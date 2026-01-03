@@ -59,6 +59,11 @@ clean:
 run-pingpong: $(BUILD_DIR)/pingpong
 	./$(BUILD_DIR)/pingpong
 
+# Run file I/O example
+.PHONY: run-fileio
+run-fileio: $(BUILD_DIR)/fileio
+	./$(BUILD_DIR)/fileio
+
 # Help
 .PHONY: help
 help:
@@ -66,6 +71,7 @@ help:
 	@echo "  all          - Build library and examples (default)"
 	@echo "  clean        - Remove build artifacts"
 	@echo "  run-pingpong - Build and run ping-pong example"
+	@echo "  run-fileio   - Build and run file I/O example"
 	@echo "  help         - Show this help message"
 
 # Dependencies

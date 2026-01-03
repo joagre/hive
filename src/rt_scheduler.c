@@ -3,9 +3,13 @@
 #include "rt_context.h"
 #include <stdio.h>
 #include <stdbool.h>
+#include <time.h>
 
 // External function to get actor table
 extern actor_table *rt_actor_get_table(void);
+
+// External function to process file I/O completions
+extern void rt_file_process_completions(void);
 
 // Scheduler state
 static struct {
@@ -60,6 +64,9 @@ void rt_scheduler_run(void) {
     printf("Scheduler started\n");
 
     while (!g_scheduler.shutdown_requested && table->num_actors > 0) {
+        // Process I/O completions
+        rt_file_process_completions();
+
         // Find next runnable actor
         actor *next = find_next_runnable();
 
@@ -80,26 +87,10 @@ void rt_scheduler_run(void) {
             }
 
         } else {
-            // No runnable actors
-            // In a full implementation, we would wait for I/O completions
-            // For this minimal version, if there are actors but none are runnable,
-            // they might all be blocked - this is a deadlock
-            bool all_blocked = false;
-            for (size_t i = 0; i < table->max_actors; i++) {
-                actor *a = &table->actors[i];
-                if (a->state == ACTOR_STATE_BLOCKED) {
-                    all_blocked = true;
-                    break;
-                }
-            }
-
-            if (all_blocked) {
-                fprintf(stderr, "Deadlock detected: all actors blocked\n");
-                break;
-            }
-
-            // All actors must have exited
-            break;
+            // No runnable actors - they may be blocked on I/O
+            // Sleep briefly to allow I/O operations to complete
+            struct timespec ts = {.tv_sec = 0, .tv_nsec = 1000000}; // 1ms
+            nanosleep(&ts, NULL);
         }
     }
 

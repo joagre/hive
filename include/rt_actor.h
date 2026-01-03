@@ -46,6 +46,11 @@ typedef struct {
     // For blocked IPC_BORROW sends
     bool           waiting_for_release;
     actor_id       blocked_on_actor;
+
+    // For I/O completion results
+    rt_status      io_status;
+    int            io_result_fd;      // For file_open
+    size_t         io_result_nbytes;  // For file read/write
 } actor;
 
 // Actor table - global storage for all actors
