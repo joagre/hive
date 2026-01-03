@@ -1,6 +1,7 @@
 #include "rt_ipc.h"
 #include "rt_actor.h"
 #include "rt_scheduler.h"
+#include "rt_log.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -46,9 +47,11 @@ rt_status rt_ipc_send(actor_id to, const void *data, size_t len, rt_ipc_mode mod
 
         // If receiver is blocked waiting for message, wake it up
         if (receiver->state == ACTOR_STATE_BLOCKED) {
+            RT_LOG_TRACE("IPC: Waking up blocked receiver %u", to);
             receiver->state = ACTOR_STATE_READY;
         }
 
+        RT_LOG_TRACE("IPC: Message sent from %u to %u (COPY mode)", sender->id, to);
         return RT_SUCCESS;
 
     } else { // IPC_BORROW
@@ -89,6 +92,8 @@ rt_status rt_ipc_recv(rt_message *msg, int32_t timeout_ms) {
         return RT_ERROR(RT_ERR_INVALID, "Not called from actor context");
     }
 
+    RT_LOG_TRACE("IPC recv: actor %u checking mailbox (count=%zu)", current->id, current->mbox.count);
+
     // Check if there's a message in the mailbox
     if (current->mbox.head == NULL) {
         if (timeout_ms == 0) {
@@ -96,10 +101,12 @@ rt_status rt_ipc_recv(rt_message *msg, int32_t timeout_ms) {
             return RT_ERROR(RT_ERR_WOULDBLOCK, "No messages available");
         } else {
             // Blocking - yield until message arrives
+            RT_LOG_TRACE("IPC recv: actor %u blocking, waiting for message", current->id);
             current->state = ACTOR_STATE_BLOCKED;
             rt_scheduler_yield();
 
             // When we wake up, check again
+            RT_LOG_TRACE("IPC recv: actor %u woke up, mailbox count=%zu", current->id, current->mbox.count);
             if (current->mbox.head == NULL) {
                 return RT_ERROR(RT_ERR_WOULDBLOCK, "No messages available after wakeup");
             }

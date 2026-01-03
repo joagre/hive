@@ -52,6 +52,7 @@ typedef struct {
         struct {
             char     host[256];
             uint16_t port;
+            int      pending_fd;  // For tracking in-progress connection
         } connect;
 
         struct {
@@ -113,6 +114,8 @@ static void *net_worker_thread(void *arg) {
             continue;
         }
 
+        RT_LOG_TRACE("Network worker: processing op=%d from requester=%u", req.op, req.requester);
+
         // Process request
         net_completion comp = {
             .requester = req.requester,
@@ -157,26 +160,30 @@ static void *net_worker_thread(void *arg) {
                 struct sockaddr_in client_addr;
                 socklen_t client_len = sizeof(client_addr);
 
-                // For blocking accept, use select with timeout
+                // For blocking accept, use select with polling to avoid blocking other requests
                 if (req.timeout_ms != 0) {
                     fd_set readfds;
                     FD_ZERO(&readfds);
                     FD_SET(req.data.accept.fd, &readfds);
 
+                    // Use 100ms polling interval to allow processing other requests
                     struct timeval tv;
-                    if (req.timeout_ms > 0) {
-                        tv.tv_sec = req.timeout_ms / 1000;
-                        tv.tv_usec = (req.timeout_ms % 1000) * 1000;
-                    }
+                    tv.tv_sec = 0;
+                    tv.tv_usec = 100000; // 100ms
 
-                    int ret = select(req.data.accept.fd + 1, &readfds, NULL, NULL,
-                                   req.timeout_ms > 0 ? &tv : NULL);
+                    RT_LOG_TRACE("Network worker: accept polling on fd=%d", req.data.accept.fd);
+                    int ret = select(req.data.accept.fd + 1, &readfds, NULL, NULL, &tv);
+                    RT_LOG_TRACE("Network worker: accept select returned %d", ret);
                     if (ret < 0) {
                         comp.status = RT_ERROR(RT_ERR_IO, strerror(errno));
                         break;
                     } else if (ret == 0) {
-                        comp.status = RT_ERROR(RT_ERR_TIMEOUT, "Accept timeout");
-                        break;
+                        // Timeout - requeue request and process other requests
+                        RT_LOG_TRACE("Network worker: accept timeout, requeuing");
+                        if (!rt_spsc_push(&g_net_io.request_queue, &req)) {
+                            RT_LOG_TRACE("Network worker: accept requeue failed - queue full");
+                        }
+                        continue; // Don't push completion, just loop
                     }
                 }
 
@@ -196,64 +203,77 @@ static void *net_worker_thread(void *arg) {
             }
 
             case NET_OP_CONNECT: {
-                struct hostent *server = gethostbyname(req.data.connect.host);
-                if (!server) {
-                    comp.status = RT_ERROR(RT_ERR_IO, "Host not found");
-                    break;
-                }
+                int fd;
 
-                int fd = socket(AF_INET, SOCK_STREAM, 0);
-                if (fd < 0) {
-                    comp.status = RT_ERROR(RT_ERR_IO, strerror(errno));
-                    break;
-                }
+                // Check if this is a retry (pending_fd already set)
+                if (req.data.connect.pending_fd > 0) {
+                    fd = req.data.connect.pending_fd;
+                } else {
+                    // First time: create socket and start connect
+                    struct hostent *server = gethostbyname(req.data.connect.host);
+                    if (!server) {
+                        comp.status = RT_ERROR(RT_ERR_IO, "Host not found");
+                        break;
+                    }
 
-                struct sockaddr_in serv_addr = {0};
-                serv_addr.sin_family = AF_INET;
-                memcpy(&serv_addr.sin_addr.s_addr, server->h_addr_list[0], server->h_length);
-                serv_addr.sin_port = htons(req.data.connect.port);
+                    fd = socket(AF_INET, SOCK_STREAM, 0);
+                    if (fd < 0) {
+                        comp.status = RT_ERROR(RT_ERR_IO, strerror(errno));
+                        break;
+                    }
 
-                // Set non-blocking for connect timeout
-                set_nonblocking(fd);
+                    struct sockaddr_in serv_addr = {0};
+                    serv_addr.sin_family = AF_INET;
+                    memcpy(&serv_addr.sin_addr.s_addr, server->h_addr_list[0], server->h_length);
+                    serv_addr.sin_port = htons(req.data.connect.port);
 
-                if (connect(fd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
-                    if (errno == EINPROGRESS) {
-                        // Connection in progress, use select with timeout
-                        fd_set writefds;
-                        FD_ZERO(&writefds);
-                        FD_SET(fd, &writefds);
+                    // Set non-blocking for connect
+                    set_nonblocking(fd);
 
-                        struct timeval tv;
-                        if (req.timeout_ms > 0) {
-                            tv.tv_sec = req.timeout_ms / 1000;
-                            tv.tv_usec = (req.timeout_ms % 1000) * 1000;
-                        }
-
-                        int ret = select(fd + 1, NULL, &writefds, NULL,
-                                       req.timeout_ms > 0 ? &tv : NULL);
-                        if (ret < 0) {
+                    if (connect(fd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
+                        if (errno != EINPROGRESS) {
                             comp.status = RT_ERROR(RT_ERR_IO, strerror(errno));
                             close(fd);
                             break;
-                        } else if (ret == 0) {
-                            comp.status = RT_ERROR(RT_ERR_TIMEOUT, "Connect timeout");
-                            close(fd);
-                            break;
                         }
-
-                        // Check if connection succeeded
-                        int error = 0;
-                        socklen_t len = sizeof(error);
-                        if (getsockopt(fd, SOL_SOCKET, SO_ERROR, &error, &len) < 0 || error != 0) {
-                            comp.status = RT_ERROR(RT_ERR_IO, error ? strerror(error) : "Connection failed");
-                            close(fd);
-                            break;
-                        }
+                        // Connection in progress - store fd for polling
+                        req.data.connect.pending_fd = fd;
                     } else {
-                        comp.status = RT_ERROR(RT_ERR_IO, strerror(errno));
-                        close(fd);
+                        // Connected immediately
+                        comp.result.fd = fd;
                         break;
                     }
+                }
+
+                // Poll for connection completion with 100ms timeout
+                fd_set writefds;
+                FD_ZERO(&writefds);
+                FD_SET(fd, &writefds);
+
+                struct timeval tv;
+                tv.tv_sec = 0;
+                tv.tv_usec = 100000; // 100ms polling
+
+                int ret = select(fd + 1, NULL, &writefds, NULL, &tv);
+                if (ret < 0) {
+                    comp.status = RT_ERROR(RT_ERR_IO, strerror(errno));
+                    close(fd);
+                    break;
+                } else if (ret == 0) {
+                    // Timeout - requeue request and process other requests
+                    if (!rt_spsc_push(&g_net_io.request_queue, &req)) {
+                        // Queue full
+                    }
+                    continue; // Don't push completion, just loop
+                }
+
+                // Check if connection succeeded
+                int error = 0;
+                socklen_t len = sizeof(error);
+                if (getsockopt(fd, SOL_SOCKET, SO_ERROR, &error, &len) < 0 || error != 0) {
+                    comp.status = RT_ERROR(RT_ERR_IO, error ? strerror(error) : "Connection failed");
+                    close(fd);
+                    break;
                 }
 
                 comp.result.fd = fd;
@@ -352,6 +372,8 @@ static void *net_worker_thread(void *arg) {
             struct timespec ts = {.tv_sec = 0, .tv_nsec = 100000}; // 100us
             nanosleep(&ts, NULL);
         }
+        RT_LOG_TRACE("Network worker: pushed completion for requester=%u, status=%d",
+                     comp.requester, comp.status.code);
     }
 
     RT_LOG_DEBUG("Network I/O worker thread exiting");

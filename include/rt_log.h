@@ -3,15 +3,16 @@
 
 #include <stdio.h>
 
-// Log levels (lower number = more severe)
-typedef enum {
-    RT_LOG_LEVEL_TRACE = 0,
-    RT_LOG_LEVEL_DEBUG = 1,
-    RT_LOG_LEVEL_INFO = 2,
-    RT_LOG_LEVEL_WARN = 3,
-    RT_LOG_LEVEL_ERROR = 4,
-    RT_LOG_LEVEL_NONE = 5
-} rt_log_level_t;
+// Log level constants for compile-time filtering (preprocessor needs numeric values)
+#define RT_LOG_LEVEL_TRACE 0
+#define RT_LOG_LEVEL_DEBUG 1
+#define RT_LOG_LEVEL_INFO  2
+#define RT_LOG_LEVEL_WARN  3
+#define RT_LOG_LEVEL_ERROR 4
+#define RT_LOG_LEVEL_NONE  5
+
+// Log level type for runtime use
+typedef int rt_log_level_t;
 
 // Default compile-time log level (can override with -DRT_LOG_LEVEL=...)
 #ifndef RT_LOG_LEVEL

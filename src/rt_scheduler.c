@@ -43,11 +43,13 @@ static actor *find_next_runnable(void) {
         for (size_t i = 0; i < table->max_actors; i++) {
             actor *a = &table->actors[i];
             if (a->state == ACTOR_STATE_READY && a->priority == prio) {
+                RT_LOG_TRACE("Scheduler: Found runnable actor %u (prio=%d)", a->id, prio);
                 return a;
             }
         }
     }
 
+    RT_LOG_TRACE("Scheduler: No runnable actors found");
     return NULL;
 }
 
@@ -75,6 +77,7 @@ void rt_scheduler_run(void) {
 
         if (next) {
             // Switch to actor
+            RT_LOG_TRACE("Scheduler: Switching to actor %u", next->id);
             next->state = ACTOR_STATE_RUNNING;
             rt_actor_set_current(next);
 
@@ -82,6 +85,7 @@ void rt_scheduler_run(void) {
             rt_context_switch(&g_scheduler.scheduler_ctx, &next->ctx);
 
             // Actor has yielded or exited
+            RT_LOG_TRACE("Scheduler: Actor %u yielded, state=%d", next->id, next->state);
             rt_actor_set_current(NULL);
 
             // If actor is still running, mark as ready
