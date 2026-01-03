@@ -2,6 +2,7 @@
 CC := gcc
 CFLAGS := -std=c11 -Wall -Wextra -Wpedantic -Werror -O2 -g
 CPPFLAGS := -Iinclude -D_POSIX_C_SOURCE=200809L
+DEPFLAGS = -MMD -MP
 LDFLAGS :=
 LDLIBS := -pthread
 
@@ -15,6 +16,7 @@ EXAMPLES_DIR := examples
 SRCS := $(wildcard $(SRC_DIR)/*.c)
 ASM_SRCS := $(wildcard $(SRC_DIR)/*.S)
 OBJS := $(SRCS:$(SRC_DIR)/%.c=$(BUILD_DIR)/%.o) $(ASM_SRCS:$(SRC_DIR)/%.S=$(BUILD_DIR)/%.o)
+DEPS := $(SRCS:$(SRC_DIR)/%.c=$(BUILD_DIR)/%.d)
 
 # Library
 LIB := $(BUILD_DIR)/librt.a
@@ -31,9 +33,9 @@ all: $(LIB) $(EXAMPLES)
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
 
-# Compile source files
+# Compile source files with dependency generation
 $(BUILD_DIR)/%.o: $(SRC_DIR)/%.c | $(BUILD_DIR)
-	$(CC) $(CFLAGS) $(CPPFLAGS) -c $< -o $@
+	$(CC) $(CFLAGS) $(CPPFLAGS) $(DEPFLAGS) -c $< -o $@
 
 # Compile assembly files
 $(BUILD_DIR)/%.o: $(SRC_DIR)/%.S | $(BUILD_DIR)
@@ -75,3 +77,6 @@ deps:
 .PHONY: print-%
 print-%:
 	@echo '$*=$($*)'
+
+# Include automatically generated dependencies
+-include $(DEPS)

@@ -6,6 +6,9 @@ build/
 *.a
 *.so
 
+# Dependency files
+*.d
+
 # Executables
 *.out
 
