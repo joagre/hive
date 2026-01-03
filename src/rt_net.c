@@ -3,6 +3,7 @@
 #include "rt_scheduler.h"
 #include "rt_runtime.h"
 #include "rt_spsc.h"
+#include "rt_log.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -99,7 +100,7 @@ static int set_nonblocking(int fd) {
 static void *net_worker_thread(void *arg) {
     (void)arg;
 
-    printf("Network I/O worker thread started\n");
+    RT_LOG_DEBUG("Network I/O worker thread started");
 
     while (g_net_io.running) {
         net_request req;
@@ -353,7 +354,7 @@ static void *net_worker_thread(void *arg) {
         }
     }
 
-    printf("Network I/O worker thread exiting\n");
+    RT_LOG_DEBUG("Network I/O worker thread exiting");
     return NULL;
 }
 

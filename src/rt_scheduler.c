@@ -1,6 +1,7 @@
 #include "rt_scheduler.h"
 #include "rt_actor.h"
 #include "rt_context.h"
+#include "rt_log.h"
 #include <stdio.h>
 #include <stdbool.h>
 #include <time.h>
@@ -52,17 +53,17 @@ static actor *find_next_runnable(void) {
 
 void rt_scheduler_run(void) {
     if (!g_scheduler.initialized) {
-        fprintf(stderr, "Scheduler not initialized\n");
+        RT_LOG_ERROR("Scheduler not initialized");
         return;
     }
 
     actor_table *table = rt_actor_get_table();
     if (!table) {
-        fprintf(stderr, "Actor table not initialized\n");
+        RT_LOG_ERROR("Actor table not initialized");
         return;
     }
 
-    printf("Scheduler started\n");
+    RT_LOG_INFO("Scheduler started");
 
     while (!g_scheduler.shutdown_requested && table->num_actors > 0) {
         // Process I/O completions
@@ -91,12 +92,12 @@ void rt_scheduler_run(void) {
         } else {
             // No runnable actors - they may be blocked on I/O
             // Sleep briefly to allow I/O operations to complete
-            struct timespec ts = {.tv_sec = 0, .tv_nsec = 1000000}; // 1ms
+            struct timespec ts = {.tv_sec = 0, .tv_nsec = 100000}; // 100us
             nanosleep(&ts, NULL);
         }
     }
 
-    printf("Scheduler stopped\n");
+    RT_LOG_INFO("Scheduler stopped");
 }
 
 void rt_scheduler_shutdown(void) {
@@ -106,7 +107,7 @@ void rt_scheduler_shutdown(void) {
 void rt_scheduler_yield(void) {
     actor *current = rt_actor_current();
     if (!current) {
-        fprintf(stderr, "yield called outside actor context\n");
+        RT_LOG_ERROR("yield called outside actor context");
         return;
     }
 

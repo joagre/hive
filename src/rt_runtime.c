@@ -1,6 +1,7 @@
 #include "rt_runtime.h"
 #include "rt_actor.h"
 #include "rt_scheduler.h"
+#include "rt_log.h"
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -93,8 +94,8 @@ actor_id rt_spawn_ex(actor_fn fn, void *arg, const actor_config *cfg) {
 _Noreturn void rt_exit(void) {
     actor *current = rt_actor_current();
     if (current) {
-        printf("Actor %u (%s) exiting\n", current->id,
-               current->name ? current->name : "unnamed");
+        RT_LOG_DEBUG("Actor %u (%s) exiting", current->id,
+                     current->name ? current->name : "unnamed");
         rt_actor_free(current);
     }
 
@@ -102,7 +103,7 @@ _Noreturn void rt_exit(void) {
     rt_scheduler_yield();
 
     // Should never reach here
-    fprintf(stderr, "rt_exit: returned from scheduler yield\n");
+    RT_LOG_ERROR("rt_exit: returned from scheduler yield");
     abort();
 }
 

@@ -3,6 +3,7 @@
 #include "rt_scheduler.h"
 #include "rt_runtime.h"
 #include "rt_spsc.h"
+#include "rt_log.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -83,7 +84,7 @@ static struct {
 static void *file_worker_thread(void *arg) {
     (void)arg;
 
-    printf("File I/O worker thread started\n");
+    RT_LOG_DEBUG("File I/O worker thread started");
 
     while (g_file_io.running) {
         file_request req;
@@ -176,7 +177,7 @@ static void *file_worker_thread(void *arg) {
         }
     }
 
-    printf("File I/O worker thread exiting\n");
+    RT_LOG_DEBUG("File I/O worker thread exiting");
     return NULL;
 }
 
