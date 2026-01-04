@@ -12,6 +12,7 @@ extern actor_table *rt_actor_get_table(void);
 // External functions to process I/O completions
 extern void rt_file_process_completions(void);
 extern void rt_net_process_completions(void);
+extern void rt_timer_process_completions(void);
 
 // Scheduler state
 static struct {
@@ -71,6 +72,7 @@ void rt_scheduler_run(void) {
         // Process I/O completions
         rt_file_process_completions();
         rt_net_process_completions();
+        rt_timer_process_completions();
 
         // Find next runnable actor
         actor *next = find_next_runnable();
