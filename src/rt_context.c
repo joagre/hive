@@ -46,10 +46,10 @@ void rt_context_init(rt_context *ctx, void *stack, size_t stack_size,
     uintptr_t stack_top = (uintptr_t)stack + stack_size;
     stack_top &= ~((uintptr_t)15);  // Align to 16 bytes
 
-    // x86-64 ABI requires RSP to be aligned such that (RSP+8) % 16 == 0 at function entry
-    // Since we'll be using 'ret' to jump to context_entry, and 'ret' pops 8 bytes,
-    // we need RSP to be 8 bytes off 16-byte alignment before the ret
-    // After ret, RSP will be 16-byte aligned as required
+    // Subtract 16 bytes to ensure proper alignment after function prologue
+    // The x86-64 ABI requires (RSP + 8) % 16 == 0 at function entry
+    // But the function prologue may push rbp, and we need local vars 16-byte aligned
+    stack_top -= 16;
 
     // Store function and argument in callee-saved registers
     // These will be preserved across the context switch

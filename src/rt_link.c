@@ -265,7 +265,22 @@ void rt_link_cleanup_actor(actor_id dying_actor_id) {
         return;
     }
 
-    actor *dying = rt_actor_get(dying_actor_id);
+    // Get actor table and find the dying actor WITHOUT state check
+    // (rt_actor_get filters out DEAD actors, but we need to access it here)
+    actor_table *table = rt_actor_get_table();
+    if (!table || !table->actors) {
+        return;
+    }
+
+    actor *dying = NULL;
+    for (size_t i = 0; i < table->max_actors; i++) {
+        actor *a = &table->actors[i];
+        if (a->id == dying_actor_id) {
+            dying = a;
+            break;
+        }
+    }
+
     if (!dying) {
         return;
     }
@@ -347,8 +362,8 @@ void rt_link_cleanup_actor(actor_id dying_actor_id) {
     // Pass 2: Send notifications for monitors (actors monitoring the dying actor)
     // We need to find all actors that are monitoring this one
     // This requires scanning all actors' monitor lists
-    actor_table *table = rt_actor_get_table();
-    if (table) {
+    // (We already have table from above)
+    {
         for (size_t i = 0; i < table->max_actors; i++) {
             actor *a = &table->actors[i];
             if (a->state == ACTOR_STATE_DEAD || a->id == ACTOR_ID_INVALID) {

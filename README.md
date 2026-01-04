@@ -11,6 +11,8 @@ This is a minimal x86-64 Linux implementation demonstrating the core concepts. S
 - ✅ Actor lifecycle management (spawn, exit)
 - ✅ IPC with COPY and BORROW modes
 - ✅ Blocking and non-blocking message receive
+- ✅ Actor linking and monitoring (bidirectional links, unidirectional monitors)
+- ✅ Exit notifications with exit reasons (normal, crash, killed)
 - ✅ Timers (one-shot and periodic with timerfd/epoll)
 - ✅ Network I/O (async TCP with worker thread)
 - ✅ File I/O (async read/write with worker thread)
@@ -27,6 +29,12 @@ make
 ```bash
 # Basic IPC example
 ./build/pingpong
+
+# Actor linking example (bidirectional links)
+./build/link_demo
+
+# Supervisor pattern example (monitoring workers)
+./build/supervisor
 
 # File I/O example
 ./build/fileio
@@ -50,6 +58,7 @@ make
 │   ├── rt_context.h     # Context switching interface
 │   ├── rt_actor.h       # Actor management
 │   ├── rt_ipc.h         # Inter-process communication
+│   ├── rt_link.h        # Actor linking and monitoring
 │   ├── rt_scheduler.h   # Scheduler interface
 │   ├── rt_runtime.h     # Runtime initialization and public API
 │   ├── rt_timer.h       # Timer subsystem
@@ -63,6 +72,7 @@ make
 │   ├── rt_context.c     # Context initialization
 │   ├── rt_context_asm.S # x86-64 context switch assembly
 │   ├── rt_ipc.c         # Mailbox and message passing
+│   ├── rt_link.c        # Linking and monitoring implementation
 │   ├── rt_runtime.c     # Runtime init and actor spawning
 │   ├── rt_scheduler.c   # Cooperative scheduler
 │   ├── rt_timer.c       # Timer worker thread (timerfd/epoll)
@@ -73,6 +83,8 @@ make
 │   └── rt_log.c         # Logging implementation
 ├── examples/         # Example programs
 │   ├── pingpong.c       # Classic ping-pong actor example
+│   ├── link_demo.c      # Actor linking example
+│   ├── supervisor.c     # Supervisor pattern with monitoring
 │   ├── timer.c          # Timer example (one-shot and periodic)
 │   ├── fileio.c         # File I/O example
 │   ├── bus.c            # Bus pub-sub example
@@ -211,6 +223,36 @@ rt_net_send(client_fd, buffer, received, &sent);
 rt_net_close(client_fd);
 ```
 
+### Actor Linking and Monitoring
+
+```c
+#include "rt_link.h"
+
+// Bidirectional linking - both actors receive exit notifications
+actor_id other = rt_spawn(other_actor, NULL);
+rt_link(other);  // Link to the other actor
+
+// Receive exit notification when linked actor dies
+rt_message msg;
+rt_ipc_recv(&msg, -1);
+if (rt_is_exit_msg(&msg)) {
+    rt_exit_msg exit_info;
+    rt_decode_exit(&msg, &exit_info);
+    printf("Actor %u died, reason: %d\n", exit_info.actor, exit_info.reason);
+    // exit_info.reason: RT_EXIT_NORMAL, RT_EXIT_CRASH, or RT_EXIT_KILLED
+}
+
+// Unidirectional monitoring - only monitor receives exit notification
+uint32_t monitor_ref;
+rt_monitor(other, &monitor_ref);  // Monitor the other actor
+
+// Stop monitoring
+rt_demonitor(monitor_ref);
+
+// Unlink (remove bidirectional link)
+rt_unlink(other);
+```
+
 ## API Overview
 
 ### Runtime Initialization
@@ -235,6 +277,15 @@ rt_net_close(client_fd);
 - `rt_ipc_release(msg)` - Release borrowed message
 - `rt_ipc_pending()` - Check if messages are available
 - `rt_ipc_count()` - Get number of pending messages
+
+### Linking and Monitoring
+
+- `rt_link(target)` - Create bidirectional link
+- `rt_unlink(target)` - Remove bidirectional link
+- `rt_monitor(target, out_ref)` - Create unidirectional monitor
+- `rt_demonitor(ref)` - Remove monitor
+- `rt_is_exit_msg(msg)` - Check if message is exit notification
+- `rt_decode_exit(msg, out)` - Extract exit information
 
 ### Timers
 
@@ -305,7 +356,6 @@ All I/O operations (timers, file, network) are handled by dedicated worker threa
 
 ### Limitations
 
-- No actor linking or monitoring yet
 - Simple memory management (uses malloc/free)
 - No stack overflow detection
 - Linux-only (no FreeRTOS/ARM Cortex-M port yet)
@@ -314,7 +364,6 @@ See `spec.md` for the full feature set planned for production use.
 
 ## Future Work
 
-- Implement actor linking and monitoring
 - Port to ARM Cortex-M with FreeRTOS integration
 - Add memory pools for better performance
 - Add stack overflow detection (guard patterns or MPU)

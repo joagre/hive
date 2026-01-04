@@ -106,9 +106,10 @@ int main(void) {
         return 1;
     }
 
-    // Spawn supervisor
+    // Spawn supervisor with larger stack (needs space for arrays and nested spawns)
     actor_config sup_cfg = RT_ACTOR_CONFIG_DEFAULT;
     sup_cfg.name = "supervisor";
+    sup_cfg.stack_size = 128 * 1024;  // 128KB stack
 
     actor_id supervisor = rt_spawn_ex(supervisor_actor, NULL, &sup_cfg);
     if (supervisor == ACTOR_ID_INVALID) {

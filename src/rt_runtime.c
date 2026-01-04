@@ -121,7 +121,12 @@ actor_id rt_spawn_ex(actor_fn fn, void *arg, const actor_config *cfg) {
         return ACTOR_ID_INVALID;
     }
 
-    actor_config actual_cfg = *cfg;
+    // Copy config field by field instead of struct copy to avoid alignment issues
+    // (struct copy may use SIMD instructions requiring 16-byte alignment)
+    actor_config actual_cfg;
+    actual_cfg.stack_size = cfg->stack_size;
+    actual_cfg.priority = cfg->priority;
+    actual_cfg.name = cfg->name;
     if (actual_cfg.stack_size == 0) {
         actual_cfg.stack_size = g_config.default_stack_size;
     }
