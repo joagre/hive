@@ -305,7 +305,6 @@ All I/O operations (timers, file, network) are handled by dedicated worker threa
 
 ### Limitations
 
-- No bus/pub-sub system yet
 - No actor linking or monitoring yet
 - Simple memory management (uses malloc/free)
 - No stack overflow detection
@@ -315,7 +314,6 @@ See `spec.md` for the full feature set planned for production use.
 
 ## Future Work
 
-- Implement bus (pub-sub) system
 - Implement actor linking and monitoring
 - Port to ARM Cortex-M with FreeRTOS integration
 - Add memory pools for better performance
