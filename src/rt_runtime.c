@@ -12,6 +12,8 @@ extern rt_status rt_net_init(void);
 extern void rt_net_cleanup(void);
 extern rt_status rt_timer_init(void);
 extern void rt_timer_cleanup(void);
+extern rt_status rt_bus_init(void);
+extern void rt_bus_cleanup(void);
 
 // Global configuration
 static rt_config g_config = RT_CONFIG_DEFAULT;
@@ -61,6 +63,17 @@ rt_status rt_init(const rt_config *cfg) {
         return status;
     }
 
+    // Initialize bus subsystem
+    status = rt_bus_init();
+    if (RT_FAILED(status)) {
+        rt_timer_cleanup();
+        rt_net_cleanup();
+        rt_file_cleanup();
+        rt_scheduler_cleanup();
+        rt_actor_cleanup();
+        return status;
+    }
+
     return RT_SUCCESS;
 }
 
@@ -73,6 +86,7 @@ void rt_shutdown(void) {
 }
 
 void rt_cleanup(void) {
+    rt_bus_cleanup();
     rt_timer_cleanup();
     rt_net_cleanup();
     rt_file_cleanup();
@@ -109,7 +123,10 @@ _Noreturn void rt_exit(void) {
     if (current) {
         RT_LOG_DEBUG("Actor %u (%s) exiting", current->id,
                      current->name ? current->name : "unnamed");
-        rt_actor_free(current);
+
+        // Mark actor as dead - scheduler will clean up resources
+        // Don't free stack here - we're still running on it!
+        current->state = ACTOR_STATE_DEAD;
     }
 
     // Yield back to scheduler and never return

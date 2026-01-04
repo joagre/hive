@@ -117,10 +117,16 @@ actor *rt_actor_alloc(actor_fn fn, void *arg, const actor_config *cfg) {
     return a;
 }
 
+// External cleanup functions
+extern void rt_bus_cleanup_actor(actor_id id);
+
 void rt_actor_free(actor *a) {
     if (!a) {
         return;
     }
+
+    // Cleanup bus subscriptions
+    rt_bus_cleanup_actor(a->id);
 
     // Free stack
     if (a->stack) {

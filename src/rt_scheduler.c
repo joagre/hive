@@ -19,6 +19,7 @@ static struct {
     rt_context scheduler_ctx;
     bool       shutdown_requested;
     bool       initialized;
+    size_t     last_run_idx[RT_PRIO_COUNT];  // Last run actor index for each priority
 } g_scheduler = {0};
 
 rt_status rt_scheduler_init(void) {
@@ -40,10 +41,15 @@ static actor *find_next_runnable(void) {
 
     // Search by priority level
     for (rt_priority prio = RT_PRIO_CRITICAL; prio < RT_PRIO_COUNT; prio++) {
-        // Round-robin within priority level
+        // Round-robin within priority level - start from after last run actor
+        size_t start_idx = (g_scheduler.last_run_idx[prio] + 1) % table->max_actors;
+
         for (size_t i = 0; i < table->max_actors; i++) {
-            actor *a = &table->actors[i];
+            size_t idx = (start_idx + i) % table->max_actors;
+            actor *a = &table->actors[idx];
+
             if (a->state == ACTOR_STATE_READY && a->priority == prio) {
+                g_scheduler.last_run_idx[prio] = idx;
                 RT_LOG_TRACE("Scheduler: Found runnable actor %u (prio=%d)", a->id, prio);
                 return a;
             }
@@ -90,8 +96,12 @@ void rt_scheduler_run(void) {
             RT_LOG_TRACE("Scheduler: Actor %u yielded, state=%d", next->id, next->state);
             rt_actor_set_current(NULL);
 
+            // If actor is dead, free its resources
+            if (next->state == ACTOR_STATE_DEAD) {
+                rt_actor_free(next);
+            }
             // If actor is still running, mark as ready
-            if (next->state == ACTOR_STATE_RUNNING) {
+            else if (next->state == ACTOR_STATE_RUNNING) {
                 next->state = ACTOR_STATE_READY;
             }
 
