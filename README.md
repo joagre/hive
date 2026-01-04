@@ -546,7 +546,6 @@ These limitations are intentional for the current release. See `spec.md` for com
 
 - Port to ARM Cortex-M with FreeRTOS integration
 - Add stack overflow detection (guard patterns or MPU)
-- Add throttling on IPC send for backpressure control
 
 ## License
 

@@ -541,5 +541,4 @@ The runtime abstracts platform-specific functionality:
 
 Not in scope for first version, but noted for future:
 
-- **Throttling on IPC send:** D-language style backpressure when mailbox is full
 - **Stack overflow detection:** Guard patterns or MPU-based protection on Cortex-M

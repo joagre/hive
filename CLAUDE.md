@@ -104,7 +104,6 @@ Different implementations for Linux (dev) vs FreeRTOS (prod):
 - `RT_SENDER_SYSTEM` (0xFFFFFFFE): System messages (e.g., actor death notifications)
 
 ## Future Considerations
-- Throttling on IPC send (D-language style backpressure)
 - Stack overflow detection (guard patterns or MPU)
 - Distributed actors for multi-MCU systems
 - Hot code reload
