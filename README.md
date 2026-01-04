@@ -211,20 +211,20 @@ rt_file_close(fd);
 
 // Create listening socket
 int listen_fd;
-rt_net_listen(8080, 10, &listen_fd);
+rt_net_listen(8080, &listen_fd);
 
-// Accept connection
+// Accept connection (blocking)
 int client_fd;
-rt_net_accept(listen_fd, &client_fd);
+rt_net_accept(listen_fd, &client_fd, -1);
 
-// Receive data
+// Receive data (blocking)
 char buffer[1024];
 size_t received;
-rt_net_recv(client_fd, buffer, sizeof(buffer), &received);
+rt_net_recv(client_fd, buffer, sizeof(buffer), &received, -1);
 
-// Send data
+// Send data (blocking)
 size_t sent;
-rt_net_send(client_fd, buffer, received, &sent);
+rt_net_send(client_fd, buffer, received, &sent, -1);
 
 // Close socket
 rt_net_close(client_fd);
@@ -310,11 +310,11 @@ rt_unlink(other);
 
 ### Network I/O
 
-- `rt_net_listen(port, backlog, out_fd)` - Create TCP listening socket
-- `rt_net_accept(listen_fd, out_fd)` - Accept incoming connection
-- `rt_net_connect(host, port, out_fd)` - Connect to remote host
-- `rt_net_send(fd, buf, len, out_sent)` - Send data
-- `rt_net_recv(fd, buf, len, out_recv)` - Receive data
+- `rt_net_listen(port, out_fd)` - Create TCP listening socket (backlog hardcoded to 5)
+- `rt_net_accept(listen_fd, out_fd, timeout_ms)` - Accept incoming connection
+- `rt_net_connect(host, port, out_fd, timeout_ms)` - Connect to remote host
+- `rt_net_send(fd, buf, len, out_sent, timeout_ms)` - Send data
+- `rt_net_recv(fd, buf, len, out_recv, timeout_ms)` - Receive data
 - `rt_net_close(fd)` - Close socket
 
 ## Design Principles
