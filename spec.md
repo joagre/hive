@@ -402,7 +402,7 @@ typedef struct {
 } rt_config;
 
 #define RT_CONFIG_DEFAULT { \
-    .default_stack_size = 4096, \
+    .default_stack_size = 65536, \
     .max_actors = 64, \
     .completion_queue_size = 64 \
 }
@@ -415,6 +415,9 @@ void rt_run(void);
 
 // Request graceful shutdown
 void rt_shutdown(void);
+
+// Cleanup runtime resources (call after rt_run completes)
+void rt_cleanup(void);
 ```
 
 ## Completion Queue
