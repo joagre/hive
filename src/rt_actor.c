@@ -1,7 +1,12 @@
 #include "rt_actor.h"
+#include "rt_static_config.h"
+#include "rt_ipc.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+
+// Static actor storage
+static actor g_actors[RT_MAX_ACTORS];
 
 // Global actor table
 static actor_table g_actor_table = {0};
@@ -14,32 +19,17 @@ rt_status rt_actor_init(size_t max_actors) {
         return RT_ERROR(RT_ERR_INVALID, "max_actors must be > 0");
     }
 
-    g_actor_table.actors = calloc(max_actors, sizeof(actor));
-    if (!g_actor_table.actors) {
-        return RT_ERROR(RT_ERR_NOMEM, "Failed to allocate actor table");
+    if (max_actors > RT_MAX_ACTORS) {
+        return RT_ERROR(RT_ERR_INVALID, "max_actors exceeds RT_MAX_ACTORS");
     }
 
+    // Use static actor array (already zero-initialized)
+    g_actor_table.actors = g_actors;
     g_actor_table.max_actors = max_actors;
     g_actor_table.num_actors = 0;
     g_actor_table.next_id = 1; // Start at 1, 0 is ACTOR_ID_INVALID
 
     return RT_SUCCESS;
-}
-
-// Clear all entries from a mailbox
-static void mailbox_clear(mailbox *mbox) {
-    mailbox_entry *entry = mbox->head;
-    while (entry) {
-        mailbox_entry *next = entry->next;
-        if (entry->data) {
-            free(entry->data);
-        }
-        free(entry);
-        entry = next;
-    }
-    mbox->head = NULL;
-    mbox->tail = NULL;
-    mbox->count = 0;
 }
 
 void rt_actor_cleanup(void) {
@@ -49,10 +39,10 @@ void rt_actor_cleanup(void) {
             actor *a = &g_actor_table.actors[i];
             if (a->state != ACTOR_STATE_DEAD && a->stack) {
                 free(a->stack);
-                mailbox_clear(&a->mbox);
+                rt_ipc_mailbox_clear(&a->mbox);
             }
         }
-        free(g_actor_table.actors);
+        // Note: g_actor_table.actors points to static g_actors array, so no free() needed
         g_actor_table.actors = NULL;
     }
 }
@@ -140,15 +130,12 @@ void rt_actor_free(actor *a) {
 
     // Free active message
     if (a->active_msg) {
-        if (a->active_msg->data) {
-            free(a->active_msg->data);
-        }
-        free(a->active_msg);
+        rt_ipc_free_active_msg(a->active_msg);
         a->active_msg = NULL;
     }
 
     // Free mailbox entries
-    mailbox_clear(&a->mbox);
+    rt_ipc_mailbox_clear(&a->mbox);
 
     a->state = ACTOR_STATE_DEAD;
     g_actor_table.num_actors--;

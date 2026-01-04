@@ -1,12 +1,23 @@
 #include "rt_bus.h"
+#include "rt_static_config.h"
+#include "rt_pool.h"
 #include "rt_actor.h"
 #include "rt_scheduler.h"
 #include "rt_runtime.h"
 #include "rt_log.h"
 #include <stdlib.h>
 #include <string.h>
+#include <stddef.h>
 #include <time.h>
 #include <sys/time.h>
+
+// Message data entry type (matches rt_ipc.c)
+typedef struct {
+    uint8_t data[RT_MAX_MESSAGE_SIZE];
+} message_data_entry;
+
+// External IPC pools (defined in rt_ipc.c)
+extern rt_pool g_message_pool_mgr;
 
 // Forward declarations
 rt_status rt_bus_init(size_t max_buses);
@@ -43,9 +54,14 @@ typedef struct {
     bool             active;
 } bus_t;
 
+// Static bus storage
+static bus_t g_buses[RT_MAX_BUSES];
+static bus_entry g_bus_entries[RT_MAX_BUSES][RT_MAX_BUS_ENTRIES];
+static bus_subscriber g_bus_subscribers[RT_MAX_BUSES][RT_MAX_BUS_SUBSCRIBERS];
+
 // Bus table
 static struct {
-    bus_t    *buses;        // Dynamically allocated array
+    bus_t    *buses;        // Points to static g_buses array
     size_t    max_buses;    // Maximum number of buses
     bus_id    next_id;
     bool      initialized;
@@ -103,7 +119,10 @@ static void expire_old_entries(bus_t *bus) {
         }
 
         // Expire this entry
-        free(entry->data);
+        if (entry->data) {
+            message_data_entry *msg_data = (message_data_entry*)((char*)entry->data - offsetof(message_data_entry, data));
+            rt_pool_free(&g_message_pool_mgr, msg_data);
+        }
         entry->valid = false;
         bus->tail = (bus->tail + 1) % bus->config.max_entries;
         bus->count--;
@@ -120,12 +139,12 @@ rt_status rt_bus_init(size_t max_buses) {
         return RT_ERROR(RT_ERR_INVALID, "max_buses must be > 0");
     }
 
-    // Allocate bus table
-    g_bus_table.buses = calloc(max_buses, sizeof(bus_t));
-    if (!g_bus_table.buses) {
-        return RT_ERROR(RT_ERR_NOMEM, "Failed to allocate bus table");
+    if (max_buses > RT_MAX_BUSES) {
+        return RT_ERROR(RT_ERR_INVALID, "max_buses exceeds RT_MAX_BUSES");
     }
 
+    // Use static bus array (already zero-initialized)
+    g_bus_table.buses = g_buses;
     g_bus_table.max_buses = max_buses;
     g_bus_table.next_id = 1;
     g_bus_table.initialized = true;
@@ -143,20 +162,19 @@ void rt_bus_cleanup(void) {
     for (size_t i = 0; i < g_bus_table.max_buses; i++) {
         bus_t *bus = &g_bus_table.buses[i];
         if (bus->active) {
-            // Free all entry data
+            // Free all entry data from pool
             for (size_t j = 0; j < bus->config.max_entries; j++) {
                 if (bus->entries[j].valid && bus->entries[j].data) {
-                    free(bus->entries[j].data);
+                    message_data_entry *msg_data = (message_data_entry*)((char*)bus->entries[j].data - offsetof(message_data_entry, data));
+                    rt_pool_free(&g_message_pool_mgr, msg_data);
                 }
             }
-            free(bus->entries);
-            free(bus->subscribers);
+            // Note: bus->entries and bus->subscribers point to static arrays, no free needed
             bus->active = false;
         }
     }
 
-    // Free bus table
-    free(g_bus_table.buses);
+    // Note: g_bus_table.buses points to static g_buses array, no free needed
     g_bus_table.buses = NULL;
     g_bus_table.max_buses = 0;
     g_bus_table.initialized = false;
@@ -199,11 +217,22 @@ rt_status rt_bus_create(const rt_bus_config *cfg, bus_id *out) {
         return RT_ERROR(RT_ERR_INVALID, "Invalid bus configuration");
     }
 
+    // Validate against compile-time limits
+    if (cfg->max_entries > RT_MAX_BUS_ENTRIES) {
+        return RT_ERROR(RT_ERR_INVALID, "max_entries exceeds RT_MAX_BUS_ENTRIES");
+    }
+
+    if (cfg->max_subscribers > RT_MAX_BUS_SUBSCRIBERS) {
+        return RT_ERROR(RT_ERR_INVALID, "max_subscribers exceeds RT_MAX_BUS_SUBSCRIBERS");
+    }
+
     // Find free slot
     bus_t *bus = NULL;
+    size_t bus_idx = 0;
     for (size_t i = 0; i < g_bus_table.max_buses; i++) {
         if (!g_bus_table.buses[i].active) {
             bus = &g_bus_table.buses[i];
+            bus_idx = i;
             break;
         }
     }
@@ -212,25 +241,12 @@ rt_status rt_bus_create(const rt_bus_config *cfg, bus_id *out) {
         return RT_ERROR(RT_ERR_NOMEM, "Bus table full");
     }
 
-    // Allocate ring buffer
-    bus_entry *entries = calloc(cfg->max_entries, sizeof(bus_entry));
-    if (!entries) {
-        return RT_ERROR(RT_ERR_NOMEM, "Failed to allocate bus entries");
-    }
-
-    // Allocate subscriber array
-    bus_subscriber *subscribers = calloc(cfg->max_subscribers, sizeof(bus_subscriber));
-    if (!subscribers) {
-        free(entries);
-        return RT_ERROR(RT_ERR_NOMEM, "Failed to allocate bus subscribers");
-    }
-
-    // Initialize bus
+    // Initialize bus using static arrays
     memset(bus, 0, sizeof(bus_t));
     bus->id = g_bus_table.next_id++;
     bus->config = *cfg;
-    bus->entries = entries;
-    bus->subscribers = subscribers;
+    bus->entries = g_bus_entries[bus_idx];
+    bus->subscribers = g_bus_subscribers[bus_idx];
     bus->head = 0;
     bus->tail = 0;
     bus->count = 0;
@@ -255,15 +271,15 @@ rt_status rt_bus_destroy(bus_id id) {
         return RT_ERROR(RT_ERR_INVALID, "Cannot destroy bus with active subscribers");
     }
 
-    // Free all entry data
+    // Free all entry data from pool
     for (size_t i = 0; i < bus->config.max_entries; i++) {
         if (bus->entries[i].valid && bus->entries[i].data) {
-            free(bus->entries[i].data);
+            message_data_entry *msg_data = (message_data_entry*)((char*)bus->entries[i].data - offsetof(message_data_entry, data));
+            rt_pool_free(&g_message_pool_mgr, msg_data);
         }
     }
 
-    free(bus->entries);
-    free(bus->subscribers);
+    // Note: bus->entries and bus->subscribers point to static arrays, no free needed
     bus->active = false;
 
     RT_LOG_DEBUG("Destroyed bus %u", id);
@@ -288,23 +304,31 @@ rt_status rt_bus_publish(bus_id id, const void *data, size_t len) {
     // Expire old entries
     expire_old_entries(bus);
 
+    // Validate message size against pool limit
+    if (len > RT_MAX_MESSAGE_SIZE) {
+        return RT_ERROR(RT_ERR_INVALID, "Message exceeds RT_MAX_MESSAGE_SIZE");
+    }
+
     // If buffer is full, evict oldest entry
     if (bus->count >= bus->config.max_entries) {
         bus_entry *oldest = &bus->entries[bus->tail];
         if (oldest->valid && oldest->data) {
-            free(oldest->data);
+            // Free from message pool using offsetof pattern
+            message_data_entry *msg_data = (message_data_entry*)((char*)oldest->data - offsetof(message_data_entry, data));
+            rt_pool_free(&g_message_pool_mgr, msg_data);
         }
         oldest->valid = false;
         bus->tail = (bus->tail + 1) % bus->config.max_entries;
         bus->count--;
     }
 
-    // Allocate and copy data
-    void *entry_data = malloc(len);
-    if (!entry_data) {
-        return RT_ERROR(RT_ERR_NOMEM, "Failed to allocate entry data");
+    // Allocate from message pool and copy data
+    message_data_entry *msg_data = rt_pool_alloc(&g_message_pool_mgr);
+    if (!msg_data) {
+        return RT_ERROR(RT_ERR_NOMEM, "Message pool exhausted");
     }
-    memcpy(entry_data, data, len);
+    memcpy(msg_data->data, data, len);
+    void *entry_data = msg_data->data;
 
     // Add new entry
     bus_entry *entry = &bus->entries[bus->head];
@@ -458,7 +482,10 @@ rt_status rt_bus_read(bus_id id, void *buf, size_t max_len, size_t *actual_len) 
 
     // Check if entry should be removed (max_readers)
     if (bus->config.max_readers > 0 && entry->read_count >= bus->config.max_readers) {
-        free(entry->data);
+        if (entry->data) {
+            message_data_entry *msg_data = (message_data_entry*)((char*)entry->data - offsetof(message_data_entry, data));
+            rt_pool_free(&g_message_pool_mgr, msg_data);
+        }
         entry->valid = false;
         entry->data = NULL;
 

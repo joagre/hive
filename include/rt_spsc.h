@@ -15,9 +15,10 @@ typedef struct {
     atomic_size_t   tail;         // Written by consumer
 } rt_spsc_queue;
 
-// Initialize SPSC queue
+// Initialize SPSC queue with pre-allocated buffer
 // capacity must be a power of 2
-rt_status rt_spsc_init(rt_spsc_queue *q, size_t entry_size, size_t capacity);
+// buffer must be at least entry_size * capacity bytes
+rt_status rt_spsc_init(rt_spsc_queue *q, void *buffer, size_t entry_size, size_t capacity);
 
 // Destroy SPSC queue and free resources
 void rt_spsc_destroy(rt_spsc_queue *q);

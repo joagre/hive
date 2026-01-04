@@ -2,6 +2,7 @@
 #define RT_IPC_H
 
 #include "rt_types.h"
+#include "rt_actor.h"
 
 // Send message to actor
 // Blocks if mode == IPC_BORROW (until receiver consumes)
@@ -20,5 +21,11 @@ void rt_ipc_release(const rt_message *msg);
 // Query mailbox state
 bool rt_ipc_pending(void);
 size_t rt_ipc_count(void);
+
+// Clear mailbox entries (used during actor cleanup)
+void rt_ipc_mailbox_clear(mailbox *mbox);
+
+// Free active message entry (used during actor cleanup)
+void rt_ipc_free_active_msg(mailbox_entry *entry);
 
 #endif // RT_IPC_H

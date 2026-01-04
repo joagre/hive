@@ -1,4 +1,6 @@
 #include "rt_timer.h"
+#include "rt_static_config.h"
+#include "rt_pool.h"
 #include "rt_actor.h"
 #include "rt_scheduler.h"
 #include "rt_runtime.h"
@@ -8,12 +10,22 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stddef.h>
 #include <unistd.h>
 #include <pthread.h>
 #include <errno.h>
 #include <time.h>
 #include <sys/timerfd.h>
 #include <sys/epoll.h>
+
+// Message data entry type (matches rt_ipc.c)
+typedef struct {
+    uint8_t data[RT_MAX_MESSAGE_SIZE];
+} message_data_entry;
+
+// External IPC pools (defined in rt_ipc.c)
+extern rt_pool g_mailbox_pool_mgr;
+extern rt_pool g_message_pool_mgr;
 
 // Forward declarations for internal functions
 rt_status rt_timer_init(size_t queue_size);
@@ -58,6 +70,15 @@ typedef struct timer_entry {
     bool                periodic;
     struct timer_entry *next;
 } timer_entry;
+
+// Static buffers for timer queues
+static uint8_t g_timer_request_buffer[sizeof(timer_request) * RT_COMPLETION_QUEUE_SIZE];
+static uint8_t g_timer_completion_buffer[sizeof(timer_completion) * RT_COMPLETION_QUEUE_SIZE];
+
+// Static pool for timer entries
+static timer_entry g_timer_pool[RT_TIMER_ENTRY_POOL_SIZE];
+static bool g_timer_used[RT_TIMER_ENTRY_POOL_SIZE];
+static rt_pool g_timer_pool_mgr;
 
 // Timer subsystem state
 static struct {
@@ -130,10 +151,10 @@ static void *timer_worker_thread(void *arg) {
                         break;
                     }
 
-                    // Create timer entry
-                    timer_entry *entry = malloc(sizeof(timer_entry));
+                    // Create timer entry from pool
+                    timer_entry *entry = rt_pool_alloc(&g_timer_pool_mgr);
                     if (!entry) {
-                        comp.status = RT_ERROR(RT_ERR_NOMEM, "Failed to allocate timer entry");
+                        comp.status = RT_ERROR(RT_ERR_NOMEM, "Timer entry pool exhausted");
                         close(tfd);
                         break;
                     }
@@ -164,7 +185,7 @@ static void *timer_worker_thread(void *arg) {
                         }
                         pthread_mutex_unlock(&g_timer.timers_lock);
                         close(tfd);
-                        free(entry);
+                        rt_pool_free(&g_timer_pool_mgr, entry);
                         break;
                     }
 
@@ -189,7 +210,7 @@ static void *timer_worker_thread(void *arg) {
                     if (entry) {
                         epoll_ctl(g_timer.epoll_fd, EPOLL_CTL_DEL, entry->fd, NULL);
                         close(entry->fd);
-                        free(entry);
+                        rt_pool_free(&g_timer_pool_mgr, entry);
                     } else {
                         comp.status = RT_ERROR(RT_ERR_INVALID, "Timer not found");
                     }
@@ -242,7 +263,7 @@ static void *timer_worker_thread(void *arg) {
 
                 epoll_ctl(g_timer.epoll_fd, EPOLL_CTL_DEL, entry->fd, NULL);
                 close(entry->fd);
-                free(entry);
+                rt_pool_free(&g_timer_pool_mgr, entry);
             }
         }
     }
@@ -260,13 +281,24 @@ rt_status rt_timer_init(size_t queue_size) {
         return RT_SUCCESS;
     }
 
-    // Initialize queues
-    rt_status status = rt_spsc_init(&g_timer.request_queue, sizeof(timer_request), queue_size);
+    // Validate queue_size against compile-time limit
+    if (queue_size > RT_COMPLETION_QUEUE_SIZE) {
+        return RT_ERROR(RT_ERR_INVALID, "queue_size exceeds RT_COMPLETION_QUEUE_SIZE");
+    }
+
+    // Initialize timer entry pool
+    rt_pool_init(&g_timer_pool_mgr, g_timer_pool, g_timer_used,
+                 sizeof(timer_entry), RT_TIMER_ENTRY_POOL_SIZE);
+
+    // Initialize queues with static buffers
+    rt_status status = rt_spsc_init(&g_timer.request_queue, g_timer_request_buffer,
+                                     sizeof(timer_request), queue_size);
     if (RT_FAILED(status)) {
         return status;
     }
 
-    status = rt_spsc_init(&g_timer.completion_queue, sizeof(timer_completion), queue_size);
+    status = rt_spsc_init(&g_timer.completion_queue, g_timer_completion_buffer,
+                          sizeof(timer_completion), queue_size);
     if (RT_FAILED(status)) {
         rt_spsc_destroy(&g_timer.request_queue);
         return status;
@@ -306,7 +338,7 @@ void rt_timer_cleanup(void) {
     while (entry) {
         timer_entry *next = entry->next;
         close(entry->fd);
-        free(entry);
+        rt_pool_free(&g_timer_pool_mgr, entry);
         entry = next;
     }
     g_timer.timers = NULL;
@@ -346,20 +378,25 @@ void rt_timer_process_completions(void) {
                 break;
 
             case TIMER_COMP_TICK:
-                // Timer tick - inject message into actor's mailbox
+                // Timer tick - inject message into actor's mailbox using IPC pools
                 {
-                    mailbox_entry *entry = malloc(sizeof(mailbox_entry));
+                    mailbox_entry *entry = rt_pool_alloc(&g_mailbox_pool_mgr);
                     if (!entry) {
-                        break;  // Drop tick if out of memory
+                        RT_LOG_ERROR("Failed to send timer tick (mailbox pool exhausted)");
+                        break;  // Drop tick if pool exhausted
                     }
 
                     entry->sender = RT_SENDER_TIMER;
                     entry->len = sizeof(timer_id);
-                    entry->data = malloc(sizeof(timer_id));
-                    if (!entry->data) {
-                        free(entry);
+
+                    message_data_entry *msg_data = rt_pool_alloc(&g_message_pool_mgr);
+                    if (!msg_data) {
+                        rt_pool_free(&g_mailbox_pool_mgr, entry);
+                        RT_LOG_ERROR("Failed to allocate timer tick data (message pool exhausted)");
                         break;
                     }
+
+                    entry->data = msg_data->data;
                     *(timer_id *)entry->data = comp.id;
                     entry->borrow_ptr = NULL;
                     entry->next = NULL;

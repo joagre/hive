@@ -6,7 +6,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-// Forward declarations for I/O subsystems
+// Forward declarations for subsystems
+extern rt_status rt_ipc_init(void);
 extern rt_status rt_file_init(size_t queue_size);
 extern void rt_file_cleanup(void);
 extern rt_status rt_net_init(size_t queue_size);
@@ -35,6 +36,14 @@ rt_status rt_init(const rt_config *cfg) {
     // Initialize scheduler
     status = rt_scheduler_init();
     if (RT_FAILED(status)) {
+        rt_actor_cleanup();
+        return status;
+    }
+
+    // Initialize IPC pools
+    status = rt_ipc_init();
+    if (RT_FAILED(status)) {
+        rt_scheduler_cleanup();
         rt_actor_cleanup();
         return status;
     }

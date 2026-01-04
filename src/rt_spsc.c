@@ -7,9 +7,13 @@ static bool is_power_of_2(size_t n) {
     return n > 0 && (n & (n - 1)) == 0;
 }
 
-rt_status rt_spsc_init(rt_spsc_queue *q, size_t entry_size, size_t capacity) {
+rt_status rt_spsc_init(rt_spsc_queue *q, void *buffer, size_t entry_size, size_t capacity) {
     if (!q) {
         return RT_ERROR(RT_ERR_INVALID, "Queue pointer is NULL");
+    }
+
+    if (!buffer) {
+        return RT_ERROR(RT_ERR_INVALID, "Buffer pointer is NULL");
     }
 
     if (entry_size == 0) {
@@ -20,12 +24,8 @@ rt_status rt_spsc_init(rt_spsc_queue *q, size_t entry_size, size_t capacity) {
         return RT_ERROR(RT_ERR_INVALID, "Capacity must be power of 2");
     }
 
-    // Allocate ring buffer
-    q->buffer = malloc(entry_size * capacity);
-    if (!q->buffer) {
-        return RT_ERROR(RT_ERR_NOMEM, "Failed to allocate queue buffer");
-    }
-
+    // Use provided static buffer
+    q->buffer = buffer;
     q->entry_size = entry_size;
     q->capacity = capacity;
     atomic_init(&q->head, 0);
@@ -35,8 +35,8 @@ rt_status rt_spsc_init(rt_spsc_queue *q, size_t entry_size, size_t capacity) {
 }
 
 void rt_spsc_destroy(rt_spsc_queue *q) {
-    if (q && q->buffer) {
-        free(q->buffer);
+    if (q) {
+        // Note: buffer points to static memory, no free needed
         q->buffer = NULL;
     }
 }

@@ -1,4 +1,5 @@
 #include "rt_file.h"
+#include "rt_static_config.h"
 #include "rt_actor.h"
 #include "rt_scheduler.h"
 #include "rt_runtime.h"
@@ -69,6 +70,10 @@ typedef struct {
         size_t nbytes;   // For read/write
     } result;
 } file_completion;
+
+// Static buffers for file I/O queues
+static uint8_t g_file_request_buffer[sizeof(file_request) * RT_COMPLETION_QUEUE_SIZE];
+static uint8_t g_file_completion_buffer[sizeof(file_completion) * RT_COMPLETION_QUEUE_SIZE];
 
 // File I/O subsystem state
 static struct {
@@ -186,13 +191,20 @@ rt_status rt_file_init(size_t queue_size) {
         return RT_SUCCESS;
     }
 
-    // Initialize queues (power of 2 capacity)
-    rt_status status = rt_spsc_init(&g_file_io.request_queue, sizeof(file_request), queue_size);
+    // Validate queue_size against compile-time limit
+    if (queue_size > RT_COMPLETION_QUEUE_SIZE) {
+        return RT_ERROR(RT_ERR_INVALID, "queue_size exceeds RT_COMPLETION_QUEUE_SIZE");
+    }
+
+    // Initialize queues with static buffers (power of 2 capacity)
+    rt_status status = rt_spsc_init(&g_file_io.request_queue, g_file_request_buffer,
+                                     sizeof(file_request), queue_size);
     if (RT_FAILED(status)) {
         return status;
     }
 
-    status = rt_spsc_init(&g_file_io.completion_queue, sizeof(file_completion), queue_size);
+    status = rt_spsc_init(&g_file_io.completion_queue, g_file_completion_buffer,
+                          sizeof(file_completion), queue_size);
     if (RT_FAILED(status)) {
         rt_spsc_destroy(&g_file_io.request_queue);
         return status;

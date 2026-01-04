@@ -1,9 +1,39 @@
 #include "rt_ipc.h"
+#include "rt_static_config.h"
+#include "rt_pool.h"
 #include "rt_actor.h"
 #include "rt_scheduler.h"
 #include "rt_log.h"
 #include <stdlib.h>
 #include <string.h>
+
+// Static pools for IPC (mailbox entries and message data)
+static mailbox_entry g_mailbox_pool[RT_MAILBOX_ENTRY_POOL_SIZE];
+static bool g_mailbox_used[RT_MAILBOX_ENTRY_POOL_SIZE];
+rt_pool g_mailbox_pool_mgr;  // Non-static so rt_link.c can access
+
+// Message data pool - fixed size entries
+typedef struct {
+    uint8_t data[RT_MAX_MESSAGE_SIZE];
+} message_data_entry;
+
+static message_data_entry g_message_pool[RT_MESSAGE_DATA_POOL_SIZE];
+static bool g_message_used[RT_MESSAGE_DATA_POOL_SIZE];
+rt_pool g_message_pool_mgr;  // Non-static so rt_link.c can access
+
+// Forward declaration for init function
+rt_status rt_ipc_init(void);
+
+// Initialize IPC pools
+rt_status rt_ipc_init(void) {
+    rt_pool_init(&g_mailbox_pool_mgr, g_mailbox_pool, g_mailbox_used,
+                 sizeof(mailbox_entry), RT_MAILBOX_ENTRY_POOL_SIZE);
+
+    rt_pool_init(&g_message_pool_mgr, g_message_pool, g_message_used,
+                 sizeof(message_data_entry), RT_MESSAGE_DATA_POOL_SIZE);
+
+    return RT_SUCCESS;
+}
 
 rt_status rt_ipc_send(actor_id to, const void *data, size_t len, rt_ipc_mode mode) {
     actor *sender = rt_actor_current();
@@ -16,10 +46,15 @@ rt_status rt_ipc_send(actor_id to, const void *data, size_t len, rt_ipc_mode mod
         return RT_ERROR(RT_ERR_INVALID, "Invalid receiver actor ID");
     }
 
-    // Allocate mailbox entry
-    mailbox_entry *entry = malloc(sizeof(mailbox_entry));
+    // Validate message size
+    if (len > RT_MAX_MESSAGE_SIZE) {
+        return RT_ERROR(RT_ERR_INVALID, "Message exceeds RT_MAX_MESSAGE_SIZE");
+    }
+
+    // Allocate mailbox entry from pool
+    mailbox_entry *entry = rt_pool_alloc(&g_mailbox_pool_mgr);
     if (!entry) {
-        return RT_ERROR(RT_ERR_NOMEM, "Failed to allocate mailbox entry");
+        return RT_ERROR(RT_ERR_NOMEM, "Mailbox entry pool exhausted");
     }
 
     entry->sender = sender->id;
@@ -27,13 +62,14 @@ rt_status rt_ipc_send(actor_id to, const void *data, size_t len, rt_ipc_mode mod
     entry->next = NULL;
 
     if (mode == IPC_COPY) {
-        // Copy mode: allocate and copy data
-        entry->data = malloc(len);
-        if (!entry->data) {
-            free(entry);
-            return RT_ERROR(RT_ERR_NOMEM, "Failed to allocate message data");
+        // Copy mode: allocate and copy data from pool
+        message_data_entry *msg_data = rt_pool_alloc(&g_message_pool_mgr);
+        if (!msg_data) {
+            rt_pool_free(&g_mailbox_pool_mgr, entry);
+            return RT_ERROR(RT_ERR_NOMEM, "Message data pool exhausted");
         }
-        memcpy(entry->data, data, len);
+        memcpy(msg_data->data, data, len);
+        entry->data = msg_data->data;
         entry->borrow_ptr = NULL;
 
         // Add to receiver's mailbox
@@ -116,9 +152,11 @@ rt_status rt_ipc_recv(rt_message *msg, int32_t timeout_ms) {
     // Free previous active message if any
     if (current->active_msg) {
         if (current->active_msg->data) {
-            free(current->active_msg->data);  // Free COPY message data
+            // Calculate message_data_entry pointer from data pointer
+            message_data_entry *msg_data = (message_data_entry*)((char*)current->active_msg->data - offsetof(message_data_entry, data));
+            rt_pool_free(&g_message_pool_mgr, msg_data);
         }
-        free(current->active_msg);  // Free entry
+        rt_pool_free(&g_mailbox_pool_mgr, current->active_msg);
         current->active_msg = NULL;
     }
 
@@ -163,9 +201,11 @@ void rt_ipc_release(const rt_message *msg) {
     // Free the active message
     if (current->active_msg) {
         if (current->active_msg->data) {
-            free(current->active_msg->data);  // Free COPY message data
+            // Calculate message_data_entry pointer from data pointer
+            message_data_entry *msg_data = (message_data_entry*)((char*)current->active_msg->data - offsetof(message_data_entry, data));
+            rt_pool_free(&g_message_pool_mgr, msg_data);
         }
-        free(current->active_msg);  // Free entry
+        rt_pool_free(&g_mailbox_pool_mgr, current->active_msg);
         current->active_msg = NULL;
     }
 }
@@ -184,4 +224,40 @@ size_t rt_ipc_count(void) {
         return 0;
     }
     return current->mbox.count;
+}
+
+// Clear all entries from a mailbox (called during actor cleanup)
+void rt_ipc_mailbox_clear(mailbox *mbox) {
+    if (!mbox) {
+        return;
+    }
+
+    mailbox_entry *entry = mbox->head;
+    while (entry) {
+        mailbox_entry *next = entry->next;
+        if (entry->data) {
+            // Calculate message_data_entry pointer from data pointer
+            message_data_entry *msg_data = (message_data_entry*)((char*)entry->data - offsetof(message_data_entry, data));
+            rt_pool_free(&g_message_pool_mgr, msg_data);
+        }
+        rt_pool_free(&g_mailbox_pool_mgr, entry);
+        entry = next;
+    }
+    mbox->head = NULL;
+    mbox->tail = NULL;
+    mbox->count = 0;
+}
+
+// Free an active message entry (called during actor cleanup)
+void rt_ipc_free_active_msg(mailbox_entry *entry) {
+    if (!entry) {
+        return;
+    }
+
+    if (entry->data) {
+        // Calculate message_data_entry pointer from data pointer
+        message_data_entry *msg_data = (message_data_entry*)((char*)entry->data - offsetof(message_data_entry, data));
+        rt_pool_free(&g_message_pool_mgr, msg_data);
+    }
+    rt_pool_free(&g_mailbox_pool_mgr, entry);
 }
