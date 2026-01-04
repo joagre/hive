@@ -376,7 +376,7 @@ On blocking calls, the actor yields to the scheduler. The I/O thread handles the
 File I/O operations.
 
 ```c
-rt_status rt_file_open(const char *path, int flags, int *fd_out);
+rt_status rt_file_open(const char *path, int flags, int mode, int *fd_out);
 rt_status rt_file_close(int fd);
 
 rt_status rt_file_read(int fd, void *buf, size_t len, size_t *actual);
@@ -387,6 +387,8 @@ rt_status rt_file_pwrite(int fd, const void *buf, size_t len, size_t offset, siz
 
 rt_status rt_file_sync(int fd);
 ```
+
+The `mode` parameter in `rt_file_open()` specifies file permissions (e.g., 0644) when creating files with `O_CREAT` flag, following POSIX conventions.
 
 File operations block the calling actor and yield to the scheduler.
 
