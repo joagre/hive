@@ -76,9 +76,7 @@ make
 │   ├── timer.c          # Timer example (one-shot and periodic)
 │   ├── fileio.c         # File I/O example
 │   ├── bus.c            # Bus pub-sub example
-│   ├── echo.c           # Network echo server
-│   ├── minimal_echo.c   # Minimal network echo
-│   └── minimal_net.c    # Minimal network example
+│   └── echo.c           # Network echo server
 ├── build/            # Build artifacts (generated)
 ├── Makefile          # Build system
 ├── spec.md           # Full specification

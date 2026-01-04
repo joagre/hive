@@ -69,16 +69,6 @@ run-fileio: $(BUILD_DIR)/fileio
 run-echo: $(BUILD_DIR)/echo
 	./$(BUILD_DIR)/echo
 
-# Run minimal echo example
-.PHONY: run-minimal-echo
-run-minimal-echo: $(BUILD_DIR)/minimal_echo
-	./$(BUILD_DIR)/minimal_echo
-
-# Run minimal network example
-.PHONY: run-minimal-net
-run-minimal-net: $(BUILD_DIR)/minimal_net
-	./$(BUILD_DIR)/minimal_net
-
 # Help
 .PHONY: help
 help:
@@ -88,8 +78,6 @@ help:
 	@echo "  run-pingpong      - Build and run ping-pong example"
 	@echo "  run-fileio        - Build and run file I/O example"
 	@echo "  run-echo          - Build and run echo server/client example"
-	@echo "  run-minimal-echo  - Build and run minimal echo example"
-	@echo "  run-minimal-net   - Build and run minimal network example"
 	@echo "  help              - Show this help message"
 
 # Dependencies
