@@ -108,25 +108,42 @@ The runtime uses static allocation for deterministic behavior and suitability fo
 
 **Allocation Strategy:**
 
-- **Actor table:** Fixed-size array allocated at initialization, size configured via `rt_config.max_actors`
-- **Actor stacks:** Fixed-size per actor, allocated at spawn time from pre-allocated stack pool or via static allocation
-- **Mailboxes:** Fixed-size ring buffer per actor, configured via compile-time constant
-- **Bus entries:** Fixed-size ring buffer per bus, size configured at bus creation
-- **Bus subscribers:** Fixed-size array per bus, size configured at bus creation
-- **Link/Monitor entries:** Fixed-size arrays per actor, configured via compile-time constants
-- **Timer entries:** Fixed-size global pool, configured via compile-time constant
-- **Completion queues:** Fixed-size arrays, size configured via `rt_config.completion_queue_size`
+- **Actor table:** Static array of `RT_MAX_ACTORS` (64), configured at compile time
+- **Actor stacks:** Fixed-size per actor, allocated at spawn time via malloc (~64KB each, only malloc in system)
+- **IPC pools:** Static pools with O(1) allocation
+  - Mailbox entry pool: `RT_MAILBOX_ENTRY_POOL_SIZE` (256)
+  - Message data pool: `RT_MESSAGE_DATA_POOL_SIZE` (256), fixed-size entries of `RT_MAX_MESSAGE_SIZE` (256 bytes)
+- **Link/Monitor pools:** Static pools for actor relationships
+  - Link entry pool: `RT_LINK_ENTRY_POOL_SIZE` (128)
+  - Monitor entry pool: `RT_MONITOR_ENTRY_POOL_SIZE` (128)
+- **Timer pool:** Static pool of `RT_TIMER_ENTRY_POOL_SIZE` (64)
+- **Bus storage:** Static arrays per bus
+  - Bus entries: Pre-allocated array of `RT_MAX_BUS_ENTRIES` (64) per bus
+  - Bus subscribers: Pre-allocated array of `RT_MAX_BUS_SUBSCRIBERS` (32) per bus
+  - Entry data: Uses shared message pool
+- **Completion queues:** Static buffers of `RT_COMPLETION_QUEUE_SIZE` (64) for each I/O subsystem
+
+**Memory Footprint (typical configuration):**
+- Static data (BSS): ~138KB
+  - Actor table: 64 × ~200 bytes = 12.8 KB
+  - Mailbox pool: 256 × ~40 bytes = 10.2 KB
+  - Message pool: 256 × 256 bytes = 64 KB
+  - Link/monitor pools: 256 × ~16 bytes = 4 KB
+  - Timer pool: 64 × ~40 bytes = 2.5 KB
+  - Bus tables: 32 × ~200 bytes = 6.4 KB
+  - Completion queues: 6 × 64 × ~100 bytes = 38.4 KB
+- Dynamic (heap): Variable actor stacks only
+  - Example: 20 actors × 32KB average = 640 KB
+
+**Total:** ~778 KB (known at compile time)
 
 **Benefits:**
 
-- Zero runtime allocation failures
-- No heap fragmentation
-- Deterministic memory usage
-- Known memory footprint at link time
+- Deterministic memory: Footprint calculable at link time
+- Zero heap fragmentation: No malloc in hot paths
+- Predictable allocation: Pool exhaustion returns clear errors
 - Suitable for safety-critical certification
-- Predictable timing (no malloc latency)
-
-**Implementation Note:** The current Linux development version uses `malloc/calloc` for convenience during prototyping. The production MCU version will use static arrays and pre-allocated buffers exclusively, with all limits defined at compile time.
+- Predictable timing: No malloc latency in message passing
 
 ## Error Handling
 

@@ -57,24 +57,27 @@ make
 ```
 .
 ├── include/          # Public headers
-│   ├── rt_types.h       # Core types and error handling
-│   ├── rt_context.h     # Context switching interface
-│   ├── rt_actor.h       # Actor management
-│   ├── rt_ipc.h         # Inter-process communication
-│   ├── rt_link.h        # Actor linking and monitoring
-│   ├── rt_scheduler.h   # Scheduler interface
-│   ├── rt_runtime.h     # Runtime initialization and public API
-│   ├── rt_timer.h       # Timer subsystem
-│   ├── rt_file.h        # File I/O subsystem
-│   ├── rt_net.h         # Network I/O subsystem
-│   ├── rt_bus.h         # Bus pub-sub subsystem
-│   ├── rt_spsc.h        # Lock-free SPSC queue
-│   └── rt_log.h         # Logging utilities
+│   ├── rt_types.h          # Core types and error handling
+│   ├── rt_static_config.h  # Compile-time configuration and limits
+│   ├── rt_pool.h           # Memory pool allocator
+│   ├── rt_context.h        # Context switching interface
+│   ├── rt_actor.h          # Actor management
+│   ├── rt_ipc.h            # Inter-process communication
+│   ├── rt_link.h           # Actor linking and monitoring
+│   ├── rt_scheduler.h      # Scheduler interface
+│   ├── rt_runtime.h        # Runtime initialization and public API
+│   ├── rt_timer.h          # Timer subsystem
+│   ├── rt_file.h           # File I/O subsystem
+│   ├── rt_net.h            # Network I/O subsystem
+│   ├── rt_bus.h            # Bus pub-sub subsystem
+│   ├── rt_spsc.h           # Lock-free SPSC queue
+│   └── rt_log.h            # Logging utilities
 ├── src/              # Implementation
+│   ├── rt_pool.c        # Pool allocator implementation
 │   ├── rt_actor.c       # Actor table and lifecycle
 │   ├── rt_context.c     # Context initialization
 │   ├── rt_context_asm.S # x86-64 context switch assembly
-│   ├── rt_ipc.c         # Mailbox and message passing
+│   ├── rt_ipc.c         # Mailbox and message passing with pools
 │   ├── rt_link.c        # Linking and monitoring implementation
 │   ├── rt_runtime.c     # Runtime init and actor spawning
 │   ├── rt_scheduler.c   # Cooperative scheduler
@@ -359,17 +362,16 @@ All I/O operations (timers, file, network) are handled by dedicated worker threa
 
 ### Current Limitations
 
-- Simple memory management (uses malloc/free, memory pools planned)
 - No stack overflow detection (guard patterns/MPU planned)
 - Linux-only (FreeRTOS/ARM Cortex-M port planned)
 
-These limitations are intentional for the initial release. See `spec.md` for complete details and `Future Work` below for planned enhancements.
+These limitations are intentional for the current release. See `spec.md` for complete details and `Future Work` below for planned enhancements.
 
 ## Future Work
 
 - Port to ARM Cortex-M with FreeRTOS integration
-- Add memory pools for better performance
 - Add stack overflow detection (guard patterns or MPU)
+- Add throttling on IPC send for backpressure control
 
 ## License
 

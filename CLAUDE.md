@@ -46,10 +46,15 @@ On FreeRTOS, the entire actor runtime runs as a single task. Blocking I/O is del
 - Implemented in manual assembly for performance
 
 ### Memory Management
-- Actor stacks: Fixed-size, allocated at spawn, no reallocation
-- Actor table: Static array configured at runtime init
-- Mailbox/bus entries: Simple linked lists or ring buffers from pools
-- First version uses malloc/free; future versions may use dedicated pools
+- Actor stacks: Fixed-size, allocated at spawn via malloc (only malloc in system)
+- Actor table: Static array (RT_MAX_ACTORS), configured at compile time
+- All runtime structures: Static pools with O(1) allocation
+  - IPC: Mailbox entry pool (256) and message data pool (256)
+  - Links/Monitors: Dedicated pools (128 each)
+  - Timers: Timer entry pool (64)
+  - Bus: Uses message pool for entry data
+- Deterministic memory: ~138KB static + variable actor stacks
+- No heap fragmentation: Zero malloc in hot paths (message passing, timers, etc.)
 
 ### Error Handling
 All runtime functions return `rt_status` with a code and optional string literal message. The message field is never heap-allocated.
@@ -71,12 +76,17 @@ All runtime functions return `rt_status` with a code and optional string literal
 ## Important Implementation Details
 
 ### Runtime Configuration
-The runtime is configured via `rt_config` structure passed to `rt_init()`:
-- `default_stack_size`: Default actor stack size in bytes (default: 65536)
-- `max_actors`: Maximum number of concurrent actors (default: 64)
-- `completion_queue_size`: Size of I/O completion queues for each subsystem (default: 64)
+The runtime uses compile-time configuration via `rt_static_config.h`:
+- `RT_MAX_ACTORS`: Maximum concurrent actors (64)
+- `RT_MAILBOX_ENTRY_POOL_SIZE`: Mailbox entry pool (256)
+- `RT_MESSAGE_DATA_POOL_SIZE`: Message data pool (256)
+- `RT_LINK_ENTRY_POOL_SIZE`: Link entry pool (128)
+- `RT_MONITOR_ENTRY_POOL_SIZE`: Monitor entry pool (128)
+- `RT_TIMER_ENTRY_POOL_SIZE`: Timer entry pool (64)
+- `RT_COMPLETION_QUEUE_SIZE`: I/O completion queue size (64)
+- `RT_MAX_MESSAGE_SIZE`: Maximum message size in bytes (256)
 
-After `rt_run()` completes, call `rt_cleanup()` to free all runtime resources.
+The `rt_config` structure passed to `rt_init()` validates runtime parameters against these compile-time limits. After `rt_run()` completes, call `rt_cleanup()` to free actor stacks.
 
 ### Completion Queue
 Lock-free SPSC queue with atomic head/tail pointers. Capacity must be power of 2. Producer (I/O thread) pushes, consumer (scheduler) pops.
@@ -93,7 +103,8 @@ Different implementations for Linux (dev) vs FreeRTOS (prod):
 - `RT_SENDER_TIMER` (0xFFFFFFFF): Timer tick messages
 - `RT_SENDER_SYSTEM` (0xFFFFFFFE): System messages (e.g., actor death notifications)
 
-## Future Considerations (Not in First Version)
+## Future Considerations
 - Throttling on IPC send (D-language style backpressure)
-- Dedicated memory pools
 - Stack overflow detection (guard patterns or MPU)
+- Distributed actors for multi-MCU systems
+- Hot code reload
