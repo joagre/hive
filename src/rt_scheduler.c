@@ -1,6 +1,7 @@
 #include "rt_scheduler.h"
 #include "rt_actor.h"
 #include "rt_context.h"
+#include "rt_link.h"
 #include "rt_log.h"
 #include <stdio.h>
 #include <stdbool.h>

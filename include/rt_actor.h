@@ -28,6 +28,19 @@ typedef struct {
     size_t         count;
 } mailbox;
 
+// Link entry (bidirectional relationship)
+typedef struct link_entry {
+    actor_id            target;
+    struct link_entry  *next;
+} link_entry;
+
+// Monitor entry (unidirectional relationship)
+typedef struct monitor_entry {
+    uint32_t               ref;
+    actor_id               target;
+    struct monitor_entry  *next;
+} monitor_entry;
+
 // Actor control block
 typedef struct {
     actor_id       id;
@@ -54,6 +67,11 @@ typedef struct {
     rt_status      io_status;
     int            io_result_fd;      // For file_open
     size_t         io_result_nbytes;  // For file read/write
+
+    // Links and monitors
+    link_entry    *links;        // Bidirectional links to other actors
+    monitor_entry *monitors;     // Actors we are monitoring (unidirectional)
+    rt_exit_reason exit_reason;  // Why this actor exited
 } actor;
 
 // Actor table - global storage for all actors

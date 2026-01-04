@@ -1,6 +1,7 @@
 #include "rt_runtime.h"
 #include "rt_actor.h"
 #include "rt_scheduler.h"
+#include "rt_link.h"
 #include "rt_log.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -14,6 +15,8 @@ extern rt_status rt_timer_init(void);
 extern void rt_timer_cleanup(void);
 extern rt_status rt_bus_init(void);
 extern void rt_bus_cleanup(void);
+extern rt_status rt_link_init(void);
+extern void rt_link_cleanup(void);
 
 // Global configuration
 static rt_config g_config = RT_CONFIG_DEFAULT;
@@ -36,9 +39,18 @@ rt_status rt_init(const rt_config *cfg) {
         return status;
     }
 
+    // Initialize link subsystem
+    status = rt_link_init();
+    if (RT_FAILED(status)) {
+        rt_scheduler_cleanup();
+        rt_actor_cleanup();
+        return status;
+    }
+
     // Initialize file I/O subsystem
     status = rt_file_init();
     if (RT_FAILED(status)) {
+        rt_link_cleanup();
         rt_scheduler_cleanup();
         rt_actor_cleanup();
         return status;
@@ -48,6 +60,7 @@ rt_status rt_init(const rt_config *cfg) {
     status = rt_net_init();
     if (RT_FAILED(status)) {
         rt_file_cleanup();
+        rt_link_cleanup();
         rt_scheduler_cleanup();
         rt_actor_cleanup();
         return status;
@@ -58,6 +71,7 @@ rt_status rt_init(const rt_config *cfg) {
     if (RT_FAILED(status)) {
         rt_net_cleanup();
         rt_file_cleanup();
+        rt_link_cleanup();
         rt_scheduler_cleanup();
         rt_actor_cleanup();
         return status;
@@ -69,6 +83,7 @@ rt_status rt_init(const rt_config *cfg) {
         rt_timer_cleanup();
         rt_net_cleanup();
         rt_file_cleanup();
+        rt_link_cleanup();
         rt_scheduler_cleanup();
         rt_actor_cleanup();
         return status;
@@ -90,6 +105,7 @@ void rt_cleanup(void) {
     rt_timer_cleanup();
     rt_net_cleanup();
     rt_file_cleanup();
+    rt_link_cleanup();
     rt_scheduler_cleanup();
     rt_actor_cleanup();
 }
@@ -124,8 +140,9 @@ _Noreturn void rt_exit(void) {
         RT_LOG_DEBUG("Actor %u (%s) exiting", current->id,
                      current->name ? current->name : "unnamed");
 
-        // Mark actor as dead - scheduler will clean up resources
-        // Don't free stack here - we're still running on it!
+        // Mark exit reason and actor state
+        // Scheduler will clean up resources - don't free stack here!
+        current->exit_reason = RT_EXIT_NORMAL;
         current->state = ACTOR_STATE_DEAD;
     }
 
