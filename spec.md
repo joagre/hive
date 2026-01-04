@@ -102,13 +102,31 @@ Stack growth/reallocation is not supported. If an actor overflows its stack, beh
 
 ### Memory Allocation
 
-The runtime uses simple allocation strategies suitable for MCU:
+The runtime uses static allocation for deterministic behavior and suitability for MCU deployment:
 
-- Actor table: Static array, size configured at init
-- Mailbox entries: Simple linked list with fixed-size entries from a pool
-- Bus entries: Ring buffer per bus
+**Design Principle:** All memory is allocated at compile time or initialization. No heap allocation occurs during runtime operation (message passing, timer events, etc.).
 
-First version uses malloc/free for simplicity. Future versions may use dedicated memory pools.
+**Allocation Strategy:**
+
+- **Actor table:** Fixed-size array allocated at initialization, size configured via `rt_config.max_actors`
+- **Actor stacks:** Fixed-size per actor, allocated at spawn time from pre-allocated stack pool or via static allocation
+- **Mailboxes:** Fixed-size ring buffer per actor, configured via compile-time constant
+- **Bus entries:** Fixed-size ring buffer per bus, size configured at bus creation
+- **Bus subscribers:** Fixed-size array per bus, size configured at bus creation
+- **Link/Monitor entries:** Fixed-size arrays per actor, configured via compile-time constants
+- **Timer entries:** Fixed-size global pool, configured via compile-time constant
+- **Completion queues:** Fixed-size arrays, size configured via `rt_config.completion_queue_size`
+
+**Benefits:**
+
+- Zero runtime allocation failures
+- No heap fragmentation
+- Deterministic memory usage
+- Known memory footprint at link time
+- Suitable for safety-critical certification
+- Predictable timing (no malloc latency)
+
+**Implementation Note:** The current Linux development version uses `malloc/calloc` for convenience during prototyping. The production MCU version will use static arrays and pre-allocated buffers exclusively, with all limits defined at compile time.
 
 ## Error Handling
 
@@ -506,5 +524,4 @@ The runtime abstracts platform-specific functionality:
 Not in scope for first version, but noted for future:
 
 - **Throttling on IPC send:** D-language style backpressure when mailbox is full
-- **Memory pools:** Dedicated allocators for mailbox entries, bus entries, actor stacks
 - **Stack overflow detection:** Guard patterns or MPU-based protection on Cortex-M
