@@ -97,5 +97,3 @@ Different implementations for Linux (dev) vs FreeRTOS (prod):
 - Throttling on IPC send (D-language style backpressure)
 - Dedicated memory pools
 - Stack overflow detection (guard patterns or MPU)
-- Distributed actors for multi-MCU systems
-- Hot code reload

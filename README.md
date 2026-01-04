@@ -367,7 +367,6 @@ See `spec.md` for the full feature set planned for production use.
 - Port to ARM Cortex-M with FreeRTOS integration
 - Add memory pools for better performance
 - Add stack overflow detection (guard patterns or MPU)
-- Distributed actors for multi-MCU systems
 
 ## License
 

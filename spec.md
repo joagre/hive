@@ -508,5 +508,3 @@ Not in scope for first version, but noted for future:
 - **Throttling on IPC send:** D-language style backpressure when mailbox is full
 - **Memory pools:** Dedicated allocators for mailbox entries, bus entries, actor stacks
 - **Stack overflow detection:** Guard patterns or MPU-based protection on Cortex-M
-- **Distributed actors:** External data marshalling for multi-MCU systems
-- **Hot code reload:** Actor replacement without system restart
