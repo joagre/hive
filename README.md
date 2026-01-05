@@ -289,6 +289,11 @@ if (rt_ipc_recv(&msg, 0) == RT_OK) {
 }
 ```
 
+**Also available:**
+- `rt_ipc_pending()` - Check if messages are available without receiving
+- `rt_ipc_count()` - Get number of messages in mailbox
+- Timeout parameter: `-1` (block forever), `0` (non-blocking), `>0` (milliseconds)
+
 ### Using Timers
 
 ```c
@@ -337,6 +342,12 @@ rt_file_read(fd, buffer, sizeof(buffer), &nread);
 rt_file_close(fd);
 ```
 
+**Also available:**
+- All operations return `rt_status` - check with `RT_FAILED(status)` for errors
+- Operations are **async** - they block the calling actor but not the runtime
+- Worker thread handles actual I/O, communicates via completion queue
+- See `examples/fileio.c` for complete example
+
 ### Network I/O
 
 ```c
@@ -379,6 +390,13 @@ if (!RT_FAILED(status)) {
     rt_net_close(server_fd);
 }
 ```
+
+**Also available:**
+- All operations return `rt_status` - check with `RT_FAILED(status)` for errors
+- Timeout parameter: `-1` (block forever), `0` (non-blocking), `>0` (milliseconds)
+- Operations are **async** - worker thread handles actual network I/O
+- Non-blocking mode useful for polling multiple connections
+- See `examples/echo.c` for complete TCP echo server example
 
 ### Bus (Pub-Sub)
 
@@ -426,6 +444,14 @@ rt_bus_unsubscribe(sensor_bus);
 rt_bus_destroy(sensor_bus);
 ```
 
+**Retention policy explained:**
+- `max_readers = 0` - Entries persist indefinitely (removed only when buffer wraps)
+- `max_readers = N` - Entry auto-removed after N subscribers read it
+- `max_age_ms = 0` - No time-based expiry
+- `max_age_ms = T` - Entries older than T milliseconds are auto-removed
+- Multiple subscribers can read the same data (pub-sub pattern)
+- See `examples/bus.c` for complete multi-subscriber example
+
 ### Actor Linking and Monitoring
 
 ```c
@@ -455,6 +481,14 @@ rt_demonitor(monitor_ref);
 // Unlink (remove bidirectional link)
 rt_unlink(other);
 ```
+
+**Link vs Monitor:**
+- **Link** (`rt_link`) - Bidirectional: both actors get exit notification if either dies
+- **Monitor** (`rt_monitor`) - Unidirectional: only monitor gets notification when target dies
+- Use **link** for peer relationships (both actors depend on each other)
+- Use **monitor** for supervisor patterns (supervisor watches workers)
+- Exit reasons: `RT_EXIT_NORMAL` (clean exit), `RT_EXIT_CRASH` (error), `RT_EXIT_KILLED` (terminated)
+- See `examples/link_demo.c` and `examples/supervisor.c` for complete examples
 
 ## API Overview
 
