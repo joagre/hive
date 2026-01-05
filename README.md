@@ -7,6 +7,14 @@ A complete actor-based runtime designed for **embedded and safety-critical syste
 
 The runtime uses **static memory allocation** for deterministic behavior with zero heap fragmentation—perfect for embedded systems and safety-critical applications. It features **priority-based scheduling** (4 levels: CRITICAL, HIGH, NORMAL, LOW) with fast context switching via manual assembly. Despite this minimalistic design, it provides a complete actor system with message passing (IPC with COPY/BORROW modes), linking, monitoring, timers, pub-sub messaging (bus), async networking, and async file I/O.
 
+## Quick Links
+
+📖 **[Full Specification](spec.md)** - Complete design and implementation details
+💻 **[Examples Directory](examples/)** - Working examples (pingpong, bus, echo server, etc.)
+🤖 **[Development Guide](CLAUDE.md)** - Instructions for Claude Code when working with this codebase
+🔧 **[Static Configuration](include/rt_static_config.h)** - Compile-time memory limits and pool sizes
+⚡ **[Benchmarks](#performance)** - Performance measurements and comparison
+
 ## Table of Contents
 
 - [Why Use This?](#why-use-this)
@@ -21,6 +29,7 @@ The runtime uses **static memory allocation** for deterministic behavior with ze
 - [Implementation Details](#implementation-details)
 - [Memory Configuration](#memory-configuration)
 - [Troubleshooting](#troubleshooting)
+- [FAQ](#faq)
 - [Future Work](#future-work)
 
 ## Why Use This?
@@ -59,6 +68,50 @@ This runtime is designed for:
 | **Priority scheduling** | ✅ | ❌ | ✅ | ❌ | ❌ |
 | **Message passing** | ✅ | ✅ | ⚠️ | ✅ | ❌ |
 | **MCU-ready** | ✅ (planned) | ❌ | ✅ | ❌ | ✅ |
+
+### Real-World Use Cases
+
+**Drone Autopilot (STM32F7)**
+```
+Actors:
+- IMU sensor reader (CRITICAL priority) - reads gyro/accel at 1kHz
+- Flight controller (CRITICAL) - PID loops for stabilization
+- GPS processor (HIGH) - position updates at 10Hz
+- Radio receiver (HIGH) - pilot commands
+- Telemetry sender (NORMAL) - ground station updates
+- LED status (LOW) - visual indicators
+
+Communication: Sensor actors publish to bus, controller subscribes
+Memory: ~150 KB static pools + 10 actors × 32KB stacks = ~470 KB total
+```
+
+**Industrial Sensor Network (ARM Cortex-M4)**
+```
+Actors:
+- Temperature sensors (HIGH) - 4 actors, one per sensor
+- Pressure monitor (HIGH) - analog sensor reader
+- Data aggregator (NORMAL) - collects and processes readings
+- ModBus interface (NORMAL) - communicates with PLC
+- Alarm monitor (CRITICAL) - safety threshold checks
+- LED display (LOW) - local status display
+
+Communication: Sensors publish to shared bus with retention policy
+Memory: ~80 KB static pools + 7 actors × 16KB stacks = ~192 KB total
+```
+
+**Robotics Control System (x86-64 Linux)**
+```
+Actors:
+- Vision processor (HIGH) - camera input processing
+- Path planner (HIGH) - navigation and obstacle avoidance
+- Motor controllers (CRITICAL) - 6 actors, one per motor
+- Lidar processor (HIGH) - distance sensing
+- Web interface (LOW) - remote monitoring/control
+- Data logger (NORMAL) - record telemetry
+
+Communication: Mix of IPC (COPY for small messages) and bus (sensor data)
+Memory: ~231 KB static pools + 12 actors × 64KB stacks = ~1 MB total
+```
 
 ## Features
 
@@ -932,6 +985,89 @@ size build/librt.a
 3. If pool exhausted → increase pool size in `rt_static_config.h`
 4. If hanging → add debug printf in actor, check for infinite loops
 5. If crashing → increase stack size or check for invalid pointers
+
+## FAQ
+
+### General Questions
+
+**Q: Can I use this in production?**
+A: The x86-64 Linux version is feature-complete and tested. For embedded/MCU deployment, wait for the ARM Cortex-M port (see [Future Work](#future-work)).
+
+**Q: Is this thread-safe?**
+A: The actor runtime itself is single-threaded (cooperative). I/O subsystems (file, network, timer) use separate worker threads but communicate via lock-free queues. Actors themselves should not use threads.
+
+**Q: How does this compare to FreeRTOS?**
+A: FreeRTOS provides preemptive multitasking with tasks and queues. This runtime provides cooperative multitasking with actors and message passing. FreeRTOS is lower-level; this runtime provides higher-level abstractions (linking, monitoring, pub-sub). You can run this runtime ON TOP of FreeRTOS (planned).
+
+**Q: Can actors share memory?**
+A: No. Actors communicate exclusively via message passing. This eliminates data races and shared-state bugs. Use IPC (COPY/BORROW modes) for direct messaging or Bus for pub-sub.
+
+**Q: What happens when a pool is exhausted?**
+A: Operations return `RT_ERR_NOMEM`. For critical operations (like exit notifications), messages may be dropped with error logging. Increase pool sizes in `rt_static_config.h`.
+
+### Performance Questions
+
+**Q: Why cooperative instead of preemptive?**
+A: Cooperative multitasking is simpler, more predictable, and avoids preemption-related bugs. It's perfect for embedded systems where actors cooperate (sensors, controllers, etc.). Critical actors get CRITICAL priority (0) and run first.
+
+**Q: What's the context switch overhead?**
+A: ~1.1 µs per switch on x86-64 (see [Performance](#performance)). This allows ~900K switches/sec, more than enough for typical embedded workloads.
+
+**Q: Should I use COPY or BORROW mode?**
+A:
+- **COPY** - For small messages (<256 bytes), fire-and-forget, sender doesn't care when receiver processes
+- **BORROW** - For large messages, when you need backpressure (sender blocks until receiver processes), zero-copy efficiency
+
+**Q: How many actors can I have?**
+A: Configured at compile time with `RT_MAX_ACTORS` (default: 64). Each actor needs a stack (~64KB default). Total actors limited by available memory.
+
+### Configuration Questions
+
+**Q: How do I change pool sizes?**
+A: Edit `include/rt_static_config.h`, modify the relevant `#define`, and rebuild with `make clean && make all`. See [Memory Configuration](#memory-configuration).
+
+**Q: How do I set actor priority?**
+A: Use `rt_spawn_ex()` with `actor_config`:
+```c
+actor_config cfg = RT_ACTOR_CONFIG_DEFAULT;
+cfg.priority = 0;  // CRITICAL (0-3, lower is higher priority)
+rt_spawn_ex(my_actor, arg, &cfg);
+```
+
+**Q: How much memory does this use?**
+A: Default config: ~231 KB static (BSS) + N actors × stack size. For 20 actors with 64KB stacks: ~1.5 MB total. See [Memory Configuration](#memory-configuration) for calculation details.
+
+**Q: Can I run this on Arduino/ESP32/STM32?**
+A: Not yet. Current version targets x86-64 Linux. ARM Cortex-M port (STM32) is planned. ESP32 (Xtensa) not currently planned.
+
+### Debugging Questions
+
+**Q: Why is my actor not running?**
+A: Possible causes:
+1. Lower priority than another busy actor (check priority levels)
+2. Actor is WAITING (blocked on `rt_ipc_recv()`, `rt_file_read()`, etc.)
+3. No messages in mailbox (if blocking on receive)
+
+**Q: How do I debug deadlocks?**
+A: Add debug printf at actor boundaries:
+```c
+printf("[Actor %u] Waiting for message...\n", rt_self());
+rt_ipc_recv(&msg, -1);
+printf("[Actor %u] Received message\n", rt_self());
+```
+Check for circular dependencies (A waits for B, B waits for A).
+
+**Q: Can I use GDB with this?**
+A: Yes! Compile with `-g` (already in Makefile), run with GDB:
+```bash
+gdb ./build/your_example
+(gdb) break my_actor
+(gdb) run
+(gdb) bt  # Show actor call stack
+```
+
+**Q: Why can't I use printf in actors?**
+A: You CAN use printf! It's cooperative, so printf won't block the runtime. Just be aware that excessive printf can slow down your application.
 
 ## Future Work
 
