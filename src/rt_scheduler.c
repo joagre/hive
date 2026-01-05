@@ -6,6 +6,7 @@
 #include "rt_log.h"
 #include <stdio.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include <time.h>
 
 // External function to get actor table
@@ -16,6 +17,10 @@ extern void rt_file_process_completions(void);
 extern void rt_net_process_completions(void);
 extern void rt_timer_process_completions(void);
 
+// Stack overflow detection (must match rt_actor.c)
+#define STACK_GUARD_PATTERN 0xDEADBEEFCAFEBABEULL
+#define STACK_GUARD_SIZE 8
+
 // Scheduler state
 static struct {
     rt_context scheduler_ctx;
@@ -23,6 +28,18 @@ static struct {
     bool       initialized;
     size_t     last_run_idx[RT_PRIO_COUNT];  // Last run actor index for each priority
 } g_scheduler = {0};
+
+// Check stack guard patterns for overflow detection
+static bool check_stack_guard(actor *a) {
+    if (!a || !a->stack) {
+        return true;  // No stack to check
+    }
+
+    uint64_t *guard_low = (uint64_t *)a->stack;
+    uint64_t *guard_high = (uint64_t *)((uint8_t *)a->stack + a->stack_size - STACK_GUARD_SIZE);
+
+    return (*guard_low == STACK_GUARD_PATTERN && *guard_high == STACK_GUARD_PATTERN);
+}
 
 rt_status rt_scheduler_init(void) {
     g_scheduler.shutdown_requested = false;
@@ -93,6 +110,13 @@ void rt_scheduler_run(void) {
 
             // Context switch to actor
             rt_context_switch(&g_scheduler.scheduler_ctx, &next->ctx);
+
+            // Check for stack overflow
+            if (!check_stack_guard(next)) {
+                RT_LOG_ERROR("Actor %u stack overflow detected", next->id);
+                next->exit_reason = RT_EXIT_CRASH_STACK;
+                next->state = ACTOR_STATE_DEAD;
+            }
 
             // Actor has yielded or exited
             RT_LOG_TRACE("Scheduler: Actor %u yielded, state=%d", next->id, next->state);

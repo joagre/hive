@@ -79,9 +79,10 @@ typedef enum {
 
 // Exit reason codes
 typedef enum {
-    RT_EXIT_NORMAL,    // Actor called rt_exit()
-    RT_EXIT_CRASH,     // Actor function returned without calling rt_exit()
-    RT_EXIT_KILLED,    // Actor was killed externally (reserved for future use)
+    RT_EXIT_NORMAL,       // Actor called rt_exit()
+    RT_EXIT_CRASH,        // Actor function returned without calling rt_exit()
+    RT_EXIT_CRASH_STACK,  // Stack overflow detected
+    RT_EXIT_KILLED,       // Actor was killed externally (reserved for future use)
 } rt_exit_reason;
 
 #endif // RT_TYPES_H

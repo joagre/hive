@@ -254,9 +254,10 @@ Exit message structure:
 
 ```c
 typedef enum {
-    RT_EXIT_NORMAL,    // actor called rt_exit()
-    RT_EXIT_CRASH,     // actor crashed (stack overflow, etc.)
-    RT_EXIT_KILLED,    // actor was killed externally
+    RT_EXIT_NORMAL,       // Actor called rt_exit()
+    RT_EXIT_CRASH,        // Actor function returned without calling rt_exit()
+    RT_EXIT_CRASH_STACK,  // Stack overflow detected
+    RT_EXIT_KILLED,       // Actor was killed externally
 } rt_exit_reason;
 
 typedef struct {
@@ -730,8 +731,31 @@ The runtime abstracts platform-specific functionality:
 | Network | BSD sockets | lwIP |
 | File | POSIX | FATFS or littlefs |
 
+## Stack Overflow Detection
+
+The runtime implements stack overflow detection using guard patterns:
+
+**Implementation:**
+- 8-byte guard patterns placed at both ends of each actor stack
+- Guards checked on every context switch
+- Pattern: `0xDEADBEEFCAFEBABE` (uint64_t)
+- Overhead: 16 bytes per stack
+
+**Behavior on overflow:**
+- Detection occurs on next context switch after overflow
+- Actor marked as DEAD with exit reason `RT_EXIT_CRASH_STACK`
+- Links/monitors notified (if stack corruption hasn't prevented it)
+- Error logged: "Actor N stack overflow detected"
+- System continues running other actors
+
+**Limitations:**
+- Detection is post-facto (after overflow occurs)
+- Severe overflows may corrupt adjacent memory before detection
+- On embedded systems, MPU-based guard pages provide immediate hardware traps
+
+**Future:**
+- ARM Cortex-M: MPU guard pages for zero-overhead hardware protection
+
 ## Future Considerations
 
 Not in scope for first version, but noted for future:
-
-- **Stack overflow detection:** Guard patterns or MPU-based protection on Cortex-M

@@ -22,11 +22,12 @@ The runtime uses **static memory allocation** for deterministic behavior with ze
 - Static memory allocation - Deterministic footprint, zero fragmentation, safety-critical ready
 - Cooperative multitasking with manual x86-64 context switching
 - Priority-based round-robin scheduler (4 priority levels)
+- Stack overflow detection with guard patterns (16-byte overhead per actor)
 - Actor lifecycle management (spawn, exit)
 - IPC with COPY and BORROW modes
 - Blocking and non-blocking message receive
 - Actor linking and monitoring (bidirectional links, unidirectional monitors)
-- Exit notifications with exit reasons (normal, crash, killed)
+- Exit notifications with exit reasons (normal, crash, stack overflow, killed)
 - Timers (one-shot and periodic with timerfd/epoll)
 - Network I/O (async TCP with worker thread)
 - File I/O (async read/write with worker thread)
@@ -233,7 +234,7 @@ rt_ipc_recv(&msg, -1);
 if (rt_is_exit_msg(&msg)) {
     rt_exit_msg exit_info;
     rt_decode_exit(&msg, &exit_info);
-    // exit_info.reason: RT_EXIT_NORMAL, RT_EXIT_CRASH, RT_EXIT_KILLED
+    // exit_info.reason: RT_EXIT_NORMAL, RT_EXIT_CRASH, RT_EXIT_CRASH_STACK, RT_EXIT_KILLED
 }
 ```
 
