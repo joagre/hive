@@ -194,21 +194,6 @@ All resource limits are defined at compile time. Edit and recompile to change:
 **Future platform (ARM Cortex-M):**
 - ARM Cortex-M4/M7 with FreeRTOS (planned)
 
-### Verification
-
-Check your environment:
-
-```bash
-# Check GCC version (need 4.7+)
-gcc --version
-
-# Check if pthread is available
-gcc -pthread -o /tmp/test -x c - <<< 'int main(){return 0;}'
-
-# Verify you're on x86-64
-uname -m  # Should show: x86_64
-```
-
 ## Building
 
 ```bash
