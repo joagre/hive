@@ -864,6 +864,82 @@ bool rt_timer_is_tick(const rt_message *msg);
 
 Timer wake-ups are delivered as messages with `sender == RT_SENDER_TIMER`. The actor receives these in its normal `rt_ipc_recv()` loop.
 
+### Timer Precision and Monotonicity
+
+**Unit mismatch by design:**
+- Timer API uses **microseconds** (`uint32_t delay_us`, `uint32_t interval_us`)
+- Rest of system (IPC, file, network) uses **milliseconds** (`int32_t timeout_ms`)
+- Rationale: Timers often need sub-millisecond precision; I/O timeouts rarely do
+
+**Resolution and precision:**
+
+Platform | Clock Source | API Precision | Actual Precision | Notes
+---------|-------------|---------------|------------------|------
+**Linux (x86-64)** | `CLOCK_MONOTONIC` via `timerfd` | Nanosecond (`itimerspec`) | ~1 ms typical | Kernel-limited, non-realtime scheduler
+**FreeRTOS (ARM)** | Hardware timer + tick interrupt | Tick-based | 1-10 ms typical | Depends on `configTICK_RATE_HZ` (e.g., 1000 Hz = 1 ms)
+
+- Implementation: `src/rt_timer.c:123` - `timerfd_create(CLOCK_MONOTONIC, ...)`
+- On Linux, requests < 1ms may still fire with ~1ms precision due to kernel scheduling
+- On FreeRTOS, timers round up to next tick boundary
+
+**Monotonic clock guarantee:**
+- Uses **monotonic clock** on both platforms (CLOCK_MONOTONIC on Linux, hardware timer on FreeRTOS)
+- **NOT affected by**:
+  - System time changes (NTP adjustments, user setting clock)
+  - Timezone changes
+  - Daylight saving time
+- **Guaranteed to**:
+  - Never go backwards
+  - Count elapsed time accurately (subject to clock drift, typically <100 ppm)
+- **Use case**: Timers measure **elapsed time**, not wall-clock time
+
+**Wraparound behavior:**
+
+1. **Timer interval wraparound** (`uint32_t interval_us`):
+   - Type: 32-bit unsigned integer
+   - Max value: 4,294,967,295 microseconds = **~4295 seconds** = **~71.6 minutes**
+   - Wraparound: Values > 71.6 minutes wrap around (e.g., 72 minutes becomes 24 seconds)
+   - **Mitigation**: Use multiple timers or external tick counting for intervals > 1 hour
+
+2. **Timer ID wraparound** (`timer_id` = `uint32_t`):
+   - Global counter `g_timer.next_id` increments on each timer creation
+   - Wraps at 4,294,967,295 timers
+   - Potential collision: If timer ID wraps and old timer still active, `rt_timer_cancel()` may cancel wrong timer
+   - **Likelihood**: Extremely rare (requires 4 billion timer creations without runtime restart)
+   - **Mitigation**: None needed in practice; runtime typically restarts long before wraparound
+
+**Example: Maximum timer interval**
+
+```c
+// Maximum safe one-shot timer: ~71 minutes
+uint32_t max_interval = UINT32_MAX;  // 4,294,967,295 us
+rt_timer_after(max_interval, &timer);  // OK, fires after ~71.6 minutes
+
+// For longer intervals, use periodic timer with counter
+uint32_t one_hour_us = 3600 * 1000000;  // 3.6 billion us
+// ERROR: Wraps to 705,032,704 us (~11.75 minutes)
+
+// Correct approach for long intervals:
+uint32_t tick_interval = 60 * 1000000;  // 1 minute
+rt_timer_every(tick_interval, &timer);
+// Count ticks in actor to reach 60 minutes
+```
+
+**Comparison with rest of system:**
+
+Feature | Timer API | IPC/File/Network API
+--------|-----------|---------------------
+**Units** | Microseconds (`uint32_t`) | Milliseconds (`int32_t`)
+**Max value** | ~71 minutes | ~24.8 days (2^31 ms)
+**Signed/Unsigned** | Unsigned (always positive) | Signed (negative = block forever)
+**Wraparound** | At ~71 minutes | At ~24.8 days (unlikely in practice)
+
+**Design rationale:**
+- Microseconds for timers: Sub-millisecond intervals common in embedded systems (sensor sampling, PWM, etc.)
+- Milliseconds for I/O: Network/file timeouts rarely need microsecond precision
+- 32-bit limit: Embedded systems prefer fixed-size types; 64-bit would waste memory
+- Trade-off: Accept wraparound at ~71 minutes for memory efficiency
+
 ## Network API
 
 Non-blocking network I/O with blocking wrappers.
