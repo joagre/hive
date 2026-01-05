@@ -15,10 +15,20 @@ This is an actor-based runtime for embedded systems, targeting STM32 (ARM Cortex
 ## Design Principles
 
 - Minimalistic and predictable behavior
-- No heap allocation in hot paths
+- Pool-based allocation: O(1) for all runtime operations, zero malloc after initialization
 - Least surprise API design
 - Fast context switching via manual assembly (no setjmp/longjmp or ucontext)
 - Cooperative multitasking only (no preemption within actor runtime)
+
+### Heap Usage Policy
+
+**Allowed malloc**:
+- Actor stack allocation: Only if `actor_config.malloc_stack = true` (default is arena allocator)
+- Actor cleanup: Corresponding free for malloc'd stacks
+
+**Forbidden malloc** (exhaustive):
+- Scheduler, IPC, timers, bus, network I/O, file I/O, linking/monitoring, completion processing
+- All runtime operations use static pools with O(1) allocation
 
 ## Architecture
 
@@ -58,7 +68,7 @@ On FreeRTOS, the entire actor runtime runs as a single task. Blocking I/O is del
   - Timers: Timer entry pool (64)
   - Bus: Uses message pool for entry data
 - Deterministic memory: ~231KB static + variable actor stacks
-- No heap fragmentation: Zero malloc in hot paths (message passing, timers, etc.)
+- Zero heap allocation in runtime operations (see Heap Usage Policy above)
 
 ### Error Handling
 All runtime functions return `rt_status` with a code and optional string literal message. The message field is never heap-allocated.

@@ -12,8 +12,31 @@ A minimalistic actor-based runtime designed for **embedded and safety-critical s
 2. **Predictable**: Cooperative scheduling, no surprises
 3. **Modern C11**: Clean, safe, standards-compliant code
 4. **Static allocation**: Deterministic memory, zero fragmentation, compile-time footprint
-5. **No heap in hot paths**: O(1) pool allocation for all runtime operations
+5. **Pool-based allocation**: O(1) allocation for all runtime operations
 6. **Explicit control**: Actors yield explicitly, no preemption
+
+### Heap Usage Policy
+
+**Allowed heap use** (malloc/free):
+- `rt_init()`: None (uses only static/BSS)
+- `rt_spawn()` / `rt_spawn_ex()`: Actor stack allocation **only if** `actor_config.malloc_stack = true`
+  - Default: Arena allocator (static memory, no malloc)
+  - Optional: Explicit malloc via config flag
+- Actor exit/cleanup: Corresponding free for malloc'd stacks
+
+**Forbidden heap use** (exhaustive):
+- Scheduler loop (`rt_run()`, `rt_yield()`, context switching)
+- IPC (`rt_ipc_send()`, `rt_ipc_recv()`, `rt_ipc_release()`)
+- Timers (`rt_timer_after()`, `rt_timer_every()`, timer delivery)
+- Bus (`rt_bus_publish()`, `rt_bus_read()`, `rt_bus_read_wait()`)
+- Network I/O (`rt_net_*()` functions, completion handling)
+- File I/O (`rt_file_*()` functions, completion handling)
+- Linking/monitoring (`rt_link()`, `rt_monitor()`, death notifications)
+- All I/O completion processing
+
+**Consequence**: All "hot path" operations use **static pools** with **O(1) allocation** and return `RT_ERR_NOMEM` on pool exhaustion. No malloc, no heap fragmentation, no allocation latency.
+
+**Verification**: Run with `LD_PRELOAD` malloc wrapper to assert no malloc calls after `rt_init()` (except explicit `malloc_stack = true` spawns).
 
 ## Target Platforms
 
@@ -230,10 +253,10 @@ The runtime uses static allocation for deterministic behavior and suitability fo
 **Benefits:**
 
 - Deterministic memory: Footprint calculable at link time
-- Zero heap fragmentation: No malloc in hot paths
-- Predictable allocation: Pool exhaustion returns clear errors
+- Zero heap fragmentation: No malloc after initialization (except explicit `malloc_stack` flag)
+- Predictable allocation: Pool exhaustion returns clear errors (`RT_ERR_NOMEM`)
 - Suitable for safety-critical certification
-- Predictable timing: No malloc latency in message passing
+- Predictable timing: O(1) pool allocation, no malloc latency in runtime operations
 
 ## Error Handling
 
@@ -1009,8 +1032,8 @@ All resource limits are defined at compile-time and require recompilation to cha
 
 All runtime structures are **statically allocated** based on these limits. Actor stacks use a static arena allocator by default (configurable via `actor_config.malloc_stack` for malloc). This ensures:
 - Deterministic memory footprint (calculable at link time)
-- No heap fragmentation in message passing
-- No malloc in hot paths (scheduling, IPC, I/O completions)
+- Zero heap allocation in runtime operations (see Heap Usage Policy)
+- O(1) pool allocation for all operations (scheduling, IPC, I/O completions)
 - Suitable for embedded/MCU deployment
 
 ### Runtime API
