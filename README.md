@@ -39,11 +39,11 @@ Benchmarks measured on a vanilla Dell XPS 13 (Intel Core i7, x86-64 Linux):
 
 | Operation | Latency | Throughput | Notes |
 |-----------|---------|------------|-------|
-| **Context switch** | ~1.1 µs/switch | 0.87 M switches/sec | Manual assembly, cooperative |
-| **IPC (COPY mode)** | ~2.3 µs/msg | 0.43 M msgs/sec | 8-256 byte messages |
-| **Pool allocation** | ~10 ns/op | 100 M ops/sec | 1.1x faster than malloc |
-| **Actor spawn** | ~2.7 µs/actor | 365K actors/sec | Includes stack allocation |
-| **Bus pub/sub** | ~281 ns/msg | 3.55 M msgs/sec | With cooperative yields |
+| **Context switch** | ~1.1 µs/switch | 0.88 M switches/sec | Manual assembly, cooperative, +2.9% overhead for stack guards |
+| **IPC (COPY mode)** | ~2.2-2.3 µs/msg | 0.43-0.45 M msgs/sec | 8-256 byte messages |
+| **Pool allocation** | ~9 ns/op | 104 M ops/sec | 1.3x faster than malloc |
+| **Actor spawn** | ~670 ns/actor | 1.49 M actors/sec | Includes stack allocation (arena) |
+| **Bus pub/sub** | ~288 ns/msg | 3.47 M msgs/sec | With cooperative yields |
 
 Run benchmarks yourself:
 ```bash
