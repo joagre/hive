@@ -326,9 +326,15 @@ All I/O operations (timers, file, network) are handled by dedicated worker threa
 
 ### Thread Safety
 
-The runtime uses a **single-threaded model**: all runtime APIs (`rt_ipc_send`, `rt_spawn`, `rt_bus_publish`, etc.) must be called from within actors (scheduler thread). I/O threads communicate only via lock-free completion queues. External threads cannot call runtime APIs - use platform-specific mechanisms (sockets, pipes) with dedicated reader actors instead.
+The runtime enforces **strict thread boundaries** with three contractual rules:
 
-This design eliminates locks in hot paths (message passing, scheduling, actor management) for deterministic, predictable behavior. No lock contention, no priority inversion, no deadlock. See `spec.md` "Thread Safety" section for complete details.
+1. **Scheduler thread**: ONLY thread that may mutate runtime state and call runtime APIs
+2. **I/O threads**: May ONLY push SPSC completions and signal wakeup (CANNOT call APIs)
+3. **External threads**: FORBIDDEN from calling runtime APIs (`rt_ipc_send` is NOT THREAD-SAFE)
+
+**Why external threads can't call `rt_ipc_send()`:** Adding thread-safe message passing would require locks/atomics on mailbox enqueue and pool allocation, causing lock contention in hot paths. This violates deterministic behavior requirements for safety-critical systems. Instead, use platform IPC (sockets/pipes) with dedicated reader actors.
+
+This single-threaded ownership model eliminates locks in hot paths (message passing, scheduling, actor management), ensuring deterministic, predictable behavior. No lock contention, no priority inversion, no deadlock. See `spec.md` "Thread Safety" section for complete details.
 
 ## Future Work
 

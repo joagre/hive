@@ -175,7 +175,25 @@ Lock-free SPSC queue with atomic head/tail pointers. Capacity must be power of 2
 When all actors are blocked on I/O, the scheduler efficiently waits on a single shared wakeup primitive (eventfd on Linux, binary semaphore on FreeRTOS) instead of busy-polling. All I/O threads (file, network, timer) signal this primitive after posting completions. This eliminates CPU waste and provides immediate wakeup on I/O completion.
 
 ### Thread Safety
-Single-threaded runtime model. Only the scheduler thread may call runtime APIs (rt_ipc_send, rt_spawn, etc.). I/O threads may only push to SPSC completion queues and signal scheduler wakeup. External threads cannot call runtime APIs - use platform-specific mechanisms (sockets, pipes) with dedicated reader actors instead. No locks in hot paths (mailboxes, IPC, scheduling) for deterministic behavior. See spec.md "Thread Safety" section for full details.
+
+**Three thread/task boundaries (strict contracts):**
+
+1. **BOUNDARY 1: Scheduler thread (exclusive runtime owner)**
+   - ONLY thread that may mutate runtime state (actors, mailboxes, buses)
+   - ONLY thread that may call runtime APIs (rt_ipc_send, rt_spawn, rt_bus_publish, etc.)
+   - All actor code runs in this thread
+
+2. **BOUNDARY 2: I/O threads/tasks (completion-only)**
+   - May ONLY push to SPSC completion queues
+   - May ONLY signal scheduler wakeup (eventfd/semaphore)
+   - CANNOT call runtime APIs (NOT THREAD-SAFE)
+   - CANNOT access actor/mailbox/bus state
+
+3. **BOUNDARY 3: External threads (forbidden)**
+   - CANNOT call runtime APIs (rt_ipc_send NOT THREAD-SAFE - no locking/atomics)
+   - Must use platform-specific IPC (sockets, pipes) with dedicated reader actors
+
+**No locks in hot paths:** Mailboxes, IPC, scheduling accessed only by scheduler thread. See spec.md "Thread Safety" section for full details.
 
 ### Platform Abstraction
 Different implementations for Linux (dev) vs FreeRTOS (prod):

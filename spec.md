@@ -120,28 +120,108 @@ No use of setjmp/longjmp or ucontext for performance reasons.
 
 ## Thread Safety
 
-### Single-Threaded Runtime Model
+### Thread/Task Boundary Contract
 
-The actor runtime is **single-threaded from the scheduler's perspective**. All runtime state (actors, mailboxes, buses) is owned and mutated by the scheduler thread only.
+The runtime uses a **single-threaded ownership model** with strict thread boundaries. All runtime state is owned by the scheduler thread; I/O threads/tasks and external threads have **no direct access** to runtime internals.
 
-**Thread ownership rules:**
+**The following three rules define the thread safety contract:**
 
-1. **Scheduler thread (main runtime thread):**
-   - Owns all actor state, mailboxes, and bus state
-   - Processes I/O completions and updates actors accordingly
-   - **Only thread that may call runtime APIs** (rt_ipc_send, rt_spawn, rt_bus_publish, etc.)
-   - All actor code runs in this thread
+---
 
-2. **I/O threads/tasks (file, network, timer):**
-   - May **only** push completion entries to their SPSC queues
-   - May **only** signal the scheduler wakeup primitive (eventfd/semaphore)
-   - **Cannot** call runtime APIs directly (rt_ipc_send, rt_spawn, etc.)
-   - **Cannot** access actor/mailbox/bus state
+#### **BOUNDARY 1: Scheduler Thread (Exclusive Runtime Owner)**
 
-3. **External threads:**
-   - **Cannot** call any runtime APIs
-   - Must communicate with actors via external mechanisms (sockets, pipes, etc.)
-   - No support for multi-threaded message senders
+**Contract:** **ONLY** the scheduler thread may mutate runtime state.
+
+**Allowed operations (scheduler thread ONLY):**
+- Mutate actor state (spawn, exit, state transitions)
+- Mutate mailboxes (enqueue/dequeue messages, link/monitor notifications)
+- Mutate bus state (publish, subscribe, read)
+- Call **ANY** runtime API:
+  - `rt_ipc_send()`, `rt_ipc_recv()`, `rt_ipc_release()`
+  - `rt_spawn()`, `rt_spawn_ex()`, `rt_exit()`, `rt_yield()`
+  - `rt_bus_create()`, `rt_bus_publish()`, `rt_bus_subscribe()`, `rt_bus_read()`
+  - `rt_link()`, `rt_monitor()`, `rt_unlink()`, `rt_demonitor()`
+  - `rt_timer_after()`, `rt_timer_every()`, `rt_timer_cancel()`
+  - `rt_file_*()`, `rt_net_*()` (request submission only, blocking handled via SPSC)
+- Process I/O completions from SPSC queues
+- Access/modify pools (actor table, message pool, mailbox pool, timer pool, etc.)
+
+**Forbidden operations:**
+- None (scheduler thread has full access to all runtime state)
+
+**Implementation:** All actor code runs in the scheduler thread. When an actor calls `rt_ipc_send()`, it executes in the scheduler thread context.
+
+---
+
+#### **BOUNDARY 2: I/O Threads/Tasks (Completion-Only)**
+
+**Contract:** I/O threads/tasks may **ONLY** push completion entries to SPSC queues and signal scheduler wakeup. They **CANNOT** access runtime state.
+
+**Allowed operations (I/O threads ONLY):**
+1. **Push to SPSC completion queue:**
+   - `rt_spsc_push(&g_timer.completion_queue, &completion)`
+   - `rt_spsc_push(&g_file_io.completion_queue, &completion)`
+   - `rt_spsc_push(&g_net_io.completion_queue, &completion)`
+
+2. **Signal scheduler wakeup primitive:**
+   - `rt_scheduler_wakeup_signal()` (posts to eventfd/semaphore)
+
+3. **Access own I/O subsystem state:**
+   - Timer thread: Access timer list (via mutex)
+   - File thread: Process file I/O requests
+   - Network thread: Process socket operations
+
+**Forbidden operations (NEVER from I/O threads):**
+- Call runtime APIs: `rt_ipc_send()`, `rt_spawn()`, `rt_bus_publish()`, etc. (**NOT THREAD-SAFE**)
+- Access actor state directly (actor table, actor structs)
+- Access mailboxes directly (enqueue/dequeue)
+- Access bus state directly (ring buffers, subscriber lists)
+- Access pools directly (message pool, mailbox pool) except via completion queue mechanism
+
+**Rationale:** I/O threads exist solely to offload blocking operations (file I/O, network I/O, timer waits). They communicate results back to the scheduler via lock-free SPSC queues. The scheduler thread processes completions and updates runtime state accordingly.
+
+**Implementation:**
+- Timer worker thread: Waits on `timerfd` / `epoll`, pushes timer tick completions
+- File I/O worker thread: Processes file read/write requests, pushes completions
+- Network I/O worker thread: Processes socket operations, pushes completions
+
+---
+
+#### **BOUNDARY 3: External Threads (Forbidden)**
+
+**Contract:** External threads **CANNOT** call runtime APIs. Communication with actors requires platform-specific mechanisms.
+
+**Allowed operations:**
+- None (no direct runtime API access)
+
+**Forbidden operations (NEVER from external threads):**
+- Call **ANY** runtime API:
+  - `rt_ipc_send()` (**NOT THREAD-SAFE** - no locking/atomics implemented)
+  - `rt_spawn()`, `rt_bus_publish()`, etc. (all forbidden)
+- Access runtime state in any way
+
+**Workaround for external thread communication:**
+- Use platform-specific IPC mechanisms (sockets, pipes, shared memory queues)
+- Have a dedicated **reader actor** that blocks on the external mechanism
+- External thread writes to socket/pipe → reader actor receives via `rt_net_recv()` or `rt_file_read()` → actor forwards to other actors via `rt_ipc_send()`
+
+**Design decision:** External threads are **NOT** supported for direct message passing. Adding thread-safe `rt_ipc_send()` would require:
+- Mutex/atomic protection on mailbox enqueue (contention in hot path)
+- Mutex/atomic protection on message pool allocation
+- Loss of deterministic behavior (priority inversion, lock contention)
+- Incompatible with safety-critical requirements
+
+**Alternative for multi-producer scenarios:** Use network/file I/O with dedicated reader actors instead of direct API calls.
+
+---
+
+### Summary: Thread Boundary Rules
+
+| Thread Type | Mutate Runtime State? | Call Runtime APIs? | Push SPSC? | Access Actor/Mailbox/Bus? |
+|-------------|----------------------|-------------------|-----------|--------------------------|
+| **Scheduler** | ✓ YES (exclusive owner) | ✓ YES (all APIs) | ✓ YES (pop completions) | ✓ YES (exclusive access) |
+| **I/O threads** | ✗ NO | ✗ NO (forbidden) | ✓ YES (push completions) | ✗ NO (forbidden) |
+| **External threads** | ✗ NO | ✗ NO (forbidden) | ✗ NO | ✗ NO (forbidden) |
 
 ### Synchronization Primitives
 
@@ -165,39 +245,68 @@ This single-threaded model provides:
 
 The cooperative scheduling model ensures actors yield explicitly, so there are no race conditions within the runtime itself.
 
-### Consequences
+### Consequences and Usage Patterns
 
-**Valid patterns:**
+**Valid patterns (allowed by boundary contracts):**
+
 ```c
-// Actor calling runtime APIs (runs in scheduler thread)
+// ✓ VALID: Actor calling runtime APIs (BOUNDARY 1: scheduler thread)
 void my_actor(void *arg) {
-    rt_ipc_send(other_actor, &data, sizeof(data), IPC_COPY);  // OK
-    actor_id new_actor = rt_spawn(worker, NULL);               // OK
-    rt_bus_publish(bus, &event, sizeof(event));               // OK
+    rt_ipc_send(other_actor, &data, sizeof(data), IPC_COPY);  // ✓ OK
+    actor_id new_actor = rt_spawn(worker, NULL);               // ✓ OK
+    rt_bus_publish(bus, &event, sizeof(event));               // ✓ OK
 }
 
-// I/O thread posting completion (runs in I/O thread)
-void io_worker_thread(void) {
-    // Process I/O operation...
-    rt_spsc_push(&completion_queue, &completion);  // OK
-    rt_scheduler_wakeup_signal();                  // OK
+// ✓ VALID: I/O thread posting completion (BOUNDARY 2: completion-only)
+void timer_worker_thread(void) {
+    // Wait for timer expiry...
+    timer_completion comp = {...};
+    rt_spsc_push(&g_timer.completion_queue, &comp);  // ✓ OK (BOUNDARY 2 allows)
+    rt_scheduler_wakeup_signal();                    // ✓ OK (BOUNDARY 2 allows)
+}
+
+// ✓ VALID: External thread → socket → reader actor (BOUNDARY 3 workaround)
+// External thread:
+void external_producer(void) {
+    int sock = connect_to_actor_socket();
+    write(sock, data, len);  // ✓ OK (platform-specific IPC)
+}
+
+// Reader actor:
+void socket_reader_actor(void *arg) {
+    int sock = listen_and_accept();
+    while (1) {
+        rt_net_recv(sock, buf, len, &received, -1);  // ✓ OK (scheduler thread)
+        rt_ipc_send(worker, buf, received, IPC_COPY); // ✓ OK (scheduler thread)
+    }
 }
 ```
 
-**Invalid patterns:**
+**Invalid patterns (violate boundary contracts):**
+
 ```c
-// External thread trying to send message - NOT SUPPORTED
+// ✗ INVALID: External thread calling runtime API (violates BOUNDARY 3)
 void external_thread(void) {
-    rt_ipc_send(actor, &data, sizeof(data), IPC_COPY);  // INVALID - NOT THREAD-SAFE!
+    rt_ipc_send(actor, &data, sizeof(data), IPC_COPY);  // ✗ FORBIDDEN
+    // ERROR: No locking/atomics, NOT THREAD-SAFE, will corrupt mailbox!
 }
 
-// I/O thread calling runtime API - NOT SUPPORTED
-void io_worker_thread(void) {
-    rt_spawn(actor, NULL);  // INVALID - ONLY SCHEDULER THREAD MAY CALL THIS!
+// ✗ INVALID: I/O thread calling runtime API (violates BOUNDARY 2)
+void file_worker_thread(void) {
+    rt_spawn(actor, NULL);           // ✗ FORBIDDEN (violates BOUNDARY 2)
+    rt_ipc_send(actor, &data, len);  // ✗ FORBIDDEN (violates BOUNDARY 2)
+    // ERROR: I/O threads may ONLY push SPSC completions, not mutate runtime state!
+}
+
+// ✗ INVALID: I/O thread accessing actor state directly (violates BOUNDARY 2)
+void net_worker_thread(void) {
+    actor *a = rt_actor_get(id);     // ✗ FORBIDDEN (direct state access)
+    a->state = ACTOR_STATE_READY;    // ✗ FORBIDDEN (mutation from wrong thread)
+    // ERROR: Only scheduler thread may access/mutate actor state!
 }
 ```
 
-**Guideline:** If you need external threads to communicate with actors, use platform-specific mechanisms (sockets, pipes) and have a dedicated actor read from those sources.
+**Key takeaway:** If you have external threads that need to communicate with actors, use **platform-specific IPC** (sockets, pipes, shared memory) with a **dedicated reader actor** that calls `rt_net_recv()` or `rt_file_read()` to bridge the boundary.
 
 ## Memory Model
 
