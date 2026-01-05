@@ -46,18 +46,18 @@ This runtime is designed for:
 
 ### What Problems It Solves
 
-✅ **Structured concurrency** - Actor model eliminates shared-state bugs and race conditions
-✅ **Deterministic memory** - Static allocation means no heap fragmentation or OOM surprises
-✅ **Type-safe IPC** - Message passing with backpressure (BORROW mode)
-✅ **Predictable scheduling** - Priority-based cooperative multitasking, no preemption surprises
-✅ **Async I/O without complexity** - File/network operations handled by worker threads
+- ✅ **Structured concurrency** - Actor model eliminates shared-state bugs and race conditions
+- ✅ **Deterministic memory** - Static allocation means no heap fragmentation or OOM surprises
+- ✅ **Type-safe IPC** - Message passing with backpressure (BORROW mode)
+- ✅ **Predictable scheduling** - Priority-based cooperative multitasking, no preemption surprises
+- ✅ **Async I/O without complexity** - File/network operations handled by worker threads
 
 ### When NOT to Use This
 
-❌ **General-purpose servers** - Use Erlang/BEAM, Akka, or Go instead
-❌ **UI applications** - Event loops (Qt, GTK) are better suited
-❌ **Preemptive actor scheduling** - Actors use cooperative multitasking; use native OS threads for preemption
-❌ **Dynamic workloads** - Requires compile-time configuration of pool sizes
+- ❌ **General-purpose servers** - Use Erlang/BEAM, Akka, or Go instead
+- ❌ **UI applications** - Event loops (Qt, GTK) are better suited
+- ❌ **Preemptive actor scheduling** - Actors use cooperative multitasking; use native OS threads for preemption
+- ❌ **Dynamic workloads** - Requires compile-time configuration of pool sizes
 
 ### Comparison with Alternatives
 
