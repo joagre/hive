@@ -214,6 +214,8 @@ uname -m  # Should show: x86_64
 make
 ```
 
+That's it! Then try `./build/pingpong` to see actors in action.
+
 ## Running Examples
 
 ```bash
