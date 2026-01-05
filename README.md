@@ -76,7 +76,7 @@ This runtime is designed for:
 ### Real-World Use Cases
 
 **Drone Autopilot (STM32F7)**
-```
+
 Actors:
 - IMU sensor reader (CRITICAL priority) - reads gyro/accel at 1kHz
 - Flight controller (CRITICAL) - PID loops for stabilization
@@ -87,10 +87,9 @@ Actors:
 
 Communication: Sensor actors publish to bus, controller subscribes
 Memory: ~150 KB static pools + 10 actors × 32KB stacks = ~470 KB total
-```
 
 **Industrial Sensor Network (ARM Cortex-M4)**
-```
+
 Actors:
 - Temperature sensors (HIGH) - 4 actors, one per sensor
 - Pressure monitor (HIGH) - analog sensor reader
@@ -101,10 +100,9 @@ Actors:
 
 Communication: Sensors publish to shared bus with retention policy
 Memory: ~80 KB static pools + 7 actors × 16KB stacks = ~192 KB total
-```
 
 **Robotics Control System (x86-64 Linux)**
-```
+
 Actors:
 - Vision processor (HIGH) - camera input processing
 - Path planner (HIGH) - navigation and obstacle avoidance
@@ -115,7 +113,6 @@ Actors:
 
 Communication: Mix of IPC (COPY for small messages) and bus (sensor data)
 Memory: ~231 KB static pools + 12 actors × 64KB stacks = ~1 MB total
-```
 
 ## Features
 
