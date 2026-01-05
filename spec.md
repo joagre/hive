@@ -102,6 +102,44 @@ There is no preemptive scheduling or time slicing within the actor runtime.
 - All runtime API calls must occur from actor context (the scheduler thread)
 - Violating this constraint results in undefined behavior (data corruption, crashes)
 
+### Actor Blocking Semantics
+
+When an actor calls a blocking API, the following contract applies:
+
+**State transition:**
+- Actor transitions to `ACTOR_STATE_BLOCKED` and yields to scheduler
+- Actor is removed from run queue (not schedulable until unblocked)
+- Scheduler saves actor context and switches to next runnable actor
+
+**Operations that block:**
+- `rt_ipc_recv()` with timeout > 0 or timeout < 0 (block until message or timeout)
+- `rt_ipc_send()` with `IPC_SYNC` (block until receiver releases)
+- `rt_file_read()`, `rt_file_write()` (block until I/O completes or timeout)
+- `rt_net_send()`, `rt_net_recv()` (block until I/O completes or timeout)
+- `rt_bus_read_wait()` (block until data available or timeout)
+
+**Mailbox availability while blocked:**
+- Blocked actors **can** receive mailbox messages
+- Message enqueues are scheduler-owned operations (do not require actor to be runnable)
+- Enqueued messages are available when actor unblocks
+
+**Unblock conditions:**
+- I/O completion arrives (file/network operation completes)
+- Timer expires (for APIs with timeout)
+- Message arrives in mailbox (for `rt_ipc_recv()`)
+- Explicit release occurs (for `IPC_SYNC` sender)
+
+**Timeout and completion races:**
+- Exactly one unblock event is processed
+- If timeout and completion race, completion wins (I/O result delivered, timeout ignored)
+- If multiple messages arrive during block, actor unblocks on first arrival
+- Late completions (after timeout) are discarded
+
+**Determinism guarantee:**
+- Blocking is deterministic: same inputs always produce same wakeup ordering
+- No phantom wakeups (actor only unblocks on specified conditions)
+- Scheduler guarantees fair wakeup ordering (FIFO within priority level)
+
 ### Priority Levels
 
 Four priority levels, lower value means higher priority:
