@@ -741,19 +741,7 @@ See **[TROUBLESHOOTING.md](TROUBLESHOOTING.md)** for detailed solutions to commo
 - Performance issues
 - Debugging tips and workflow
 
-## FAQ
-
-See **[FAQ.md](FAQ.md)** for frequently asked questions about:
-- Production readiness, thread safety, comparison with FreeRTOS
-- Performance (cooperative vs preemptive, overhead, COPY vs BORROW)
-- Configuration (pool sizes, priorities, memory usage, platforms)
-- Debugging (deadlocks, GDB usage, common issues)
-
 ## Future Work
 
 - Port to ARM Cortex-M with FreeRTOS integration
 - Add stack overflow detection (guard patterns or MPU)
-
-## License
-
-See project license file.
