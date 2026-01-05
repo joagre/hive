@@ -263,6 +263,27 @@ void rt_actor_free(actor *a) {
         return;
     }
 
+    // If stack overflow, memory is corrupted - skip ALL cleanup except freeing stack
+    // Links/monitors will NOT be notified to prevent cascading crashes
+    bool is_stack_overflow = (a->exit_reason == RT_EXIT_CRASH_STACK);
+
+    if (is_stack_overflow) {
+        // Only free the stack - skip all other cleanup to prevent crashes
+        if (a->stack) {
+            if (a->stack_is_malloced) {
+                free(a->stack);
+            } else {
+                arena_free(a->stack);
+            }
+            a->stack = NULL;
+        }
+
+        a->state = ACTOR_STATE_DEAD;
+        g_actor_table.num_actors--;
+        return;
+    }
+
+    // Normal cleanup for non-stack-overflow deaths
     // Cleanup links/monitors and send death notifications
     rt_link_cleanup_actor(a->id);
 

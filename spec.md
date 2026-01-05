@@ -744,9 +744,10 @@ The runtime implements stack overflow detection using guard patterns:
 **Behavior on overflow:**
 - Detection occurs on next context switch after overflow
 - Actor marked as DEAD with exit reason `RT_EXIT_CRASH_STACK`
-- Links/monitors notified (if stack corruption hasn't prevented it)
+- Links/monitors are NOT notified (prevents cascading crashes from corrupted memory)
+- Mailbox is NOT cleared (data may be corrupted)
+- Stack is freed, other actors continue running
 - Error logged: "Actor N stack overflow detected"
-- System continues running other actors
 
 **Limitations:**
 - Detection is post-facto (after overflow occurs)
