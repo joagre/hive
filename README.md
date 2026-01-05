@@ -19,22 +19,6 @@ The runtime uses **static memory allocation** for deterministic behavior with ze
 - **[FAQ](FAQ.md)** - Frequently asked questions
 - **[Development Guide](CLAUDE.md)** - Instructions for Claude Code when working with this codebase
 
-## Table of Contents
-
-- [Why Use This?](#why-use-this)
-- [Features](#features)
-- [Performance](#performance)
-- [Building](#building)
-- [Running Examples](#running-examples)
-- [Quick Start](#quick-start)
-- [API Overview](#api-overview)
-- [Design Principles](#design-principles)
-- [Implementation Details](#implementation-details)
-- [Memory Configuration](#memory-configuration)
-- [Troubleshooting](TROUBLESHOOTING.md) - Common issues and solutions
-- [FAQ](FAQ.md) - Frequently asked questions
-- [Future Work](#future-work)
-
 ## Why Use This?
 
 ### Who Should Use This
@@ -130,14 +114,6 @@ All resource limits are defined at compile time. Edit and recompile to change:
 - No heap fragmentation
 - Perfect for embedded/safety-critical systems
 
-## Building
-
-```bash
-make
-```
-
-That's it! Then try `./build/pingpong` to see actors in action.
-
 ## Running Examples
 
 ```bash
@@ -161,56 +137,6 @@ That's it! Then try `./build/pingpong` to see actors in action.
 
 # Bus pub-sub example
 ./build/bus
-```
-
-## Project Structure
-
-```
-.
-├── include/          # Public headers
-│   ├── rt_types.h          # Core types and error handling
-│   ├── rt_static_config.h  # Compile-time configuration and limits
-│   ├── rt_pool.h           # Memory pool allocator
-│   ├── rt_context.h        # Context switching interface
-│   ├── rt_actor.h          # Actor management
-│   ├── rt_ipc.h            # Inter-process communication
-│   ├── rt_link.h           # Actor linking and monitoring
-│   ├── rt_scheduler.h      # Scheduler interface
-│   ├── rt_runtime.h        # Runtime initialization and public API
-│   ├── rt_timer.h          # Timer subsystem
-│   ├── rt_file.h           # File I/O subsystem
-│   ├── rt_net.h            # Network I/O subsystem
-│   ├── rt_bus.h            # Bus pub-sub subsystem
-│   ├── rt_spsc.h           # Lock-free SPSC queue
-│   └── rt_log.h            # Logging utilities
-├── src/              # Implementation
-│   ├── rt_pool.c        # Pool allocator implementation
-│   ├── rt_actor.c       # Actor table and lifecycle
-│   ├── rt_context.c     # Context initialization
-│   ├── rt_context_asm.S # x86-64 context switch assembly
-│   ├── rt_ipc.c         # Mailbox and message passing with pools
-│   ├── rt_link.c        # Linking and monitoring implementation
-│   ├── rt_runtime.c     # Runtime init and actor spawning
-│   ├── rt_scheduler.c   # Cooperative scheduler
-│   ├── rt_timer.c       # Timer worker thread (timerfd/epoll)
-│   ├── rt_file.c        # File I/O worker thread
-│   ├── rt_net.c         # Network I/O worker thread
-│   ├── rt_bus.c         # Bus pub-sub implementation
-│   ├── rt_spsc.c        # Lock-free queue implementation
-│   └── rt_log.c         # Logging implementation
-├── examples/         # Example programs
-│   ├── pingpong.c       # Classic ping-pong actor example
-│   ├── link_demo.c      # Actor linking example
-│   ├── supervisor.c     # Supervisor pattern with monitoring
-│   ├── timer.c          # Timer example (one-shot and periodic)
-│   ├── fileio.c         # File I/O example
-│   ├── bus.c            # Bus pub-sub example
-│   └── echo.c           # Network echo server
-├── build/            # Build artifacts (generated)
-├── Makefile          # Build system
-├── spec.md           # Full specification
-├── CLAUDE.md         # Development guide for Claude Code
-└── README.md         # This file
 ```
 
 ## Quick Start
@@ -586,34 +512,6 @@ rt_unlink(other);
 - `rt_bus_publish(bus, data, len)` - Publish data to bus (non-blocking)
 - `rt_bus_read(bus, buf, len, out_len)` - Read next message (non-blocking)
 - `rt_bus_read_wait(bus, buf, len, out_len, timeout_ms)` - Read next message (blocking)
-
-## Design Principles
-
-1. **Minimalistic**: Only essential features, no bloat
-2. **Predictable**: Cooperative scheduling, no surprises
-3. **Modern C11**: Clean, safe, standards-compliant code
-4. **Static allocation**: Deterministic memory, zero fragmentation, compile-time footprint
-5. **No heap in hot paths**: O(1) pool allocation for all runtime operations
-6. **Explicit control**: Actors yield explicitly, no preemption
-
-## Implementation Notes
-
-### Context Switching
-
-The x86-64 context switch saves and restores callee-saved registers (rbx, rbp, r12-r15) and the stack pointer. This is implemented in hand-written assembly for performance and control.
-
-### Scheduling
-
-The scheduler uses a simple priority-based round-robin algorithm:
-1. Find the highest-priority READY actor
-2. Context switch to it
-3. When it yields, mark it READY again
-4. Repeat
-
-### IPC Modes
-
-- **IPC_COPY**: Message data is copied to receiver's mailbox. Sender continues immediately.
-- **IPC_BORROW**: Message data remains on sender's stack. Sender blocks until receiver calls `rt_ipc_release()`. Provides automatic backpressure.
 
 ## Implementation Details
 
