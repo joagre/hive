@@ -1,5 +1,7 @@
 # Actor Runtime for Embedded Systems
 
+> **Erlang's actor model for embedded systems, with deterministic memory and no GC.**
+
 A complete actor-based runtime designed for **embedded and safety-critical systems**. Features cooperative multitasking with priority-based scheduling and message passing inspired by Erlang's actor model.
 
 **Current platform:** x86-64 Linux (fully implemented)
