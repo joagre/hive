@@ -99,7 +99,7 @@ No use of setjmp/longjmp or ucontext for performance reasons.
 
 ### Actor Stacks
 
-Each actor has a fixed-size stack allocated at spawn time. Stack size is configurable per actor, with a system-wide default.
+Each actor has a fixed-size stack allocated at spawn time. Stack size is configurable per actor via `actor_config.stack_size`, with a system-wide default (`RT_DEFAULT_STACK_SIZE`). Different actors can use different stack sizes to optimize memory usage.
 
 Stack growth/reallocation is not supported. If an actor overflows its stack, behavior is undefined (on debug builds, a guard pattern may detect overflow).
 
@@ -113,7 +113,10 @@ The runtime uses static allocation for deterministic behavior and suitability fo
 
 - **Actor table:** Static array of `RT_MAX_ACTORS` (64), configured at compile time
 - **Actor stacks:** Hybrid allocation (configurable per actor)
-  - Default: Static arena allocator with `RT_STACK_ARENA_SIZE` (1 MB), first-fit with coalescing
+  - Default: Static arena allocator with `RT_STACK_ARENA_SIZE` (1 MB)
+    - First-fit allocation with block splitting for variable stack sizes
+    - Automatic memory reclamation and reuse when actors exit (coalescing)
+    - Supports different stack sizes for different actors
   - Optional: malloc via `actor_config.malloc_stack = true`
 - **IPC pools:** Static pools with O(1) allocation
   - Mailbox entry pool: `RT_MAILBOX_ENTRY_POOL_SIZE` (256)

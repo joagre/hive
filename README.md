@@ -67,7 +67,7 @@ All resource limits are defined at compile time. Edit and recompile to change:
 // ... see rt_static_config.h for full list
 ```
 
-All structures are statically allocated. Actor stacks use a static arena allocator by default (configurable size), with optional malloc via `actor_config.malloc_stack = true`. No malloc in hot paths. Memory footprint calculable at link time.
+All structures are statically allocated. Actor stacks use a static arena allocator by default (configurable size), with optional malloc via `actor_config.malloc_stack = true`. Stack sizes are configurable per actor, allowing different actors to use different stack sizes. Arena memory is automatically reclaimed and reused when actors exit. No malloc in hot paths. Memory footprint calculable at link time.
 
 ## Running Examples
 

@@ -46,8 +46,10 @@ On FreeRTOS, the entire actor runtime runs as a single task. Blocking I/O is del
 - Implemented in manual assembly for performance
 
 ### Memory Management
-- Actor stacks: Hybrid allocation strategy
-  - Default: Static arena allocator (RT_STACK_ARENA_SIZE = 1 MB), first-fit with coalescing
+- Actor stacks: Hybrid allocation strategy with variable sizes per actor
+  - Default: Static arena allocator (RT_STACK_ARENA_SIZE = 1 MB)
+    - First-fit allocation with block splitting for variable stack sizes
+    - Automatic memory reclamation and reuse when actors exit (coalescing)
   - Optional: malloc via `actor_config.malloc_stack = true`
 - Actor table: Static array (RT_MAX_ACTORS), configured at compile time
 - All runtime structures: Static pools with O(1) allocation
