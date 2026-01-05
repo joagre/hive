@@ -154,9 +154,11 @@ rt_ipc_recv(&msg, -1);   // -1=block forever
 rt_ipc_recv(&msg, 0);    // 0=non-blocking (returns RT_ERR_WOULDBLOCK if empty)
 rt_ipc_recv(&msg, 100);  // 100=timeout after 100ms (returns RT_ERR_TIMEOUT if no message)
 
-if (msg.mode == IPC_BORROW) {
-    rt_ipc_release(&msg);  // Unblock sender
-}
+// Process message data
+process(&msg);
+
+// Release message (required for BORROW, no-op for COPY)
+rt_ipc_release(&msg);
 ```
 
 ### Timers

@@ -361,10 +361,12 @@ Actor A: rt_ipc_send(B, &data, len, IPC_BORROW);  // Blocks until B releases
 **Failure handling:**
 
 If receiver crashes or exits without releasing:
-- **Current behavior**: Sender may remain blocked indefinitely
-- **Mitigation**: Use timeouts, watchdogs, or supervisor patterns to detect hung actors
-- **Future**: Receiver cleanup should unblock waiting senders (enhancement needed)
-- Best practice: Only use BORROW between validated, trusted actors that guarantee release
+- Sender is automatically unblocked during receiver's actor cleanup
+- Sender's `rt_ipc_send()` returns normally (no error)
+- Borrowed data is no longer referenced by receiver
+- Principle of least surprise: sender is not stuck forever
+
+Best practice: Design actors to always release borrowed messages, but receiver crashes are handled gracefully.
 
 **Safety-critical recommendation:**
 

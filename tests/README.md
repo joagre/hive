@@ -107,6 +107,27 @@ Coordinator: Distribution complete
 
 ---
 
+### `borrow_crash_test.c`
+Tests IPC_BORROW behavior when receiver crashes without releasing.
+
+**Tests:**
+- Sender sends IPC_BORROW message
+- Receiver crashes immediately without calling `rt_ipc_release()`
+- Sender is automatically unblocked (principle of least surprise)
+
+**Key validations:**
+- PASS: Sender unblocked when receiver crashes
+- PASS: rt_ipc_send() returns normally after receiver death
+- PASS: Runtime handles receiver crash gracefully
+
+**Results:**
+```
+Sender: PASS - Send returned normally after receiver crash
+Sender: Sender was automatically unblocked (principle of least surprise)
+```
+
+---
+
 ## Test Insights
 
 ### Why Retries Don't Always Trigger
