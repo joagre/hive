@@ -50,6 +50,11 @@ rt_status rt_ipc_send(actor_id to, const void *data, size_t len, rt_ipc_mode mod
         return RT_ERROR(RT_ERR_INVALID, "Message exceeds RT_MAX_MESSAGE_SIZE");
     }
 
+    // Prevent self-send with BORROW (guaranteed deadlock)
+    if (mode == IPC_BORROW && to == sender->id) {
+        return RT_ERROR(RT_ERR_INVALID, "Self-send with IPC_BORROW is forbidden (deadlock)");
+    }
+
     // Allocate mailbox entry from pool
     mailbox_entry *entry = rt_pool_alloc(&g_mailbox_pool_mgr);
     if (!entry) {

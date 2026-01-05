@@ -681,6 +681,85 @@ If receiver crashes or exits without releasing:
 
 Best practice: Design actors to always release borrowed messages, but receiver crashes are handled gracefully.
 
+**Edge cases (explicit semantics):**
+
+1. **Calling `rt_ipc_recv()` again without releasing previous BORROW:**
+   - **Legal:** Auto-release semantics apply
+   - Behavior: Previous BORROW sender is automatically unblocked
+   - Implementation: `src/rt_ipc.c` lines 205-224 (auto-release in rt_ipc_recv)
+   - Rationale: Prevents deadlock if receiver forgets to release
+   - Example:
+   ```c
+   rt_message msg1, msg2;
+   rt_ipc_recv(&msg1, -1);  // msg1 is BORROW from actor A
+   // ... process msg1.data ...
+   rt_ipc_recv(&msg2, -1);  // msg1 AUTO-RELEASED, actor A unblocked
+   // msg1.data now invalid, msg2.data valid
+   ```
+
+2. **Receiver death while holding borrowed message:**
+   - **Auto-release:** Sender is automatically unblocked during receiver's actor cleanup
+   - Sender's `rt_ipc_send()` returns `RT_SUCCESS` (no error, unblocked normally)
+   - Borrowed data no longer referenced by dead receiver
+   - Sender does NOT receive error or notification (already returned from send)
+   - Rationale: Principle of least surprise - sender not stuck forever
+   - Tested: `tests/borrow_crash_test.c`
+
+3. **Sender death while blocked in BORROW:**
+   - **Receiver sees:** Normal message with `msg.data` pointing to dead sender's stack
+   - **Data validity:** UNDEFINED - stack memory reclaimed on sender death
+   - **Receiver behavior:**
+     - If receiver reads before sender stack reused: May see valid data (lucky)
+     - If receiver reads after sender stack reused: CORRUPTED DATA (use-after-free)
+   - **Consequence:** Receiver MUST NOT use `msg.data` after sender dies
+   - **Detection:** Check `msg.sender` with `rt_actor_get()` before use (returns NULL if dead)
+   - **Mitigation:** Use IPC_COPY for untrusted senders, or validate sender liveness
+   - Example:
+   ```c
+   rt_message msg;
+   rt_ipc_recv(&msg, -1);
+
+   // UNSAFE: Sender may have died
+   process(msg.data);  // WRONG - could be corrupted
+
+   // SAFE: Check sender still alive
+   if (rt_actor_get(msg.sender) == NULL) {
+       // Sender dead, data invalid
+       rt_ipc_release(&msg);  // No-op, but harmless
+       return;
+   }
+   process(msg.data);  // OK - sender still alive
+   rt_ipc_release(&msg);
+   ```
+
+4. **Self-send with BORROW (`rt_ipc_send(rt_self(), ..., IPC_BORROW)`):**
+   - **Forbidden:** Immediate deadlock
+   - **Behavior:** Sender enqueues message to own mailbox, then blocks waiting for self to release
+   - **Result:** Actor blocks forever (cannot receive while blocked)
+   - **Detection:** Implementation returns `RT_ERR_INVALID` for self-send with BORROW
+   - **Enforcement:** `src/rt_ipc.c` checks `to == sender->id` for BORROW mode
+   - **Rationale:** Prevent guaranteed deadlock
+   - Example:
+   ```c
+   // DEADLOCK: Self-send with BORROW
+   rt_status status = rt_ipc_send(rt_self(), &data, len, IPC_BORROW);
+   // Returns RT_ERR_INVALID, prevents deadlock
+   assert(status.code == RT_ERR_INVALID);
+
+   // OK: Self-send with COPY
+   rt_ipc_send(rt_self(), &data, len, IPC_COPY);  // Works fine
+   ```
+
+**Lifetime rule (strict definition):**
+
+For `IPC_BORROW`, `rt_message.data` is valid:
+- **From:** When `rt_ipc_recv()` returns the message
+- **Until:** EARLIEST of:
+  1. `rt_ipc_release(&msg)` called explicitly, OR
+  2. Next `rt_ipc_recv()` called (auto-release), OR
+  3. Sender dies (data becomes UNDEFINED)
+- **After:** Data pointer is INVALID, use triggers undefined behavior
+
 **Safety-critical recommendation:**
 
 In safety-critical systems:
