@@ -1398,31 +1398,69 @@ The runtime abstracts platform-specific functionality:
 | Network | BSD sockets | lwIP |
 | File | POSIX | FATFS or littlefs |
 
-## Stack Overflow Detection
+## Stack Overflow
 
-The runtime implements stack overflow detection using guard patterns:
+### Semantic Contract (Defined Behavior)
+
+**Stack overflow is NOT undefined behavior.** The runtime provides defined semantics even when detection is imperfect:
+
+**Guaranteed semantics:**
+1. **Actor crashes** with exit reason `RT_EXIT_CRASH_STACK`
+2. **Links/monitors are notified** (receive exit message with `RT_EXIT_CRASH_STACK`)
+3. **Runtime remains stable** (other actors continue running)
+4. **Actor resources cleaned up** (stack freed, mailbox cleared, timers cancelled)
+
+**Rationale:** Even if detection fails (severe corruption before guard check), the semantic CONTRACT is that stack overflow results in actor crash with notification, not undefined behavior. This enables recovery logic and supervisor patterns.
+
+### Detection Mechanism (Best-Effort)
+
+**Implementation:** Guard pattern detection (Linux/FreeRTOS)
 
 **Mechanism:**
 - 8-byte guard patterns placed at both ends of each actor stack
 - Guards checked on every context switch
 - Pattern: `0xDEADBEEFCAFEBABE` (uint64_t)
-- Overhead: 16 bytes per stack
+- Overhead: 16 bytes per stack (8 bytes × 2)
 
-**Behavior on overflow:**
-- Detection occurs on next context switch after overflow
-- Actor marked as DEAD with exit reason `RT_EXIT_CRASH_STACK`
-- Links/monitors are NOT notified (prevents cascading crashes from corrupted memory)
-- Mailbox is NOT cleared (data may be corrupted)
-- Stack is freed, other actors continue running
-- Error logged: "Actor N stack overflow detected"
+**Detection quality:**
+- **Best-effort:** Catches most overflows during normal operation
+- **Post-facto:** Detection occurs on next context switch after overflow
+- **Not guaranteed:** Severe overflows may corrupt guards before check
+- **Timing:** Overflow → corruption → next context switch → detection
 
-**Limitations:**
-- Detection is post-facto (after overflow occurs)
-- Severe overflows may corrupt adjacent memory before detection
-- On embedded systems, MPU-based guard pages provide immediate hardware traps
+**When detection succeeds:**
+1. Guard check fails during context switch
+2. Actor immediately marked DEAD with `RT_EXIT_CRASH_STACK`
+3. Links/monitors receive exit notification
+4. Mailbox cleared, stack freed, timers cancelled
+5. Error logged: "Actor N stack overflow detected"
+6. Runtime continues normally
 
-**Future:**
-- ARM Cortex-M: MPU guard pages for zero-overhead hardware protection
+**When detection fails (severe corruption):**
+- Guard patterns themselves corrupted before check
+- Actor may crash with segfault or corrupt other memory
+- **Semantic contract still applies:** Intended behavior is actor crash with notification
+- **Mitigation:** Size stacks appropriately, use MPU on production hardware
+
+**Comparison with alternatives:**
+
+| Detection Method | Overhead | Reliability | Timing |
+|------------------|----------|-------------|--------|
+| **Guard patterns (current)** | 16 bytes/stack | Best-effort (post-facto) | Next context switch |
+| **MPU guard pages (future)** | 0 bytes | Hardware-guaranteed | Immediate trap |
+| **Canaries at runtime** | Function call overhead | Function-level | At function return |
+| **Static analysis** | Compile-time only | Depends on analysis | Before runtime |
+
+**Future improvements:**
+- **ARM Cortex-M:** MPU guard pages for zero-overhead hardware traps
+- **Debug builds:** Stack usage watermarking and high-water tracking
+- **Telemetry:** Stack usage statistics per actor
+
+**Best practices:**
+- Size stacks with 2-3x safety margin
+- Test worst-case call depth (including interrupts on embedded)
+- Use static analysis tools to verify stack usage
+- Monitor stack overflow errors in production (should be rare)
 
 ## Future Considerations
 
