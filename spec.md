@@ -402,6 +402,69 @@ typedef enum {
 
 **IPC_BORROW:** Zero-copy transfer. Payload remains on sender's stack. Sender blocks until receiver calls `rt_ipc_release()`. Provides implicit backpressure.
 
+### API Contract: rt_ipc_send()
+
+**Signature:**
+```c
+rt_status rt_ipc_send(actor_id to, const void *data, size_t len, rt_ipc_mode mode);
+```
+
+**Behavior when pools are exhausted:**
+
+`rt_ipc_send()` uses two global pools:
+1. **Mailbox entry pool** (`RT_MAILBOX_ENTRY_POOL_SIZE` = 256) - for all IPC modes
+2. **Message data pool** (`RT_MESSAGE_DATA_POOL_SIZE` = 256) - for IPC_COPY only
+
+**Fail-fast semantics** (chosen for deterministic embedded behavior):
+
+- **Returns `RT_ERR_NOMEM` immediately** if either required pool is exhausted
+- **Does NOT block** waiting for pool space to become available
+- **Does NOT drop** the message silently
+- **Does NOT enqueue** the message (atomic operation: either succeeds completely or fails)
+
+**Specific cases:**
+
+| Mode | Mailbox Pool Full | Message Pool Full | Result |
+|------|-------------------|-------------------|--------|
+| **IPC_COPY** | Returns `RT_ERR_NOMEM` | Returns `RT_ERR_NOMEM` | Fail immediately |
+| **IPC_BORROW** | Returns `RT_ERR_NOMEM` | N/A (no message pool used) | Fail immediately |
+
+**Caller responsibilities:**
+- **MUST** check return value and handle `RT_ERR_NOMEM`
+- **MUST** implement backpressure/retry logic if needed
+- **MUST NOT** assume message was delivered if `RT_FAILED(status)`
+
+**Design rationale:**
+- **Deterministic**: Fail-fast behavior is predictable and testable
+- **No deadlock**: No blocking on pool exhaustion (see "Deadlock Freedom" below)
+- **No silent drops**: Caller knows immediately if send failed
+- **Explicit backpressure**: Caller controls retry policy (backoff, drop, etc.)
+- **Safety-critical friendly**: No hidden surprises, all failures explicit
+
+**Example: Handling pool exhaustion**
+
+```c
+// Bad: Ignoring RT_ERR_NOMEM (message lost, caller unaware)
+rt_ipc_send(target, &data, sizeof(data), IPC_COPY);  // WRONG
+
+// Good: Check and handle pool exhaustion
+rt_status status = rt_ipc_send(target, &data, sizeof(data), IPC_COPY);
+if (status.code == RT_ERR_NOMEM) {
+    // Pool exhausted - implement backpressure
+    // Option 1: Drop with telemetry
+    log_dropped_message(target);
+
+    // Option 2: Retry with backoff
+    rt_message msg;
+    rt_ipc_recv(&msg, 10);  // Backoff 10ms, process messages
+    rt_ipc_release(&msg);
+    // Retry send...
+
+    // Option 3: Fail-fast to caller
+    return RT_ERR_NOMEM;
+}
+```
+
 ### Message Data Lifetime
 
 The lifetime of `rt_message.data` depends on the send mode:
