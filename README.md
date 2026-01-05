@@ -745,7 +745,7 @@ Rebuild after changes: `make clean && make all`
 - **Actor stacks**: N actors × stack size (e.g., 20 × 64KB = 1.3 MB)
 - **Example total**: ~1.5 MB for 20 actors with default config
 
-📖 **For detailed memory calculations, pool sizing guidelines, and configuration examples**, see the [Memory Model section in spec.md](spec.md#memory-model).
+📖 **For detailed memory calculations, pool sizing guidelines, and configuration examples**, see [spec.md](spec.md#memory-model).
 
 ## Troubleshooting
 
