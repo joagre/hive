@@ -93,6 +93,32 @@ IPC uses global pools shared by all actors:
 - **max_age_ms**: Remove entry after time expires (0 = no time-based expiry)
 - Buffer full: Oldest entry evicted on publish
 
+### Bus Pool Exhaustion
+Bus shares the message data pool with IPC and has per-bus buffer limits:
+
+**Message Pool Exhaustion** (shared with IPC):
+- Bus uses the global `RT_MESSAGE_DATA_POOL_SIZE` pool (same as IPC)
+- When pool is exhausted, `rt_bus_publish()` returns `RT_ERR_NOMEM` immediately
+- Does NOT block waiting for space
+- Does NOT drop messages automatically in this case
+- Caller must check return value and handle failure
+
+**Bus Ring Buffer Full** (per-bus limit):
+- Each bus has its own ring buffer sized via `max_entries` config
+- When ring buffer is full, `rt_bus_publish()` **automatically evicts oldest entry**
+- This is different from IPC - bus has automatic message dropping
+- Publish succeeds (unless message pool also exhausted)
+- Slow readers may miss messages if buffer wraps
+
+**Subscriber Table Full**:
+- Each bus has subscriber limit via `max_subscribers` config (up to `RT_MAX_BUS_SUBSCRIBERS`)
+- When full, `rt_bus_subscribe()` returns `RT_ERR_NOMEM`
+
+**Key Differences from IPC:**
+- IPC never drops messages automatically (returns error instead)
+- Bus automatically drops oldest entry when ring buffer is full
+- Both share the same message data pool (`RT_MESSAGE_DATA_POOL_SIZE`)
+
 ## Important Implementation Details
 
 ### Memory Allocation - Compile-Time Configuration

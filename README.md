@@ -199,7 +199,11 @@ rt_bus_create(&cfg, &bus);
 rt_bus_subscribe(bus);
 
 sensor_data data = {.temperature = 25.5f};
-rt_bus_publish(bus, &data, sizeof(data));
+rt_status status = rt_bus_publish(bus, &data, sizeof(data));
+if (RT_FAILED(status)) {
+    // Message pool exhausted (shares RT_MESSAGE_DATA_POOL_SIZE with IPC)
+    // Note: Ring buffer full automatically drops oldest entry
+}
 
 sensor_data received;
 rt_bus_read_wait(bus, &received, sizeof(received), &actual_len, -1);

@@ -394,6 +394,39 @@ Typical use cases:
 - Configuration: `max_readers=0, max_age_ms=0` – Persistent until overwritten
 - Events: `max_readers=N, max_age_ms=0` – Consumed after all subscribers read
 
+### Pool Exhaustion and Buffer Full Behavior
+
+The bus can encounter two types of resource limits:
+
+**1. Message Pool Exhaustion** (shared with IPC):
+- Bus uses the global `RT_MESSAGE_DATA_POOL_SIZE` pool (same as IPC)
+- When pool is exhausted, `rt_bus_publish()` returns `RT_ERR_NOMEM` immediately
+- Does NOT block waiting for space
+- Does NOT drop messages automatically in this case
+- Caller must check return value and handle failure
+
+**2. Bus Ring Buffer Full** (per-bus limit):
+- Each bus has its own ring buffer sized via `max_entries` config
+- When ring buffer is full, `rt_bus_publish()` **automatically evicts oldest entry**
+- This is different from IPC - bus has automatic message dropping
+- Publish succeeds (unless message pool also exhausted)
+- Slow readers may miss messages if buffer wraps
+
+**3. Subscriber Table Full**:
+- Each bus has subscriber limit via `max_subscribers` config (up to `RT_MAX_BUS_SUBSCRIBERS`)
+- When full, `rt_bus_subscribe()` returns `RT_ERR_NOMEM`
+
+**Key Differences from IPC:**
+- IPC never drops messages automatically (returns error instead)
+- Bus automatically drops oldest entry when ring buffer is full
+- Both share the same message data pool (`RT_MESSAGE_DATA_POOL_SIZE`)
+
+**Mitigation strategies:**
+- Size message pool appropriately for combined IPC + bus load
+- Configure per-bus `max_entries` based on publish rate vs read rate
+- Use retention policies (`max_readers`, `max_age_ms`) to prevent accumulation
+- Monitor `rt_bus_entry_count()` to detect slow readers
+
 ## Timer API
 
 Timers for periodic and one-shot wake-ups.
