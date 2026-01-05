@@ -7,50 +7,15 @@ A complete actor-based runtime designed for **embedded and safety-critical syste
 **Current platform:** x86-64 Linux (fully implemented)
 **Future platform:** STM32/ARM Cortex-M with FreeRTOS (see `spec.md`)
 
-The runtime uses **static memory allocation** for deterministic behavior with zero heap fragmentation—perfect for embedded systems and safety-critical applications. It features **priority-based scheduling** (4 levels: CRITICAL, HIGH, NORMAL, LOW) with fast context switching via manual assembly. Despite this minimalistic design, it provides a complete actor system with message passing (IPC with COPY/BORROW modes), linking, monitoring, timers, pub-sub messaging (bus), async networking, and async file I/O.
+The runtime uses **static memory allocation** for deterministic behavior with zero heap fragmentation. It features **priority-based scheduling** (4 levels: CRITICAL, HIGH, NORMAL, LOW) with fast context switching via manual assembly. Provides message passing (IPC with COPY/BORROW modes), linking, monitoring, timers, pub-sub messaging (bus), async networking, and async file I/O.
 
 ## Quick Links
 
 - **[Full Specification](spec.md)** - Complete design and implementation details
 - **[Examples Directory](examples/)** - Working examples (pingpong, bus, echo server, etc.)
 - **[Static Configuration](include/rt_static_config.h)** - Compile-time memory limits and pool sizes
-- **[Benchmarks](#performance)** - Performance measurements and comparison
-- **[Troubleshooting](TROUBLESHOOTING.md)** - Common issues and solutions
+- **[Benchmarks](#performance)** - Performance measurements
 - **[FAQ](FAQ.md)** - Frequently asked questions
-- **[Development Guide](CLAUDE.md)** - Instructions for Claude Code when working with this codebase
-
-## Why Use This?
-
-### Who Should Use This
-
-This runtime is designed for:
-- **Embedded systems developers** building autopilots, sensor networks, or robotics platforms
-- **Safety-critical applications** requiring deterministic memory behavior (DO-178C, etc.)
-- **MCU projects** needing structured concurrency on top of FreeRTOS (or bare-metal with pthreads on Linux)
-- **Researchers** exploring actor models on resource-constrained hardware
-
-### What Problems It Solves
-
-- **Structured concurrency** - Actor model eliminates shared-state bugs and race conditions
-- **Deterministic memory** - Static allocation means no heap fragmentation or OOM surprises
-- **Type-safe IPC** - Message passing with backpressure (BORROW mode)
-- **Predictable scheduling** - Priority-based cooperative multitasking, no preemption surprises
-- **Async I/O without complexity** - File/network operations handled by worker threads
-
-### Real-World Use Cases
-
-**Drone Autopilot (STM32F7)**
-
-Actors:
-- IMU sensor reader (CRITICAL priority) - reads gyro/accel at 1kHz
-- Flight controller (CRITICAL) - PID loops for stabilization
-- GPS processor (HIGH) - position updates at 10Hz
-- Radio receiver (HIGH) - pilot commands
-- Telemetry sender (NORMAL) - ground station updates
-- LED status (LOW) - visual indicators
-
-Communication: Sensor actors publish to bus, controller subscribes
-Memory: ~150 KB static pools + 10 actors × 32KB stacks = ~470 KB total
 
 ## Features
 
@@ -84,12 +49,6 @@ Run benchmarks yourself:
 make bench
 ```
 
-**Key insights:**
-- Pool allocation is faster and more predictable than malloc/free
-- Context switching overhead is minimal (~1 µs)
-- Message passing is fast enough for high-frequency communication
-- Bus pub/sub demonstrates proper cooperative actor behavior
-
 ## Memory Model
 
 The runtime uses **compile-time configuration** for predictable memory allocation.
@@ -104,15 +63,10 @@ All resource limits are defined at compile time. Edit and recompile to change:
 #define RT_MESSAGE_DATA_POOL_SIZE 256   // Message pool size
 #define RT_COMPLETION_QUEUE_SIZE 64     // I/O completion queue size
 #define RT_MAX_BUSES 32                 // Maximum concurrent buses
-// ... and more (see rt_static_config.h for full list)
+// ... see rt_static_config.h for full list
 ```
 
-**Memory characteristics:**
-- All structures (except actor stacks) are **statically allocated**
-- No malloc in hot paths (IPC, scheduling, I/O completions)
-- Memory footprint is **calculable at link time**
-- No heap fragmentation
-- Perfect for embedded/safety-critical systems
+All structures (except actor stacks) are statically allocated. No malloc in hot paths. Memory footprint calculable at link time.
 
 ## Running Examples
 
@@ -165,286 +119,100 @@ int main(void) {
 }
 ```
 
-### Advanced Actor Spawning
+### IPC and Configuration
 
 ```c
-// Passing arguments to actors
-typedef struct {
-    int worker_id;
-    const char *task_name;
-} worker_args;
+// Configure actor
+actor_config cfg = RT_ACTOR_CONFIG_DEFAULT;
+cfg.priority = 0;             // 0-3, lower is higher
+cfg.stack_size = 128 * 1024;
+actor_id worker = rt_spawn_ex(worker_actor, &args, &cfg);
 
-void worker_actor(void *arg) {
-    worker_args *args = (worker_args *)arg;
-    printf("Worker %d starting task: %s\n", args->worker_id, args->task_name);
-
-    // Do work...
-
-    rt_exit();
-}
-
-int main(void) {
-    rt_init();
-
-    // Spawn with custom configuration
-    actor_config cfg = RT_ACTOR_CONFIG_DEFAULT;
-    cfg.name = "high_priority_worker";
-    cfg.priority = 0;           // CRITICAL priority (0-3, lower is higher)
-    cfg.stack_size = 128 * 1024; // 128 KB stack
-
-    worker_args args = {.worker_id = 1, .task_name = "sensor_processing"};
-    actor_id worker = rt_spawn_ex(worker_actor, &args, &cfg);
-
-    printf("Spawned worker actor (ID: %u, priority: %d)\n", worker, cfg.priority);
-
-    rt_run();
-    rt_cleanup();
-    return 0;
-}
-```
-
-### Sending Messages
-
-```c
-// Send a COPY message (async - data is copied, sender continues immediately)
+// Send messages
 int data = 42;
-rt_ipc_send(target_actor, &data, sizeof(data), IPC_COPY);
+rt_ipc_send(target, &data, sizeof(data), IPC_COPY);    // Async, copied
+rt_ipc_send(target, &data, sizeof(data), IPC_BORROW);  // Zero-copy, blocks until released
 
-// Send a BORROW message (zero-copy - sender blocks until receiver releases)
-int data = 42;
-rt_ipc_send(target_actor, &data, sizeof(data), IPC_BORROW);
-// Sender blocked here until receiver calls rt_ipc_release()
-```
-
-### Receiving Messages
-
-```c
-// Blocking receive
+// Receive messages
 rt_message msg;
-rt_ipc_recv(&msg, -1);  // Block until message arrives
+rt_ipc_recv(&msg, -1);  // -1=block, 0=nonblock, >0=timeout ms
 
-// Process COPY message (data is in msg.data)
-if (msg.mode == IPC_COPY) {
-    int *value = (int *)msg.data;
-    printf("Received COPY: %d from actor %u\n", *value, msg.sender);
-    // No release needed for COPY messages
-}
-
-// Process BORROW message (data is on sender's stack, must release!)
 if (msg.mode == IPC_BORROW) {
-    int *value = (int *)msg.data;
-    printf("Received BORROW: %d from actor %u\n", *value, msg.sender);
-
-    // IMPORTANT: Release borrowed message to unblock sender
-    rt_ipc_release(&msg);
-}
-
-// Non-blocking receive
-if (rt_ipc_recv(&msg, 0) == RT_OK) {
-    // Process message (check msg.mode and release if BORROW)
+    rt_ipc_release(&msg);  // Unblock sender
 }
 ```
 
-**Also available:**
-- `rt_ipc_pending()` - Check if messages are available without receiving
-- `rt_ipc_count()` - Get number of messages in mailbox
-- Timeout parameter: `-1` (block forever), `0` (non-blocking), `>0` (milliseconds)
-
-### Using Timers
+### Timers
 
 ```c
-#include "rt_timer.h"
-
-// One-shot timer (fires once after delay)
 timer_id timer;
-rt_timer_after(500000, &timer);  // 500ms delay
+rt_timer_after(500000, &timer);    // One-shot, 500ms
+rt_timer_every(200000, &periodic); // Periodic, 200ms
 
-// Periodic timer (fires repeatedly)
-timer_id periodic;
-rt_timer_every(200000, &periodic);  // Every 200ms
-
-// Receive timer ticks
 rt_message msg;
 rt_ipc_recv(&msg, -1);
 if (rt_timer_is_tick(&msg)) {
-    timer_id *tick_id = (timer_id *)msg.data;
-    printf("Timer %u fired\n", *tick_id);
+    // Handle timer tick
 }
-
-// Cancel timer
 rt_timer_cancel(periodic);
 ```
 
-### File I/O
+### File and Network I/O
 
 ```c
-#include "rt_file.h"
-
-// Open file
+// File operations
 int fd;
 rt_file_open("test.txt", O_RDWR | O_CREAT, 0644, &fd);
-
-// Write data
-const char *data = "Hello, world!";
-size_t written;
-rt_file_write(fd, data, strlen(data), &written);
-
-// Read data
-char buffer[128];
-size_t nread;
+rt_file_write(fd, data, len, &written);
 rt_file_read(fd, buffer, sizeof(buffer), &nread);
-
-// Close file
 rt_file_close(fd);
-```
 
-**Also available:**
-- All operations return `rt_status` - check with `RT_FAILED(status)` for errors
-- Operations are **async** - they block the calling actor but not the runtime
-- Worker thread handles actual I/O, communicates via completion queue
-- See `examples/fileio.c` for complete example
-
-### Network I/O
-
-```c
-#include "rt_net.h"
-
-// SERVER SIDE: Create listening socket and handle connections
-int listen_fd;
+// Network server
+int listen_fd, client_fd;
 rt_net_listen(8080, &listen_fd);
-
-// Accept connection (blocking, timeout in ms, -1 = infinite)
-int client_fd;
 rt_net_accept(listen_fd, &client_fd, -1);
-
-// Receive data (blocking)
-char buffer[1024];
-size_t received;
 rt_net_recv(client_fd, buffer, sizeof(buffer), &received, -1);
-
-// Send data (blocking)
-size_t sent;
 rt_net_send(client_fd, buffer, received, &sent, -1);
-
-// Close socket
 rt_net_close(client_fd);
 
-// CLIENT SIDE: Connect to remote server
+// Network client
 int server_fd;
-rt_status status = rt_net_connect("127.0.0.1", 8080, &server_fd, 5000); // 5 sec timeout
-if (!RT_FAILED(status)) {
-    // Send request
-    const char *request = "GET /data";
-    size_t sent;
-    rt_net_send(server_fd, request, strlen(request), &sent, -1);
-
-    // Receive response
-    char response[1024];
-    size_t received;
-    rt_net_recv(server_fd, response, sizeof(response), &received, -1);
-
-    rt_net_close(server_fd);
-}
+rt_net_connect("127.0.0.1", 8080, &server_fd, 5000);
 ```
-
-**Also available:**
-- All operations return `rt_status` - check with `RT_FAILED(status)` for errors
-- Timeout parameter: `-1` (block forever), `0` (non-blocking), `>0` (milliseconds)
-- Operations are **async** - worker thread handles actual network I/O
-- Non-blocking mode useful for polling multiple connections
-- See `examples/echo.c` for complete TCP echo server example
 
 ### Bus (Pub-Sub)
 
 ```c
-#include "rt_bus.h"
-
-// Create a bus with retention policy
 rt_bus_config cfg = RT_BUS_CONFIG_DEFAULT;
-cfg.max_entries = 16;          // Ring buffer size
-cfg.max_entry_size = 256;      // Max payload size
-cfg.max_subscribers = 32;      // Max concurrent subscribers
-cfg.max_readers = 0;           // 0 = data persists (not removed after read)
-cfg.max_age_ms = 0;            // 0 = no time-based expiry
+cfg.max_readers = 0;   // 0=persist, N=remove after N reads
+cfg.max_age_ms = 0;    // 0=no expiry, T=expire after T ms
 
-bus_id sensor_bus;
-rt_bus_create(&cfg, &sensor_bus);
+bus_id bus;
+rt_bus_create(&cfg, &bus);
+rt_bus_subscribe(bus);
 
-// Publisher actor - publish sensor data
-typedef struct {
-    uint32_t timestamp;
-    float temperature;
-} sensor_data;
+sensor_data data = {.temperature = 25.5f};
+rt_bus_publish(bus, &data, sizeof(data));
 
-sensor_data data = {.timestamp = 123, .temperature = 25.5f};
-rt_bus_publish(sensor_bus, &data, sizeof(data));
-
-// Subscriber actor - subscribe and read data
-rt_bus_subscribe(sensor_bus);
-
-// Blocking read - wait for next message
-size_t actual_len;
 sensor_data received;
-rt_bus_read_wait(sensor_bus, &received, sizeof(received), &actual_len, -1);
-
-// Non-blocking read - check if data available
-rt_status status = rt_bus_read(sensor_bus, &received, sizeof(received), &actual_len);
-if (!RT_FAILED(status)) {
-    printf("Temperature: %.1f\n", received.temperature);
-}
-
-// Unsubscribe when done
-rt_bus_unsubscribe(sensor_bus);
-
-// Destroy bus
-rt_bus_destroy(sensor_bus);
+rt_bus_read_wait(bus, &received, sizeof(received), &actual_len, -1);
 ```
 
-**Retention policy explained:**
-- `max_readers = 0` - Entries persist indefinitely (removed only when buffer wraps)
-- `max_readers = N` - Entry auto-removed after N subscribers read it
-- `max_age_ms = 0` - No time-based expiry
-- `max_age_ms = T` - Entries older than T milliseconds are auto-removed
-- Multiple subscribers can read the same data (pub-sub pattern)
-- See `examples/bus.c` for complete multi-subscriber example
-
-### Actor Linking and Monitoring
+### Linking and Monitoring
 
 ```c
-#include "rt_link.h"
-
-// Bidirectional linking - both actors receive exit notifications
 actor_id other = rt_spawn(other_actor, NULL);
-rt_link(other);  // Link to the other actor
+rt_link(other);     // Bidirectional - both get exit notifications
+rt_monitor(other, &ref);  // Unidirectional - only monitor gets notifications
 
-// Receive exit notification when linked actor dies
 rt_message msg;
 rt_ipc_recv(&msg, -1);
 if (rt_is_exit_msg(&msg)) {
     rt_exit_msg exit_info;
     rt_decode_exit(&msg, &exit_info);
-    printf("Actor %u died, reason: %d\n", exit_info.actor, exit_info.reason);
-    // exit_info.reason: RT_EXIT_NORMAL, RT_EXIT_CRASH, or RT_EXIT_KILLED
+    // exit_info.reason: RT_EXIT_NORMAL, RT_EXIT_CRASH, RT_EXIT_KILLED
 }
-
-// Unidirectional monitoring - only monitor receives exit notification
-uint32_t monitor_ref;
-rt_monitor(other, &monitor_ref);  // Monitor the other actor
-
-// Stop monitoring
-rt_demonitor(monitor_ref);
-
-// Unlink (remove bidirectional link)
-rt_unlink(other);
 ```
-
-**Link vs Monitor:**
-- **Link** (`rt_link`) - Bidirectional: both actors get exit notification if either dies
-- **Monitor** (`rt_monitor`) - Unidirectional: only monitor gets notification when target dies
-- Use **link** for peer relationships (both actors depend on each other)
-- Use **monitor** for supervisor patterns (supervisor watches workers)
-- Exit reasons: `RT_EXIT_NORMAL` (clean exit), `RT_EXIT_CRASH` (error), `RT_EXIT_KILLED` (terminated)
-- See `examples/link_demo.c` and `examples/supervisor.c` for complete examples
 
 ## API Overview
 
@@ -529,51 +297,6 @@ All I/O operations (timers, file, network) are handled by dedicated worker threa
 **File I/O subsystem**: Worker thread processes read/write requests asynchronously.
 
 **Network I/O subsystem**: Worker thread handles socket operations (accept, connect, send, recv) asynchronously.
-
-## Memory Configuration
-
-The runtime uses **static memory allocation** for deterministic behavior:
-
-- **Deterministic footprint**: Total memory usage known at compile/link time
-- **Zero fragmentation**: No malloc in hot paths (message passing, timers, etc.)
-- **Predictable allocation**: Pool exhaustion returns clear errors
-- **Safety-critical ready**: Suitable for DO-178C and similar certifications
-
-**Only one malloc**: Actor stacks are allocated at spawn time (~64KB default each).
-
-### Quick Configuration
-
-Edit `include/rt_static_config.h` to adjust pool sizes:
-
-```c
-#define RT_MAX_ACTORS 64                // Maximum concurrent actors
-#define RT_MAILBOX_ENTRY_POOL_SIZE 256  // Mailbox pool
-#define RT_MESSAGE_DATA_POOL_SIZE  256  // Message pool
-#define RT_MAX_MESSAGE_SIZE        256  // Max bytes per message
-// ... see rt_static_config.h for complete list
-```
-
-Rebuild after changes: `make clean && make all`
-
-### Memory Footprint
-
-**Total memory** = Static pools + Actor stacks
-
-- **Static pools**: ~231 KB (default config, measured)
-- **Actor stacks**: N actors × stack size (e.g., 20 × 64KB = 1.3 MB)
-- **Example total**: ~1.5 MB for 20 actors with default config
-
-📖 **For detailed memory calculations, pool sizing guidelines, and configuration examples**, see [spec.md](spec.md#memory-model).
-
-## Troubleshooting
-
-See **[TROUBLESHOOTING.md](TROUBLESHOOTING.md)** for detailed solutions to common issues:
-- Pool exhaustion errors
-- Examples hanging or timing out
-- Segmentation faults
-- Build errors
-- Performance issues
-- Debugging tips and workflow
 
 ## Future Work
 
