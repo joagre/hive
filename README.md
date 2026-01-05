@@ -19,7 +19,7 @@ The runtime uses **static memory allocation** for deterministic behavior with ze
 
 ## Features
 
-- **Static memory allocation** - Deterministic footprint, zero fragmentation, safety-critical ready
+- Static memory allocation - Deterministic footprint, zero fragmentation, safety-critical ready
 - Cooperative multitasking with manual x86-64 context switching
 - Priority-based round-robin scheduler (4 priority levels)
 - Actor lifecycle management (spawn, exit)
