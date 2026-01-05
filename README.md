@@ -145,7 +145,7 @@ if (RT_FAILED(status)) {
     // Retry send...
 }
 
-// IPC_SYNC: One-copy to pinned buffer, sender blocks until receiver releases
+// IPC_SYNC: Payload copied to sync buffer pool, sender blocks until receiver releases
 // WARNING: Use with care - sender blocks, risk of deadlock
 // See spec.md for safety considerations and deadlock scenarios
 rt_ipc_send(target, &data, sizeof(data), IPC_SYNC);

@@ -10,10 +10,10 @@
 //   - Safe default for most use cases
 //   - Suitable for small messages and general communication
 //
-// IPC_SYNC: One-copy to pinned runtime buffer, sender blocks until receiver releases
+// IPC_SYNC: Payload copied to sync buffer pool, sender blocks until receiver releases
 //   - WARNING: REQUIRES CAREFUL USE - see spec.md "IPC_SYNC Safety Considerations"
 //   - Actor context only (not I/O threads or completion handlers)
-//   - Data copied to pinned buffer (NOT sender's stack, eliminates UAF)
+//   - Data copied to pinned runtime buffer (NOT sender's stack, eliminates UAF)
 //   - Sender blocks and cannot process other messages
 //   - Risk of deadlock with circular/nested synchronous sends
 //   - Use for: Flow control, backpressure, trusted cooperating actors

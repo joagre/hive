@@ -92,10 +92,10 @@ All runtime functions return `rt_status` with a code and optional string literal
   - Safe default for most use cases
   - Suitable for untrusted actors and general communication
 
-- **IPC_SYNC**: One-copy to pinned runtime buffer, sender blocks until receiver calls `rt_ipc_release()`
+- **IPC_SYNC**: Payload copied to sync buffer pool, sender blocks until receiver calls `rt_ipc_release()`
   - Use for: Flow control, backpressure, trusted cooperating actors
   - WARNING: Requires careful use - actor context only, sender blocks until release
-  - Data copied to pinned buffer (NOT sender's stack, eliminates use-after-free)
+  - Data copied to pinned runtime buffer (NOT sender's stack, eliminates use-after-free)
   - Risk of deadlock with circular/nested synchronous sends
   - Preconditions: Actor context only (not I/O threads), sender cannot process other messages while blocked
   - See spec.md "IPC_SYNC Safety Considerations" for full details

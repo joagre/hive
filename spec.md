@@ -514,14 +514,14 @@ typedef struct {
 
 ```c
 typedef enum {
-    IPC_ASYNC,    // memcpy payload to receiver's mailbox
-    IPC_SYNC,  // one-copy to pinned buffer, sender blocks until receiver consumes
+    IPC_ASYNC,    // copy to message pool, sender continues immediately
+    IPC_SYNC,     // copy to sync buffer pool, sender blocks until receiver releases
 } rt_ipc_mode;
 ```
 
-**IPC_ASYNC:** Payload is copied to receiver's mailbox. Sender continues immediately. Suitable for small messages and general-purpose communication.
+**IPC_ASYNC:** Payload copied to message data pool (RT_MESSAGE_DATA_POOL_SIZE). Sender continues immediately. Suitable for small messages and general-purpose communication.
 
-**IPC_SYNC:** One-copy transfer to pinned runtime buffer (not sender's stack). Sender blocks until receiver calls `rt_ipc_release()`. Provides implicit backpressure and memory safety (no UAF if sender dies).
+**IPC_SYNC:** Payload copied to sync buffer pool (RT_SYNC_BUFFER_POOL_SIZE). Sender blocks until receiver calls `rt_ipc_release()`. Provides implicit backpressure and memory safety (no UAF if sender dies).
 
 ### API Contract: rt_ipc_send()
 
@@ -737,10 +737,10 @@ void actor_with_timer(void *arg) {
 **WARNING: IPC_SYNC requires careful use.** It trades simplicity and performance for strict constraints.
 
 **Design rationale:**
-- One-copy to pinned buffer (vs two-copy for IPC_ASYNC: pool → receiver local)
+- Separate sync buffer pool (RT_SYNC_BUFFER_POOL_SIZE) isolates ASYNC/SYNC resource contention
 - Pinned runtime buffers for memory safety (prevents UAF if sender dies)
-- Blocking provides implicit backpressure
-- Static pool allocation for deterministic memory (RT_SYNC_BUFFER_POOL_SIZE)
+- Blocking provides implicit backpressure (sender cannot proceed until receiver consumes)
+- Static pool allocation for deterministic memory
 - Simple implementation suitable for embedded/safety-critical systems
 
 **Mandatory preconditions:**
