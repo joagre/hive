@@ -2,15 +2,18 @@
 
 ## Overview
 
-A minimalistic actor-based runtime for embedded systems, initially targeting autopilot applications on STM32 (ARM Cortex-M). The runtime implements cooperative multitasking with message passing, inspired by Erlang's actor model.
+A minimalistic actor-based runtime designed for **embedded and safety-critical systems**. The runtime implements cooperative multitasking with priority-based scheduling and message passing, inspired by Erlang's actor model.
+
+**Target use cases:** Drone autopilots, industrial sensor networks, robotics control systems, and other resource-constrained embedded applications requiring structured concurrency.
 
 **Design principles:**
 
-- Minimalistic and predictable
-- Modern C (C11 or later)
-- No heap allocation in hot paths
-- Least surprise API design
-- Fast context switching via manual assembly
+1. **Minimalistic**: Only essential features, no bloat
+2. **Predictable**: Cooperative scheduling, no surprises
+3. **Modern C11**: Clean, safe, standards-compliant code
+4. **Static allocation**: Deterministic memory, zero fragmentation, compile-time footprint
+5. **No heap in hot paths**: O(1) pool allocation for all runtime operations
+6. **Explicit control**: Actors yield explicitly, no preemption
 
 ## Target Platforms
 
