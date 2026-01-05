@@ -95,6 +95,87 @@ Context switching is implemented via manual assembly for performance:
 
 No use of setjmp/longjmp or ucontext for performance reasons.
 
+## Thread Safety
+
+### Single-Threaded Runtime Model
+
+The actor runtime is **single-threaded from the scheduler's perspective**. All runtime state (actors, mailboxes, buses) is owned and mutated by the scheduler thread only.
+
+**Thread ownership rules:**
+
+1. **Scheduler thread (main runtime thread):**
+   - Owns all actor state, mailboxes, and bus state
+   - Processes I/O completions and updates actors accordingly
+   - **Only thread that may call runtime APIs** (rt_ipc_send, rt_spawn, rt_bus_publish, etc.)
+   - All actor code runs in this thread
+
+2. **I/O threads/tasks (file, network, timer):**
+   - May **only** push completion entries to their SPSC queues
+   - May **only** signal the scheduler wakeup primitive (eventfd/semaphore)
+   - **Cannot** call runtime APIs directly (rt_ipc_send, rt_spawn, etc.)
+   - **Cannot** access actor/mailbox/bus state
+
+3. **External threads:**
+   - **Cannot** call any runtime APIs
+   - Must communicate with actors via external mechanisms (sockets, pipes, etc.)
+   - No support for multi-threaded message senders
+
+### Synchronization Primitives
+
+The runtime uses minimal synchronization:
+
+- **SPSC queues:** Lock-free atomic head/tail for I/O completion queues
+- **Scheduler wakeup:** Single eventfd (Linux) or semaphore (FreeRTOS) for I/O→scheduler signaling
+- **Timer list:** Mutex-protected (accessed by both timer thread and scheduler thread for timer management)
+- **Logging:** Mutex-protected (optional, not part of core runtime)
+
+**No locks in hot paths:** Mailboxes, actor state, bus state, and message passing require no locks because they are accessed only by the scheduler thread.
+
+### Rationale
+
+This single-threaded model provides:
+
+- **Simplicity:** No lock ordering, no deadlock, easier to reason about
+- **Determinism:** No lock contention, predictable execution
+- **Performance:** No lock overhead in message passing or scheduling
+- **Safety-critical compliance:** Deterministic behavior, no priority inversion from locks
+
+The cooperative scheduling model ensures actors yield explicitly, so there are no race conditions within the runtime itself.
+
+### Consequences
+
+**Valid patterns:**
+```c
+// Actor calling runtime APIs (runs in scheduler thread)
+void my_actor(void *arg) {
+    rt_ipc_send(other_actor, &data, sizeof(data), IPC_COPY);  // OK
+    actor_id new_actor = rt_spawn(worker, NULL);               // OK
+    rt_bus_publish(bus, &event, sizeof(event));               // OK
+}
+
+// I/O thread posting completion (runs in I/O thread)
+void io_worker_thread(void) {
+    // Process I/O operation...
+    rt_spsc_push(&completion_queue, &completion);  // OK
+    rt_scheduler_wakeup_signal();                  // OK
+}
+```
+
+**Invalid patterns:**
+```c
+// External thread trying to send message - NOT SUPPORTED
+void external_thread(void) {
+    rt_ipc_send(actor, &data, sizeof(data), IPC_COPY);  // INVALID - NOT THREAD-SAFE!
+}
+
+// I/O thread calling runtime API - NOT SUPPORTED
+void io_worker_thread(void) {
+    rt_spawn(actor, NULL);  // INVALID - ONLY SCHEDULER THREAD MAY CALL THIS!
+}
+```
+
+**Guideline:** If you need external threads to communicate with actors, use platform-specific mechanisms (sockets, pipes) and have a dedicated actor read from those sources.
+
 ## Memory Model
 
 ### Actor Stacks
