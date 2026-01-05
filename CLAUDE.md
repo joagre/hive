@@ -46,7 +46,9 @@ On FreeRTOS, the entire actor runtime runs as a single task. Blocking I/O is del
 - Implemented in manual assembly for performance
 
 ### Memory Management
-- Actor stacks: Fixed-size, allocated at spawn via malloc (only malloc in system)
+- Actor stacks: Hybrid allocation strategy
+  - Default: Static arena allocator (RT_STACK_ARENA_SIZE = 1 MB), first-fit with coalescing
+  - Optional: malloc via `actor_config.malloc_stack = true`
 - Actor table: Static array (RT_MAX_ACTORS), configured at compile time
 - All runtime structures: Static pools with O(1) allocation
   - IPC: Mailbox entry pool (256) and message data pool (256)
@@ -89,13 +91,14 @@ The runtime uses **compile-time configuration** for deterministic memory allocat
 - `RT_TIMER_ENTRY_POOL_SIZE`: Timer entry pool (64)
 - `RT_COMPLETION_QUEUE_SIZE`: I/O completion queue size (64)
 - `RT_MAX_MESSAGE_SIZE`: Maximum message size in bytes (256)
+- `RT_STACK_ARENA_SIZE`: Stack arena size (1*1024*1024) // 1 MB default
 - `RT_DEFAULT_STACK_SIZE`: Default actor stack size (65536)
 
 To change these limits, edit `rt_static_config.h` and recompile.
 
 **Memory characteristics:**
-- All runtime structures (except actor stacks) are **statically allocated** based on compile-time limits
-- Only malloc used: actor stacks at spawn time
+- All runtime structures are **statically allocated** based on compile-time limits
+- Actor stacks use static arena by default, with optional malloc via `actor_config.malloc_stack`
 - No malloc in hot paths (IPC, scheduling, I/O completions)
 - Memory footprint calculable at link time
 - Zero heap fragmentation in message passing
