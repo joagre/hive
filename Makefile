@@ -25,9 +25,14 @@ LIB := $(BUILD_DIR)/librt.a
 EXAMPLE_SRCS := $(wildcard $(EXAMPLES_DIR)/*.c)
 EXAMPLES := $(EXAMPLE_SRCS:$(EXAMPLES_DIR)/%.c=$(BUILD_DIR)/%)
 
+# Benchmarks
+BENCHMARKS_DIR := benchmarks
+BENCHMARK_SRCS := $(wildcard $(BENCHMARKS_DIR)/*.c)
+BENCHMARKS := $(BENCHMARK_SRCS:$(BENCHMARKS_DIR)/%.c=$(BUILD_DIR)/%)
+
 # Default target
 .PHONY: all
-all: $(LIB) $(EXAMPLES)
+all: $(LIB) $(EXAMPLES) $(BENCHMARKS)
 
 # Create build directory
 $(BUILD_DIR):
@@ -48,6 +53,15 @@ $(LIB): $(OBJS)
 # Build examples
 $(BUILD_DIR)/%: $(EXAMPLES_DIR)/%.c $(LIB)
 	$(CC) $(CFLAGS) $(CPPFLAGS) $< -o $@ -L$(BUILD_DIR) -lrt $(LDLIBS)
+
+# Build benchmarks
+$(BUILD_DIR)/%: $(BENCHMARKS_DIR)/%.c $(LIB)
+	$(CC) $(CFLAGS) $(CPPFLAGS) $< -o $@ -L$(BUILD_DIR) -lrt $(LDLIBS)
+
+# Run benchmarks
+.PHONY: bench
+bench: $(BUILD_DIR)/bench
+	./$(BUILD_DIR)/bench
 
 # Clean
 .PHONY: clean
@@ -73,8 +87,9 @@ run-echo: $(BUILD_DIR)/echo
 .PHONY: help
 help:
 	@echo "Available targets:"
-	@echo "  all               - Build library and examples (default)"
+	@echo "  all               - Build library, examples, and benchmarks (default)"
 	@echo "  clean             - Remove build artifacts"
+	@echo "  bench             - Build and run benchmark suite"
 	@echo "  run-pingpong      - Build and run ping-pong example"
 	@echo "  run-fileio        - Build and run file I/O example"
 	@echo "  run-echo          - Build and run echo server/client example"
