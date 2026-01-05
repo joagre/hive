@@ -212,13 +212,14 @@ int main(void) {
 ### Sending Messages
 
 ```c
-// Send a COPY message (async)
+// Send a COPY message (async - data is copied, sender continues immediately)
 int data = 42;
 rt_ipc_send(target_actor, &data, sizeof(data), IPC_COPY);
 
-// Send a BORROW message (zero-copy, blocks until consumed)
+// Send a BORROW message (zero-copy - sender blocks until receiver releases)
 int data = 42;
 rt_ipc_send(target_actor, &data, sizeof(data), IPC_BORROW);
+// Sender blocked here until receiver calls rt_ipc_release()
 ```
 
 ### Receiving Messages
@@ -227,11 +228,26 @@ rt_ipc_send(target_actor, &data, sizeof(data), IPC_BORROW);
 // Blocking receive
 rt_message msg;
 rt_ipc_recv(&msg, -1);  // Block until message arrives
-printf("Received %zu bytes from actor %u\n", msg.len, msg.sender);
+
+// Process COPY message (data is in msg.data)
+if (msg.mode == IPC_COPY) {
+    int *value = (int *)msg.data;
+    printf("Received COPY: %d from actor %u\n", *value, msg.sender);
+    // No release needed for COPY messages
+}
+
+// Process BORROW message (data is on sender's stack, must release!)
+if (msg.mode == IPC_BORROW) {
+    int *value = (int *)msg.data;
+    printf("Received BORROW: %d from actor %u\n", *value, msg.sender);
+
+    // IMPORTANT: Release borrowed message to unblock sender
+    rt_ipc_release(&msg);
+}
 
 // Non-blocking receive
 if (rt_ipc_recv(&msg, 0) == RT_OK) {
-    // Process message
+    // Process message (check msg.mode and release if BORROW)
 }
 ```
 
