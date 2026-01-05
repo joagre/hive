@@ -881,6 +881,67 @@ When an actor dies (via `rt_exit()`, crash, or external kill):
 
 6. **Resources freed:** Stack and actor table entry are released.
 
+### Exit Notification Ordering
+
+**When exit notifications are sent:**
+
+Exit notifications (steps 2-3 above) are enqueued in recipient mailboxes **during death processing**, following standard FIFO mailbox semantics.
+
+**Ordering guarantees:**
+
+1. **Messages already in recipient mailboxes:**
+   - Exit notifications are enqueued at the **tail** of recipient mailboxes
+   - Recipients will receive all messages sent before death **before** the exit notification
+   - Example: If A sends M1, M2 to B, then A dies, B receives: M1 → M2 → EXIT(A)
+
+2. **Messages sent by dying actor:**
+   - Messages successfully enqueued before death remain in recipient mailboxes
+   - These messages will be delivered **before** exit notifications (FIFO)
+   - Example: A sends M1 to B, then A dies, B receives: M1 → EXIT(A)
+
+3. **Messages in dying actor's mailbox:**
+   - Dying actor's mailbox is **cleared** (step 1)
+   - All pending messages are **discarded**
+   - Senders are **not** notified of message loss
+   - Exception: IPC_BORROW senders are unblocked (see IPC_BORROW safety section)
+
+4. **Multiple recipients:**
+   - Each recipient's exit notification is enqueued independently
+   - No ordering guarantee across different recipients
+   - Example: A linked to B and C, dies. B and C both receive EXIT(A), but no guarantee which processes it first.
+
+**Consequences:**
+
+```c
+// Dying actor sends messages before death
+void actor_A(void *arg) {
+    rt_ipc_send(B, &msg1, sizeof(msg1), IPC_COPY);  // Enqueued in B's mailbox
+    rt_ipc_send(C, &msg2, sizeof(msg2), IPC_COPY);  // Enqueued in C's mailbox
+    rt_exit();  // Exit notifications sent to links/monitors
+}
+// Linked actor B will receive: msg1, then EXIT(A)
+// Actor C will receive: msg2 (no exit notification, not linked)
+
+// Messages sent TO dying actor are lost
+void actor_B(void *arg) {
+    rt_ipc_send(A, &msg, sizeof(msg), IPC_COPY);  // Enqueued in A's mailbox
+}
+void actor_A(void *arg) {
+    // ... does some work ...
+    rt_exit();  // Mailbox cleared, msg from B is discarded
+}
+```
+
+**Design rationale:**
+- FIFO enqueuing = predictable, testable behavior
+- Messages before death delivered before exit = "happens-before" relationship
+- Mailbox clearing = simple cleanup, no orphaned messages
+- No sender notification = simpler implementation, sender must handle recipient death via links/monitors
+
+**Comparison to Erlang:**
+
+Erlang provides stronger guarantees (signals are ordered with messages). This runtime provides simpler semantics: exit notifications follow standard FIFO mailbox ordering, enqueued at tail when death is processed.
+
 ## Scheduler Main Loop
 
 Pseudocode for the scheduler:
