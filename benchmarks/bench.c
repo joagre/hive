@@ -462,11 +462,11 @@ int main(void) {
     fflush(stdout);
     bench_context_switch();
 
-    /* TODO: Debug these benchmarks - they currently segfault
     printf("Starting IPC benchmark...\n");
     fflush(stdout);
     bench_ipc();
 
+    /* TODO: Debug these benchmarks
     printf("Starting pool allocation benchmark...\n");
     fflush(stdout);
     bench_pool_allocation();

@@ -46,10 +46,11 @@ void rt_context_init(rt_context *ctx, void *stack, size_t stack_size,
     uintptr_t stack_top = (uintptr_t)stack + stack_size;
     stack_top &= ~((uintptr_t)15);  // Align to 16 bytes
 
-    // Subtract 16 bytes to ensure proper alignment after function prologue
-    // The x86-64 ABI requires (RSP + 8) % 16 == 0 at function entry
-    // But the function prologue may push rbp, and we need local vars 16-byte aligned
-    stack_top -= 16;
+    // x86-64 ABI requires RSP % 16 == 8 when entering a function (before pushing frame pointer)
+    // Our context switch uses RET to jump to context_entry, which pops the return address
+    // So we need: (RSP after RET) % 16 == 8
+    // Which means: (RSP before RET) % 16 == 0 (since RET adds 8)
+    // We already have 16-byte alignment, so just push the return address
 
     // Store function and argument in callee-saved registers
     // These will be preserved across the context switch
@@ -72,6 +73,11 @@ void rt_context_init(rt_context *ctx, void *stack, size_t stack_size,
     // Set instruction pointer to context_entry
     // We do this by pushing the return address onto the stack
     // When the context switch does 'ret', it will pop this address and jump to it
+    // After this push, RSP will be at (16-byte aligned - 8)
+    // After RET pops it, RSP will be 16-byte aligned - but we need it to be (16-aligned - 8)!
+    // So we need to push an extra dummy value first
+    stack_top -= sizeof(void *);
+    *(void **)stack_top = (void *)0;  // Dummy padding for alignment
     stack_top -= sizeof(void *);
     *(void **)stack_top = entry_conv.obj_ptr;
 

@@ -1,9 +1,11 @@
 #include "rt_actor.h"
 #include "rt_static_config.h"
 #include "rt_ipc.h"
+#include "rt_log.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <stdint.h>
 
 // Static actor storage
 static actor g_actors[RT_MAX_ACTORS];
