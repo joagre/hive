@@ -202,10 +202,20 @@ rt_status rt_ipc_recv(rt_message *msg, int32_t timeout_ms) {
         }
     }
 
-    // Free previous active message if any
+    // Free previous active message if any (auto-release for BORROW)
     if (current->active_msg) {
+        // If previous message was BORROW, unblock sender
+        if (current->active_msg->borrow_ptr) {
+            actor *sender = rt_actor_get(current->active_msg->sender);
+            if (sender && sender->waiting_for_release && sender->blocked_on_actor == current->id) {
+                sender->waiting_for_release = false;
+                sender->blocked_on_actor = ACTOR_ID_INVALID;
+                sender->state = ACTOR_STATE_READY;
+            }
+        }
+
+        // Free COPY message data from pool
         if (current->active_msg->data) {
-            // Calculate message_data_entry pointer from data pointer
             message_data_entry *msg_data = DATA_TO_MSG_ENTRY(current->active_msg->data);
             rt_pool_free(&g_message_pool_mgr, msg_data);
         }

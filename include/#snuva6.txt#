@@ -1,0 +1,17 @@
+The review also says this:
+
+== Start cite
+
+E) Cross-thread API calls are not specified
+
+On FreeRTOS you have I/O tasks. On Linux you have I/O threads. Do they call into runtime functions directly? Probably not, but the spec should say:
+
+Only the scheduler thread may mutate actor/mailbox/bus state.
+
+I/O threads/tasks can only push completion entries to SPSC queues.
+
+Also: can an external thread call rt_ipc_send() into an actor mailbox? Your spec implies “actors yield explicitly,” but it does not define multi-threaded senders. If you allow it, your “no surprises” story gets harder. If you forbid it, state it.
+
+== End cite
+
+Comments on that?

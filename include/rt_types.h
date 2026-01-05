@@ -68,7 +68,8 @@ typedef struct {
 typedef struct {
     actor_id    sender;
     size_t      len;
-    const void *data;   // valid until rt_ipc_release() or next rt_ipc_recv()
+    const void *data;   // COPY: valid until next rt_ipc_recv()
+                        // BORROW: valid until rt_ipc_release() (next recv auto-releases)
 } rt_message;
 
 // IPC send mode

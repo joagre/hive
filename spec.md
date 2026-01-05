@@ -361,7 +361,8 @@ Inter-process communication via mailboxes. Each actor has one mailbox.
 typedef struct {
     actor_id    sender;
     size_t      len;
-    const void *data;   // valid until rt_ipc_release() or next rt_ipc_recv()
+    const void *data;   // COPY: valid until next rt_ipc_recv()
+                        // BORROW: valid until rt_ipc_release() (next recv auto-releases)
 } rt_message;
 ```
 
@@ -377,6 +378,46 @@ typedef enum {
 **IPC_COPY:** Payload is copied to receiver's mailbox. Sender continues immediately. Suitable for small messages and general-purpose communication.
 
 **IPC_BORROW:** Zero-copy transfer. Payload remains on sender's stack. Sender blocks until receiver calls `rt_ipc_release()`. Provides implicit backpressure.
+
+### Message Data Lifetime
+
+The lifetime of `rt_message.data` depends on the send mode:
+
+**IPC_COPY:**
+- Data is **valid until next `rt_ipc_recv()`**
+- Data lives in a pool-allocated buffer
+- Next recv frees the previous message's buffer and reuses the pool entry
+- Calling `rt_ipc_release()` is optional (no-op for COPY)
+
+**IPC_BORROW:**
+- Data is **valid until `rt_ipc_release()`** is called
+- Data lives on sender's stack
+- Sender is blocked until `rt_ipc_release()` is called
+- **Auto-release:** If `rt_ipc_recv()` is called without releasing the previous BORROW message, the sender is automatically unblocked (prevents deadlock)
+
+**Auto-release behavior:**
+
+```c
+// Safe: explicit release (recommended)
+rt_message msg;
+rt_ipc_recv(&msg, -1);
+if (msg.data) {
+    process(msg.data);
+}
+rt_ipc_release(&msg);  // Unblocks sender (if BORROW)
+
+// Also safe: auto-release on next recv (forgiving)
+rt_message msg1, msg2;
+rt_ipc_recv(&msg1, -1);  // msg1 is BORROW
+process(msg1.data);
+rt_ipc_recv(&msg2, -1);  // msg1 auto-released, sender unblocked
+// No explicit release needed, but calling it is harmless
+```
+
+**Design rationale:**
+- Auto-release prevents deadlock if receiver forgets to call `rt_ipc_release()`
+- Forgiving API reduces cognitive load (one code path handles both COPY and BORROW)
+- Explicit release is still recommended for clarity and to minimize sender blocking time
 
 ### Mailbox Semantics
 
