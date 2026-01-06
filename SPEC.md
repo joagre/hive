@@ -634,7 +634,20 @@ actor_id rt_spawn_ex(actor_fn fn, void *arg, const actor_config *cfg);
 
 // Terminate current actor
 _Noreturn void rt_exit(void);
+```
 
+**Actor function return behavior:**
+
+Actors **must** call `rt_exit()` to terminate cleanly. If an actor function returns without calling `rt_exit()`, the runtime detects this as a crash:
+
+1. Exit reason is set to `RT_EXIT_CRASH`
+2. Linked/monitoring actors receive exit notification with `RT_EXIT_CRASH` reason
+3. Normal cleanup proceeds (mailbox cleared, resources freed)
+4. An ERROR log is emitted: "Actor N returned without calling rt_exit()"
+
+This crash detection prevents infinite loops and ensures linked actors are notified of the improper termination.
+
+```c
 // Get current actor's ID
 actor_id rt_self(void);
 
