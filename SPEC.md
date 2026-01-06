@@ -320,7 +320,7 @@ This pure single-threaded model provides:
 - Timers: `timerfd` registered in `epoll`
 - Network: Non-blocking sockets registered in `epoll`
 - File: Direct synchronous I/O (regular files don't work with epoll anyway)
-- Event loop: `epoll_wait()` blocks when no actors runnable
+- Event loop: `epoll_wait()` with short timeout when no actors runnable (allows IPC/bus polling)
 
 **STM32 (bare metal):**
 - Timers: Hardware timers (SysTick or TIM peripherals)
@@ -1664,8 +1664,8 @@ procedure rt_run():
             # Returns here when actor yields/blocks
 
         else:
-            # 3. No runnable actors, wait for I/O events
-            events = epoll_wait(epoll_fd, timeout=-1)
+            # 3. No runnable actors, wait for I/O events (short timeout for IPC/bus polling)
+            events = epoll_wait(epoll_fd, timeout=10ms)  # Returns 0 on timeout, -1/EINTR on signal
 
             # 4. Dispatch I/O events
             for event in events:
@@ -1704,7 +1704,9 @@ epoll_ctl(epoll_fd, EPOLL_CTL_ADD, sock, &ev);
 // Scheduler waits when no actors are ready
 if (no_runnable_actors) {
     struct epoll_event events[64];
-    int n = epoll_wait(epoll_fd, events, 64, -1);
+    // Short timeout allows polling for actors made ready by IPC/bus (not epoll-based)
+    int n = epoll_wait(epoll_fd, events, 64, 10);  // 10ms timeout
+    if (n < 0 && errno == EINTR) continue;  // Signal interrupted, retry
     for (int i = 0; i < n; i++) {
         io_source *source = events[i].data.ptr;
         dispatch_io_event(source);  // Handle timer tick or network I/O
@@ -1761,10 +1763,11 @@ if (no_runnable_actors) {
 - All returned events are processed before next epoll_wait
 - No I/O events are lost
 
-**Spurious wakeup handling:**
-- epoll_wait may return 0 events (rare)
-- Scheduler handles correctly, immediately re-enters wait
-- No correctness impact
+**epoll_wait return handling:**
+- Returns > 0: Events ready, process them
+- Returns 0: Timeout expired (10ms), no events - scheduler retries (allows IPC/bus polling)
+- Returns -1 with `errno=EINTR`: Signal interrupted syscall - scheduler retries
+- Note: Runtime APIs are not reentrant - signal handlers must not call runtime APIs
 
 **Lost event prevention:**
 - Timerfds are level-triggered (fire until read)
