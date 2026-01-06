@@ -16,8 +16,8 @@ rt_status rt_net_listen(uint16_t port, int *fd_out);
 // Accept incoming connection
 rt_status rt_net_accept(int listen_fd, int *conn_fd_out, int32_t timeout_ms);
 
-// Connect to remote host
-rt_status rt_net_connect(const char *host, uint16_t port, int *fd_out, int32_t timeout_ms);
+// Connect to remote server (ip must be numeric IPv4 address, e.g. "192.168.1.1")
+rt_status rt_net_connect(const char *ip, uint16_t port, int *fd_out, int32_t timeout_ms);
 
 // Close network socket
 rt_status rt_net_close(int fd);

@@ -146,7 +146,7 @@ static void client_actor(void *arg) {
 
     // Connect to server (with timeout)
     int conn_fd;
-    status = rt_net_connect("localhost", ECHO_PORT, &conn_fd, 5000); // 5 second timeout
+    status = rt_net_connect("127.0.0.1", ECHO_PORT, &conn_fd, 5000); // 5 second timeout
     if (RT_FAILED(status)) {
         printf("Client: Failed to connect: %s\n",
                status.msg ? status.msg : "unknown error");

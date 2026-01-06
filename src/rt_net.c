@@ -18,7 +18,6 @@
 #include <sys/epoll.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
-#include <netdb.h>
 #include <fcntl.h>
 
 // Forward declarations for internal functions
@@ -313,8 +312,8 @@ rt_status rt_net_accept(int listen_fd, int *conn_fd_out, int32_t timeout_ms) {
     return RT_SUCCESS;
 }
 
-rt_status rt_net_connect(const char *host, uint16_t port, int *fd_out, int32_t timeout_ms) {
-    if (!host || !fd_out) {
+rt_status rt_net_connect(const char *ip, uint16_t port, int *fd_out, int32_t timeout_ms) {
+    if (!ip || !fd_out) {
         return RT_ERROR(RT_ERR_INVALID, "Invalid arguments");
     }
 
@@ -325,10 +324,12 @@ rt_status rt_net_connect(const char *host, uint16_t port, int *fd_out, int32_t t
     RT_REQUIRE_ACTOR_CONTEXT();
     actor *current = rt_actor_current();
 
-    // Resolve hostname
-    struct hostent *server = gethostbyname(host);
-    if (!server) {
-        return RT_ERROR(RT_ERR_IO, "Host not found");
+    // Parse numeric IPv4 address (DNS resolution not supported - would block scheduler)
+    struct sockaddr_in serv_addr = {0};
+    serv_addr.sin_family = AF_INET;
+    serv_addr.sin_port = htons(port);
+    if (inet_pton(AF_INET, ip, &serv_addr.sin_addr) != 1) {
+        return RT_ERROR(RT_ERR_INVALID, "Invalid IPv4 address (hostnames not supported)");
     }
 
     // Create non-blocking socket
@@ -338,11 +339,6 @@ rt_status rt_net_connect(const char *host, uint16_t port, int *fd_out, int32_t t
     }
 
     set_nonblocking(fd);
-
-    struct sockaddr_in serv_addr = {0};
-    serv_addr.sin_family = AF_INET;
-    memcpy(&serv_addr.sin_addr.s_addr, server->h_addr_list[0], server->h_length);
-    serv_addr.sin_port = htons(port);
 
     // Try non-blocking connect
     if (connect(fd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {

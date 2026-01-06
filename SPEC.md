@@ -1482,13 +1482,18 @@ Non-blocking network I/O with blocking wrappers.
 // Socket management
 rt_status rt_net_listen(uint16_t port, int *fd_out);
 rt_status rt_net_accept(int listen_fd, int *conn_fd_out, int32_t timeout_ms);
-rt_status rt_net_connect(const char *host, uint16_t port, int *fd_out, int32_t timeout_ms);
+rt_status rt_net_connect(const char *ip, uint16_t port, int *fd_out, int32_t timeout_ms);
 rt_status rt_net_close(int fd);
 
 // Data transfer
 rt_status rt_net_recv(int fd, void *buf, size_t len, size_t *received, int32_t timeout_ms);
 rt_status rt_net_send(int fd, const void *buf, size_t len, size_t *sent, int32_t timeout_ms);
 ```
+
+**DNS resolution is out of scope.** The `ip` parameter must be a numeric IPv4 address (e.g., "192.168.1.1"). Hostnames are not supported. Rationale:
+- DNS resolution (`getaddrinfo`, `gethostbyname`) is blocking and would stall the scheduler
+- On STM32 bare metal, DNS typically unavailable or requires complex async plumbing
+- Callers needing DNS should resolve externally before calling `rt_net_connect()`
 
 All functions with `timeout_ms` parameter support **timeout enforcement**:
 
