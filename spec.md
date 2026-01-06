@@ -133,7 +133,15 @@ When an actor calls a blocking API, the following contract applies:
 - Exactly one unblock event is processed
 - If timeout and completion race, completion wins (I/O result delivered, timeout ignored)
 - If multiple messages arrive during block, actor unblocks on first arrival
-- Late completions (after timeout) are discarded
+- Late completions (after timeout) are discarded safely via request serialization
+
+**Request serialization (prevents late completion confusion):**
+- Constraint: **One outstanding blocking request per actor per I/O subsystem**
+- Blocked actor cannot issue new requests (state = ACTOR_STATE_BLOCKED, not schedulable)
+- When timeout occurs: Actor unblocks, previous request is implicitly cancelled/ignored
+- If late completion arrives: Scheduler checks actor state; if actor not blocked on that request, completion is discarded
+- New request from same actor gets fresh blocking state, cannot be confused with stale completion
+- This ensures late completions cannot be misinterpreted as responses to new requests
 
 **Determinism guarantee:**
 - **Deterministic policy**: Given the same sequence of completion events and runnable-set transitions, scheduling decisions are deterministic
