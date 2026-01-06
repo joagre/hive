@@ -633,6 +633,11 @@ typedef enum {
 rt_status rt_ipc_send(actor_id to, const void *data, size_t len, rt_ipc_mode mode);
 ```
 
+**Message size validation:**
+- If `len > RT_MAX_MESSAGE_SIZE` (256 bytes): Returns `RT_ERR_INVALID`
+- Message data pools use fixed-size entries of `RT_MAX_MESSAGE_SIZE` bytes
+- Oversized messages are rejected immediately, not truncated
+
 **Behavior when pools are exhausted:**
 
 `rt_ipc_send()` uses three global pools (mode-dependent):
@@ -1122,6 +1127,18 @@ rt_status rt_bus_read_wait(bus_id bus, void *buf, size_t max_len,
 // Query bus state
 size_t rt_bus_entry_count(bus_id bus);
 ```
+
+**Message size validation:**
+
+`rt_bus_create()`:
+- If `cfg->max_entry_size > RT_MAX_MESSAGE_SIZE` (256 bytes): Returns `RT_ERR_INVALID`
+- Bus entries share the message data pool, which uses fixed-size `RT_MAX_MESSAGE_SIZE` entries
+- This constraint ensures bus entries fit in pool slots
+
+`rt_bus_publish()`:
+- If `len > cfg.max_entry_size`: Returns `RT_ERR_INVALID`
+- Oversized messages are rejected immediately, not truncated
+- The `max_entry_size` was validated at bus creation time
 
 ### Bus Consumption Model (Semantic Contract)
 

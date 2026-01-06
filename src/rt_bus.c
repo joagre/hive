@@ -212,6 +212,10 @@ rt_status rt_bus_create(const rt_bus_config *cfg, bus_id *out) {
         return RT_ERROR(RT_ERR_INVALID, "max_subscribers exceeds RT_MAX_BUS_SUBSCRIBERS");
     }
 
+    if (cfg->max_entry_size > RT_MAX_MESSAGE_SIZE) {
+        return RT_ERROR(RT_ERR_INVALID, "max_entry_size exceeds RT_MAX_MESSAGE_SIZE");
+    }
+
     // Find free slot
     bus_t *bus = NULL;
     size_t bus_idx = 0;
