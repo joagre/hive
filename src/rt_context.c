@@ -6,12 +6,6 @@
 // Forward declaration of assembly function
 extern void rt_context_switch_asm(rt_context *from, rt_context *to);
 
-// Helper structure to pass data through the initial context
-typedef struct {
-    void (*fn)(void *);
-    void *arg;
-} context_start_data;
-
 // Wrapper function that calls the actor function and handles return
 static void context_entry(void) {
     // When we first enter, r12 and r13 contain our function and argument

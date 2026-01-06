@@ -49,11 +49,3 @@ void rt_pool_free(rt_pool *pool, void *entry) {
         pool->allocated--;
     }
 }
-
-size_t rt_pool_available(const rt_pool *pool) {
-    return pool->capacity - pool->allocated;
-}
-
-bool rt_pool_is_empty(const rt_pool *pool) {
-    return pool->allocated == 0;
-}

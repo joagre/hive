@@ -31,10 +31,4 @@ void* rt_pool_alloc(rt_pool *pool);
 // entry must have been allocated from this pool
 void rt_pool_free(rt_pool *pool, void *entry);
 
-// Get number of free entries remaining
-size_t rt_pool_available(const rt_pool *pool);
-
-// Check if pool is empty
-bool rt_pool_is_empty(const rt_pool *pool);
-
 #endif // RT_POOL_H
