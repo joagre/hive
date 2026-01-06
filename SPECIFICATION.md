@@ -480,7 +480,7 @@ This runtime makes deliberate design choices that favor **determinism, performan
 
 **This is not beginner-friendly.** Code must copy data immediately if needed beyond current iteration.
 
-**Mitigation:** Documented with WARNING box and correct/incorrect examples (SPECIFICATION.md:650-667). But developers will still make mistakes.
+**Mitigation:** Documented with WARNING box and correct/incorrect examples in IPC_ASYNC section. But developers will still make mistakes.
 
 **Acceptable if:** You optimize for determinism over ergonomics, and code reviews catch pointer misuse.
 
@@ -518,7 +518,7 @@ This runtime makes deliberate design choices that favor **determinism, performan
 
 **IPC_SYNC must be used rarely.** Code reviews must treat SYNC usage as suspicious.
 
-**Mitigation:** Documented deadlock scenarios (SPECIFICATION.md:828-853), runtime detects self-send, auto-release prevents some deadlocks.
+**Mitigation:** Documented deadlock scenarios in IPC_SYNC section, runtime detects self-send, auto-release prevents some deadlocks.
 
 **Acceptable if:** You use SYNC sparingly for validated request-response patterns, not general communication.
 
@@ -535,7 +535,7 @@ This runtime makes deliberate design choices that favor **determinism, performan
 
 **Consequence:** Misconfigured bus can cause all `IPC_ASYNC` sends to fail with `RT_ERR_NOMEM`.
 
-**Mitigation:** WARNING box (SPECIFICATION.md:1277-1292), size pool for combined load, monitor exhaustion.
+**Mitigation:** WARNING box in Bus section, size pool for combined load, monitor exhaustion.
 
 **Acceptable if:** You size pools correctly and monitor resource usage in production.
 
