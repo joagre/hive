@@ -238,7 +238,7 @@ rt_status rt_ipc_recv(rt_message *msg, int32_t timeout_ms) {
             rt_pool_free(&g_sync_pool_mgr, sync_data);
         }
 
-        // Free COPY message data from pool
+        // Free ASYNC message data from pool
         if (current->active_msg->data) {
             message_data_entry *msg_data = DATA_TO_MSG_ENTRY(current->active_msg->data);
             rt_pool_free(&g_message_pool_mgr, msg_data);

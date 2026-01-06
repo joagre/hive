@@ -7,7 +7,7 @@ A complete actor-based runtime designed for **embedded and safety-critical syste
 **Current platform:** x86-64 Linux (fully implemented)
 **Future platform:** STM32/ARM Cortex-M with FreeRTOS (see `spec.md`)
 
-The runtime uses **static memory allocation** for deterministic behavior with zero heap fragmentation. It features **priority-based scheduling** (4 levels: CRITICAL, HIGH, NORMAL, LOW) with fast context switching. Provides message passing (IPC with COPY/SYNC modes), linking, monitoring, timers, pub-sub messaging (bus), network I/O, and file I/O.
+The runtime uses **static memory allocation** for deterministic behavior with zero heap fragmentation. It features **priority-based scheduling** (4 levels: CRITICAL, HIGH, NORMAL, LOW) with fast context switching. Provides message passing (IPC with ASYNC/SYNC modes), linking, monitoring, timers, pub-sub messaging (bus), network I/O, and file I/O.
 
 ## Quick Links
 
@@ -24,7 +24,7 @@ The runtime uses **static memory allocation** for deterministic behavior with ze
 - Priority-based round-robin scheduler (4 priority levels)
 - Stack overflow detection with guard patterns (16-byte overhead per actor)
 - Actor lifecycle management (spawn, exit)
-- IPC with COPY and SYNC modes
+- IPC with ASYNC and SYNC modes
 - Blocking and non-blocking message receive
 - Actor linking and monitoring (bidirectional links, unidirectional monitors)
 - Exit notifications with exit reasons (normal, crash, stack overflow, killed)
@@ -159,7 +159,7 @@ rt_ipc_recv(&msg, 100);  // 100=timeout after 100ms (returns RT_ERR_TIMEOUT if n
 // Process message data
 process(&msg);
 
-// Release message (required for SYNC, no-op for COPY)
+// Release message (required for SYNC, no-op for ASYNC)
 rt_ipc_release(&msg);
 ```
 

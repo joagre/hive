@@ -282,10 +282,10 @@ void rt_actor_free(actor *a) {
     }
 
     // Free active message
-    // If actor dies with an active BORROW message, unblock the sender
+    // If actor dies with an active SYNC message, unblock the sender
     if (a->active_msg) {
         if (a->active_msg->sync_ptr != NULL) {
-            // This is a BORROW message - unblock the sender
+            // This is a SYNC message - unblock the sender
             actor *sender = rt_actor_get(a->active_msg->sender);
             if (sender && sender->waiting_for_release && sender->blocked_on_actor == a->id) {
                 // Receiver died - unblock sender (principle of least surprise)
