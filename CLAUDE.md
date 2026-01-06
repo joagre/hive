@@ -42,7 +42,7 @@ The runtime consists of:
 4. **Bus**: Publish-subscribe system with configurable retention policies (max_readers, max_age_ms)
 5. **Timers**: timerfd registered in epoll (Linux), hardware timers on STM32 (SysTick/TIM)
 6. **Network**: Non-blocking sockets registered in epoll (Linux), lwIP NO_SYS mode on STM32
-7. **File**: Synchronous I/O (regular files don't work with epoll; embedded filesystems are fast)
+7. **File**: Synchronous I/O (stalls scheduler; regular files don't work with epoll; embedded filesystems are fast)
 
 ## Key Concepts
 

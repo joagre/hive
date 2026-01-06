@@ -114,12 +114,13 @@ When an actor calls a blocking API, the following contract applies:
 - Actor is removed from run queue (not schedulable until unblocked)
 - Scheduler saves actor context and switches to next runnable actor
 
-**Operations that block:**
+**Operations that block (actor yields, other actors run):**
 - `rt_ipc_recv()` with timeout > 0 or timeout < 0 (block until message or timeout)
 - `rt_ipc_send()` with `IPC_SYNC` (block until receiver releases)
-- `rt_file_read()`, `rt_file_write()` (block until I/O completes or timeout)
 - `rt_net_send()`, `rt_net_recv()` (block until I/O completes or timeout)
 - `rt_bus_read_wait()` (block until data available or timeout)
+
+**Note:** File I/O (`rt_file_*`) is NOT in this list. See "Scheduler-Stalling Calls" below.
 
 **Mailbox availability while blocked:**
 - Blocked actors **can** receive mailbox messages
@@ -127,11 +128,12 @@ When an actor calls a blocking API, the following contract applies:
 - Enqueued messages are available when actor unblocks
 
 **Unblock conditions:**
-- I/O completion arrives (file/network operation completes)
+- I/O completion arrives (network operation completes)
 - Timer expires (for APIs with timeout)
 - Message arrives in mailbox (for `rt_ipc_recv()`)
+- Bus data published (for `rt_bus_read_wait()`)
 - Explicit release occurs (for `IPC_SYNC` sender)
-- **Important**: Mailbox arrival only unblocks actors blocked in `rt_ipc_recv()` or `rt_bus_read_wait()`, not actors blocked on file/net I/O or `IPC_SYNC` send
+- **Important**: Mailbox arrival only unblocks actors blocked in `rt_ipc_recv()`, not actors blocked on network I/O, bus read, or `IPC_SYNC` send
 
 **Timeout and completion races:**
 - Exactly one unblock event is processed
@@ -152,8 +154,36 @@ When an actor calls a blocking API, the following contract applies:
 - **Deterministic policy**: Given the same sequence of completion events and runnable-set transitions, scheduling decisions are deterministic
 - Runtime does not introduce nondeterminism beyond external event arrival order (I/O timing, timer jitter, ISR scheduling)
 - No phantom wakeups (actor only unblocks on specified conditions)
-- **Scheduling phase definition**: One iteration of the scheduler loop, including completion draining (file/net/timer queues) and all run-queue enqueues performed during that iteration, ending when the next actor is selected for execution
+- **Scheduling phase definition**: One iteration of the scheduler loop, including completion draining (network/timer events) and all run-queue enqueues performed during that iteration, ending when the next actor is selected for execution
 - Scheduler guarantees FIFO ordering among actors enqueued into the same run queue in the same scheduling phase
+
+### Scheduler-Stalling Calls
+
+File I/O operations (`rt_file_read()`, `rt_file_write()`, `rt_file_sync()`) are **synchronous** and stall the entire runtime:
+
+**Behavior:**
+- Calling actor does NOT transition to `ACTOR_STATE_BLOCKED`
+- The scheduler event loop is paused during the syscall
+- All actors are stalled (no actor runs while file I/O executes)
+- Timers do not fire during the stall
+- Network events are not processed during the stall
+
+**Rationale:**
+- Regular files do not work with `epoll` on Linux (always report ready)
+- True async file I/O would require `io_uring` (Linux 5.1+) or a thread pool
+- For embedded (STM32): FATFS/littlefs operations are typically fast (<1ms)
+- Simplicity: no additional complexity for a rarely-needed feature
+
+**Consequences:**
+- File I/O breaks real-time latency bounds
+- Long file operations delay all actors, timers, and network processing
+- Use file I/O sparingly and with small buffers
+- For latency-sensitive systems: perform file I/O only during initialization or shutdown
+
+**Design alternatives not implemented:**
+- `io_uring`: Would add Linux 5.1+ dependency and significant complexity
+- Thread pool: Contradicts single-threaded design; removed in event loop migration
+- DMA with completion interrupt (STM32): Could be added for specific flash/SD drivers
 
 ### Priority Levels
 
@@ -201,7 +231,7 @@ The runtime is **completely single-threaded**. All runtime operations execute in
 | **IPC APIs** (`rt_ipc_send`, `rt_ipc_recv`) | Single-threaded only | Must call from actor context |
 | **Bus APIs** (`rt_bus_publish`, `rt_bus_read`) | Single-threaded only | Must call from actor context |
 | **Timer APIs** (`rt_timer_after`, `rt_timer_every`) | Single-threaded only | Must call from actor context |
-| **File APIs** (`rt_file_read`, `rt_file_write`) | Single-threaded only | Must call from actor context |
+| **File APIs** (`rt_file_read`, `rt_file_write`) | Single-threaded only | Must call from actor context; stalls scheduler |
 | **Network APIs** (`rt_net_recv`, `rt_net_send`) | Single-threaded only | Must call from actor context |
 
 **Forbidden from:**
@@ -1720,11 +1750,11 @@ if (no_runnable_actors) {
 - Sockets are level-triggered by default (readable until read)
 - epoll guarantees: if I/O is ready, epoll_wait will return it
 
-**File I/O blocking:**
-- File operations (read, write, fsync) are **synchronous** and block the scheduler briefly
+**File I/O stalling:**
+- File operations (read, write, fsync) are **synchronous** and stall the entire scheduler
+- See "Scheduler-Stalling Calls" section for detailed semantics and consequences
 - On embedded systems: FATFS/littlefs operations are fast (< 1ms typical)
 - On Linux dev: Acceptable for development workloads
-- No async file I/O infrastructure (io_uring deferred for simplicity)
 
 ### Advantages
 

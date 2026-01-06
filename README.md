@@ -28,7 +28,7 @@ The runtime uses **static memory allocation** for deterministic behavior with ze
 - Exit notifications with exit reasons (normal, crash, stack overflow, killed)
 - Timers (one-shot and periodic with timerfd/epoll)
 - Network I/O (non-blocking TCP via event loop)
-- File I/O (synchronous read/write)
+- File I/O (synchronous, stalls scheduler)
 - Bus (pub-sub with retention policies)
 
 ## Performance
