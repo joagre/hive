@@ -174,7 +174,13 @@ static rt_status try_or_epoll(int fd, uint32_t epoll_events, int operation,
     RT_REQUIRE_ACTOR_CONTEXT();
     actor *current = rt_actor_current();
 
-    // Create timeout timer if needed
+    // Non-blocking mode: timeout=0 means "poll once and return immediately"
+    if (timeout_ms == 0) {
+        return RT_ERROR(RT_ERR_WOULDBLOCK, "Operation would block");
+    }
+
+    // Create timeout timer if needed (timeout > 0)
+    // Note: timeout < 0 means "wait forever" (no timer)
     timer_id timeout_timer = TIMER_ID_INVALID;
     if (timeout_ms > 0) {
         rt_status status = rt_timer_after((uint32_t)timeout_ms * 1000, &timeout_timer);
