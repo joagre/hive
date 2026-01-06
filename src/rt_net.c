@@ -361,18 +361,8 @@ rt_status rt_net_init(void) {
     RT_INIT_GUARD(g_net_io.initialized);
 
     // Initialize queues with static buffers (power of 2 capacity)
-    rt_status status = rt_spsc_init(&g_net_io.request_queue, g_net_request_buffer,
-                                     sizeof(net_request), RT_COMPLETION_QUEUE_SIZE);
-    if (RT_FAILED(status)) {
-        return status;
-    }
-
-    status = rt_spsc_init(&g_net_io.completion_queue, g_net_completion_buffer,
-                          sizeof(net_completion), RT_COMPLETION_QUEUE_SIZE);
-    if (RT_FAILED(status)) {
-        rt_spsc_destroy(&g_net_io.request_queue);
-        return status;
-    }
+    RT_INIT_SPSC_QUEUES(g_net_io.request_queue, g_net_request_buffer, net_request,
+                        g_net_io.completion_queue, g_net_completion_buffer, net_completion);
 
     // Start worker thread
     g_net_io.running = true;

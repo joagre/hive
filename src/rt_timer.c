@@ -286,18 +286,8 @@ rt_status rt_timer_init(void) {
                  sizeof(timer_entry), RT_TIMER_ENTRY_POOL_SIZE);
 
     // Initialize queues with static buffers
-    rt_status status = rt_spsc_init(&g_timer.request_queue, g_timer_request_buffer,
-                                     sizeof(timer_request), RT_COMPLETION_QUEUE_SIZE);
-    if (RT_FAILED(status)) {
-        return status;
-    }
-
-    status = rt_spsc_init(&g_timer.completion_queue, g_timer_completion_buffer,
-                          sizeof(timer_completion), RT_COMPLETION_QUEUE_SIZE);
-    if (RT_FAILED(status)) {
-        rt_spsc_destroy(&g_timer.request_queue);
-        return status;
-    }
+    RT_INIT_SPSC_QUEUES(g_timer.request_queue, g_timer_request_buffer, timer_request,
+                        g_timer.completion_queue, g_timer_completion_buffer, timer_completion);
 
     // Initialize timer state
     g_timer.timers = NULL;

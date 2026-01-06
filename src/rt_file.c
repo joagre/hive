@@ -195,18 +195,8 @@ rt_status rt_file_init(void) {
     RT_INIT_GUARD(g_file_io.initialized);
 
     // Initialize queues with static buffers (power of 2 capacity)
-    rt_status status = rt_spsc_init(&g_file_io.request_queue, g_file_request_buffer,
-                                     sizeof(file_request), RT_COMPLETION_QUEUE_SIZE);
-    if (RT_FAILED(status)) {
-        return status;
-    }
-
-    status = rt_spsc_init(&g_file_io.completion_queue, g_file_completion_buffer,
-                          sizeof(file_completion), RT_COMPLETION_QUEUE_SIZE);
-    if (RT_FAILED(status)) {
-        rt_spsc_destroy(&g_file_io.request_queue);
-        return status;
-    }
+    RT_INIT_SPSC_QUEUES(g_file_io.request_queue, g_file_request_buffer, file_request,
+                        g_file_io.completion_queue, g_file_completion_buffer, file_completion);
 
     // Start worker thread
     g_file_io.running = true;

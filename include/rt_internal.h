@@ -40,6 +40,23 @@ typedef struct {
         } \
     } while(0)
 
+// Initialize SPSC queue pair (request + completion) with error handling
+// Used by: Timer, file I/O, network I/O subsystems
+#define RT_INIT_SPSC_QUEUES(req_queue, req_buf, req_type, comp_queue, comp_buf, comp_type) \
+    do { \
+        rt_status _status = rt_spsc_init(&(req_queue), (req_buf), \
+                                          sizeof(req_type), RT_COMPLETION_QUEUE_SIZE); \
+        if (RT_FAILED(_status)) { \
+            return _status; \
+        } \
+        _status = rt_spsc_init(&(comp_queue), (comp_buf), \
+                               sizeof(comp_type), RT_COMPLETION_QUEUE_SIZE); \
+        if (RT_FAILED(_status)) { \
+            rt_spsc_destroy(&(req_queue)); \
+            return _status; \
+        } \
+    } while(0)
+
 // Internal helper functions (implemented in rt_ipc.c)
 
 // Add mailbox entry to actor's mailbox and wake if blocked
