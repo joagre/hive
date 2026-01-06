@@ -6,6 +6,10 @@
 #include "rt_runtime.h"
 #include "rt_spsc.h"
 #include "rt_log.h"
+#include "rt_timer.h"
+#include "rt_ipc.h"
+#include "rt_pool.h"
+#include "rt_internal.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -19,6 +23,10 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <fcntl.h>
+
+// External declarations for timeout handling (pools from rt_ipc.c)
+extern rt_pool g_mailbox_pool_mgr;
+extern rt_pool g_message_pool_mgr;
 
 // Forward declarations for internal functions
 rt_status rt_net_init(void);
@@ -436,6 +444,15 @@ static rt_status submit_and_block(net_request *req) {
 
     req->requester = current->id;
 
+    // Create timeout timer if needed (like rt_ipc_recv)
+    timer_id timeout_timer = TIMER_ID_INVALID;
+    if (req->timeout_ms > 0) {
+        rt_status status = rt_timer_after((uint32_t)req->timeout_ms * 1000, &timeout_timer);
+        if (RT_FAILED(status)) {
+            return status;  // Timer pool exhausted
+        }
+    }
+
     // Submit request
     while (!rt_spsc_push(&g_net_io.request_queue, req)) {
         // Request queue full, yield and try again
@@ -446,7 +463,32 @@ static rt_status submit_and_block(net_request *req) {
     current->state = ACTOR_STATE_BLOCKED;
     rt_yield();
 
-    // When we wake up, the operation is complete
+    // When we wake up, check if timeout occurred (like rt_ipc_recv)
+    if (timeout_timer != TIMER_ID_INVALID) {
+        // Check if first message in mailbox is timer tick
+        if (current->mbox.head && current->mbox.head->sender == RT_SENDER_TIMER) {
+            // Timeout occurred - dequeue timer message
+            mailbox_entry *entry = current->mbox.head;
+            current->mbox.head = entry->next;
+            if (current->mbox.head == NULL) {
+                current->mbox.tail = NULL;
+            }
+            current->mbox.count--;
+
+            // Free timer message resources
+            if (entry->data) {
+                message_data_entry *msg_data = DATA_TO_MSG_ENTRY(entry->data);
+                rt_pool_free(&g_message_pool_mgr, msg_data);
+            }
+            rt_pool_free(&g_mailbox_pool_mgr, entry);
+
+            return RT_ERROR(RT_ERR_TIMEOUT, "Network I/O operation timed out");
+        } else {
+            // I/O completed before timeout - cancel timer
+            rt_timer_cancel(timeout_timer);
+        }
+    }
+
     // Return the result stored by the completion handler
     return current->io_status;
 }

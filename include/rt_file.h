@@ -14,20 +14,19 @@ rt_status rt_file_open(const char *path, int flags, int mode, int *fd_out);
 // Close file
 rt_status rt_file_close(int fd);
 
-// Read from file
-// timeout_ms: -1 = block forever, 0 = non-blocking (NOT SUPPORTED), >0 = timeout
-rt_status rt_file_read(int fd, void *buf, size_t len, size_t *actual, int32_t timeout_ms);
+// Read from file (blocks until complete or error)
+rt_status rt_file_read(int fd, void *buf, size_t len, size_t *actual);
 
 // Read from file at offset (does not change file position)
-rt_status rt_file_pread(int fd, void *buf, size_t len, size_t offset, size_t *actual, int32_t timeout_ms);
+rt_status rt_file_pread(int fd, void *buf, size_t len, size_t offset, size_t *actual);
 
 // Write to file
-rt_status rt_file_write(int fd, const void *buf, size_t len, size_t *actual, int32_t timeout_ms);
+rt_status rt_file_write(int fd, const void *buf, size_t len, size_t *actual);
 
 // Write to file at offset (does not change file position)
-rt_status rt_file_pwrite(int fd, const void *buf, size_t len, size_t offset, size_t *actual, int32_t timeout_ms);
+rt_status rt_file_pwrite(int fd, const void *buf, size_t len, size_t offset, size_t *actual);
 
 // Sync file to disk
-rt_status rt_file_sync(int fd, int32_t timeout_ms);
+rt_status rt_file_sync(int fd);
 
 #endif // RT_FILE_H

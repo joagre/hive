@@ -180,12 +180,11 @@ rt_timer_cancel(periodic);
 ### File and Network I/O
 
 ```c
-// File operations
-// Note: timeout_ms < 0 blocks forever, > 0 times out (timeout=0 not supported)
+// File operations (block until complete)
 int fd;
 rt_file_open("test.txt", O_RDWR | O_CREAT, 0644, &fd);
-rt_file_write(fd, data, len, &written, -1);
-rt_file_read(fd, buffer, sizeof(buffer), &nread, -1);
+rt_file_write(fd, data, len, &written);
+rt_file_read(fd, buffer, sizeof(buffer), &nread);
 rt_file_close(fd);
 
 // Network server
@@ -286,11 +285,13 @@ if (rt_is_exit_msg(&msg)) {
 
 - `rt_file_open(path, flags, mode, out_fd)` - Open file
 - `rt_file_close(fd)` - Close file
-- `rt_file_read(fd, buf, count, out_bytes, timeout_ms)` - Read from file
-- `rt_file_pread(fd, buf, count, offset, out_bytes, timeout_ms)` - Read from file at offset
-- `rt_file_write(fd, buf, count, out_bytes, timeout_ms)` - Write to file
-- `rt_file_pwrite(fd, buf, count, offset, out_bytes, timeout_ms)` - Write to file at offset
-- `rt_file_sync(fd, timeout_ms)` - Sync file to disk
+- `rt_file_read(fd, buf, count, out_bytes)` - Read from file
+- `rt_file_pread(fd, buf, count, offset, out_bytes)` - Read from file at offset
+- `rt_file_write(fd, buf, count, out_bytes)` - Write to file
+- `rt_file_pwrite(fd, buf, count, offset, out_bytes)` - Write to file at offset
+- `rt_file_sync(fd)` - Sync file to disk
+
+**Note:** File operations block until complete. No timeout parameter.
 
 ### Network I/O
 

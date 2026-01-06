@@ -25,7 +25,7 @@ static void writer_actor(void *arg) {
 
     // Write message
     size_t written;
-    status = rt_file_write(fd, message, strlen(message), &written, -1);
+    status = rt_file_write(fd, message, strlen(message), &written);
     if (RT_FAILED(status)) {
         printf("Writer: Failed to write: %s\n",
                status.msg ? status.msg : "unknown error");
@@ -36,7 +36,7 @@ static void writer_actor(void *arg) {
     printf("Writer: Wrote %zu bytes\n", written);
 
     // Sync to disk
-    status = rt_file_sync(fd, -1);
+    status = rt_file_sync(fd);
     if (RT_FAILED(status)) {
         printf("Writer: Failed to sync: %s\n",
                status.msg ? status.msg : "unknown error");
@@ -80,7 +80,7 @@ static void reader_actor(void *arg) {
     // Read content
     char buffer[256] = {0};
     size_t nread;
-    status = rt_file_read(fd, buffer, sizeof(buffer) - 1, &nread, -1);
+    status = rt_file_read(fd, buffer, sizeof(buffer) - 1, &nread);
     if (RT_FAILED(status)) {
         printf("Reader: Failed to read: %s\n",
                status.msg ? status.msg : "unknown error");

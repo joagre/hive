@@ -1532,11 +1532,13 @@ rt_status rt_net_recv(int fd, void *buf, size_t len, size_t *received, int32_t t
 rt_status rt_net_send(int fd, const void *buf, size_t len, size_t *sent, int32_t timeout_ms);
 ```
 
-All functions with `timeout_ms` parameter:
+All functions with `timeout_ms` parameter support **timeout enforcement**:
 
 - `timeout_ms == 0`: Non-blocking, returns `RT_ERR_WOULDBLOCK` if would block
-- `timeout_ms < 0`: Block forever
-- `timeout_ms > 0`: Block up to timeout
+- `timeout_ms < 0`: Block forever until I/O completes
+- `timeout_ms > 0`: Block up to timeout, returns `RT_ERR_TIMEOUT` if exceeded
+
+**Timeout implementation:** Uses timer-based enforcement (consistent with `rt_ipc_recv`). When timeout expires, a timer message wakes the actor and `RT_ERR_TIMEOUT` is returned. This is essential for handling unreachable hosts, slow connections, and implementing application-level keepalives.
 
 On blocking calls, the actor yields to the scheduler. The I/O thread handles the actual operation and posts completion to the scheduler's completion queue.
 
@@ -1548,21 +1550,18 @@ File I/O operations.
 rt_status rt_file_open(const char *path, int flags, int mode, int *fd_out);
 rt_status rt_file_close(int fd);
 
-rt_status rt_file_read(int fd, void *buf, size_t len, size_t *actual, int32_t timeout_ms);
-rt_status rt_file_pread(int fd, void *buf, size_t len, size_t offset, size_t *actual, int32_t timeout_ms);
+rt_status rt_file_read(int fd, void *buf, size_t len, size_t *actual);
+rt_status rt_file_pread(int fd, void *buf, size_t len, size_t offset, size_t *actual);
 
-rt_status rt_file_write(int fd, const void *buf, size_t len, size_t *actual, int32_t timeout_ms);
-rt_status rt_file_pwrite(int fd, const void *buf, size_t len, size_t offset, size_t *actual, int32_t timeout_ms);
+rt_status rt_file_write(int fd, const void *buf, size_t len, size_t *actual);
+rt_status rt_file_pwrite(int fd, const void *buf, size_t len, size_t offset, size_t *actual);
 
-rt_status rt_file_sync(int fd, int32_t timeout_ms);
+rt_status rt_file_sync(int fd);
 ```
 
 The `mode` parameter in `rt_file_open()` specifies file permissions (e.g., 0644) when creating files with `O_CREAT` flag, following POSIX conventions.
 
-File operations block the calling actor until I/O completes or timeout expires (`timeout_ms` parameter):
-- `timeout_ms < 0`: Block forever until I/O completes
-- `timeout_ms > 0`: Block with timeout, return `RT_ERR_TIMEOUT` if exceeded
-- `timeout_ms == 0`: Non-blocking mode (NOT currently supported, will return error)
+**File operations block the calling actor until I/O completes.** On embedded systems with local filesystems (FATFS, littlefs), file operations complete quickly (microseconds to milliseconds) and are bounded by hardware characteristics. Timeouts are not provided as hardware failures (dead SD card, flash corruption) cannot be recovered via timeout and require physical intervention.
 
 ## Memory Allocation Architecture
 
