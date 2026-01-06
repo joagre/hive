@@ -296,7 +296,7 @@ if (rt_is_exit_msg(&msg)) {
 
 - `rt_net_listen(port, out_fd)` - Create TCP listening socket (backlog hardcoded to 5)
 - `rt_net_accept(listen_fd, out_fd, timeout_ms)` - Accept incoming connection
-- `rt_net_connect(host, port, out_fd, timeout_ms)` - Connect to remote host
+- `rt_net_connect(ip, port, out_fd, timeout_ms)` - Connect to remote server (numeric IPv4 only)
 - `rt_net_send(fd, buf, len, out_sent, timeout_ms)` - Send data
 - `rt_net_recv(fd, buf, len, out_recv, timeout_ms)` - Receive data
 - `rt_net_close(fd)` - Close socket
