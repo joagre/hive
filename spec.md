@@ -1352,8 +1352,8 @@ uint32_t max_interval = UINT32_MAX;  // 4,294,967,295 us
 rt_timer_after(max_interval, &timer);  // OK, fires after ~71.6 minutes
 
 // For longer intervals, use periodic timer with counter
-uint32_t one_hour_us = 3600 * 1000000;  // 3.6 billion us
-// ERROR: Wraps to 705,032,704 us (~11.75 minutes)
+uint32_t seventy_two_min_us = 72 * 60 * 1000000;  // 4.32 billion us
+// ERROR: Exceeds UINT32_MAX (4.29 billion), wraps to ~25 seconds
 
 // Correct approach for long intervals:
 uint32_t tick_interval = 60 * 1000000;  // 1 minute
