@@ -176,11 +176,22 @@ In the simultaneous case, the actor's wakeup handler checks for timeout by exami
 - **File I/O**: Stalls scheduler synchronously (no event loop involvement)
 - **IPC_SYNC**: Sender blocks until receiver releases (no event loop, no timeout race)
 
-**Determinism guarantee:**
-- **Deterministic policy**: Given the same sequence of epoll events in the same order, scheduling decisions are deterministic
-- Runtime does not introduce nondeterminism beyond external event arrival order
-- No phantom wakeups (actor only unblocks on specified conditions)
-- FIFO ordering among actors enqueued in the same scheduling phase
+**Determinism guarantee (qualified):**
+
+The runtime provides **conditional determinism**, not absolute determinism:
+
+- **Deterministic policy**: Given identical epoll event arrays in identical order, scheduling decisions are deterministic
+- **Source of nondeterminism**: epoll_wait returns ready file descriptors in kernel-determined order (not sorted, not stable)
+- **Consequence**: If multiple FDs become ready simultaneously, their processing order is kernel-dependent
+- **What we guarantee**:
+  - No phantom wakeups (actor only unblocks on specified conditions)
+  - FIFO ordering among actors enqueued in the same scheduling phase
+  - Consistent policy (same input → same output)
+- **What we do NOT guarantee**:
+  - Deterministic ordering when multiple timers/sockets fire in the same epoll_wait call
+  - Reproducible event dispatch order across kernel versions or system load conditions
+
+**Design choice**: Sorting epoll events by fd/source-id before dispatch would provide determinism but adds O(n log n) overhead per epoll_wait. For embedded systems prioritizing latency over reproducibility, this overhead is not justified. Applications requiring deterministic replay should use external event logging.
 
 ### Scheduler-Stalling Calls
 
@@ -311,9 +322,9 @@ The runtime uses **zero synchronization primitives** in the core event loop:
 This pure single-threaded model provides:
 
 - **Maximum simplicity:** No lock ordering, no deadlock, trivial to reason about
-- **Maximum determinism:** No lock contention, no priority inversion, reproducible execution
+- **No threading nondeterminism:** No lock contention, no priority inversion, no data races
 - **Maximum performance:** Zero lock overhead, no cache line bouncing, no atomic operations
-- **Safety-critical compliance:** Fully deterministic behavior, no threading edge cases
+- **Safety-critical friendly:** No threading edge cases (event dispatch order is kernel-dependent, see "Determinism guarantee")
 - **Portability:** Works on platforms without pthread support
 
 **Trade-off:** Cannot leverage multiple CPU cores for I/O parallelism. This is acceptable for embedded systems (typically single-core) and simplifies the implementation dramatically.
