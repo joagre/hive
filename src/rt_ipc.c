@@ -6,7 +6,6 @@
 #include "rt_scheduler.h"
 #include "rt_timer.h"
 #include "rt_runtime.h"
-#include "rt_spsc.h"
 #include "rt_log.h"
 #include <stdlib.h>
 #include <string.h>
@@ -90,13 +89,6 @@ rt_status rt_mailbox_handle_timeout(actor *current, timer_id timeout_timer, cons
         // I/O completed before timeout - cancel timer
         rt_timer_cancel(timeout_timer);
         return RT_SUCCESS;
-    }
-}
-
-// Internal helper: Push to SPSC queue with blocking retry
-void rt_spsc_push_blocking(rt_spsc_queue *queue, const void *entry) {
-    while (!rt_spsc_push(queue, entry)) {
-        rt_yield();
     }
 }
 

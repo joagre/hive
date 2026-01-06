@@ -22,4 +22,7 @@ void rt_scheduler_yield(void);
 // Check if shutdown was requested
 bool rt_scheduler_should_stop(void);
 
+// Get epoll file descriptor for event loop (for subsystems to register I/O)
+int rt_scheduler_get_epoll_fd(void);
+
 #endif // RT_SCHEDULER_H

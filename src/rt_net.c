@@ -1,24 +1,21 @@
 #include "rt_net.h"
+#include "rt_internal.h"
 #include "rt_static_config.h"
 #include "rt_actor.h"
 #include "rt_scheduler.h"
-#include "rt_scheduler_wakeup.h"
 #include "rt_runtime.h"
-#include "rt_spsc.h"
 #include "rt_log.h"
 #include "rt_timer.h"
 #include "rt_ipc.h"
 #include "rt_pool.h"
-#include "rt_internal.h"
+#include "rt_io_source.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <pthread.h>
 #include <errno.h>
-#include <time.h>
 #include <sys/socket.h>
-#include <sys/select.h>
+#include <sys/epoll.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <netdb.h>
@@ -27,76 +24,24 @@
 // Forward declarations for internal functions
 rt_status rt_net_init(void);
 void rt_net_cleanup(void);
-void rt_net_process_completions(void);
 
-// Network operation types
-typedef enum {
-    NET_OP_LISTEN,
+// Network operation types (used in io_source.data.net.operation)
+enum {
     NET_OP_ACCEPT,
     NET_OP_CONNECT,
-    NET_OP_CLOSE,
     NET_OP_RECV,
     NET_OP_SEND,
-} net_op_type;
+};
 
-// Network operation request
-typedef struct {
-    net_op_type op;
-    actor_id    requester;
-    int32_t     timeout_ms;
+// Static pool for io_source entries
+static io_source g_io_source_pool[RT_IO_SOURCE_POOL_SIZE];
+static bool g_io_source_used[RT_IO_SOURCE_POOL_SIZE];
+static rt_pool g_io_source_pool_mgr;
 
-    // Operation-specific data
-    union {
-        struct {
-            uint16_t port;
-        } listen;
-
-        struct {
-            int fd;
-        } accept;
-
-        struct {
-            char     host[256];
-            uint16_t port;
-            int      pending_fd;  // For tracking in-progress connection
-        } connect;
-
-        struct {
-            int fd;
-        } close;
-
-        struct {
-            int    fd;
-            void  *buf;
-            size_t len;
-        } rw;
-    } data;
-} net_request;
-
-// Network operation completion
-typedef struct {
-    actor_id    requester;
-    rt_status   status;
-
-    // Result data
-    union {
-        int    fd;       // For listen, accept, connect
-        size_t nbytes;   // For recv/send
-    } result;
-} net_completion;
-
-// Static buffers for network I/O queues
-static uint8_t g_net_request_buffer[sizeof(net_request) * RT_COMPLETION_QUEUE_SIZE];
-static uint8_t g_net_completion_buffer[sizeof(net_completion) * RT_COMPLETION_QUEUE_SIZE];
-
-// Network I/O subsystem state
+// Network I/O subsystem state (simplified - no worker thread!)
 static struct {
-    rt_spsc_queue  request_queue;
-    rt_spsc_queue  completion_queue;
-    pthread_t      worker_thread;
-    bool           running;
-    bool           initialized;
-} g_net_io = {0};
+    bool initialized;
+} g_net = {0};
 
 // Set socket to non-blocking mode
 static int set_nonblocking(int fd) {
@@ -107,348 +52,185 @@ static int set_nonblocking(int fd) {
     return fcntl(fd, F_SETFL, flags | O_NONBLOCK);
 }
 
-// Poll file descriptor for readiness with 100ms timeout
-// Returns: 1 = ready, 0 = timeout, -1 = error
-static int poll_fd(int fd, bool for_write) {
-    fd_set fds;
-    FD_ZERO(&fds);
-    FD_SET(fd, &fds);
+// Handle network event from scheduler (called when socket ready)
+void rt_net_handle_event(io_source *source) {
+    net_io_data *net = &source->data.net;
 
-    struct timeval tv = { .tv_sec = 0, .tv_usec = RT_NET_SELECT_TIMEOUT_US };
-
-    if (for_write) {
-        return select(fd + 1, NULL, &fds, NULL, &tv);
-    } else {
-        return select(fd + 1, &fds, NULL, NULL, &tv);
+    // Get the actor
+    actor *a = rt_actor_get(net->actor);
+    if (!a) {
+        // Actor is dead - cleanup
+        int epoll_fd = rt_scheduler_get_epoll_fd();
+        epoll_ctl(epoll_fd, EPOLL_CTL_DEL, net->fd, NULL);
+        rt_pool_free(&g_io_source_pool_mgr, source);
+        return;
     }
-}
 
-// Network I/O worker thread
-static void *net_worker_thread(void *arg) {
-    (void)arg;
+    // Perform the actual I/O based on operation type
+    rt_status status = RT_SUCCESS;
+    ssize_t n = 0;
 
-    RT_LOG_DEBUG("Network I/O worker thread started");
-
-    while (g_net_io.running) {
-        net_request req;
-
-        // Try to get a request
-        if (!rt_spsc_pop(&g_net_io.request_queue, &req)) {
-            // No requests, sleep briefly
-            struct timespec ts = {.tv_sec = 0, .tv_nsec = RT_WORKER_IDLE_SLEEP_NS};
-            nanosleep(&ts, NULL);
-            continue;
-        }
-
-
-        // Process request
-        net_completion comp = {
-            .requester = req.requester,
-            .status = RT_SUCCESS
-        };
-
-        switch (req.op) {
-            case NET_OP_LISTEN: {
-                int fd = socket(AF_INET, SOCK_STREAM, 0);
-                if (fd < 0) {
-                    comp.status = RT_ERROR(RT_ERR_IO, strerror(errno));
-                    break;
+    switch (net->operation) {
+        case NET_OP_ACCEPT: {
+            struct sockaddr_in client_addr;
+            socklen_t client_len = sizeof(client_addr);
+            int conn_fd = accept(net->fd, (struct sockaddr *)&client_addr, &client_len);
+            if (conn_fd < 0) {
+                if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                    // Still not ready - this shouldn't happen with epoll, but handle it
+                    return;  // Keep waiting
+                } else {
+                    status = RT_ERROR(RT_ERR_IO, strerror(errno));
                 }
-
-                // Set SO_REUSEADDR to avoid "Address already in use" errors
-                int opt = 1;
-                setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
-
-                struct sockaddr_in addr = {0};
-                addr.sin_family = AF_INET;
-                addr.sin_addr.s_addr = INADDR_ANY;
-                addr.sin_port = htons(req.data.listen.port);
-
-                if (bind(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
-                    comp.status = RT_ERROR(RT_ERR_IO, strerror(errno));
-                    close(fd);
-                    break;
-                }
-
-                if (listen(fd, 5) < 0) {
-                    comp.status = RT_ERROR(RT_ERR_IO, strerror(errno));
-                    close(fd);
-                    break;
-                }
-
-                set_nonblocking(fd);
-                comp.result.fd = fd;
-                break;
-            }
-
-            case NET_OP_ACCEPT: {
-                // For blocking accept, poll to avoid blocking other requests
-                if (req.timeout_ms != 0) {
-                    int ret = poll_fd(req.data.accept.fd, false);
-                    if (ret < 0) {
-                        comp.status = RT_ERROR(RT_ERR_IO, strerror(errno));
-                        break;
-                    } else if (ret == 0) {
-                        // Timeout - requeue and process other requests
-                        rt_spsc_push(&g_net_io.request_queue, &req);
-                        continue;
-                    }
-                }
-
-                struct sockaddr_in client_addr;
-                socklen_t client_len = sizeof(client_addr);
-                int conn_fd = accept(req.data.accept.fd, (struct sockaddr *)&client_addr, &client_len);
-                if (conn_fd < 0) {
-                    if (errno == EAGAIN || errno == EWOULDBLOCK) {
-                        comp.status = RT_ERROR(RT_ERR_WOULDBLOCK, "Would block");
-                    } else {
-                        comp.status = RT_ERROR(RT_ERR_IO, strerror(errno));
-                    }
-                    break;
-                }
-
+            } else {
                 set_nonblocking(conn_fd);
-                comp.result.fd = conn_fd;
-                break;
+                a->io_result_fd = conn_fd;
             }
-
-            case NET_OP_CONNECT: {
-                int fd;
-
-                // Check if this is a retry (pending_fd already set)
-                if (req.data.connect.pending_fd > 0) {
-                    fd = req.data.connect.pending_fd;
-                } else {
-                    // First time: create socket and start connect
-                    struct hostent *server = gethostbyname(req.data.connect.host);
-                    if (!server) {
-                        comp.status = RT_ERROR(RT_ERR_IO, "Host not found");
-                        break;
-                    }
-
-                    fd = socket(AF_INET, SOCK_STREAM, 0);
-                    if (fd < 0) {
-                        comp.status = RT_ERROR(RT_ERR_IO, strerror(errno));
-                        break;
-                    }
-
-                    struct sockaddr_in serv_addr = {0};
-                    serv_addr.sin_family = AF_INET;
-                    memcpy(&serv_addr.sin_addr.s_addr, server->h_addr_list[0], server->h_length);
-                    serv_addr.sin_port = htons(req.data.connect.port);
-
-                    set_nonblocking(fd);
-
-                    if (connect(fd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
-                        if (errno != EINPROGRESS) {
-                            comp.status = RT_ERROR(RT_ERR_IO, strerror(errno));
-                            close(fd);
-                            break;
-                        }
-                        // Connection in progress - store fd for polling
-                        req.data.connect.pending_fd = fd;
-                    } else {
-                        // Connected immediately
-                        comp.result.fd = fd;
-                        break;
-                    }
-                }
-
-                // Poll for connection completion
-                int ret = poll_fd(fd, true);
-                if (ret < 0) {
-                    comp.status = RT_ERROR(RT_ERR_IO, strerror(errno));
-                    close(fd);
-                    break;
-                } else if (ret == 0) {
-                    // Timeout - requeue and process other requests
-                    rt_spsc_push(&g_net_io.request_queue, &req);
-                    continue;
-                }
-
-                // Check if connection succeeded
-                int error = 0;
-                socklen_t len = sizeof(error);
-                if (getsockopt(fd, SOL_SOCKET, SO_ERROR, &error, &len) < 0 || error != 0) {
-                    comp.status = RT_ERROR(RT_ERR_IO, error ? strerror(error) : "Connection failed");
-                    close(fd);
-                    break;
-                }
-
-                comp.result.fd = fd;
-                break;
-            }
-
-            case NET_OP_CLOSE: {
-                if (close(req.data.close.fd) < 0) {
-                    comp.status = RT_ERROR(RT_ERR_IO, strerror(errno));
-                }
-                break;
-            }
-
-            case NET_OP_RECV: {
-                // Poll to avoid blocking the worker thread
-                if (req.timeout_ms != 0) {
-                    int ret = poll_fd(req.data.rw.fd, false);
-                    if (ret < 0) {
-                        comp.status = RT_ERROR(RT_ERR_IO, strerror(errno));
-                        break;
-                    } else if (ret == 0) {
-                        // Timeout - requeue and process other requests
-                        rt_spsc_push(&g_net_io.request_queue, &req);
-                        continue;
-                    }
-                }
-
-                ssize_t n = recv(req.data.rw.fd, req.data.rw.buf, req.data.rw.len, 0);
-                if (n < 0) {
-                    if (errno == EAGAIN || errno == EWOULDBLOCK) {
-                        comp.status = RT_ERROR(RT_ERR_WOULDBLOCK, "Would block");
-                    } else {
-                        comp.status = RT_ERROR(RT_ERR_IO, strerror(errno));
-                    }
-                } else {
-                    comp.result.nbytes = (size_t)n;
-                }
-                break;
-            }
-
-            case NET_OP_SEND: {
-                // Poll to avoid blocking the worker thread
-                if (req.timeout_ms != 0) {
-                    int ret = poll_fd(req.data.rw.fd, true);
-                    if (ret < 0) {
-                        comp.status = RT_ERROR(RT_ERR_IO, strerror(errno));
-                        break;
-                    } else if (ret == 0) {
-                        // Timeout - requeue and process other requests
-                        rt_spsc_push(&g_net_io.request_queue, &req);
-                        continue;
-                    }
-                }
-
-                ssize_t n = send(req.data.rw.fd, req.data.rw.buf, req.data.rw.len, 0);
-                if (n < 0) {
-                    if (errno == EAGAIN || errno == EWOULDBLOCK) {
-                        comp.status = RT_ERROR(RT_ERR_WOULDBLOCK, "Would block");
-                    } else {
-                        comp.status = RT_ERROR(RT_ERR_IO, strerror(errno));
-                    }
-                } else {
-                    comp.result.nbytes = (size_t)n;
-                }
-                break;
-            }
+            break;
         }
 
-        // Push completion
-        while (!rt_spsc_push(&g_net_io.completion_queue, &comp)) {
-            // Completion queue full, wait briefly
-            struct timespec ts = {.tv_sec = 0, .tv_nsec = RT_COMPLETION_RETRY_SLEEP_NS};
-            nanosleep(&ts, NULL);
+        case NET_OP_CONNECT: {
+            // Check if connection succeeded
+            int error = 0;
+            socklen_t len = sizeof(error);
+            if (getsockopt(net->fd, SOL_SOCKET, SO_ERROR, &error, &len) < 0 || error != 0) {
+                status = RT_ERROR(RT_ERR_IO, error ? strerror(error) : "Connection failed");
+                close(net->fd);
+            } else {
+                a->io_result_fd = net->fd;
+            }
+            break;
         }
 
-        // Wake up scheduler to process completion
-        rt_scheduler_wakeup_signal();
+        case NET_OP_RECV: {
+            n = recv(net->fd, net->buf, net->len, 0);
+            if (n < 0) {
+                if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                    // Still not ready - shouldn't happen with epoll
+                    return;  // Keep waiting
+                } else {
+                    status = RT_ERROR(RT_ERR_IO, strerror(errno));
+                }
+            } else {
+                a->io_result_nbytes = (size_t)n;
+            }
+            break;
+        }
+
+        case NET_OP_SEND: {
+            n = send(net->fd, net->buf, net->len, 0);
+            if (n < 0) {
+                if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                    // Still not ready - shouldn't happen with epoll
+                    return;  // Keep waiting
+                } else {
+                    status = RT_ERROR(RT_ERR_IO, strerror(errno));
+                }
+            } else {
+                a->io_result_nbytes = (size_t)n;
+            }
+            break;
+        }
+
+        default:
+            status = RT_ERROR(RT_ERR_INVALID, "Unknown network operation");
+            break;
     }
 
-    RT_LOG_DEBUG("Network I/O worker thread exiting");
-    return NULL;
+    // Remove from epoll (one-shot operation)
+    int epoll_fd = rt_scheduler_get_epoll_fd();
+    epoll_ctl(epoll_fd, EPOLL_CTL_DEL, net->fd, NULL);
+
+    // Store result in actor
+    a->io_status = status;
+
+    // Wake actor
+    a->state = ACTOR_STATE_READY;
+
+    // Free io_source
+    rt_pool_free(&g_io_source_pool_mgr, source);
 }
 
 // Initialize network I/O subsystem
 rt_status rt_net_init(void) {
-    RT_INIT_GUARD(g_net_io.initialized);
+    RT_INIT_GUARD(g_net.initialized);
 
-    // Initialize queues with static buffers (power of 2 capacity)
-    RT_INIT_SPSC_QUEUES(g_net_io.request_queue, g_net_request_buffer, net_request,
-                        g_net_io.completion_queue, g_net_completion_buffer, net_completion);
+    // Initialize io_source pool
+    rt_pool_init(&g_io_source_pool_mgr, g_io_source_pool, g_io_source_used,
+                 sizeof(io_source), RT_IO_SOURCE_POOL_SIZE);
 
-    // Start worker thread
-    g_net_io.running = true;
-    if (pthread_create(&g_net_io.worker_thread, NULL, net_worker_thread, NULL) != 0) {
-        rt_spsc_destroy(&g_net_io.request_queue);
-        rt_spsc_destroy(&g_net_io.completion_queue);
-        return RT_ERROR(RT_ERR_IO, "Failed to create network I/O worker thread");
-    }
-
-    g_net_io.initialized = true;
+    g_net.initialized = true;
     return RT_SUCCESS;
 }
 
 // Cleanup network I/O subsystem
 void rt_net_cleanup(void) {
-    RT_CLEANUP_GUARD(g_net_io.initialized);
-
-    // Stop worker thread
-    g_net_io.running = false;
-    pthread_join(g_net_io.worker_thread, NULL);
-
-    // Cleanup queues
-    rt_spsc_destroy(&g_net_io.request_queue);
-    rt_spsc_destroy(&g_net_io.completion_queue);
-
-    g_net_io.initialized = false;
+    RT_CLEANUP_GUARD(g_net.initialized);
+    g_net.initialized = false;
 }
 
-// Process network completions (called by scheduler)
-void rt_net_process_completions(void) {
-    if (!g_net_io.initialized) {
-        return;
-    }
-
-    net_completion comp;
-    while (rt_spsc_pop(&g_net_io.completion_queue, &comp)) {
-        // Find the actor that made the request
-        actor *a = rt_actor_get(comp.requester);
-        if (a && a->state == ACTOR_STATE_BLOCKED) {
-            // Store completion result in actor
-            a->io_status = comp.status;
-            a->io_result_fd = comp.result.fd;
-            a->io_result_nbytes = comp.result.nbytes;
-
-            // Wake up the actor
-            a->state = ACTOR_STATE_READY;
-        }
-    }
-}
-
-// Submit network operation and block
-static rt_status submit_and_block(net_request *req) {
+// Helper: Try non-blocking I/O, add to epoll if would block
+static rt_status try_or_epoll(int fd, uint32_t epoll_events, int operation,
+                               void *buf, size_t len, int32_t timeout_ms) {
     actor *current = rt_actor_current();
     if (!current) {
         return RT_ERROR(RT_ERR_INVALID, "Not called from actor context");
     }
 
-    if (!g_net_io.initialized) {
-        return RT_ERROR(RT_ERR_INVALID, "Network I/O subsystem not initialized");
-    }
-
-    req->requester = current->id;
-
-    // Create timeout timer if needed (like rt_ipc_recv)
+    // Create timeout timer if needed
     timer_id timeout_timer = TIMER_ID_INVALID;
-    if (req->timeout_ms > 0) {
-        rt_status status = rt_timer_after((uint32_t)req->timeout_ms * 1000, &timeout_timer);
+    if (timeout_ms > 0) {
+        rt_status status = rt_timer_after((uint32_t)timeout_ms * 1000, &timeout_timer);
         if (RT_FAILED(status)) {
             return status;  // Timer pool exhausted
         }
     }
 
-    // Submit request (blocking retry)
-    rt_spsc_push_blocking(&g_net_io.request_queue, req);
+    // Allocate io_source from pool
+    io_source *source = rt_pool_alloc(&g_io_source_pool_mgr);
+    if (!source) {
+        if (timeout_timer != TIMER_ID_INVALID) {
+            rt_timer_cancel(timeout_timer);
+        }
+        return RT_ERROR(RT_ERR_NOMEM, "io_source pool exhausted");
+    }
 
-    // Block waiting for completion
+    // Setup io_source for epoll
+    source->type = IO_SOURCE_NETWORK;
+    source->data.net.fd = fd;
+    source->data.net.buf = buf;
+    source->data.net.len = len;
+    source->data.net.actor = current->id;
+    source->data.net.operation = operation;
+
+    // Add to scheduler's epoll
+    int epoll_fd = rt_scheduler_get_epoll_fd();
+    struct epoll_event ev;
+    ev.events = epoll_events;
+    ev.data.ptr = source;
+
+    if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, fd, &ev) < 0) {
+        rt_pool_free(&g_io_source_pool_mgr, source);
+        if (timeout_timer != TIMER_ID_INVALID) {
+            rt_timer_cancel(timeout_timer);
+        }
+        return RT_ERROR(RT_ERR_IO, strerror(errno));
+    }
+
+    // Block actor until I/O ready
     current->state = ACTOR_STATE_BLOCKED;
     rt_yield();
 
-    // When we wake up, check for timeout and handle it
+    // When we resume, check for timeout
     rt_status timeout_status = rt_mailbox_handle_timeout(current, timeout_timer, "Network I/O operation timed out");
     if (RT_FAILED(timeout_status)) {
+        // Timeout occurred - cleanup epoll registration
+        epoll_ctl(epoll_fd, EPOLL_CTL_DEL, fd, NULL);
+        rt_pool_free(&g_io_source_pool_mgr, source);
         return timeout_status;
     }
 
-    // Return the result stored by the completion handler
+    // Return the result stored by the event handler
     return current->io_status;
 }
 
@@ -457,18 +239,39 @@ rt_status rt_net_listen(uint16_t port, int *fd_out) {
         return RT_ERROR(RT_ERR_INVALID, "Invalid arguments");
     }
 
-    net_request req = {
-        .op = NET_OP_LISTEN,
-        .data.listen.port = port
-    };
+    if (!g_net.initialized) {
+        return RT_ERROR(RT_ERR_INVALID, "Network I/O subsystem not initialized");
+    }
 
-    rt_status status = submit_and_block(&req);
-    if (RT_FAILED(status)) {
+    // Create socket (synchronous, doesn't block)
+    int fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (fd < 0) {
+        return RT_ERROR(RT_ERR_IO, strerror(errno));
+    }
+
+    // Set SO_REUSEADDR to avoid "Address already in use" errors
+    int opt = 1;
+    setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+
+    struct sockaddr_in addr = {0};
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = INADDR_ANY;
+    addr.sin_port = htons(port);
+
+    if (bind(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
+        rt_status status = RT_ERROR(RT_ERR_IO, strerror(errno));
+        close(fd);
         return status;
     }
 
-    actor *current = rt_actor_current();
-    *fd_out = current->io_result_fd;
+    if (listen(fd, 5) < 0) {
+        rt_status status = RT_ERROR(RT_ERR_IO, strerror(errno));
+        close(fd);
+        return status;
+    }
+
+    set_nonblocking(fd);
+    *fd_out = fd;
     return RT_SUCCESS;
 }
 
@@ -477,18 +280,39 @@ rt_status rt_net_accept(int listen_fd, int *conn_fd_out, int32_t timeout_ms) {
         return RT_ERROR(RT_ERR_INVALID, "Invalid arguments");
     }
 
-    net_request req = {
-        .op = NET_OP_ACCEPT,
-        .timeout_ms = timeout_ms,
-        .data.accept.fd = listen_fd
-    };
+    if (!g_net.initialized) {
+        return RT_ERROR(RT_ERR_INVALID, "Network I/O subsystem not initialized");
+    }
 
-    rt_status status = submit_and_block(&req);
+    actor *current = rt_actor_current();
+    if (!current) {
+        return RT_ERROR(RT_ERR_INVALID, "Not called from actor context");
+    }
+
+    // Try immediate accept with non-blocking
+    struct sockaddr_in client_addr;
+    socklen_t client_len = sizeof(client_addr);
+    int conn_fd = accept(listen_fd, (struct sockaddr *)&client_addr, &client_len);
+
+    if (conn_fd >= 0) {
+        // Success immediately!
+        set_nonblocking(conn_fd);
+        *conn_fd_out = conn_fd;
+        return RT_SUCCESS;
+    }
+
+    if (errno != EAGAIN && errno != EWOULDBLOCK) {
+        // Error (not just "would block")
+        return RT_ERROR(RT_ERR_IO, strerror(errno));
+    }
+
+    // Would block - register interest in epoll and yield
+    rt_status status = try_or_epoll(listen_fd, EPOLLIN, NET_OP_ACCEPT, NULL, 0, timeout_ms);
     if (RT_FAILED(status)) {
         return status;
     }
 
-    actor *current = rt_actor_current();
+    // Result stored by event handler
     *conn_fd_out = current->io_result_fd;
     return RT_SUCCESS;
 }
@@ -498,31 +322,65 @@ rt_status rt_net_connect(const char *host, uint16_t port, int *fd_out, int32_t t
         return RT_ERROR(RT_ERR_INVALID, "Invalid arguments");
     }
 
-    net_request req = {
-        .op = NET_OP_CONNECT,
-        .timeout_ms = timeout_ms
-    };
-
-    strncpy(req.data.connect.host, host, sizeof(req.data.connect.host) - 1);
-    req.data.connect.port = port;
-
-    rt_status status = submit_and_block(&req);
-    if (RT_FAILED(status)) {
-        return status;
+    if (!g_net.initialized) {
+        return RT_ERROR(RT_ERR_INVALID, "Network I/O subsystem not initialized");
     }
 
     actor *current = rt_actor_current();
-    *fd_out = current->io_result_fd;
+    if (!current) {
+        return RT_ERROR(RT_ERR_INVALID, "Not called from actor context");
+    }
+
+    // Resolve hostname
+    struct hostent *server = gethostbyname(host);
+    if (!server) {
+        return RT_ERROR(RT_ERR_IO, "Host not found");
+    }
+
+    // Create non-blocking socket
+    int fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (fd < 0) {
+        return RT_ERROR(RT_ERR_IO, strerror(errno));
+    }
+
+    set_nonblocking(fd);
+
+    struct sockaddr_in serv_addr = {0};
+    serv_addr.sin_family = AF_INET;
+    memcpy(&serv_addr.sin_addr.s_addr, server->h_addr_list[0], server->h_length);
+    serv_addr.sin_port = htons(port);
+
+    // Try non-blocking connect
+    if (connect(fd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
+        if (errno != EINPROGRESS) {
+            rt_status status = RT_ERROR(RT_ERR_IO, strerror(errno));
+            close(fd);
+            return status;
+        }
+
+        // Connection in progress - add to epoll and wait for writable
+        rt_status status = try_or_epoll(fd, EPOLLOUT, NET_OP_CONNECT, NULL, 0, timeout_ms);
+        if (RT_FAILED(status)) {
+            close(fd);
+            return status;
+        }
+
+        // Result stored by event handler
+        *fd_out = current->io_result_fd;
+        return RT_SUCCESS;
+    }
+
+    // Connected immediately (rare but possible on localhost)
+    *fd_out = fd;
     return RT_SUCCESS;
 }
 
 rt_status rt_net_close(int fd) {
-    net_request req = {
-        .op = NET_OP_CLOSE,
-        .data.close.fd = fd
-    };
-
-    return submit_and_block(&req);
+    // Close is synchronous and fast
+    if (close(fd) < 0) {
+        return RT_ERROR(RT_ERR_IO, strerror(errno));
+    }
+    return RT_SUCCESS;
 }
 
 rt_status rt_net_recv(int fd, void *buf, size_t len, size_t *received, int32_t timeout_ms) {
@@ -530,22 +388,35 @@ rt_status rt_net_recv(int fd, void *buf, size_t len, size_t *received, int32_t t
         return RT_ERROR(RT_ERR_INVALID, "Invalid arguments");
     }
 
-    net_request req = {
-        .op = NET_OP_RECV,
-        .timeout_ms = timeout_ms,
-        .data.rw = {
-            .fd = fd,
-            .buf = buf,
-            .len = len
-        }
-    };
+    if (!g_net.initialized) {
+        return RT_ERROR(RT_ERR_INVALID, "Network I/O subsystem not initialized");
+    }
 
-    rt_status status = submit_and_block(&req);
+    actor *current = rt_actor_current();
+    if (!current) {
+        return RT_ERROR(RT_ERR_INVALID, "Not called from actor context");
+    }
+
+    // Try immediate non-blocking recv
+    ssize_t n = recv(fd, buf, len, MSG_DONTWAIT);
+    if (n >= 0) {
+        // Success immediately!
+        *received = (size_t)n;
+        return RT_SUCCESS;
+    }
+
+    if (errno != EAGAIN && errno != EWOULDBLOCK) {
+        // Error (not just "would block")
+        return RT_ERROR(RT_ERR_IO, strerror(errno));
+    }
+
+    // Would block - register interest in epoll and yield
+    rt_status status = try_or_epoll(fd, EPOLLIN, NET_OP_RECV, buf, len, timeout_ms);
     if (RT_FAILED(status)) {
         return status;
     }
 
-    actor *current = rt_actor_current();
+    // Result stored by event handler
     *received = current->io_result_nbytes;
     return RT_SUCCESS;
 }
@@ -555,22 +426,35 @@ rt_status rt_net_send(int fd, const void *buf, size_t len, size_t *sent, int32_t
         return RT_ERROR(RT_ERR_INVALID, "Invalid arguments");
     }
 
-    net_request req = {
-        .op = NET_OP_SEND,
-        .timeout_ms = timeout_ms,
-        .data.rw = {
-            .fd = fd,
-            .buf = (void *)buf,  // Cast away const for union
-            .len = len
-        }
-    };
+    if (!g_net.initialized) {
+        return RT_ERROR(RT_ERR_INVALID, "Network I/O subsystem not initialized");
+    }
 
-    rt_status status = submit_and_block(&req);
+    actor *current = rt_actor_current();
+    if (!current) {
+        return RT_ERROR(RT_ERR_INVALID, "Not called from actor context");
+    }
+
+    // Try immediate non-blocking send
+    ssize_t n = send(fd, buf, len, MSG_DONTWAIT);
+    if (n >= 0) {
+        // Success immediately!
+        *sent = (size_t)n;
+        return RT_SUCCESS;
+    }
+
+    if (errno != EAGAIN && errno != EWOULDBLOCK) {
+        // Error (not just "would block")
+        return RT_ERROR(RT_ERR_IO, strerror(errno));
+    }
+
+    // Would block - register interest in epoll and yield
+    rt_status status = try_or_epoll(fd, EPOLLOUT, NET_OP_SEND, (void *)buf, len, timeout_ms);
     if (RT_FAILED(status)) {
         return status;
     }
 
-    actor *current = rt_actor_current();
+    // Result stored by event handler
     *sent = current->io_result_nbytes;
     return RT_SUCCESS;
 }

@@ -1,22 +1,19 @@
 #include "rt_scheduler.h"
-#include "rt_scheduler_wakeup.h"
 #include "rt_static_config.h"
 #include "rt_actor.h"
 #include "rt_context.h"
 #include "rt_link.h"
 #include "rt_log.h"
+#include "rt_internal.h"
 #include <stdio.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <time.h>
+#include <sys/epoll.h>
+#include <unistd.h>
 
 // External function to get actor table
 extern actor_table *rt_actor_get_table(void);
-
-// External functions to process I/O completions
-extern void rt_file_process_completions(void);
-extern void rt_net_process_completions(void);
-extern void rt_timer_process_completions(void);
 
 // Stack overflow detection (must match rt_actor.c)
 #define STACK_GUARD_PATTERN 0xDEADBEEFCAFEBABEULL
@@ -28,6 +25,7 @@ static struct {
     bool       shutdown_requested;
     bool       initialized;
     size_t     last_run_idx[RT_PRIO_COUNT];  // Last run actor index for each priority
+    int        epoll_fd;                      // Event loop file descriptor
 } g_scheduler = {0};
 
 // Check stack guard patterns for overflow detection
@@ -46,18 +44,21 @@ rt_status rt_scheduler_init(void) {
     g_scheduler.shutdown_requested = false;
     g_scheduler.initialized = true;
 
-    // Initialize wakeup mechanism
-    rt_status status = rt_scheduler_wakeup_init();
-    if (RT_FAILED(status)) {
+    // Create epoll instance for event loop
+    g_scheduler.epoll_fd = epoll_create1(0);
+    if (g_scheduler.epoll_fd < 0) {
         g_scheduler.initialized = false;
-        return status;
+        return RT_ERROR(RT_ERR_IO, "Failed to create epoll");
     }
 
     return RT_SUCCESS;
 }
 
 void rt_scheduler_cleanup(void) {
-    rt_scheduler_wakeup_cleanup();
+    if (g_scheduler.epoll_fd >= 0) {
+        close(g_scheduler.epoll_fd);
+        g_scheduler.epoll_fd = -1;
+    }
     g_scheduler.initialized = false;
 }
 
@@ -104,11 +105,6 @@ void rt_scheduler_run(void) {
     RT_LOG_INFO("Scheduler started");
 
     while (!g_scheduler.shutdown_requested && table->num_actors > 0) {
-        // Process I/O completions
-        rt_file_process_completions();
-        rt_net_process_completions();
-        rt_timer_process_completions();
-
         // Find next runnable actor
         actor *next = find_next_runnable();
 
@@ -142,9 +138,24 @@ void rt_scheduler_run(void) {
             }
 
         } else {
-            // No runnable actors - wait for I/O completion wakeup
-            // I/O threads will signal when they post completions
-            rt_scheduler_wakeup_wait();
+            // No runnable actors - wait for I/O events
+            struct epoll_event events[64];
+            // Short timeout to allow checking for actors made ready by IPC/bus/link
+            // (those don't use epoll, they directly set actor state to READY)
+            int timeout_ms = 10;
+            int n = epoll_wait(g_scheduler.epoll_fd, events, 64, timeout_ms);
+
+            // Dispatch epoll events
+            for (int i = 0; i < n; i++) {
+                io_source *source = events[i].data.ptr;
+
+                if (source->type == IO_SOURCE_TIMER) {
+                    rt_timer_handle_event(source);
+                } else if (source->type == IO_SOURCE_NETWORK) {
+                    rt_net_handle_event(source);
+                }
+                // Future: IO_SOURCE_WAKEUP
+            }
         }
     }
 
@@ -168,4 +179,8 @@ void rt_scheduler_yield(void) {
 
 bool rt_scheduler_should_stop(void) {
     return g_scheduler.shutdown_requested;
+}
+
+int rt_scheduler_get_epoll_fd(void) {
+    return g_scheduler.epoll_fd;
 }

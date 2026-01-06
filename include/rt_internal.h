@@ -5,7 +5,7 @@
 #include "rt_types.h"
 #include "rt_timer.h"
 #include "rt_actor.h"
-#include "rt_spsc.h"
+#include "rt_io_source.h"
 #include <stddef.h>
 #include <stdbool.h>
 
@@ -40,23 +40,6 @@ typedef struct {
         } \
     } while(0)
 
-// Initialize SPSC queue pair (request + completion) with error handling
-// Used by: Timer, file I/O, network I/O subsystems
-#define RT_INIT_SPSC_QUEUES(req_queue, req_buf, req_type, comp_queue, comp_buf, comp_type) \
-    do { \
-        rt_status _status = rt_spsc_init(&(req_queue), (req_buf), \
-                                          sizeof(req_type), RT_COMPLETION_QUEUE_SIZE); \
-        if (RT_FAILED(_status)) { \
-            return _status; \
-        } \
-        _status = rt_spsc_init(&(comp_queue), (comp_buf), \
-                               sizeof(comp_type), RT_COMPLETION_QUEUE_SIZE); \
-        if (RT_FAILED(_status)) { \
-            rt_spsc_destroy(&(req_queue)); \
-            return _status; \
-        } \
-    } while(0)
-
 // Internal helper functions (implemented in rt_ipc.c)
 
 // Add mailbox entry to actor's mailbox and wake if blocked
@@ -68,8 +51,12 @@ void rt_mailbox_add_entry(actor *recipient, mailbox_entry *entry);
 // Used by: IPC recv, network I/O
 rt_status rt_mailbox_handle_timeout(actor *current, timer_id timeout_timer, const char *operation);
 
-// Push to SPSC queue with blocking retry (yields until successful)
-// Used by: Timer, file I/O, network I/O, bus subsystems
-void rt_spsc_push_blocking(rt_spsc_queue *queue, const void *entry);
+// Event loop handlers (called by scheduler when I/O sources become ready)
+
+// Handle timer event (timerfd ready)
+void rt_timer_handle_event(io_source *source);
+
+// Handle network event (socket ready)
+void rt_net_handle_event(io_source *source);
 
 #endif // RT_INTERNAL_H
