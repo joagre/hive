@@ -4,7 +4,7 @@ CFLAGS := -std=c11 -Wall -Wextra -Wpedantic -Werror -O2 -g
 CPPFLAGS := -Iinclude -D_POSIX_C_SOURCE=200809L
 DEPFLAGS = -MMD -MP
 LDFLAGS :=
-LDLIBS := -pthread
+LDLIBS :=
 
 # Directories
 SRC_DIR := src

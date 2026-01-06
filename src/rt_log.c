@@ -3,7 +3,6 @@
 #include <time.h>
 #include <string.h>
 #include <unistd.h>
-#include <pthread.h>
 
 // Level names for output
 static const char *level_names[] = {
@@ -21,9 +20,6 @@ static const char *level_colors[] = {
 
 #define COLOR_RESET "\x1b[0m"
 
-// Mutex for thread-safe logging
-static pthread_mutex_t log_mutex = PTHREAD_MUTEX_INITIALIZER;
-
 // Extract basename from file path
 static const char *basename_simple(const char *path) {
     const char *slash = strrchr(path, '/');
@@ -37,8 +33,6 @@ void rt_log_write(rt_log_level_t level, const char *file, int line,
     if (use_colors == -1) {
         use_colors = isatty(fileno(stderr));
     }
-
-    pthread_mutex_lock(&log_mutex);
 
     // Print log level with optional color
     if (use_colors) {
@@ -59,6 +53,4 @@ void rt_log_write(rt_log_level_t level, const char *file, int line,
     va_end(args);
 
     fprintf(stderr, "\n");
-
-    pthread_mutex_unlock(&log_mutex);
 }
