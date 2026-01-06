@@ -461,6 +461,99 @@ Convenience macros:
 #define RT_FAILED(s) ((s).code != RT_OK)
 ```
 
+## Design Trade-offs and Sharp Edges
+
+This runtime makes deliberate design choices that favor **determinism, performance, and simplicity** over **ergonomics and safety**. These are not bugs - they are conscious trade-offs suitable for embedded/safety-critical systems with trusted code.
+
+**Accept these consciously before using this runtime:**
+
+### 1. IPC_ASYNC Lifetime Rule is Sharp and Error-Prone
+
+**Trade-off:** Message payload pointer valid only until next `rt_ipc_recv()` call.
+
+**Why this design:**
+- Pool reuse: Deterministic O(1) allocation, no fragmentation
+- Performance: Single pool slot per actor, no reference counting
+- Simplicity: No hidden malloc, no garbage collection
+
+**Consequence:** Easy to misuse - storing `msg.data` across recv iterations causes use-after-free.
+
+**This is not beginner-friendly.** Code must copy data immediately if needed beyond current iteration.
+
+**Mitigation:** Documented with WARNING box and correct/incorrect examples (spec.md:650-667). But developers will still make mistakes.
+
+**Acceptable if:** You optimize for determinism over ergonomics, and code reviews catch pointer misuse.
+
+---
+
+### 2. No Per-Actor Mailbox Quota (Global Starvation Possible)
+
+**Trade-off:** One slow/malicious actor can consume all mailbox entries, starving the system.
+
+**Why this design:**
+- Simplicity: No per-actor accounting, no quota enforcement
+- Flexibility: Bursty actors can use available pool space
+- Performance: No quota checks on send path
+
+**Consequence:** A single bad actor can cause global `RT_ERR_NOMEM` failures for all IPC sends.
+
+**Supervisors are not optional.** You must design actor hierarchies with supervision and monitoring.
+
+**Mitigation:** Application-level quotas, supervisor actors, monitoring. Runtime provides primitives, not policies.
+
+**Acceptable if:** You deploy trusted code in embedded systems, not untrusted actors in general-purpose systems.
+
+---
+
+### 3. IPC_SYNC is Deadlock-Prone by Design
+
+**Trade-off:** Synchronous IPC provides backpressure but enables deadlock.
+
+**Why this design:**
+- Flow control: Natural rate limiting via sender blocking
+- Memory safety: Pinned buffers prevent UAF if sender dies
+- Simplicity: No complex async state machines needed
+
+**Consequence:** Circular dependencies, self-send, nested calls all deadlock immediately.
+
+**IPC_SYNC must be used rarely.** Code reviews must treat SYNC usage as suspicious.
+
+**Mitigation:** Documented deadlock scenarios (spec.md:828-853), runtime detects self-send, auto-release prevents some deadlocks.
+
+**Acceptable if:** You use SYNC sparingly for validated request-response patterns, not general communication.
+
+---
+
+### 4. Bus and IPC Share Message Pool (Resource Contention)
+
+**Trade-off:** High-rate bus publishing can starve IPC globally.
+
+**Why this design:**
+- Simplicity: Single message pool, no subsystem isolation
+- Flexibility: Pool space shared dynamically based on actual usage
+- Memory efficiency: No wasted dedicated pools
+
+**Consequence:** Misconfigured bus can cause all `IPC_ASYNC` sends to fail with `RT_ERR_NOMEM`.
+
+**Mitigation:** WARNING box (spec.md:1277-1292), size pool for combined load, monitor exhaustion.
+
+**Acceptable if:** You size pools correctly and monitor resource usage in production.
+
+---
+
+### Summary: This Runtime is a Sharp Tool
+
+These design choices make the runtime:
+- **Deterministic:** Bounded memory, predictable timing, no hidden allocations
+- **Fast:** O(1) hot paths, minimal overhead, zero-copy options
+- **Simple:** Minimal code, easy to audit, no complex features
+- **Not beginner-friendly:** Sharp edges require careful use
+- **Not fault-tolerant:** No automatic isolation, quotas, or recovery
+
+**This is intentional.** The runtime provides primitives for building robust systems, not a complete safe environment.
+
+If you want automatic safety, use Erlang. If you want deterministic embedded performance with full control, use this.
+
 ## Core Types
 
 ```c
