@@ -579,9 +579,12 @@ rt_status rt_ipc_send(actor_id to, const void *data, size_t len, rt_ipc_mode mod
 
 **Behavior when pools are exhausted:**
 
-`rt_ipc_send()` uses two global pools:
-1. **Mailbox entry pool** (`RT_MAILBOX_ENTRY_POOL_SIZE` = 256) - for all IPC modes
-2. **Message data pool** (`RT_MESSAGE_DATA_POOL_SIZE` = 256) - for IPC_ASYNC only
+`rt_ipc_send()` uses three global pools (mode-dependent):
+1. **Mailbox entry pool** (`RT_MAILBOX_ENTRY_POOL_SIZE` = 256) - **all modes** (ASYNC and SYNC)
+2. **Message data pool** (`RT_MESSAGE_DATA_POOL_SIZE` = 256) - **IPC_ASYNC only**
+3. **Sync buffer pool** (`RT_SYNC_BUFFER_POOL_SIZE` = 64) - **IPC_SYNC only**
+
+Each mode uses mailbox entry pool plus one mode-specific data pool.
 
 **Fail-fast semantics** (chosen for deterministic embedded behavior):
 
