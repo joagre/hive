@@ -1449,7 +1449,10 @@ rt_status rt_file_sync(int fd, int32_t timeout_ms);
 
 The `mode` parameter in `rt_file_open()` specifies file permissions (e.g., 0644) when creating files with `O_CREAT` flag, following POSIX conventions.
 
-File operations block the calling actor and yield to the scheduler.
+File operations block the calling actor until I/O completes or timeout expires (`timeout_ms` parameter):
+- `timeout_ms < 0`: Block forever until I/O completes
+- `timeout_ms > 0`: Block with timeout, return `RT_ERR_TIMEOUT` if exceeded
+- `timeout_ms == 0`: Non-blocking mode (NOT currently supported, will return error)
 
 ## Memory Allocation Architecture
 
