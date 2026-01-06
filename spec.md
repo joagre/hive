@@ -1480,16 +1480,25 @@ Lock-free SPSC (Single Producer Single Consumer) queue for I/O completions.
 
 Each I/O subsystem (net, file, timer) has its own completion queue. The I/O thread is the producer, the scheduler is the consumer.
 
+**Memory allocation contract:** SPSC queues use **caller-provided static buffers** and never allocate memory. The `buffer` parameter to `rt_spsc_init()` must point to pre-allocated storage (static array or arena). `rt_spsc_destroy()` does not free the buffer (caller owns it).
+
 ```c
 typedef struct {
-    void           *buffer;
+    void           *buffer;       // Ring buffer (caller-provided, never allocated by runtime)
     size_t          entry_size;
     size_t          capacity;     // must be power of 2
     atomic_size_t   head;         // written by producer
     atomic_size_t   tail;         // written by consumer
 } rt_spsc_queue;
 
-rt_status rt_spsc_init(rt_spsc_queue *q, size_t entry_size, size_t capacity);
+// Initialize SPSC queue with pre-allocated buffer
+// buffer: Caller-provided storage, must be at least (entry_size * capacity) bytes
+// capacity: Must be power of 2
+// Returns: RT_SUCCESS or RT_ERR_INVALID if capacity is not power of 2
+// NEVER allocates memory
+rt_status rt_spsc_init(rt_spsc_queue *q, void *buffer, size_t entry_size, size_t capacity);
+
+// Destroy SPSC queue (does NOT free buffer - caller owns it)
 void      rt_spsc_destroy(rt_spsc_queue *q);
 
 // Producer (I/O thread)
