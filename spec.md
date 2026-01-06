@@ -414,12 +414,14 @@ The runtime uses static allocation for deterministic behavior and suitability fo
   - Link/monitor pools: 256 entries × ~16 bytes = 4 KB
   - Timer pool: 64 entries × ~40 bytes = 2.5 KB
   - Bus tables: 32 buses × ~3 KB each = 96 KB
-  - Completion queues: 3 subsystems × ~20 KB each = 60 KB
+  - Completion queues: 3 subsystems × (request + completion buffers) = variable
+    - Each subsystem has 2 buffers (request + completion) of RT_COMPLETION_QUEUE_SIZE (64) entries
+    - Entry sizes vary by subsystem (net_request/net_completion, file_request/file_completion, timer_request/timer_completion)
   - Note: Actual size includes alignment padding and internal structures
 - Dynamic (heap): Variable actor stacks only
   - Example: 20 actors × 32KB average = 640 KB
 
-**Total:** ~871 KB (known at compile time)
+**Total:** ~871 KB static + dynamic stacks (known at compile time)
 
 **Benefits:**
 
@@ -644,12 +646,32 @@ if (status.code == RT_ERR_NOMEM) {
 The lifetime of `rt_message.data` depends on the send mode:
 
 **IPC_ASYNC:**
-- Data is **valid until next `rt_ipc_recv()`**
+
+**⚠️ CRITICAL LIFETIME RULE:**
+- **Data is ONLY valid until the next `rt_ipc_recv()` call**
+- **Per actor: only ONE message payload pointer is valid at a time**
+- **Storing `msg.data` across receive iterations causes use-after-free**
+- **If you need the data later, COPY IT IMMEDIATELY**
+
+**Correct pattern (copy immediately if needed):**
+```c
+rt_message msg;
+rt_ipc_recv(&msg, -1);
+
+// ✓ SAFE: Copy data immediately
+char local_copy[256];
+memcpy(local_copy, msg.data, msg.len);
+// local_copy is safe to use indefinitely
+
+// ✗ UNSAFE: Storing pointer
+const char *ptr = msg.data;  // DANGER
+rt_ipc_recv(&msg, -1);       // ptr now INVALID (use-after-free)
+```
+
+**Implementation details:**
 - Data lives in a pool-allocated buffer
 - Next recv frees the previous message's buffer and reuses the pool entry
 - Calling `rt_ipc_release()` is optional (no-op for ASYNC)
-- **Per actor, only the most recently received ASYNC message payload is guaranteed valid; subsequent recv invalidates it**
-- **Warning**: Storing `msg.data` beyond the current receive iteration is forbidden; callers must copy data if longer lifetime is required
 
 **IPC_SYNC:**
 - Data is **valid until `rt_ipc_release()`** is called
@@ -1691,7 +1713,7 @@ The scheduler provides the following guarantees to prevent lost wakeups and ensu
   - Within each queue: FIFO order preserved (matches I/O thread posting order)
   - Across queues: Fixed processing order (file → net → timer)
   - Each queue drained fully before processing next queue
-  - This ordering is chosen to ensure deterministic completion handling and simplify reasoning; no prioritization between subsystems is implied
+  - **Rationale for file → net → timer order**: Timers are processed last because timer ticks are periodic/expected events with slack tolerance, whereas file/network completions represent external data arrival requiring prompt processing to avoid backpressure; applications needing timer-first priority can spawn high-priority timer-handling actors
 - Runtime wakeup mechanism does not introduce nondeterminism beyond external event timing
 - External factors (I/O timing, timer jitter, ISR scheduling) may cause different completion orderings across runs
 - Given the same event arrival sequence, scheduler makes identical decisions
