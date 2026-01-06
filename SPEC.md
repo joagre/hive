@@ -128,34 +128,55 @@ When an actor calls a blocking API, the following contract applies:
 - Enqueued messages are available when actor unblocks
 
 **Unblock conditions:**
-- I/O completion arrives (network operation completes)
+- I/O readiness signaled (network socket becomes readable/writable)
 - Timer expires (for APIs with timeout)
 - Message arrives in mailbox (for `rt_ipc_recv()`)
 - Bus data published (for `rt_bus_read_wait()`)
 - Explicit release occurs (for `IPC_SYNC` sender)
 - **Important**: Mailbox arrival only unblocks actors blocked in `rt_ipc_recv()`, not actors blocked on network I/O, bus read, or `IPC_SYNC` send
 
-**Timeout and completion races:**
-- Exactly one unblock event is processed
-- If timeout and completion race, completion wins (I/O result delivered, timeout ignored)
-- If multiple messages arrive during block, actor unblocks on first arrival
-- Late completions (after timeout) are discarded safely via request serialization
+**Scheduling phase definition:**
 
-**Request serialization (prevents late completion confusion):**
+A scheduling phase consists of one iteration of the scheduler loop:
+
+1. **Find next runnable actor**: Select highest-priority ready actor (round-robin within priority)
+2. **Execute actor**: Run until yield, block, or exit
+3. **If no runnable actors**: Call `epoll_wait()` to block until I/O events arrive
+4. **Drain epoll events**: Process all returned events before returning to step 1
+
+**Event drain order within a phase:**
+
+When `epoll_wait()` returns multiple ready events (timers and network I/O), they are processed in **array index order** as returned by the kernel. This order is deterministic for a given set of ready file descriptors but is not controllable by the runtime.
+
+For each event:
+- **Timer event (timerfd)**: Read timerfd, send timer tick message to actor's mailbox, wake actor
+- **Network event (socket)**: Perform I/O operation, store result in actor's `io_status`, wake actor
+
+All events are processed before any actor runs. This ensures the actor sees a consistent state.
+
+**Timeout vs I/O readiness - no race:**
+
+Timeouts and I/O readiness do not "race" in the traditional sense. They are **sequenced** by the event loop:
+
+- If I/O becomes ready **before** timeout expires: Only network event fires, actor receives data
+- If timeout expires **before** I/O ready: Only timer event fires, actor receives timeout error
+- If both fire in the **same** `epoll_wait()` call: Both are processed, actor sees both I/O result and timer message
+
+In the simultaneous case, the actor's wakeup handler checks for timeout by examining the mailbox head. If the timer message is present, timeout is reported. The I/O result (if any) is discarded.
+
+**Note:** This is "first-processed wins" semantics based on epoll array order. For most practical scenarios (I/O ready well before or well after timeout), this distinction is irrelevant.
+
+**Request serialization:**
 - Constraint: **One outstanding blocking request per actor per I/O subsystem**
-- This invariant is enforced by the scheduler: once an actor enters ACTOR_STATE_BLOCKED, it cannot execute further runtime calls until unblocked
-- Blocked actor cannot issue new requests (state = ACTOR_STATE_BLOCKED, not schedulable)
-- When timeout occurs: Actor unblocks, previous request is implicitly cancelled/ignored
-- If late completion arrives: Scheduler checks actor state; if actor not blocked on that request, completion is discarded
-- New request from same actor gets fresh blocking state, cannot be confused with stale completion
-- This ensures late completions cannot be misinterpreted as responses to new requests
+- Enforced by scheduler: blocked actor cannot issue new requests
+- When timeout occurs: I/O registration cleaned up, any late I/O result is ignored
+- New request from same actor gets fresh state
 
 **Determinism guarantee:**
-- **Deterministic policy**: Given the same sequence of completion events and runnable-set transitions, scheduling decisions are deterministic
-- Runtime does not introduce nondeterminism beyond external event arrival order (I/O timing, timer jitter, ISR scheduling)
+- **Deterministic policy**: Given the same sequence of epoll events in the same order, scheduling decisions are deterministic
+- Runtime does not introduce nondeterminism beyond external event arrival order
 - No phantom wakeups (actor only unblocks on specified conditions)
-- **Scheduling phase definition**: One iteration of the scheduler loop, including completion draining (network/timer events) and all run-queue enqueues performed during that iteration, ending when the next actor is selected for execution
-- Scheduler guarantees FIFO ordering among actors enqueued into the same run queue in the same scheduling phase
+- FIFO ordering among actors enqueued in the same scheduling phase
 
 ### Scheduler-Stalling Calls
 
