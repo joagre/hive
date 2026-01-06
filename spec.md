@@ -138,6 +138,7 @@ When an actor calls a blocking API, the following contract applies:
 
 **Request serialization (prevents late completion confusion):**
 - Constraint: **One outstanding blocking request per actor per I/O subsystem**
+- This invariant is enforced by the scheduler: once an actor enters ACTOR_STATE_BLOCKED, it cannot execute further runtime calls until unblocked
 - Blocked actor cannot issue new requests (state = ACTOR_STATE_BLOCKED, not schedulable)
 - When timeout occurs: Actor unblocks, previous request is implicitly cancelled/ignored
 - If late completion arrives: Scheduler checks actor state; if actor not blocked on that request, completion is discarded
@@ -148,7 +149,7 @@ When an actor calls a blocking API, the following contract applies:
 - **Deterministic policy**: Given the same sequence of completion events and runnable-set transitions, scheduling decisions are deterministic
 - Runtime does not introduce nondeterminism beyond external event arrival order (I/O timing, timer jitter, ISR scheduling)
 - No phantom wakeups (actor only unblocks on specified conditions)
-- Scheduler guarantees fair wakeup ordering (FIFO within priority level for same-priority actors)
+- Scheduler guarantees FIFO ordering among actors enqueued into the same run queue in the same scheduling phase
 
 ### Priority Levels
 
@@ -380,7 +381,7 @@ Stack growth/reallocation is not supported. Stack overflow is detected via guard
 
 The runtime uses static allocation for deterministic behavior and suitability for MCU deployment:
 
-**Design Principle:** All memory is allocated at compile time or initialization. No heap allocation occurs during runtime operation (message passing, timer events, etc.).
+**Design Principle:** All memory is allocated at compile time or initialization. No heap allocation occurs during runtime operation except optional actor stack allocation at spawn/exit when explicitly enabled (message passing, timer events, etc.).
 
 **Allocation Strategy:**
 
@@ -647,6 +648,7 @@ The lifetime of `rt_message.data` depends on the send mode:
 - Next recv frees the previous message's buffer and reuses the pool entry
 - Calling `rt_ipc_release()` is optional (no-op for ASYNC)
 - **Per actor, only the most recently received ASYNC message payload is guaranteed valid; subsequent recv invalidates it**
+- **Warning**: Storing `msg.data` beyond the current receive iteration is forbidden; callers must copy data if longer lifetime is required
 
 **IPC_SYNC:**
 - Data is **valid until `rt_ipc_release()`** is called
@@ -848,7 +850,7 @@ Actor A: rt_ipc_send(B, &data, len, IPC_SYNC);  // Blocks until B releases
 
 If receiver crashes or exits without releasing:
 - Sender is automatically unblocked during receiver's actor cleanup
-- Sender's `rt_ipc_send()` returns normally (no error)
+- `rt_ipc_send()` returns `RT_SUCCESS` when unblocked due to receiver death
 - Message data is no longer referenced by receiver
 - Principle of least surprise: sender is not stuck forever
 - **Important:** Sender does NOT receive notification of receiver death (unless explicitly linked/monitoring)
@@ -1080,7 +1082,7 @@ rt_bus_read(bus, buf, len, &actual);
 
 #### **RULE 2: Per-Subscriber Cursor Storage and Eviction Behavior**
 
-**Contract:** Each subscriber has an independent read cursor. Slow subscribers may miss entries due to buffer wraparound; no error or notification is generated.
+**Contract:** Each subscriber has an independent read cursor. Slow subscribers may miss entries due to buffer wraparound; no error or notification is generated. The bus implementation supports a maximum of 32 concurrent subscribers per bus, enforced by the 32-bit `readers_mask`.
 
 **Guaranteed semantics:**
 1. **Storage per subscriber:**
@@ -1670,6 +1672,7 @@ The scheduler provides the following guarantees to prevent lost wakeups and ensu
   - Within each queue: FIFO order preserved (matches I/O thread posting order)
   - Across queues: Fixed processing order (file → net → timer)
   - Each queue drained fully before processing next queue
+  - This ordering is chosen to ensure deterministic completion handling and simplify reasoning; no prioritization between subsystems is implied
 - Runtime wakeup mechanism does not introduce nondeterminism beyond external event timing
 - External factors (I/O timing, timer jitter, ISR scheduling) may cause different completion orderings across runs
 - Given the same event arrival sequence, scheduler makes identical decisions
