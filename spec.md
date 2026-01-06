@@ -999,7 +999,7 @@ Best practice: Design actors to always release sync messages, but receiver crash
    - **Sender CAN distinguish** receiver crash (RT_ERR_CLOSED) from normal release (RT_SUCCESS)
    - Rationale: Honest failure reporting - don't lie to caller about receiver death
    - Consistent with file/net I/O semantics (connection closed = error)
-   - Tested: `tests/borrow_crash_test.c`
+   - Tested: `tests/sync_receiver_death_test.c`
 
 3. **Sender death while blocked in SYNC:**
    - **Memory safety:** Data in pinned runtime buffer, NOT sender's stack
