@@ -23,6 +23,18 @@
 extern rt_pool g_mailbox_pool_mgr;
 extern rt_pool g_message_pool_mgr;
 
+// Helper macro: Remove entry from linked list using pointer-to-pointer
+#define REMOVE_FROM_LIST(head, entry_to_remove) \
+    do { \
+        __typeof__(head) *_prev = &(head); \
+        while (*_prev && *_prev != (entry_to_remove)) { \
+            _prev = &(*_prev)->next; \
+        } \
+        if (*_prev) { \
+            *_prev = (*_prev)->next; \
+        } \
+    } while(0)
+
 // Forward declarations for internal functions
 rt_status rt_timer_init(void);
 void rt_timer_cleanup(void);
@@ -172,13 +184,7 @@ static void *timer_worker_thread(void *arg) {
                         comp.status = RT_ERROR(RT_ERR_IO, strerror(errno));
                         pthread_mutex_lock(&g_timer.timers_lock);
                         // Remove from list
-                        timer_entry **prev = &g_timer.timers;
-                        while (*prev && *prev != entry) {
-                            prev = &(*prev)->next;
-                        }
-                        if (*prev) {
-                            *prev = entry->next;
-                        }
+                        REMOVE_FROM_LIST(g_timer.timers, entry);
                         pthread_mutex_unlock(&g_timer.timers_lock);
                         close(tfd);
                         rt_pool_free(&g_timer_pool_mgr, entry);
@@ -254,13 +260,7 @@ static void *timer_worker_thread(void *arg) {
             // If one-shot, remove timer
             if (!entry->periodic) {
                 pthread_mutex_lock(&g_timer.timers_lock);
-                timer_entry **prev = &g_timer.timers;
-                while (*prev && *prev != entry) {
-                    prev = &(*prev)->next;
-                }
-                if (*prev) {
-                    *prev = entry->next;
-                }
+                REMOVE_FROM_LIST(g_timer.timers, entry);
                 pthread_mutex_unlock(&g_timer.timers_lock);
 
                 epoll_ctl(g_timer.epoll_fd, EPOLL_CTL_DEL, entry->fd, NULL);
