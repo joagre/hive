@@ -1015,6 +1015,14 @@ typedef struct {
 } rt_bus_config;
 ```
 
+**Configuration constraints (normative):**
+- `max_subscribers`: **Architectural limit of 32 subscribers** (enforced by 32-bit `readers_mask`)
+  - Valid range: 1..32
+  - `RT_MAX_BUS_SUBSCRIBERS = 32` is a hard architectural invariant, not a tunable parameter
+  - Attempts to configure `max_subscribers > 32` return `RT_ERR_INVALID`
+- `max_readers`: Valid range: 0..max_subscribers
+- Subscriber index assignment is stable for the lifetime of a subscription (affects `readers_mask` bit position)
+
 ### Functions
 
 ```c
