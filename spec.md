@@ -1665,7 +1665,10 @@ The scheduler provides the following guarantees to prevent lost wakeups and ensu
 - Pattern guarantees: if completion exists, scheduler will process it
 
 **Determinism:**
-- **Deterministic policy**: Queue processing order is FIFO (matches I/O thread posting order)
+- **Deterministic policy**:
+  - Within each queue: FIFO order preserved (matches I/O thread posting order)
+  - Across queues: Fixed processing order (file → net → timer)
+  - Each queue drained fully before processing next queue
 - Runtime wakeup mechanism does not introduce nondeterminism beyond external event timing
 - External factors (I/O timing, timer jitter, ISR scheduling) may cause different completion orderings across runs
 - Given the same event arrival sequence, scheduler makes identical decisions
