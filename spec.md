@@ -1274,6 +1274,24 @@ Entries can be removed by **three mechanisms** (whichever occurs first):
 
 ### Pool Exhaustion and Buffer Full Behavior
 
+**WARNING: Resource Contention Between IPC and Bus**
+
+Bus publishing consumes the same message data pool as IPC (`RT_MESSAGE_DATA_POOL_SIZE`). A misconfigured or high-rate bus can exhaust the message pool and cause **all** IPC_ASYNC sends to fail with `RT_ERR_NOMEM`, potentially starving critical actor communication.
+
+**Architectural consequences:**
+- Bus auto-evicts oldest entries when its ring buffer fills (graceful degradation)
+- IPC never auto-drops (fails immediately with `RT_ERR_NOMEM`)
+- A single high-rate bus publisher can starve IPC globally
+- No per-subsystem quotas or fairness guarantees
+
+**Design implications:**
+- Size `RT_MESSAGE_DATA_POOL_SIZE` for combined IPC + bus peak load
+- Use bus retention policies to limit memory consumption
+- Monitor pool exhaustion in critical systems
+- Consider separate message pools if isolation is required (requires code modification)
+
+---
+
 The bus can encounter two types of resource limits:
 
 **1. Message Pool Exhaustion** (shared with IPC):
