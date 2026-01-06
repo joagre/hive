@@ -5,6 +5,14 @@
 #include "rt_link.h"
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
+
+// Helper to get current time in milliseconds
+static uint64_t time_ms(void) {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (uint64_t)ts.tv_sec * 1000 + (uint64_t)ts.tv_nsec / 1000000;
+}
 
 // Test results
 static int tests_passed = 0;
@@ -383,6 +391,110 @@ static void test6_close_reuse(void *arg) {
 }
 
 // ============================================================================
+// Test 7: Non-blocking accept (timeout=0)
+// NOTE: Per API docs, timeout_ms=0 should return RT_ERR_WOULDBLOCK immediately
+//       if no connection is pending. This test may fail if the implementation
+//       blocks instead of returning immediately.
+// ============================================================================
+
+static void test7_nonblocking_accept(void *arg) {
+    (void)arg;
+    printf("\nTest 7: Non-blocking accept (timeout=0)\n");
+
+    int listen_fd = -1;
+    rt_status status = rt_net_listen(TEST_PORT + 5, &listen_fd);
+    if (RT_FAILED(status)) {
+        TEST_FAIL("listen failed");
+        rt_exit();
+    }
+
+    // Non-blocking accept (timeout=0) - should return immediately
+    int conn_fd = -1;
+    uint64_t start = time_ms();
+    status = rt_net_accept(listen_fd, &conn_fd, 0);
+    uint64_t elapsed = time_ms() - start;
+
+    if (status.code == RT_ERR_WOULDBLOCK) {
+        printf("    Returned WOULDBLOCK after %lu ms\n", (unsigned long)elapsed);
+        TEST_PASS("non-blocking accept returns WOULDBLOCK immediately");
+    } else if (status.code == RT_ERR_TIMEOUT) {
+        printf("    Returned TIMEOUT after %lu ms\n", (unsigned long)elapsed);
+        if (elapsed < 100) {
+            TEST_PASS("non-blocking accept returns quickly");
+        } else {
+            TEST_FAIL("non-blocking accept took too long");
+        }
+    } else if (RT_FAILED(status)) {
+        printf("    Returned error after %lu ms: %s\n", (unsigned long)elapsed,
+               status.msg ? status.msg : "unknown");
+        TEST_FAIL("unexpected error from non-blocking accept");
+    } else {
+        rt_net_close(conn_fd);
+        TEST_FAIL("non-blocking accept should not succeed without connection");
+    }
+
+    rt_net_close(listen_fd);
+    rt_exit();
+}
+
+// ============================================================================
+// Test 8: Recv timeout
+// ============================================================================
+
+static void test8_recv_timeout(void *arg) {
+    (void)arg;
+    printf("\nTest 8: Recv timeout\n");
+
+    // Create a connection to ourselves
+    int listen_fd = -1;
+    rt_status status = rt_net_listen(TEST_PORT + 6, &listen_fd);
+    if (RT_FAILED(status)) {
+        TEST_FAIL("listen failed");
+        rt_exit();
+    }
+
+    // Connect to ourselves
+    int client_fd = -1;
+    status = rt_net_connect("127.0.0.1", TEST_PORT + 6, &client_fd, 1000);
+    if (RT_FAILED(status)) {
+        TEST_FAIL("connect failed");
+        rt_net_close(listen_fd);
+        rt_exit();
+    }
+
+    // Accept the connection
+    int server_fd = -1;
+    status = rt_net_accept(listen_fd, &server_fd, 1000);
+    if (RT_FAILED(status)) {
+        TEST_FAIL("accept failed");
+        rt_net_close(client_fd);
+        rt_net_close(listen_fd);
+        rt_exit();
+    }
+
+    // Try to recv with timeout (no data sent)
+    char buf[64];
+    size_t received = 0;
+    uint64_t start = time_ms();
+    status = rt_net_recv(server_fd, buf, sizeof(buf), &received, 100);  // 100ms timeout
+    uint64_t elapsed = time_ms() - start;
+
+    if (status.code == RT_ERR_TIMEOUT) {
+        printf("    Recv timed out after %lu ms (expected ~100ms)\n", (unsigned long)elapsed);
+        TEST_PASS("recv times out when no data");
+    } else if (RT_FAILED(status)) {
+        TEST_PASS("recv returns error when no data");
+    } else {
+        TEST_FAIL("recv should timeout when no data sent");
+    }
+
+    rt_net_close(server_fd);
+    rt_net_close(client_fd);
+    rt_net_close(listen_fd);
+    rt_exit();
+}
+
+// ============================================================================
 // Test runner
 // ============================================================================
 
@@ -393,6 +505,8 @@ static void (*test_funcs[])(void *) = {
     test4_connect_invalid,
     test5_short_timeout_accept,
     test6_close_reuse,
+    test7_nonblocking_accept,
+    test8_recv_timeout,
 };
 
 #define NUM_TESTS (sizeof(test_funcs) / sizeof(test_funcs[0]))

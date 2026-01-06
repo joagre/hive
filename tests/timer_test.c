@@ -173,6 +173,130 @@ static void run_timer_tests(void *arg) {
         }
     }
 
+    // ========================================================================
+    // Test 7: Periodic timer (rt_timer_every)
+    // NOTE: This test may fail due to implementation limitations with
+    //       periodic timers not firing after the first one-shot timer completes.
+    // ========================================================================
+    printf("\nTest 7: Periodic timer (rt_timer_every)\n");
+    {
+        timer_id timer;
+        rt_status status = rt_timer_every(50000, &timer);  // 50ms interval
+        if (RT_FAILED(status)) {
+            TEST_FAIL("rt_timer_every failed to create timer");
+        } else {
+            int tick_count = 0;
+            uint64_t start = time_ms();
+
+            // Try to receive 5 ticks
+            for (int i = 0; i < 5; i++) {
+                rt_message msg;
+                status = rt_ipc_recv(&msg, 200);  // 200ms timeout per tick
+                if (RT_FAILED(status)) {
+                    printf("    Tick %d: recv failed (timeout or error)\n", i + 1);
+                    break;
+                }
+                if (rt_timer_is_tick(&msg)) {
+                    tick_count++;
+                }
+            }
+
+            uint64_t elapsed = time_ms() - start;
+            rt_timer_cancel(timer);
+
+            if (tick_count >= 5) {
+                printf("    Received %d ticks in %lu ms\n", tick_count, (unsigned long)elapsed);
+                TEST_PASS("periodic timer fires multiple times");
+            } else {
+                printf("    Only received %d/5 ticks in %lu ms\n", tick_count, (unsigned long)elapsed);
+                TEST_FAIL("periodic timer did not fire enough times");
+            }
+        }
+    }
+
+    // ========================================================================
+    // Test 8: Multiple simultaneous timers
+    // NOTE: This test may fail due to implementation limitations with
+    //       multiple timers not all firing correctly.
+    // ========================================================================
+    printf("\nTest 8: Multiple simultaneous timers\n");
+    {
+        timer_id timer1, timer2, timer3;
+
+        rt_status s1 = rt_timer_after(50000, &timer1);   // 50ms
+        rt_status s2 = rt_timer_after(100000, &timer2);  // 100ms
+        rt_status s3 = rt_timer_after(150000, &timer3);  // 150ms
+
+        if (RT_FAILED(s1) || RT_FAILED(s2) || RT_FAILED(s3)) {
+            TEST_FAIL("failed to create multiple timers");
+        } else {
+            int received = 0;
+            uint64_t start = time_ms();
+
+            for (int i = 0; i < 3; i++) {
+                rt_message msg;
+                rt_status status = rt_ipc_recv(&msg, 300);  // 300ms timeout
+                if (RT_FAILED(status)) {
+                    printf("    Timer %d: recv failed\n", i + 1);
+                    continue;
+                }
+                if (rt_timer_is_tick(&msg)) {
+                    uint64_t elapsed = time_ms() - start;
+                    printf("    Timer tick %d received at %lu ms\n", received + 1, (unsigned long)elapsed);
+                    received++;
+                }
+            }
+
+            if (received == 3) {
+                TEST_PASS("all 3 timers fired");
+            } else {
+                printf("    Only received %d/3 timer ticks\n", received);
+                TEST_FAIL("not all timers fired");
+            }
+        }
+    }
+
+    // ========================================================================
+    // Test 9: Cancel periodic timer
+    // ========================================================================
+    printf("\nTest 9: Cancel periodic timer\n");
+    {
+        timer_id timer;
+        rt_status status = rt_timer_every(30000, &timer);  // 30ms interval
+        if (RT_FAILED(status)) {
+            TEST_FAIL("rt_timer_every failed");
+        } else {
+            // Try to receive some ticks
+            int ticks = 0;
+            for (int i = 0; i < 3; i++) {
+                rt_message msg;
+                status = rt_ipc_recv(&msg, 100);  // 100ms timeout
+                if (!RT_FAILED(status) && rt_timer_is_tick(&msg)) {
+                    ticks++;
+                }
+            }
+
+            // Cancel the timer
+            status = rt_timer_cancel(timer);
+            if (RT_FAILED(status)) {
+                TEST_FAIL("rt_timer_cancel failed");
+            } else {
+                // Wait and ensure no more ticks arrive
+                rt_message msg;
+                status = rt_ipc_recv(&msg, 100);  // 100ms
+
+                if (status.code == RT_ERR_TIMEOUT) {
+                    printf("    Received %d ticks before cancel, then stopped\n", ticks);
+                    TEST_PASS("periodic timer stops after cancel");
+                } else if (!RT_FAILED(status) && rt_timer_is_tick(&msg)) {
+                    TEST_FAIL("received tick after cancel");
+                } else {
+                    TEST_PASS("periodic timer stops after cancel");
+                }
+            }
+        }
+    }
+
     printf("\n=== Results ===\n");
     printf("Passed: %d\n", tests_passed);
     printf("Failed: %d\n", tests_failed);
