@@ -184,8 +184,8 @@ rt_timer_cancel(periodic);
 // File operations
 int fd;
 rt_file_open("test.txt", O_RDWR | O_CREAT, 0644, &fd);
-rt_file_write(fd, data, len, &written);
-rt_file_read(fd, buffer, sizeof(buffer), &nread);
+rt_file_write(fd, data, len, &written, -1);
+rt_file_read(fd, buffer, sizeof(buffer), &nread, -1);
 rt_file_close(fd);
 
 // Network server

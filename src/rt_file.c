@@ -34,6 +34,7 @@ typedef enum {
 typedef struct {
     file_op_type op;
     actor_id     requester;
+    int32_t      timeout_ms;
 
     // Operation-specific data
     union {
@@ -320,13 +321,14 @@ rt_status rt_file_close(int fd) {
     return submit_and_block(&req);
 }
 
-rt_status rt_file_read(int fd, void *buf, size_t len, size_t *actual) {
+rt_status rt_file_read(int fd, void *buf, size_t len, size_t *actual, int32_t timeout_ms) {
     if (!buf || !actual) {
         return RT_ERROR(RT_ERR_INVALID, "Invalid arguments");
     }
 
     file_request req = {
         .op = FILE_OP_READ,
+        .timeout_ms = timeout_ms,
         .data.rw = {
             .fd = fd,
             .buf = buf,
@@ -344,13 +346,14 @@ rt_status rt_file_read(int fd, void *buf, size_t len, size_t *actual) {
     return RT_SUCCESS;
 }
 
-rt_status rt_file_pread(int fd, void *buf, size_t len, size_t offset, size_t *actual) {
+rt_status rt_file_pread(int fd, void *buf, size_t len, size_t offset, size_t *actual, int32_t timeout_ms) {
     if (!buf || !actual) {
         return RT_ERROR(RT_ERR_INVALID, "Invalid arguments");
     }
 
     file_request req = {
         .op = FILE_OP_PREAD,
+        .timeout_ms = timeout_ms,
         .data.rw = {
             .fd = fd,
             .buf = buf,
@@ -369,13 +372,14 @@ rt_status rt_file_pread(int fd, void *buf, size_t len, size_t offset, size_t *ac
     return RT_SUCCESS;
 }
 
-rt_status rt_file_write(int fd, const void *buf, size_t len, size_t *actual) {
+rt_status rt_file_write(int fd, const void *buf, size_t len, size_t *actual, int32_t timeout_ms) {
     if (!buf || !actual) {
         return RT_ERROR(RT_ERR_INVALID, "Invalid arguments");
     }
 
     file_request req = {
         .op = FILE_OP_WRITE,
+        .timeout_ms = timeout_ms,
         .data.rw = {
             .fd = fd,
             .buf = (void *)buf,  // Cast away const for union
@@ -393,13 +397,14 @@ rt_status rt_file_write(int fd, const void *buf, size_t len, size_t *actual) {
     return RT_SUCCESS;
 }
 
-rt_status rt_file_pwrite(int fd, const void *buf, size_t len, size_t offset, size_t *actual) {
+rt_status rt_file_pwrite(int fd, const void *buf, size_t len, size_t offset, size_t *actual, int32_t timeout_ms) {
     if (!buf || !actual) {
         return RT_ERROR(RT_ERR_INVALID, "Invalid arguments");
     }
 
     file_request req = {
         .op = FILE_OP_PWRITE,
+        .timeout_ms = timeout_ms,
         .data.rw = {
             .fd = fd,
             .buf = (void *)buf,  // Cast away const for union
@@ -418,9 +423,10 @@ rt_status rt_file_pwrite(int fd, const void *buf, size_t len, size_t offset, siz
     return RT_SUCCESS;
 }
 
-rt_status rt_file_sync(int fd) {
+rt_status rt_file_sync(int fd, int32_t timeout_ms) {
     file_request req = {
         .op = FILE_OP_SYNC,
+        .timeout_ms = timeout_ms,
         .data.sync.fd = fd
     };
 
