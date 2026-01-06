@@ -850,12 +850,13 @@ Actor A: rt_ipc_send(B, &data, len, IPC_SYNC);  // Blocks until B releases
 
 If receiver crashes or exits without releasing:
 - Sender is automatically unblocked during receiver's actor cleanup
-- `rt_ipc_send()` returns `RT_SUCCESS` when unblocked due to receiver death
+- `rt_ipc_send()` returns `RT_ERR_CLOSED` (receiver death is not success)
+- If sender is unblocked because receiver released normally: returns `RT_SUCCESS`
 - Message data is no longer referenced by receiver
 - Principle of least surprise: sender is not stuck forever
 - **Important:** Sender does NOT receive notification of receiver death (unless explicitly linked/monitoring)
 
-**Semantic note:** IPC_SYNC unblocking due to receiver death does NOT imply successful processing. The sender has no way to know if the receiver crashed. If the sender requires confirmation that the message was processed, it must use an explicit acknowledgment message (e.g., receiver sends reply after processing).
+**Semantic note:** Even on `RT_SUCCESS` (normal release), there is no guarantee the receiver processed the message. If the sender requires confirmation that the message was processed, it must use an explicit acknowledgment protocol (e.g., receiver sends reply after processing).
 
 Best practice: Design actors to always release sync messages, but receiver crashes are handled gracefully.
 

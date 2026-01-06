@@ -132,13 +132,15 @@ rt_status rt_ipc_send(actor_id to, const void *data, size_t len, rt_ipc_mode mod
         // Block sender until receiver releases
         sender->waiting_for_release = true;
         sender->blocked_on_actor = to;
+        sender->io_status = RT_SUCCESS;  // Assume success, will be overridden if receiver dies
         sender->state = ACTOR_STATE_BLOCKED;
 
         // Yield to scheduler
         rt_scheduler_yield();
 
-        // When we return here, the message has been released
-        return RT_SUCCESS;
+        // When we return here, the message has been released (or receiver died)
+        // Return status set by either rt_ipc_release() (RT_SUCCESS) or receiver death (RT_ERR_CLOSED)
+        return sender->io_status;
     }
 }
 

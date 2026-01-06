@@ -288,9 +288,10 @@ void rt_actor_free(actor *a) {
             // This is a SYNC message - unblock the sender
             actor *sender = rt_actor_get(a->active_msg->sender);
             if (sender && sender->waiting_for_release && sender->blocked_on_actor == a->id) {
-                // Receiver died - unblock sender (principle of least surprise)
+                // Receiver died - unblock sender with RT_ERR_CLOSED
                 sender->waiting_for_release = false;
                 sender->blocked_on_actor = ACTOR_ID_INVALID;
+                sender->io_status = RT_ERROR(RT_ERR_CLOSED, "Receiver died without releasing");
                 sender->state = ACTOR_STATE_READY;
             }
         }

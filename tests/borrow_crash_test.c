@@ -26,11 +26,13 @@ void sender_actor(void *arg) {
     rt_status status = rt_ipc_send(receiver, data, sizeof(data), IPC_SYNC);
 
     // If we reach here, we were unblocked
-    if (!RT_FAILED(status)) {
-        printf("Sender: PASS - Send returned normally after receiver crash\n");
-        printf("Sender: Sender was automatically unblocked (principle of least surprise)\n");
+    if (status.code == RT_ERR_CLOSED) {
+        printf("Sender: PASS - Send returned RT_ERR_CLOSED after receiver crash\n");
+        printf("Sender: Receiver death is correctly reported as failure, not success\n");
+    } else if (!RT_FAILED(status)) {
+        printf("Sender: FAIL - Send returned RT_SUCCESS (should be RT_ERR_CLOSED)\n");
     } else {
-        printf("Sender: FAIL - Send returned error: %s\n", status.msg);
+        printf("Sender: FAIL - Send returned unexpected error: %s\n", status.msg);
     }
 
     printf("\nSender: Test complete - receiver crash handled gracefully\n");
@@ -53,8 +55,8 @@ int main(void) {
     rt_cleanup();
 
     printf("\n=== Test Complete ===\n");
-    printf("Expected: Sender unblocked when receiver crashed\n");
-    printf("Result: PASS - Sender returned from rt_ipc_send()\n");
+    printf("Expected: Sender unblocked with RT_ERR_CLOSED when receiver crashed\n");
+    printf("Result: PASS - Sender returned RT_ERR_CLOSED (not RT_SUCCESS)\n");
 
     return 0;
 }
