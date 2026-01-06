@@ -161,10 +161,8 @@ static rt_status create_timer(uint32_t interval_us, bool periodic, timer_id *out
         return RT_ERROR(RT_ERR_INVALID, "Timer subsystem not initialized");
     }
 
+    RT_REQUIRE_ACTOR_CONTEXT();
     actor *current = rt_actor_current();
-    if (!current) {
-        return RT_ERROR(RT_ERR_INVALID, "Not called from actor context");
-    }
 
     // Create timerfd
     int tfd = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK);

@@ -339,10 +339,8 @@ rt_status rt_bus_subscribe(bus_id id) {
         return RT_ERROR(RT_ERR_INVALID, "Bus not found");
     }
 
+    RT_REQUIRE_ACTOR_CONTEXT();
     actor *current = rt_actor_current();
-    if (!current) {
-        return RT_ERROR(RT_ERR_INVALID, "Not called from actor context");
-    }
 
     // Check if already subscribed
     if (find_subscriber(bus, current->id) >= 0) {
@@ -380,10 +378,8 @@ rt_status rt_bus_unsubscribe(bus_id id) {
         return RT_ERROR(RT_ERR_INVALID, "Bus not found");
     }
 
+    RT_REQUIRE_ACTOR_CONTEXT();
     actor *current = rt_actor_current();
-    if (!current) {
-        return RT_ERROR(RT_ERR_INVALID, "Not called from actor context");
-    }
 
     int sub_idx = find_subscriber(bus, current->id);
     if (sub_idx < 0) {
@@ -409,10 +405,8 @@ rt_status rt_bus_read(bus_id id, void *buf, size_t max_len, size_t *actual_len) 
         return RT_ERROR(RT_ERR_INVALID, "Bus not found");
     }
 
+    RT_REQUIRE_ACTOR_CONTEXT();
     actor *current = rt_actor_current();
-    if (!current) {
-        return RT_ERROR(RT_ERR_INVALID, "Not called from actor context");
-    }
 
     int sub_idx = find_subscriber(bus, current->id);
     if (sub_idx < 0) {

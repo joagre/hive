@@ -61,6 +61,49 @@ void rt_mailbox_add_entry(actor *recipient, mailbox_entry *entry) {
     }
 }
 
+// Internal helper: Free a mailbox entry and its associated data buffers
+void rt_ipc_free_entry(mailbox_entry *entry) {
+    if (!entry) {
+        return;
+    }
+    // Free sync buffer if SYNC mode
+    if (entry->sync_ptr) {
+        message_data_entry *sync_data = DATA_TO_MSG_ENTRY(entry->sync_ptr);
+        rt_pool_free(&g_sync_pool_mgr, sync_data);
+    }
+    // Free ASYNC buffer if ASYNC mode
+    if (entry->data) {
+        message_data_entry *msg_data = DATA_TO_MSG_ENTRY(entry->data);
+        rt_pool_free(&g_message_pool_mgr, msg_data);
+    }
+    rt_pool_free(&g_mailbox_pool_mgr, entry);
+}
+
+// Internal helper: Unblock a sender waiting for IPC_SYNC release
+void rt_ipc_unblock_sender(actor_id sender_id, actor_id receiver_id) {
+    actor *sender = rt_actor_get(sender_id);
+    if (sender && sender->waiting_for_release && sender->blocked_on_actor == receiver_id) {
+        sender->waiting_for_release = false;
+        sender->blocked_on_actor = ACTOR_ID_INVALID;
+        sender->state = ACTOR_STATE_READY;
+    }
+}
+
+// Internal helper: Dequeue the head entry from an actor's mailbox
+mailbox_entry *rt_ipc_dequeue_head(actor *a) {
+    if (!a || !a->mbox.head) {
+        return NULL;
+    }
+    mailbox_entry *entry = a->mbox.head;
+    a->mbox.head = entry->next;
+    if (a->mbox.head == NULL) {
+        a->mbox.tail = NULL;
+    }
+    a->mbox.count--;
+    entry->next = NULL;
+    return entry;
+}
+
 // Internal helper: Check for timeout message and handle it
 rt_status rt_mailbox_handle_timeout(actor *current, timer_id timeout_timer, const char *operation) {
     if (timeout_timer == TIMER_ID_INVALID) {
@@ -69,21 +112,9 @@ rt_status rt_mailbox_handle_timeout(actor *current, timer_id timeout_timer, cons
 
     // Check if first message in mailbox is timer tick
     if (current->mbox.head && current->mbox.head->sender == RT_SENDER_TIMER) {
-        // Timeout occurred - dequeue timer message
-        mailbox_entry *entry = current->mbox.head;
-        current->mbox.head = entry->next;
-        if (current->mbox.head == NULL) {
-            current->mbox.tail = NULL;
-        }
-        current->mbox.count--;
-
-        // Free timer message resources
-        if (entry->data) {
-            message_data_entry *msg_data = DATA_TO_MSG_ENTRY(entry->data);
-            rt_pool_free(&g_message_pool_mgr, msg_data);
-        }
-        rt_pool_free(&g_mailbox_pool_mgr, entry);
-
+        // Timeout occurred - dequeue and free timer message
+        mailbox_entry *entry = rt_ipc_dequeue_head(current);
+        rt_ipc_free_entry(entry);
         return RT_ERROR(RT_ERR_TIMEOUT, operation);
     } else {
         // I/O completed before timeout - cancel timer
@@ -93,10 +124,8 @@ rt_status rt_mailbox_handle_timeout(actor *current, timer_id timeout_timer, cons
 }
 
 rt_status rt_ipc_send(actor_id to, const void *data, size_t len, rt_ipc_mode mode) {
+    RT_REQUIRE_ACTOR_CONTEXT();
     actor *sender = rt_actor_current();
-    if (!sender) {
-        return RT_ERROR(RT_ERR_INVALID, "Not called from actor context");
-    }
 
     actor *receiver = rt_actor_get(to);
     if (!receiver) {
@@ -171,10 +200,8 @@ rt_status rt_ipc_send(actor_id to, const void *data, size_t len, rt_ipc_mode mod
 }
 
 rt_status rt_ipc_recv(rt_message *msg, int32_t timeout_ms) {
+    RT_REQUIRE_ACTOR_CONTEXT();
     actor *current = rt_actor_current();
-    if (!current) {
-        return RT_ERROR(RT_ERR_INVALID, "Not called from actor context");
-    }
 
     RT_LOG_TRACE("IPC recv: actor %u checking mailbox (count=%zu)", current->id, current->mbox.count);
 
@@ -229,35 +256,16 @@ rt_status rt_ipc_recv(rt_message *msg, int32_t timeout_ms) {
 
     // Free previous active message if any (auto-release for SYNC)
     if (current->active_msg) {
-        // If previous message was SYNC, unblock sender and free sync buffer
+        // If previous message was SYNC, unblock sender
         if (current->active_msg->sync_ptr) {
-            actor *sender = rt_actor_get(current->active_msg->sender);
-            if (sender && sender->waiting_for_release && sender->blocked_on_actor == current->id) {
-                sender->waiting_for_release = false;
-                sender->blocked_on_actor = ACTOR_ID_INVALID;
-                sender->state = ACTOR_STATE_READY;
-            }
-            // Free sync buffer from sync pool
-            message_data_entry *sync_data = DATA_TO_MSG_ENTRY(current->active_msg->sync_ptr);
-            rt_pool_free(&g_sync_pool_mgr, sync_data);
+            rt_ipc_unblock_sender(current->active_msg->sender, current->id);
         }
-
-        // Free ASYNC message data from pool
-        if (current->active_msg->data) {
-            message_data_entry *msg_data = DATA_TO_MSG_ENTRY(current->active_msg->data);
-            rt_pool_free(&g_message_pool_mgr, msg_data);
-        }
-        rt_pool_free(&g_mailbox_pool_mgr, current->active_msg);
+        rt_ipc_free_entry(current->active_msg);
         current->active_msg = NULL;
     }
 
     // Dequeue message
-    mailbox_entry *entry = current->mbox.head;
-    current->mbox.head = entry->next;
-    if (current->mbox.head == NULL) {
-        current->mbox.tail = NULL;
-    }
-    current->mbox.count--;
+    mailbox_entry *entry = rt_ipc_dequeue_head(current);
 
     // Fill in message structure
     msg->sender = entry->sender;
@@ -280,28 +288,12 @@ void rt_ipc_release(const rt_message *msg) {
         return;
     }
 
-    // Find the sender if this was a synced message
-    actor *sender = rt_actor_get(msg->sender);
-    if (sender && sender->waiting_for_release && sender->blocked_on_actor == current->id) {
-        // Unblock sender
-        sender->waiting_for_release = false;
-        sender->blocked_on_actor = ACTOR_ID_INVALID;
-        sender->state = ACTOR_STATE_READY;
-    }
+    // Unblock sender if this was a synced message
+    rt_ipc_unblock_sender(msg->sender, current->id);
 
     // Free the active message
     if (current->active_msg) {
-        // Free sync buffer if SYNC mode
-        if (current->active_msg->sync_ptr) {
-            message_data_entry *sync_data = DATA_TO_MSG_ENTRY(current->active_msg->sync_ptr);
-            rt_pool_free(&g_sync_pool_mgr, sync_data);
-        }
-        // Free ASYNC buffer if ASYNC mode
-        if (current->active_msg->data) {
-            message_data_entry *msg_data = DATA_TO_MSG_ENTRY(current->active_msg->data);
-            rt_pool_free(&g_message_pool_mgr, msg_data);
-        }
-        rt_pool_free(&g_mailbox_pool_mgr, current->active_msg);
+        rt_ipc_free_entry(current->active_msg);
         current->active_msg = NULL;
     }
 }
@@ -331,17 +323,7 @@ void rt_ipc_mailbox_clear(mailbox *mbox) {
     mailbox_entry *entry = mbox->head;
     while (entry) {
         mailbox_entry *next = entry->next;
-        // Free sync buffer if SYNC mode
-        if (entry->sync_ptr) {
-            message_data_entry *sync_data = DATA_TO_MSG_ENTRY(entry->sync_ptr);
-            rt_pool_free(&g_sync_pool_mgr, sync_data);
-        }
-        // Free ASYNC buffer if ASYNC mode
-        if (entry->data) {
-            message_data_entry *msg_data = DATA_TO_MSG_ENTRY(entry->data);
-            rt_pool_free(&g_message_pool_mgr, msg_data);
-        }
-        rt_pool_free(&g_mailbox_pool_mgr, entry);
+        rt_ipc_free_entry(entry);
         entry = next;
     }
     mbox->head = NULL;
@@ -350,20 +332,7 @@ void rt_ipc_mailbox_clear(mailbox *mbox) {
 }
 
 // Free an active message entry (called during actor cleanup)
+// Note: This is now just a wrapper around rt_ipc_free_entry for API compatibility
 void rt_ipc_free_active_msg(mailbox_entry *entry) {
-    if (!entry) {
-        return;
-    }
-
-    // Free sync buffer if SYNC mode
-    if (entry->sync_ptr) {
-        message_data_entry *sync_data = DATA_TO_MSG_ENTRY(entry->sync_ptr);
-        rt_pool_free(&g_sync_pool_mgr, sync_data);
-    }
-    // Free ASYNC buffer if ASYNC mode
-    if (entry->data) {
-        message_data_entry *msg_data = DATA_TO_MSG_ENTRY(entry->data);
-        rt_pool_free(&g_message_pool_mgr, msg_data);
-    }
-    rt_pool_free(&g_mailbox_pool_mgr, entry);
+    rt_ipc_free_entry(entry);
 }

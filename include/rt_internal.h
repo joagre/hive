@@ -40,6 +40,15 @@ typedef struct {
         } \
     } while(0)
 
+// Actor context requirement macro - returns error if not in actor context
+// Used by: IPC, link, bus, timer, network APIs
+#define RT_REQUIRE_ACTOR_CONTEXT() \
+    do { \
+        if (!rt_actor_current()) { \
+            return RT_ERROR(RT_ERR_INVALID, "Not called from actor context"); \
+        } \
+    } while(0)
+
 // Internal helper functions (implemented in rt_ipc.c)
 
 // Add mailbox entry to actor's mailbox and wake if blocked
@@ -50,6 +59,19 @@ void rt_mailbox_add_entry(actor *recipient, mailbox_entry *entry);
 // Returns RT_ERR_TIMEOUT if timeout occurred, otherwise cancels timer and returns RT_SUCCESS
 // Used by: IPC recv, network I/O
 rt_status rt_mailbox_handle_timeout(actor *current, timer_id timeout_timer, const char *operation);
+
+// Free a mailbox entry and its associated data buffers (sync and/or async)
+// Used by: IPC recv, release, mailbox clear, actor cleanup
+void rt_ipc_free_entry(mailbox_entry *entry);
+
+// Unblock a sender that was waiting for IPC_SYNC release
+// Used by: IPC recv (auto-release), IPC release, actor cleanup
+void rt_ipc_unblock_sender(actor_id sender_id, actor_id receiver_id);
+
+// Dequeue the head entry from an actor's mailbox
+// Returns NULL if mailbox is empty
+// Used by: IPC recv, timeout handling
+mailbox_entry *rt_ipc_dequeue_head(actor *a);
 
 // Event loop handlers (called by scheduler when I/O sources become ready)
 

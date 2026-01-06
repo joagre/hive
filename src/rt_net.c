@@ -172,10 +172,8 @@ void rt_net_cleanup(void) {
 // Helper: Try non-blocking I/O, add to epoll if would block
 static rt_status try_or_epoll(int fd, uint32_t epoll_events, int operation,
                                void *buf, size_t len, int32_t timeout_ms) {
+    RT_REQUIRE_ACTOR_CONTEXT();
     actor *current = rt_actor_current();
-    if (!current) {
-        return RT_ERROR(RT_ERR_INVALID, "Not called from actor context");
-    }
 
     // Create timeout timer if needed
     timer_id timeout_timer = TIMER_ID_INVALID;
@@ -284,10 +282,8 @@ rt_status rt_net_accept(int listen_fd, int *conn_fd_out, int32_t timeout_ms) {
         return RT_ERROR(RT_ERR_INVALID, "Network I/O subsystem not initialized");
     }
 
+    RT_REQUIRE_ACTOR_CONTEXT();
     actor *current = rt_actor_current();
-    if (!current) {
-        return RT_ERROR(RT_ERR_INVALID, "Not called from actor context");
-    }
 
     // Try immediate accept with non-blocking
     struct sockaddr_in client_addr;
@@ -326,10 +322,8 @@ rt_status rt_net_connect(const char *host, uint16_t port, int *fd_out, int32_t t
         return RT_ERROR(RT_ERR_INVALID, "Network I/O subsystem not initialized");
     }
 
+    RT_REQUIRE_ACTOR_CONTEXT();
     actor *current = rt_actor_current();
-    if (!current) {
-        return RT_ERROR(RT_ERR_INVALID, "Not called from actor context");
-    }
 
     // Resolve hostname
     struct hostent *server = gethostbyname(host);
@@ -392,10 +386,8 @@ rt_status rt_net_recv(int fd, void *buf, size_t len, size_t *received, int32_t t
         return RT_ERROR(RT_ERR_INVALID, "Network I/O subsystem not initialized");
     }
 
+    RT_REQUIRE_ACTOR_CONTEXT();
     actor *current = rt_actor_current();
-    if (!current) {
-        return RT_ERROR(RT_ERR_INVALID, "Not called from actor context");
-    }
 
     // Try immediate non-blocking recv
     ssize_t n = recv(fd, buf, len, MSG_DONTWAIT);
@@ -430,10 +422,8 @@ rt_status rt_net_send(int fd, const void *buf, size_t len, size_t *sent, int32_t
         return RT_ERROR(RT_ERR_INVALID, "Network I/O subsystem not initialized");
     }
 
+    RT_REQUIRE_ACTOR_CONTEXT();
     actor *current = rt_actor_current();
-    if (!current) {
-        return RT_ERROR(RT_ERR_INVALID, "Not called from actor context");
-    }
 
     // Try immediate non-blocking send
     ssize_t n = send(fd, buf, len, MSG_DONTWAIT);

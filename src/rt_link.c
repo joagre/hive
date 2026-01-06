@@ -88,10 +88,8 @@ static bool is_already_linked(actor *a, actor_id target_id) {
 
 // Create bidirectional link
 rt_status rt_link(actor_id target_id) {
+    RT_REQUIRE_ACTOR_CONTEXT();
     actor *current = rt_actor_current();
-    if (!current) {
-        return RT_ERROR(RT_ERR_INVALID, "Not called from actor context");
-    }
 
     // Check for self-linking
     if (current->id == target_id) {
@@ -138,10 +136,8 @@ rt_status rt_link(actor_id target_id) {
 
 // Remove bidirectional link
 rt_status rt_unlink(actor_id target_id) {
+    RT_REQUIRE_ACTOR_CONTEXT();
     actor *current = rt_actor_current();
-    if (!current) {
-        return RT_ERROR(RT_ERR_INVALID, "Not called from actor context");
-    }
 
     // Remove from current actor's link list
     link_entry **prev = &current->links;
@@ -190,10 +186,8 @@ rt_status rt_monitor(actor_id target_id, uint32_t *monitor_ref) {
         return RT_ERROR(RT_ERR_INVALID, "Invalid monitor_ref pointer");
     }
 
+    RT_REQUIRE_ACTOR_CONTEXT();
     actor *current = rt_actor_current();
-    if (!current) {
-        return RT_ERROR(RT_ERR_INVALID, "Not called from actor context");
-    }
 
     // Check for self-monitoring
     if (current->id == target_id) {
@@ -227,10 +221,8 @@ rt_status rt_monitor(actor_id target_id, uint32_t *monitor_ref) {
 
 // Remove unidirectional monitor
 rt_status rt_demonitor(uint32_t monitor_ref) {
+    RT_REQUIRE_ACTOR_CONTEXT();
     actor *current = rt_actor_current();
-    if (!current) {
-        return RT_ERROR(RT_ERR_INVALID, "Not called from actor context");
-    }
 
     // Find and remove monitor entry
     monitor_entry **prev = &current->monitors;
