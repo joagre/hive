@@ -607,6 +607,67 @@ static void test11_subscribe_destroyed_bus(void *arg) {
 }
 
 // ============================================================================
+// Test 12: Buffer overflow protection (read with undersized buffer)
+// ============================================================================
+
+static void test12_buffer_overflow_protection(void *arg) {
+    (void)arg;
+    printf("\nTest 12: Buffer overflow protection\n");
+    fflush(stdout);
+
+    rt_bus_config cfg = RT_BUS_CONFIG_DEFAULT;
+    bus_id bus;
+    rt_status status = rt_bus_create(&cfg, &bus);
+    if (RT_FAILED(status)) {
+        TEST_FAIL("rt_bus_create");
+        rt_exit();
+    }
+
+    status = rt_bus_subscribe(bus);
+    if (RT_FAILED(status)) {
+        TEST_FAIL("rt_bus_subscribe");
+        rt_bus_destroy(bus);
+        rt_exit();
+    }
+
+    // Publish a large message
+    char large_msg[128];
+    memset(large_msg, 'X', sizeof(large_msg));
+    large_msg[127] = '\0';
+
+    status = rt_bus_publish(bus, large_msg, sizeof(large_msg));
+    if (RT_FAILED(status)) {
+        TEST_FAIL("rt_bus_publish large message");
+        rt_bus_unsubscribe(bus);
+        rt_bus_destroy(bus);
+        rt_exit();
+    }
+
+    // Try to read with undersized buffer - should not overflow
+    char small_buf[16];
+    memset(small_buf, 0, sizeof(small_buf));
+    size_t actual_len = 0;
+
+    status = rt_bus_read(bus, small_buf, sizeof(small_buf), &actual_len);
+
+    // Check that we didn't overflow (buffer should be intact beyond our small_buf)
+    // The implementation should either truncate or return error
+    if (RT_FAILED(status)) {
+        TEST_PASS("rt_bus_read rejects undersized buffer");
+    } else if (actual_len <= sizeof(small_buf)) {
+        TEST_PASS("rt_bus_read truncates to buffer size");
+    } else {
+        printf("    actual_len=%zu, buffer=%zu - possible overflow!\n",
+               actual_len, sizeof(small_buf));
+        TEST_FAIL("buffer overflow not prevented");
+    }
+
+    rt_bus_unsubscribe(bus);
+    rt_bus_destroy(bus);
+    rt_exit();
+}
+
+// ============================================================================
 // Test runner
 // ============================================================================
 
@@ -622,6 +683,7 @@ static void (*test_funcs[])(void *) = {
     test9_max_age_expiry,
     test10_entry_count,
     test11_subscribe_destroyed_bus,
+    test12_buffer_overflow_protection,
 };
 
 #define NUM_TESTS (sizeof(test_funcs) / sizeof(test_funcs[0]))

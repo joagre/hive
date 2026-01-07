@@ -132,6 +132,11 @@ rt_status rt_ipc_send(actor_id to, const void *data, size_t len, rt_ipc_mode mod
     RT_REQUIRE_ACTOR_CONTEXT();
     actor *sender = rt_actor_current();
 
+    // Validate data pointer - NULL with len > 0 would cause memcpy crash
+    if (data == NULL && len > 0) {
+        return RT_ERROR(RT_ERR_INVALID, "NULL data with non-zero length");
+    }
+
     actor *receiver = rt_actor_get(to);
     if (!receiver) {
         return RT_ERROR(RT_ERR_INVALID, "Invalid receiver actor ID");

@@ -703,6 +703,84 @@ static void test15_sync_pool_exhaustion(void *arg) {
 }
 
 // ============================================================================
+// Test 16: NULL pointer handling - rt_ipc_send with NULL data (non-zero len)
+// ============================================================================
+
+static void test16_null_data_send(void *arg) {
+    (void)arg;
+    printf("\nTest 16: NULL data pointer with non-zero length\n");
+    fflush(stdout);
+
+    actor_id self = rt_self();
+
+    // Sending NULL data with len > 0 should fail or be handled safely
+    rt_status status = rt_ipc_send(self, NULL, 10, IPC_ASYNC);
+    if (RT_FAILED(status)) {
+        TEST_PASS("rt_ipc_send rejects NULL data with non-zero length");
+    } else {
+        // If it succeeded, the implementation might handle it - drain the message
+        rt_message msg;
+        rt_ipc_recv(&msg, 0);
+        TEST_PASS("rt_ipc_send handles NULL data gracefully");
+    }
+
+    rt_exit();
+}
+
+// ============================================================================
+// Test 17: Mailbox integrity after many spawn/death cycles (leak test)
+// ============================================================================
+
+static void short_lived_actor(void *arg) {
+    actor_id parent = *(actor_id *)arg;
+    // Send a message then die
+    int data = 42;
+    rt_ipc_send(parent, &data, sizeof(data), IPC_ASYNC);
+    rt_exit();
+}
+
+static void test17_spawn_death_cycle_leak(void *arg) {
+    (void)arg;
+    printf("\nTest 17: Mailbox integrity after spawn/death cycles\n");
+    fflush(stdout);
+
+    actor_id self = rt_self();
+    int cycles = 50;  // 50 spawn/death cycles
+    int messages_received = 0;
+
+    for (int i = 0; i < cycles; i++) {
+        actor_config cfg = RT_ACTOR_CONFIG_DEFAULT;
+        cfg.malloc_stack = true;
+        cfg.stack_size = 8 * 1024;
+
+        actor_id child = rt_spawn_ex(short_lived_actor, &self, &cfg);
+        if (child == ACTOR_ID_INVALID) {
+            printf("    Spawn failed at cycle %d\n", i);
+            break;
+        }
+
+        // Wait for message from child
+        rt_message msg;
+        rt_status status = rt_ipc_recv(&msg, 500);
+        if (!RT_FAILED(status)) {
+            messages_received++;
+        }
+
+        // Yield to let child fully exit
+        rt_yield();
+    }
+
+    if (messages_received == cycles) {
+        TEST_PASS("no mailbox leaks after spawn/death cycles");
+    } else {
+        printf("    Only %d/%d messages received\n", messages_received, cycles);
+        TEST_FAIL("possible mailbox leak or message loss");
+    }
+
+    rt_exit();
+}
+
+// ============================================================================
 // Test runner
 // ============================================================================
 
@@ -722,6 +800,8 @@ static void (*test_funcs[])(void *) = {
     test13_zero_length_message,
     test14_sync_to_dead_actor,
     test15_sync_pool_exhaustion,
+    test16_null_data_send,
+    test17_spawn_death_cycle_leak,
 };
 
 #define NUM_TESTS (sizeof(test_funcs) / sizeof(test_funcs[0]))

@@ -355,6 +355,42 @@ static void run_timer_tests(void *arg) {
         }
     }
 
+    // ========================================================================
+    // Test 12: Zero-interval periodic timer (should be handled safely)
+    // ========================================================================
+    printf("\nTest 12: Zero-interval periodic timer\n");
+    {
+        timer_id timer;
+
+        // A zero-interval periodic timer could fire very fast
+        // It should either be rejected or treated as minimum interval
+        rt_status status = rt_timer_every(0, &timer);
+
+        if (RT_FAILED(status)) {
+            TEST_PASS("rt_timer_every(0) is rejected");
+        } else {
+            // If accepted, it should fire but not overwhelm the system
+            // Receive a few ticks and cancel immediately
+            int ticks = 0;
+            for (int i = 0; i < 5; i++) {
+                rt_message msg;
+                status = rt_ipc_recv(&msg, 10);  // 10ms timeout
+                if (!RT_FAILED(status) && rt_timer_is_tick(&msg)) {
+                    ticks++;
+                }
+            }
+
+            rt_timer_cancel(timer);
+
+            if (ticks > 0) {
+                printf("    Zero-interval timer fired %d times in 50ms\n", ticks);
+                TEST_PASS("rt_timer_every(0) handled safely");
+            } else {
+                TEST_FAIL("zero-interval timer created but never fired");
+            }
+        }
+    }
+
     printf("\n=== Results ===\n");
     printf("Passed: %d\n", tests_passed);
     printf("Failed: %d\n", tests_failed);

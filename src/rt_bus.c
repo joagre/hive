@@ -463,10 +463,10 @@ rt_status rt_bus_read(bus_id id, void *buf, size_t max_len, size_t *actual_len) 
         return RT_ERROR(RT_ERR_WOULDBLOCK, "No data available");
     }
 
-    // Copy data
+    // Copy data (truncate to buffer size to prevent overflow)
     size_t copy_len = entry->len < max_len ? entry->len : max_len;
     memcpy(buf, entry->data, copy_len);
-    *actual_len = entry->len;
+    *actual_len = copy_len;  // Return actual bytes copied, not original length
 
     // Mark as read by this subscriber
     entry->readers_mask |= (1u << sub_idx);
