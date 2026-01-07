@@ -1,6 +1,7 @@
 #include "rt_runtime.h"
 #include "rt_timer.h"
 #include "rt_ipc.h"
+#include "rt_static_config.h"
 #include <stdio.h>
 #include <time.h>
 
@@ -293,6 +294,63 @@ static void run_timer_tests(void *arg) {
                 } else {
                     TEST_PASS("periodic timer stops after cancel");
                 }
+            }
+        }
+    }
+
+    // ========================================================================
+    // Test 10: Timer pool exhaustion (RT_TIMER_ENTRY_POOL_SIZE=64)
+    // ========================================================================
+    printf("\nTest 10: Timer pool exhaustion (RT_TIMER_ENTRY_POOL_SIZE=%d)\n",
+           RT_TIMER_ENTRY_POOL_SIZE);
+    {
+        timer_id timers[RT_TIMER_ENTRY_POOL_SIZE + 10];
+        int created = 0;
+
+        // Create timers until pool exhaustion
+        for (int i = 0; i < RT_TIMER_ENTRY_POOL_SIZE + 10; i++) {
+            rt_status status = rt_timer_after(10000000, &timers[i]);  // 10 second delay (won't fire)
+            if (RT_FAILED(status)) {
+                printf("    Timer creation failed after %d timers (pool exhausted)\n", created);
+                break;
+            }
+            created++;
+        }
+
+        if (created < RT_TIMER_ENTRY_POOL_SIZE + 10) {
+            TEST_PASS("timer pool exhaustion detected");
+        } else {
+            printf("    Created all %d timers without exhaustion\n", created);
+            TEST_FAIL("expected timer pool to exhaust");
+        }
+
+        // Cancel all created timers
+        for (int i = 0; i < created; i++) {
+            rt_timer_cancel(timers[i]);
+        }
+    }
+
+    // ========================================================================
+    // Test 11: Minimal delay timer (1 microsecond)
+    // ========================================================================
+    printf("\nTest 11: Minimal delay timer (1us)\n");
+    {
+        timer_id timer;
+        uint64_t start = time_ms();
+
+        rt_status status = rt_timer_after(1, &timer);  // 1 microsecond delay
+        if (RT_FAILED(status)) {
+            TEST_FAIL("rt_timer_after(1) failed");
+        } else {
+            rt_message msg;
+            status = rt_ipc_recv(&msg, 100);  // 100ms timeout
+            uint64_t elapsed = time_ms() - start;
+
+            if (!RT_FAILED(status) && rt_timer_is_tick(&msg)) {
+                printf("    Minimal delay timer fired after %lu ms\n", (unsigned long)elapsed);
+                TEST_PASS("minimal delay timer fires quickly");
+            } else {
+                TEST_FAIL("minimal delay timer did not fire");
             }
         }
     }

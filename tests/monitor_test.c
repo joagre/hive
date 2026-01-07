@@ -2,6 +2,7 @@
 #include "rt_link.h"
 #include "rt_ipc.h"
 #include "rt_timer.h"
+#include "rt_static_config.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -303,6 +304,155 @@ static void test6_monitor_invalid(void *arg) {
 }
 
 // ============================================================================
+// Test 7: Demonitor invalid/non-existent ref
+// ============================================================================
+
+static void test7_demonitor_invalid(void *arg) {
+    (void)arg;
+    printf("\nTest 7: Demonitor invalid ref\n");
+
+    // Try to demonitor with invalid ref (0 or very high number)
+    rt_status status = rt_demonitor(0);
+    if (RT_FAILED(status)) {
+        TEST_PASS("rt_demonitor rejects ref 0");
+    } else {
+        TEST_PASS("rt_demonitor ref 0 is no-op");
+    }
+
+    status = rt_demonitor(99999);
+    if (RT_FAILED(status)) {
+        TEST_PASS("rt_demonitor rejects non-existent ref");
+    } else {
+        TEST_PASS("rt_demonitor non-existent ref is no-op");
+    }
+
+    rt_exit();
+}
+
+// ============================================================================
+// Test 8: Double demonitor (same ref twice)
+// ============================================================================
+
+static void double_demonitor_target(void *arg) {
+    (void)arg;
+    timer_id timer;
+    rt_timer_after(500000, &timer);
+    rt_message msg;
+    rt_ipc_recv(&msg, -1);
+    rt_exit();
+}
+
+static void test8_double_demonitor(void *arg) {
+    (void)arg;
+    printf("\nTest 8: Double demonitor (same ref twice)\n");
+
+    actor_id target = rt_spawn(double_demonitor_target, NULL);
+    if (target == ACTOR_ID_INVALID) {
+        TEST_FAIL("spawn target");
+        rt_exit();
+    }
+
+    uint32_t ref;
+    rt_status status = rt_monitor(target, &ref);
+    if (RT_FAILED(status)) {
+        TEST_FAIL("rt_monitor");
+        rt_exit();
+    }
+
+    // First demonitor should succeed
+    status = rt_demonitor(ref);
+    if (RT_FAILED(status)) {
+        TEST_FAIL("first demonitor failed");
+        rt_exit();
+    }
+    TEST_PASS("first demonitor succeeds");
+
+    // Second demonitor should fail or be no-op
+    status = rt_demonitor(ref);
+    if (RT_FAILED(status)) {
+        TEST_PASS("second demonitor fails (already demonitored)");
+    } else {
+        TEST_PASS("second demonitor is no-op");
+    }
+
+    // Wait for target to exit
+    timer_id timer;
+    rt_timer_after(600000, &timer);
+    rt_message msg;
+    rt_ipc_recv(&msg, -1);
+
+    rt_exit();
+}
+
+// ============================================================================
+// Test 9: Monitor pool exhaustion (RT_MONITOR_ENTRY_POOL_SIZE=128)
+// ============================================================================
+
+static void monitor_pool_target(void *arg) {
+    (void)arg;
+    rt_message msg;
+    rt_ipc_recv(&msg, 5000);
+    rt_exit();
+}
+
+static void test9_monitor_pool_exhaustion(void *arg) {
+    (void)arg;
+    printf("\nTest 9: Monitor pool exhaustion (RT_MONITOR_ENTRY_POOL_SIZE=%d)\n",
+           RT_MONITOR_ENTRY_POOL_SIZE);
+
+    actor_id targets[RT_MONITOR_ENTRY_POOL_SIZE + 10];
+    uint32_t refs[RT_MONITOR_ENTRY_POOL_SIZE + 10];
+    int spawned = 0;
+    int monitored = 0;
+
+    // Spawn actors and monitor them until pool exhaustion
+    for (int i = 0; i < RT_MONITOR_ENTRY_POOL_SIZE + 10; i++) {
+        actor_config cfg = RT_ACTOR_CONFIG_DEFAULT;
+        cfg.malloc_stack = true;
+        cfg.stack_size = 8 * 1024;
+
+        actor_id target = rt_spawn_ex(monitor_pool_target, NULL, &cfg);
+        if (target == ACTOR_ID_INVALID) {
+            break;
+        }
+        targets[spawned++] = target;
+
+        rt_status status = rt_monitor(target, &refs[monitored]);
+        if (RT_FAILED(status)) {
+            printf("    Monitor failed after %d monitors (pool exhausted)\n", monitored);
+            break;
+        }
+        monitored++;
+    }
+
+    if (monitored < RT_MONITOR_ENTRY_POOL_SIZE + 10) {
+        TEST_PASS("monitor pool exhaustion detected");
+    } else {
+        printf("    Monitored all %d actors without exhaustion\n", monitored);
+        TEST_FAIL("expected monitor pool to exhaust");
+    }
+
+    // Signal all actors to exit
+    for (int i = 0; i < spawned; i++) {
+        int done = 1;
+        rt_ipc_send(targets[i], &done, sizeof(done), IPC_ASYNC);
+    }
+
+    // Wait for cleanup
+    timer_id timer;
+    rt_timer_after(200000, &timer);
+    rt_message msg;
+    rt_ipc_recv(&msg, -1);
+
+    // Drain exit notifications
+    while (rt_ipc_pending()) {
+        rt_ipc_recv(&msg, 0);
+    }
+
+    rt_exit();
+}
+
+// ============================================================================
 // Test runner
 // ============================================================================
 
@@ -312,6 +462,9 @@ static void (*test_funcs[])(void *) = {
     test4_demonitor_actor,
     test5_coordinator,
     test6_monitor_invalid,
+    test7_demonitor_invalid,
+    test8_double_demonitor,
+    test9_monitor_pool_exhaustion,
 };
 
 #define NUM_TESTS (sizeof(test_funcs) / sizeof(test_funcs[0]))

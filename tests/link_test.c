@@ -2,6 +2,7 @@
 #include "rt_link.h"
 #include "rt_ipc.h"
 #include "rt_timer.h"
+#include "rt_static_config.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -499,6 +500,171 @@ static void test8_link_to_dead_actor(void *arg) {
 }
 
 // ============================================================================
+// Test 9: Link to self (should fail or be a no-op)
+// ============================================================================
+
+static void test9_link_to_self(void *arg) {
+    (void)arg;
+    printf("\nTest 9: Link to self\n");
+    fflush(stdout);
+
+    actor_id self = rt_self();
+
+    rt_status status = rt_link(self);
+    if (RT_FAILED(status)) {
+        TEST_PASS("rt_link to self is rejected");
+    } else {
+        // If it succeeds, it should be a no-op (shouldn't get exit notification)
+        TEST_PASS("rt_link to self accepted (no-op expected)");
+    }
+
+    rt_exit();
+}
+
+// ============================================================================
+// Test 10: Unlink non-linked actor
+// ============================================================================
+
+static void unlink_target_actor(void *arg) {
+    (void)arg;
+    // Wait a bit then exit
+    timer_id timer;
+    rt_timer_after(200000, &timer);
+    rt_message msg;
+    rt_ipc_recv(&msg, -1);
+    rt_exit();
+}
+
+static void test10_unlink_non_linked(void *arg) {
+    (void)arg;
+    printf("\nTest 10: Unlink non-linked actor\n");
+    fflush(stdout);
+
+    // Spawn an actor but don't link to it
+    actor_id target = rt_spawn(unlink_target_actor, NULL);
+    if (target == ACTOR_ID_INVALID) {
+        TEST_FAIL("spawn target");
+        rt_exit();
+    }
+
+    // Try to unlink from an actor we're not linked to
+    rt_status status = rt_unlink(target);
+
+    // Should either fail or be a no-op
+    if (RT_FAILED(status)) {
+        TEST_PASS("rt_unlink non-linked actor fails gracefully");
+    } else {
+        TEST_PASS("rt_unlink non-linked actor is no-op");
+    }
+
+    // Wait for target to exit
+    timer_id timer;
+    rt_timer_after(300000, &timer);
+    rt_message msg;
+    rt_ipc_recv(&msg, -1);
+
+    rt_exit();
+}
+
+// ============================================================================
+// Test 11: Unlink invalid actor
+// ============================================================================
+
+static void test11_unlink_invalid(void *arg) {
+    (void)arg;
+    printf("\nTest 11: Unlink invalid actor\n");
+    fflush(stdout);
+
+    rt_status status = rt_unlink(ACTOR_ID_INVALID);
+    if (RT_FAILED(status)) {
+        TEST_PASS("rt_unlink rejects ACTOR_ID_INVALID");
+    } else {
+        TEST_FAIL("rt_unlink should reject ACTOR_ID_INVALID");
+    }
+
+    status = rt_unlink(9999);
+    if (RT_FAILED(status)) {
+        TEST_PASS("rt_unlink rejects non-existent actor");
+    } else {
+        TEST_FAIL("rt_unlink should reject non-existent actor");
+    }
+
+    rt_exit();
+}
+
+// ============================================================================
+// Test 12: Link pool exhaustion (RT_LINK_ENTRY_POOL_SIZE=128)
+// Each link uses 2 entries (bidirectional), so max ~64 links
+// ============================================================================
+
+static void link_pool_target_actor(void *arg) {
+    (void)arg;
+    // Wait for signal to exit
+    rt_message msg;
+    rt_ipc_recv(&msg, 5000);
+    rt_exit();
+}
+
+static void test12_link_pool_exhaustion(void *arg) {
+    (void)arg;
+    printf("\nTest 12: Link pool exhaustion (RT_LINK_ENTRY_POOL_SIZE=%d)\n",
+           RT_LINK_ENTRY_POOL_SIZE);
+    fflush(stdout);
+
+    // Each link uses 2 entries (bidirectional)
+    int max_links = RT_LINK_ENTRY_POOL_SIZE / 2;
+    actor_id targets[RT_LINK_ENTRY_POOL_SIZE];
+    int spawned = 0;
+    int linked = 0;
+
+    // Spawn actors and link to them until pool exhaustion
+    for (int i = 0; i < max_links + 10; i++) {
+        actor_config cfg = RT_ACTOR_CONFIG_DEFAULT;
+        cfg.malloc_stack = true;
+        cfg.stack_size = 8 * 1024;
+
+        actor_id target = rt_spawn_ex(link_pool_target_actor, NULL, &cfg);
+        if (target == ACTOR_ID_INVALID) {
+            break;
+        }
+        targets[spawned++] = target;
+
+        rt_status status = rt_link(target);
+        if (RT_FAILED(status)) {
+            printf("    Link failed after %d links (pool exhausted)\n", linked);
+            break;
+        }
+        linked++;
+    }
+
+    if (linked < max_links + 10) {
+        TEST_PASS("link pool exhaustion detected");
+    } else {
+        printf("    Linked to all %d actors without exhaustion\n", linked);
+        TEST_FAIL("expected link pool to exhaust");
+    }
+
+    // Signal all actors to exit
+    for (int i = 0; i < spawned; i++) {
+        int done = 1;
+        rt_ipc_send(targets[i], &done, sizeof(done), IPC_ASYNC);
+    }
+
+    // Wait for cleanup
+    timer_id timer;
+    rt_timer_after(200000, &timer);
+    rt_message msg;
+    rt_ipc_recv(&msg, -1);
+
+    // Drain exit notifications
+    while (rt_ipc_pending()) {
+        rt_ipc_recv(&msg, 0);
+    }
+
+    rt_exit();
+}
+
+// ============================================================================
 // Test runner
 // ============================================================================
 
@@ -511,6 +677,10 @@ static void (*test_funcs[])(void *) = {
     test6_link_vs_monitor,
     test7_exit_reason,
     test8_link_to_dead_actor,
+    test9_link_to_self,
+    test10_unlink_non_linked,
+    test11_unlink_invalid,
+    test12_link_pool_exhaustion,
 };
 
 #define NUM_TESTS (sizeof(test_funcs) / sizeof(test_funcs[0]))

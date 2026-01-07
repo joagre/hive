@@ -201,6 +201,130 @@ static void run_file_tests(void *arg) {
         }
     }
 
+    // ========================================================================
+    // Test 11: Read from invalid fd
+    // ========================================================================
+    printf("\nTest 11: Read from invalid fd\n");
+    {
+        char buf[64];
+        size_t actual = 0;
+        rt_status status = rt_file_read(-1, buf, sizeof(buf), &actual);
+        if (RT_FAILED(status)) {
+            TEST_PASS("read from invalid fd fails");
+        } else {
+            TEST_FAIL("should fail to read from invalid fd");
+        }
+    }
+
+    // ========================================================================
+    // Test 12: Write to invalid fd
+    // ========================================================================
+    printf("\nTest 12: Write to invalid fd\n");
+    {
+        const char *data = "test";
+        size_t actual = 0;
+        rt_status status = rt_file_write(-1, data, strlen(data), &actual);
+        if (RT_FAILED(status)) {
+            TEST_PASS("write to invalid fd fails");
+        } else {
+            TEST_FAIL("should fail to write to invalid fd");
+        }
+    }
+
+    // ========================================================================
+    // Test 13: pread beyond EOF
+    // ========================================================================
+    printf("\nTest 13: pread beyond EOF\n");
+    {
+        // Create a small test file
+        rt_status status = rt_file_open(TEST_FILE, O_WRONLY | O_CREAT | O_TRUNC, 0644, &fd);
+        if (!RT_FAILED(status)) {
+            const char *data = "short";
+            size_t written = 0;
+            rt_file_write(fd, data, 5, &written);
+            rt_file_close(fd);
+
+            // Open for reading
+            status = rt_file_open(TEST_FILE, O_RDONLY, 0, &fd);
+            if (!RT_FAILED(status)) {
+                char buf[64] = {0};
+                size_t actual = 0;
+                // Read at offset 1000 (way beyond the 5 byte file)
+                status = rt_file_pread(fd, buf, sizeof(buf), 1000, &actual);
+                if (!RT_FAILED(status) && actual == 0) {
+                    TEST_PASS("pread beyond EOF returns 0 bytes");
+                } else if (RT_FAILED(status)) {
+                    TEST_PASS("pread beyond EOF returns error");
+                } else {
+                    printf("    Read %zu bytes at offset 1000\n", actual);
+                    TEST_FAIL("pread beyond EOF should return 0 or error");
+                }
+                rt_file_close(fd);
+            }
+        }
+    }
+
+    // ========================================================================
+    // Test 14: Double close
+    // ========================================================================
+    printf("\nTest 14: Double close\n");
+    {
+        rt_status status = rt_file_open(TEST_FILE, O_RDONLY, 0, &fd);
+        if (!RT_FAILED(status)) {
+            int saved_fd = fd;
+
+            // First close should succeed
+            status = rt_file_close(fd);
+            if (RT_FAILED(status)) {
+                TEST_FAIL("first close failed");
+            } else {
+                // Second close should fail
+                status = rt_file_close(saved_fd);
+                if (RT_FAILED(status)) {
+                    TEST_PASS("double close fails");
+                } else {
+                    TEST_FAIL("double close should fail");
+                }
+            }
+        }
+    }
+
+    // ========================================================================
+    // Test 15: Zero-length read/write
+    // ========================================================================
+    printf("\nTest 15: Zero-length read/write\n");
+    {
+        rt_status status = rt_file_open(TEST_FILE, O_RDWR, 0, &fd);
+        if (!RT_FAILED(status)) {
+            size_t actual = 0;
+
+            // Zero-length write
+            status = rt_file_write(fd, "x", 0, &actual);
+            if (!RT_FAILED(status) && actual == 0) {
+                TEST_PASS("zero-length write succeeds");
+            } else if (!RT_FAILED(status)) {
+                printf("    Zero-length write returned %zu bytes\n", actual);
+                TEST_FAIL("zero-length write should return 0 bytes");
+            } else {
+                TEST_FAIL("zero-length write failed");
+            }
+
+            // Zero-length read
+            char buf[1];
+            status = rt_file_read(fd, buf, 0, &actual);
+            if (!RT_FAILED(status) && actual == 0) {
+                TEST_PASS("zero-length read succeeds");
+            } else if (!RT_FAILED(status)) {
+                printf("    Zero-length read returned %zu bytes\n", actual);
+                TEST_FAIL("zero-length read should return 0 bytes");
+            } else {
+                TEST_FAIL("zero-length read failed");
+            }
+
+            rt_file_close(fd);
+        }
+    }
+
     // Cleanup test file
     unlink(TEST_FILE);
 

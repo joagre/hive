@@ -492,6 +492,121 @@ static void test9_max_age_expiry(void *arg) {
 }
 
 // ============================================================================
+// Test 10: rt_bus_entry_count explicit test
+// ============================================================================
+
+static void test10_entry_count(void *arg) {
+    (void)arg;
+    printf("\nTest 10: rt_bus_entry_count\n");
+    fflush(stdout);
+
+    rt_bus_config cfg = RT_BUS_CONFIG_DEFAULT;
+    cfg.max_entries = 10;
+    bus_id bus;
+    rt_status status = rt_bus_create(&cfg, &bus);
+    if (RT_FAILED(status)) {
+        TEST_FAIL("rt_bus_create");
+        rt_exit();
+    }
+
+    status = rt_bus_subscribe(bus);
+    if (RT_FAILED(status)) {
+        TEST_FAIL("rt_bus_subscribe");
+        rt_bus_destroy(bus);
+        rt_exit();
+    }
+
+    // Initially empty
+    size_t count = rt_bus_entry_count(bus);
+    if (count == 0) {
+        TEST_PASS("entry_count returns 0 for empty bus");
+    } else {
+        printf("    Expected 0, got %zu\n", count);
+        TEST_FAIL("entry_count should be 0 for empty bus");
+    }
+
+    // Publish 5 entries
+    for (int i = 0; i < 5; i++) {
+        char msg[16];
+        snprintf(msg, sizeof(msg), "Entry %d", i);
+        rt_bus_publish(bus, msg, strlen(msg) + 1);
+    }
+
+    count = rt_bus_entry_count(bus);
+    if (count == 5) {
+        TEST_PASS("entry_count returns 5 after publishing 5 entries");
+    } else {
+        printf("    Expected 5, got %zu\n", count);
+        TEST_FAIL("entry_count wrong after publish");
+    }
+
+    // Read 2 entries
+    char buf[64];
+    size_t actual_len;
+    rt_bus_read(bus, buf, sizeof(buf), &actual_len);
+    rt_bus_read(bus, buf, sizeof(buf), &actual_len);
+
+    // With max_readers=0 (default), entries persist until aged out or buffer wraps
+    // So count should still be 5 (entries not consumed by reading)
+    count = rt_bus_entry_count(bus);
+    printf("    After reading 2 entries, count = %zu\n", count);
+
+    // Publish more to fill buffer
+    for (int i = 5; i < 12; i++) {
+        char msg[16];
+        snprintf(msg, sizeof(msg), "Entry %d", i);
+        rt_bus_publish(bus, msg, strlen(msg) + 1);
+    }
+
+    count = rt_bus_entry_count(bus);
+    if (count == 10) {
+        TEST_PASS("entry_count capped at max_entries after overflow");
+    } else {
+        printf("    Expected 10, got %zu\n", count);
+        TEST_FAIL("entry_count wrong after buffer wrap");
+    }
+
+    rt_bus_unsubscribe(bus);
+    rt_bus_destroy(bus);
+    rt_exit();
+}
+
+// ============================================================================
+// Test 11: Subscribe to destroyed bus
+// ============================================================================
+
+static void test11_subscribe_destroyed_bus(void *arg) {
+    (void)arg;
+    printf("\nTest 11: Subscribe to destroyed bus\n");
+    fflush(stdout);
+
+    rt_bus_config cfg = RT_BUS_CONFIG_DEFAULT;
+    bus_id bus;
+    rt_status status = rt_bus_create(&cfg, &bus);
+    if (RT_FAILED(status)) {
+        TEST_FAIL("rt_bus_create");
+        rt_exit();
+    }
+
+    // Destroy it immediately
+    status = rt_bus_destroy(bus);
+    if (RT_FAILED(status)) {
+        TEST_FAIL("rt_bus_destroy");
+        rt_exit();
+    }
+
+    // Try to subscribe to destroyed bus
+    status = rt_bus_subscribe(bus);
+    if (RT_FAILED(status)) {
+        TEST_PASS("subscribe to destroyed bus fails");
+    } else {
+        TEST_FAIL("subscribe to destroyed bus should fail");
+    }
+
+    rt_exit();
+}
+
+// ============================================================================
 // Test runner
 // ============================================================================
 
@@ -505,6 +620,8 @@ static void (*test_funcs[])(void *) = {
     test7_destroy_with_subscribers,
     test8_invalid_operations,
     test9_max_age_expiry,
+    test10_entry_count,
+    test11_subscribe_destroyed_bus,
 };
 
 #define NUM_TESTS (sizeof(test_funcs) / sizeof(test_funcs[0]))

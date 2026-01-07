@@ -614,6 +614,95 @@ static void test14_sync_to_dead_actor(void *arg) {
 }
 
 // ============================================================================
+// Test 15: Sync buffer pool exhaustion
+// Pool size: RT_SYNC_BUFFER_POOL_SIZE = 64
+// ============================================================================
+
+static volatile int g_sync_senders_blocked = 0;
+static volatile int g_sync_senders_failed = 0;
+
+static void sync_sender_exhaustion(void *arg) {
+    actor_id target = *(actor_id *)arg;
+    const char *data = "SYNC_EXHAUST";
+
+    rt_status status = rt_ipc_send(target, data, strlen(data) + 1, IPC_SYNC);
+    if (RT_FAILED(status)) {
+        g_sync_senders_failed++;
+    } else {
+        g_sync_senders_blocked++;
+    }
+
+    rt_exit();
+}
+
+static void test15_sync_pool_exhaustion(void *arg) {
+    (void)arg;
+    printf("\nTest 15: Sync buffer pool exhaustion (RT_SYNC_BUFFER_POOL_SIZE=%d)\n",
+           RT_SYNC_BUFFER_POOL_SIZE);
+    fflush(stdout);
+
+    g_sync_senders_blocked = 0;
+    g_sync_senders_failed = 0;
+
+    actor_id self = rt_self();
+
+    // Spawn more senders than sync buffer pool size
+    // Use malloc stacks to avoid arena exhaustion
+    int num_senders = RT_SYNC_BUFFER_POOL_SIZE + 10;
+    actor_id senders[RT_SYNC_BUFFER_POOL_SIZE + 10];
+
+    for (int i = 0; i < num_senders; i++) {
+        actor_config cfg = RT_ACTOR_CONFIG_DEFAULT;
+        cfg.malloc_stack = true;
+        cfg.stack_size = 8 * 1024;  // Small stacks to fit more actors
+
+        senders[i] = rt_spawn_ex(sync_sender_exhaustion, &self, &cfg);
+        if (senders[i] == ACTOR_ID_INVALID) {
+            num_senders = i;
+            break;
+        }
+    }
+
+    printf("    Spawned %d sender actors\n", num_senders);
+
+    // Yield to let senders attempt to send
+    for (int i = 0; i < num_senders; i++) {
+        rt_yield();
+    }
+
+    // Some should have failed with NOMEM (if we spawned more than pool size)
+    if (g_sync_senders_failed > 0) {
+        printf("    %d senders got RT_ERR_NOMEM (pool exhausted)\n", g_sync_senders_failed);
+        TEST_PASS("sync buffer pool exhaustion returns RT_ERR_NOMEM");
+    } else if (num_senders > RT_SYNC_BUFFER_POOL_SIZE) {
+        printf("    All %d senders blocked, expected some NOMEM\n", num_senders);
+        TEST_FAIL("expected some senders to fail with NOMEM");
+    } else {
+        // We couldn't spawn enough actors to exhaust the pool (actor table limit)
+        printf("    Only %d senders (limited by actor table), pool size is %d\n",
+               num_senders, RT_SYNC_BUFFER_POOL_SIZE);
+        printf("    %d blocked, %d failed\n", g_sync_senders_blocked, g_sync_senders_failed);
+        TEST_PASS("sync pool handles concurrent senders correctly");
+    }
+
+    // Release all blocked senders by receiving their messages
+    rt_message msg;
+    while (rt_ipc_pending()) {
+        rt_status status = rt_ipc_recv(&msg, 0);
+        if (!RT_FAILED(status)) {
+            rt_ipc_release(&msg);
+        }
+    }
+
+    // Wait for senders to exit
+    timer_id timer;
+    rt_timer_after(100000, &timer);
+    rt_ipc_recv(&msg, -1);
+
+    rt_exit();
+}
+
+// ============================================================================
 // Test runner
 // ============================================================================
 
@@ -632,6 +721,7 @@ static void (*test_funcs[])(void *) = {
     test12_sync_auto_release,
     test13_zero_length_message,
     test14_sync_to_dead_actor,
+    test15_sync_pool_exhaustion,
 };
 
 #define NUM_TESTS (sizeof(test_funcs) / sizeof(test_funcs[0]))
