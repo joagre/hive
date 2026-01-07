@@ -1092,6 +1092,34 @@ Best practice: Design actors to always release sync messages, but receiver crash
    rt_ipc_send(rt_self(), &data, len, IPC_ASYNC);  // Works fine
    ```
 
+5. **Cannot receive other messages while holding SYNC (single active message constraint):**
+   - **Constraint:** An actor can hold only ONE active message at a time
+   - **Implication:** Calling `rt_ipc_recv()` to receive ANY message (timer, IPC, etc.) auto-releases the previously held SYNC message
+   - **Affected patterns:** Receiver cannot wait for timer ticks or other messages while holding a SYNC message
+   - **Rationale:** Simplifies memory management, prevents message accumulation, ensures predictable resource usage
+   - Example:
+   ```c
+   // PROBLEM: Trying to use timer while holding SYNC message
+   rt_message work_msg;
+   rt_ipc_recv(&work_msg, -1);  // Receive SYNC work request
+
+   // Want to simulate slow processing with timer...
+   timer_id delay;
+   rt_timer_after(100000, &delay);
+
+   rt_message timer_msg;
+   rt_ipc_recv(&timer_msg, -1);  // OOPS: work_msg AUTO-RELEASED here!
+   // Sender already unblocked, work_msg.data now invalid
+
+   rt_ipc_release(&work_msg);  // Too late, already released
+
+   // SOLUTION: Do processing synchronously without rt_ipc_recv()
+   rt_message work_msg;
+   rt_ipc_recv(&work_msg, -1);  // Receive SYNC work request
+   do_processing(work_msg.data);  // Process without calling rt_ipc_recv()
+   rt_ipc_release(&work_msg);     // Explicit release when done
+   ```
+
 **Lifetime rule (strict definition):**
 
 For `IPC_SYNC`, `rt_message.data` is valid:
