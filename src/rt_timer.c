@@ -171,9 +171,15 @@ static rt_status create_timer(uint32_t interval_us, bool periodic, timer_id *out
     }
 
     // Set timer
+    // Note: timerfd treats (0, 0) as "disarm timer", so we use minimum 1ns for zero delay
     struct itimerspec its;
-    its.it_value.tv_sec = interval_us / RT_USEC_PER_SEC;
-    its.it_value.tv_nsec = (interval_us % RT_USEC_PER_SEC) * 1000;
+    if (interval_us == 0) {
+        its.it_value.tv_sec = 0;
+        its.it_value.tv_nsec = 1;  // Minimum 1 nanosecond to avoid disarming
+    } else {
+        its.it_value.tv_sec = interval_us / RT_USEC_PER_SEC;
+        its.it_value.tv_nsec = (interval_us % RT_USEC_PER_SEC) * 1000;
+    }
 
     if (periodic) {
         // Periodic - set interval

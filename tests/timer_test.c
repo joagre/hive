@@ -331,26 +331,26 @@ static void run_timer_tests(void *arg) {
     }
 
     // ========================================================================
-    // Test 11: Minimal delay timer (1 microsecond)
+    // Test 11: Zero delay timer (fires immediately)
     // ========================================================================
-    printf("\nTest 11: Minimal delay timer (1us)\n");
+    printf("\nTest 11: Zero delay timer\n");
     {
         timer_id timer;
         uint64_t start = time_ms();
 
-        rt_status status = rt_timer_after(1, &timer);  // 1 microsecond delay
+        rt_status status = rt_timer_after(0, &timer);  // 0 delay - should fire immediately
         if (RT_FAILED(status)) {
-            TEST_FAIL("rt_timer_after(1) failed");
+            TEST_FAIL("rt_timer_after(0) failed");
         } else {
             rt_message msg;
             status = rt_ipc_recv(&msg, 100);  // 100ms timeout
             uint64_t elapsed = time_ms() - start;
 
             if (!RT_FAILED(status) && rt_timer_is_tick(&msg)) {
-                printf("    Minimal delay timer fired after %lu ms\n", (unsigned long)elapsed);
-                TEST_PASS("minimal delay timer fires quickly");
+                printf("    Zero delay timer fired after %lu ms\n", (unsigned long)elapsed);
+                TEST_PASS("zero delay timer fires immediately");
             } else {
-                TEST_FAIL("minimal delay timer did not fire");
+                TEST_FAIL("zero delay timer did not fire");
             }
         }
     }
