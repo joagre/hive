@@ -353,6 +353,23 @@ All runtime APIs must be called from actor context (the scheduler thread). The r
 
 **External thread communication:** External threads cannot call runtime APIs directly. Use platform-specific IPC (sockets/pipes) with dedicated reader actors to bridge external threads into the actor system. See `SPEC.md` "Thread Safety" section for complete details.
 
+## Testing
+
+```bash
+# Build and run all tests
+make test
+
+# Run with valgrind (memory error detection)
+valgrind --leak-check=full ./build/actor_test
+valgrind --leak-check=full ./build/ipc_test
+# ... etc for each test
+
+# Note: stack_overflow_test intentionally corrupts memory to test
+# overflow detection - valgrind errors are expected for this test
+```
+
+The test suite includes 18 test programs covering actors, IPC, timers, bus, networking, file I/O, linking, monitoring, and edge cases like pool exhaustion and stack overflow detection.
+
 ## Future Work
 
 - Port to ARM Cortex-M bare metal (STM32)
