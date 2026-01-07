@@ -96,6 +96,9 @@ All structures are statically allocated. Actor stacks use a static arena allocat
 
 # IPC_SYNC example (backpressure, flow control)
 ./build/sync_ipc
+
+# Priority scheduling example (4 levels, starvation demo)
+./build/priority
 ```
 
 ## Quick Start
