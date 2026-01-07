@@ -1,3 +1,7 @@
+// NOTE: This test intentionally causes stack overflow, which corrupts memory.
+// Valgrind will report errors - this is expected behavior for this test.
+// Run with: valgrind --error-exitcode=0 ./build/stack_overflow_test
+
 #include "rt_runtime.h"
 #include "rt_ipc.h"
 #include "rt_link.h"
