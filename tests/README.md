@@ -11,7 +11,86 @@ make clean test    # Clean build and run tests
 
 ## Test Suite
 
-### `timeout_test.c`
+### Core Tests
+
+---
+
+#### `actor_test.c`
+Tests actor lifecycle and management (spawn, exit, yield).
+
+**Tests (13 tests):**
+- Basic spawn with default config
+- rt_self returns correct ID
+- Argument passing to actors
+- rt_yield allows cooperative multitasking
+- rt_actor_alive tracks lifecycle
+- Spawn with custom priority
+- Spawn with custom stack size
+- Spawn with malloc_stack=true
+- Spawn with name
+- Spawn with NULL function (rejected)
+- Multiple spawns
+- Actor crash detection (return without rt_exit)
+- Actor table exhaustion (RT_MAX_ACTORS)
+
+---
+
+#### `runtime_test.c`
+Tests runtime initialization and core APIs.
+
+**Tests (8 tests):**
+- rt_init returns success
+- rt_self inside actor context
+- rt_yield returns control to scheduler
+- rt_actor_alive with various IDs
+- Scheduler handles many actors
+- rt_shutdown (existence check)
+- Actor stack sizes (small and large)
+- Priority levels
+
+---
+
+#### `priority_test.c`
+Tests priority-based scheduling behavior.
+
+**Tests (5 tests):**
+- Higher priority actors run before lower priority
+- Round-robin within same priority level
+- High priority preempts after yield
+- No starvation (all priorities eventually run)
+- Default priority is NORMAL
+
+---
+
+### IPC Tests
+
+---
+
+#### `ipc_test.c`
+Tests inter-process communication (IPC) with ASYNC and SYNC modes.
+
+**Tests (17 tests):**
+- ASYNC send/recv basic
+- ASYNC send to invalid actor
+- Message ordering (FIFO)
+- Multiple senders to one receiver
+- SYNC send to self (deadlock prevention - rejected)
+- SYNC send/recv with release
+- rt_ipc_pending and rt_ipc_count
+- recv with timeout=0 (non-blocking)
+- recv with timeout > 0
+- recv with timeout < 0 (block forever)
+- Message size limits (RT_MAX_MESSAGE_SIZE)
+- SYNC auto-release on next recv
+- Zero-length message
+- SYNC send to dead actor
+- Sync buffer pool exhaustion
+- NULL data pointer handling
+- Mailbox integrity after spawn/death cycles
+
+---
+
+#### `timeout_test.c`
 Tests the `rt_ipc_recv()` timeout functionality.
 
 **Tests:**
@@ -19,14 +98,9 @@ Tests the `rt_ipc_recv()` timeout functionality.
 - Message received before timeout (returns message)
 - Backoff-retry pattern with timeout
 
-**Key validations:**
-- PASS: Timeout fires after specified duration
-- PASS: Messages take precedence over timeout
-- PASS: Developer can distinguish timeout vs message
-
 ---
 
-### `pool_exhaustion_test.c`
+#### `pool_exhaustion_test.c`
 Demonstrates IPC pool exhaustion and backoff-retry behavior.
 
 **Tests:**
@@ -34,21 +108,9 @@ Demonstrates IPC pool exhaustion and backoff-retry behavior.
 - Verify `RT_ERR_NOMEM` is returned
 - Demonstrate backoff-retry pattern
 
-**Key validations:**
-- PASS: Pool exhausts after exactly `RT_MAILBOX_ENTRY_POOL_SIZE` messages
-- PASS: `rt_ipc_send()` returns `RT_ERR_NOMEM` when pool full
-- PASS: Timeout backoff executes correctly
-- PASS: Developer has explicit control over retry logic
-
-**Results:**
-```
-Sender: PASS: Pool exhausted after 256 messages!
-Sender: Got RT_ERR_NOMEM as expected
-```
-
 ---
 
-### `backoff_retry_test.c`
+#### `backoff_retry_test.c`
 More complex test showing pool exhaustion with coordinated recovery.
 
 **Tests:**
@@ -56,17 +118,9 @@ More complex test showing pool exhaustion with coordinated recovery.
 - Receiver processes messages to free pool space
 - Sender retries after backoff
 
-**Key validations:**
-- PASS: Pool fills predictably
-- PASS: Multiple send failures handled
-- PASS: Backoff-retry pattern structure
-
-**Note:** Due to cooperative scheduling, receiver may process messages before
-sender's retry attempts. This demonstrates efficient runtime behavior.
-
 ---
 
-### `simple_backoff_test.c`
+#### `simple_backoff_test.c`
 Simplified backoff-retry test with aggressive sender and slow processor.
 
 **Tests:**
@@ -74,19 +128,9 @@ Simplified backoff-retry test with aggressive sender and slow processor.
 - Slow processor drains messages gradually
 - Backoff-retry handles transient exhaustion
 
-**Key validations:**
-- PASS: Pool exhaustion detected
-- PASS: Backoff pattern executes
-- PASS: Cooperative multitasking prevents sustained exhaustion
-
-**Results:**
-```
-Sender: PASS: Pool exhausted after 269 successful sends
-```
-
 ---
 
-### `congestion_demo.c`
+#### `congestion_demo.c`
 Realistic scenario demonstrating congestion handling.
 
 **Tests:**
@@ -94,20 +138,9 @@ Realistic scenario demonstrating congestion handling.
 - Handles burst traffic patterns
 - Backoff-retry pattern ready for real congestion
 
-**Key validations:**
-- PASS: Multi-worker coordination
-- PASS: Burst handling
-- PASS: Production-ready pattern
-
-**Results:**
-```
-Coordinator: Distribution complete
-  Total sent: 300 / 300
-```
-
 ---
 
-### `sync_sender_death_test.c`
+#### `sync_sender_death_test.c`
 Tests IPC_SYNC behavior when sender dies before receiver processes message.
 
 **Tests:**
@@ -116,17 +149,174 @@ Tests IPC_SYNC behavior when sender dies before receiver processes message.
 - Receiver accesses message data after sender has died
 - Verifies data integrity (pinned buffer prevents use-after-free)
 
-**Key validations:**
-- PASS: Receiver can safely access data after sender dies
-- PASS: Data remains valid in pinned runtime buffer
-- PASS: No use-after-free or data corruption
-- PASS: Pinned buffer prevents UAF even though sender died
+---
 
-**Results:**
-```
-Receiver: PASS - Data still valid! magic=0xdeadbeef
-Receiver: PASS - Pinned buffer prevents UAF even though sender died
-```
+#### `sync_receiver_death_test.c`
+Tests IPC_SYNC behavior when receiver crashes without releasing.
+
+**Tests:**
+- Sender blocks on IPC_SYNC send
+- Receiver receives message and crashes without rt_ipc_release()
+- Sender is unblocked with RT_ERR_CLOSED
+
+---
+
+### Linking and Monitoring Tests
+
+---
+
+#### `link_test.c`
+Tests bidirectional actor linking (rt_link).
+
+**Tests (12 tests):**
+- Basic link (both actors notified)
+- Link is bidirectional
+- Unlink prevents notification
+- Link to invalid actor fails
+- Multiple links from one actor
+- Link vs Monitor difference (bidirectional vs unidirectional)
+- Exit reason in link notification
+- Link to dead actor
+- Link to self
+- Unlink non-linked actor
+- Unlink invalid actor
+- Link pool exhaustion
+
+---
+
+#### `monitor_test.c`
+Tests unidirectional actor monitoring (rt_monitor).
+
+**Tests (8 tests):**
+- Basic monitor (normal exit notification)
+- Multiple monitors from one actor
+- Demonitor cancels monitoring
+- Monitor is unidirectional (target not notified when monitor dies)
+- Monitor invalid actor
+- Demonitor invalid ref
+- Double demonitor
+- Monitor pool exhaustion
+
+---
+
+### Timer Tests
+
+---
+
+#### `timer_test.c`
+Tests one-shot and periodic timers.
+
+**Tests (12 tests):**
+- One-shot timer (rt_timer_after)
+- Timer cancellation
+- Timer sender ID is RT_SENDER_TIMER
+- rt_timer_is_tick identifies timer messages
+- Cancel invalid timer
+- Short delay timer
+- Periodic timer (rt_timer_every)
+- Multiple simultaneous timers
+- Cancel periodic timer
+- Timer pool exhaustion
+- Zero delay timer
+- Zero-interval periodic timer
+
+---
+
+### I/O Tests
+
+---
+
+#### `file_test.c`
+Tests synchronous file I/O operations.
+
+**Tests (15 tests):**
+- Open file for writing (create)
+- Write to file
+- Sync file to disk
+- Close file
+- Open file for reading
+- Read from file
+- pread (read at offset)
+- pwrite (write at offset)
+- Open non-existent file fails
+- Close invalid fd
+- Read from invalid fd
+- Write to invalid fd
+- pread beyond EOF
+- Double close
+- Zero-length read/write
+
+---
+
+#### `net_test.c`
+Tests non-blocking network I/O operations.
+
+**Tests (12 tests):**
+- Listen and accept connection
+- Send and receive data
+- Accept timeout
+- Connect to invalid address
+- Short timeout accept
+- Close and reuse port
+- Non-blocking accept (timeout=0)
+- Recv timeout
+- Non-blocking recv (timeout=0)
+- Non-blocking send (timeout=0)
+- Connect timeout to non-routable address
+- Actor death during blocked recv
+
+---
+
+### Bus Tests
+
+---
+
+#### `bus_test.c`
+Tests pub-sub messaging (rt_bus).
+
+**Tests (12 tests):**
+- Basic publish/subscribe
+- Multiple subscribers
+- max_readers retention policy
+- Ring buffer wrap (oldest evicted)
+- Non-blocking read returns WOULDBLOCK
+- Blocking read with timeout
+- Destroy bus with subscribers fails
+- Invalid bus operations
+- max_age_ms retention policy (time-based expiry)
+- rt_bus_entry_count
+- Subscribe to destroyed bus
+- Buffer overflow protection
+
+---
+
+### Memory Tests
+
+---
+
+#### `arena_test.c`
+Tests stack arena exhaustion and malloc fallback.
+
+**Tests:**
+- Spawn actors until arena exhaustion
+- Verify arena allocation fails gracefully when full
+- Verify malloc_stack=true works independently
+- Cleanup works correctly after exhaustion
+
+---
+
+#### `stack_overflow_test.c`
+Tests stack overflow detection and handling.
+
+**NOTE:** This test intentionally causes stack overflow, which corrupts memory. Valgrind will report errors - this is expected behavior for this test.
+
+**Tests:**
+- Stack guard corruption is detected
+- Linked actors receive RT_EXIT_CRASH_STACK notification
+- System continues running after stack overflow
+- No segfault
+
+**Run with:** `valgrind --error-exitcode=0 ./build/stack_overflow_test`
 
 ---
 
