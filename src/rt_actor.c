@@ -143,11 +143,7 @@ rt_status rt_actor_init(void) {
     // Initialize stack arena
     arena_init();
 
-    // Explicitly zero-initialize actor array for valgrind
-    // (Static arrays are zero-initialized by C, but valgrind doesn't track this)
-    memset(g_actors, 0, sizeof(g_actors));
-
-    // Use static actor array
+    // Use static actor array (already zero-initialized by C)
     g_actor_table.actors = g_actors;
     g_actor_table.max_actors = RT_MAX_ACTORS;
     g_actor_table.num_actors = 0;
