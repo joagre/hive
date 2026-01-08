@@ -28,7 +28,7 @@ core.*
 *.swp
 *.swo
 *~
-#*#
+\#*\#
 .#*
 
 # OS files
