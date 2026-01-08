@@ -8,7 +8,7 @@
 // Core Send/Receive
 // -----------------------------------------------------------------------------
 
-// Send a fire-and-forget notification (RT_MSG_NOTIFY)
+// Send an async notification (RT_MSG_NOTIFY)
 // Payload is copied to receiver's mailbox, sender continues immediately.
 // Returns RT_ERR_NOMEM if IPC pools exhausted.
 rt_status rt_ipc_notify(actor_id to, const void *data, size_t len);

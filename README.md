@@ -25,7 +25,7 @@ The runtime uses **statically bounded memory** for deterministic behavior with z
 - Stack overflow detection with guard patterns (16-byte overhead per actor)
 - Actor lifecycle management (spawn, exit)
 - IPC with selective receive and request/reply
-- Message classes: NOTIFY (fire-and-forget), REQUEST/REPLY, TIMER, SYSTEM
+- Message classes: NOTIFY (async), REQUEST/REPLY, TIMER, SYSTEM
 - Actor linking and monitoring (bidirectional links, unidirectional monitors)
 - Exit notifications with exit reasons (normal, crash, stack overflow, killed)
 - Timers (one-shot and periodic with timerfd/epoll)
@@ -137,7 +137,7 @@ cfg.stack_size = 128 * 1024;
 cfg.malloc_stack = false;     // false=arena (default), true=malloc
 actor_id worker = rt_spawn_ex(worker_actor, &args, &cfg);
 
-// Notify (fire-and-forget message)
+// Notify (async message)
 int data = 42;
 rt_status status = rt_ipc_notify(target, &data, sizeof(data));
 if (RT_FAILED(status)) {
@@ -287,9 +287,9 @@ if (rt_is_exit_msg(&msg)) {
 ### Linking and Monitoring
 
 - `rt_link(target)` - Create bidirectional link
-- `rt_unlink(target)` - Remove bidirectional link
-- `rt_monitor(target, monitor_ref)` - Create unidirectional monitor
-- `rt_demonitor(ref)` - Remove monitor
+- `rt_link_remove(target)` - Remove bidirectional link
+- `rt_monitor(target, monitor_id)` - Create unidirectional monitor
+- `rt_monitor_cancel(monitor_id)` - Cancel monitor
 - `rt_is_exit_msg(msg)` - Check if message is exit notification
 - `rt_decode_exit(msg, out)` - Extract exit information
 

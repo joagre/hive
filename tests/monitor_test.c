@@ -164,7 +164,7 @@ static void target_slow_exit(void *arg) {
     rt_exit();
 }
 
-static void test4_demonitor_actor(void *arg) {
+static void test4_monitor_cancel_actor(void *arg) {
     (void)arg;
     printf("\nTest 4: Demonitor\n");
 
@@ -183,10 +183,10 @@ static void test4_demonitor_actor(void *arg) {
         rt_exit();
     }
 
-    // Immediately demonitor
-    status = rt_demonitor(ref);
+    // Immediately monitor_cancel
+    status = rt_monitor_cancel(ref);
     if (RT_FAILED(status)) {
-        TEST_FAIL("rt_demonitor");
+        TEST_FAIL("rt_monitor_cancel");
         rt_exit();
     }
 
@@ -195,15 +195,15 @@ static void test4_demonitor_actor(void *arg) {
     status = rt_ipc_recv(&msg, 700);  // 700ms timeout (target exits at 500ms)
 
     if (status.code == RT_ERR_TIMEOUT) {
-        TEST_PASS("demonitor prevents exit notification");
+        TEST_PASS("monitor_cancel prevents exit notification");
     } else if (RT_FAILED(status)) {
-        TEST_PASS("demonitor prevents exit notification (no message)");
+        TEST_PASS("monitor_cancel prevents exit notification (no message)");
     } else {
         // Got a message - check if it's an exit notification
         if (rt_is_exit_msg(&msg)) {
-            TEST_FAIL("received exit notification after demonitor");
+            TEST_FAIL("received exit notification after monitor_cancel");
         } else {
-            TEST_PASS("demonitor prevents exit notification");
+            TEST_PASS("monitor_cancel prevents exit notification");
         }
     }
 
@@ -307,33 +307,33 @@ static void test6_monitor_invalid(void *arg) {
 // Test 7: Demonitor invalid/non-existent ref
 // ============================================================================
 
-static void test7_demonitor_invalid(void *arg) {
+static void test7_monitor_cancel_invalid(void *arg) {
     (void)arg;
     printf("\nTest 7: Demonitor invalid ref\n");
 
-    // Try to demonitor with invalid ref (0 or very high number)
-    rt_status status = rt_demonitor(0);
+    // Try to monitor_cancel with invalid ref (0 or very high number)
+    rt_status status = rt_monitor_cancel(0);
     if (RT_FAILED(status)) {
-        TEST_PASS("rt_demonitor rejects ref 0");
+        TEST_PASS("rt_monitor_cancel rejects ref 0");
     } else {
-        TEST_PASS("rt_demonitor ref 0 is no-op");
+        TEST_PASS("rt_monitor_cancel ref 0 is no-op");
     }
 
-    status = rt_demonitor(99999);
+    status = rt_monitor_cancel(99999);
     if (RT_FAILED(status)) {
-        TEST_PASS("rt_demonitor rejects non-existent ref");
+        TEST_PASS("rt_monitor_cancel rejects non-existent ref");
     } else {
-        TEST_PASS("rt_demonitor non-existent ref is no-op");
+        TEST_PASS("rt_monitor_cancel non-existent ref is no-op");
     }
 
     rt_exit();
 }
 
 // ============================================================================
-// Test 8: Double demonitor (same ref twice)
+// Test 8: Double monitor_cancel (same ref twice)
 // ============================================================================
 
-static void double_demonitor_target(void *arg) {
+static void double_monitor_cancel_target(void *arg) {
     (void)arg;
     timer_id timer;
     rt_timer_after(500000, &timer);
@@ -342,11 +342,11 @@ static void double_demonitor_target(void *arg) {
     rt_exit();
 }
 
-static void test8_double_demonitor(void *arg) {
+static void test8_double_monitor_cancel(void *arg) {
     (void)arg;
-    printf("\nTest 8: Double demonitor (same ref twice)\n");
+    printf("\nTest 8: Double monitor_cancel (same ref twice)\n");
 
-    actor_id target = rt_spawn(double_demonitor_target, NULL);
+    actor_id target = rt_spawn(double_monitor_cancel_target, NULL);
     if (target == ACTOR_ID_INVALID) {
         TEST_FAIL("spawn target");
         rt_exit();
@@ -359,20 +359,20 @@ static void test8_double_demonitor(void *arg) {
         rt_exit();
     }
 
-    // First demonitor should succeed
-    status = rt_demonitor(ref);
+    // First monitor_cancel should succeed
+    status = rt_monitor_cancel(ref);
     if (RT_FAILED(status)) {
-        TEST_FAIL("first demonitor failed");
+        TEST_FAIL("first monitor_cancel failed");
         rt_exit();
     }
-    TEST_PASS("first demonitor succeeds");
+    TEST_PASS("first monitor_cancel succeeds");
 
-    // Second demonitor should fail or be no-op
-    status = rt_demonitor(ref);
+    // Second monitor_cancel should fail or be no-op
+    status = rt_monitor_cancel(ref);
     if (RT_FAILED(status)) {
-        TEST_PASS("second demonitor fails (already demonitored)");
+        TEST_PASS("second monitor_cancel fails (already monitor_canceled)");
     } else {
-        TEST_PASS("second demonitor is no-op");
+        TEST_PASS("second monitor_cancel is no-op");
     }
 
     // Wait for target to exit
@@ -459,11 +459,11 @@ static void test9_monitor_pool_exhaustion(void *arg) {
 static void (*test_funcs[])(void *) = {
     test1_monitor_actor,
     test3_multi_monitor_actor,
-    test4_demonitor_actor,
+    test4_monitor_cancel_actor,
     test5_coordinator,
     test6_monitor_invalid,
-    test7_demonitor_invalid,
-    test8_double_demonitor,
+    test7_monitor_cancel_invalid,
+    test8_double_monitor_cancel,
     test9_monitor_pool_exhaustion,
 };
 

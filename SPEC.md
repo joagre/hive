@@ -662,11 +662,11 @@ Actors can link to other actors to receive notification when they die:
 ```c
 // Bidirectional link: if either dies, the other receives exit message
 rt_status rt_link(actor_id target);
-rt_status rt_unlink(actor_id target);
+rt_status rt_link_remove(actor_id target);
 
 // Unidirectional monitor: receive notification when target dies
-rt_status rt_monitor(actor_id target, uint32_t *monitor_ref);
-rt_status rt_demonitor(uint32_t monitor_ref);
+rt_status rt_monitor(actor_id target, uint32_t *monitor_id);
+rt_status rt_monitor_cancel(uint32_t monitor_id);
 ```
 
 Exit message structure:
@@ -691,7 +691,7 @@ rt_status rt_decode_exit(const rt_message *msg, rt_exit_msg *out);
 
 ## IPC API
 
-Inter-process communication via mailboxes. Each actor has one mailbox. All messages are asynchronous (fire-and-forget). Request/reply is built on top using message tags for correlation.
+Inter-process communication via mailboxes. Each actor has one mailbox. All messages are asynchronous (sender doesn't wait for response). Request/reply is built on top using message tags for correlation.
 
 ### Message Header Format
 

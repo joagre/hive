@@ -221,7 +221,7 @@ static rt_status try_or_epoll(int fd, uint32_t epoll_events, int operation,
     }
 
     // Block actor until I/O ready
-    current->state = ACTOR_STATE_BLOCKED;
+    current->state = ACTOR_STATE_WAITING;
     rt_yield();
 
     // When we resume, check for timeout

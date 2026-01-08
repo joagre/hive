@@ -332,7 +332,7 @@ rt_status rt_bus_publish(bus_id id, const void *data, size_t len) {
         bus_subscriber *sub = &bus->subscribers[i];
         if (sub->active && sub->blocked) {
             actor *a = rt_actor_get(sub->id);
-            if (a && a->state == ACTOR_STATE_BLOCKED) {
+            if (a && a->state == ACTOR_STATE_WAITING) {
                 a->state = ACTOR_STATE_READY;
                 RT_LOG_TRACE("Woke blocked subscriber %u on bus %u", sub->id, id);
             }
@@ -530,7 +530,7 @@ rt_status rt_bus_read_wait(bus_id id, void *buf, size_t max_len,
     // Block until data is available or timeout expires
     // Mark subscriber as blocked so rt_bus_publish can wake us
     sub->blocked = true;
-    current->state = ACTOR_STATE_BLOCKED;
+    current->state = ACTOR_STATE_WAITING;
 
     // Create timeout timer if needed
     timer_id timeout_timer = TIMER_ID_INVALID;

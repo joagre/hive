@@ -163,7 +163,7 @@ void rt_actor_cleanup(void) {
                 } else {
                     arena_free(a->stack);
                 }
-                rt_ipc_mailbox_clear(&a->mbox);
+                rt_ipc_mailbox_clear(&a->mailbox);
             }
         }
         // Note: g_actor_table.actors points to static g_actors array, so no free() needed
@@ -293,7 +293,7 @@ void rt_actor_free(actor *a) {
     }
 
     // Free mailbox entries
-    rt_ipc_mailbox_clear(&a->mbox);
+    rt_ipc_mailbox_clear(&a->mailbox);
 
     a->state = ACTOR_STATE_DEAD;
     g_actor_table.num_actors--;

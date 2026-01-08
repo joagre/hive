@@ -86,18 +86,18 @@ void rt_ipc_free_entry(mailbox_entry *entry) {
 // Add mailbox entry to actor's mailbox (doubly-linked list) and wake if blocked
 void rt_mailbox_add_entry(actor *recipient, mailbox_entry *entry) {
     entry->next = NULL;
-    entry->prev = recipient->mbox.tail;
+    entry->prev = recipient->mailbox.tail;
 
-    if (recipient->mbox.tail) {
-        recipient->mbox.tail->next = entry;
+    if (recipient->mailbox.tail) {
+        recipient->mailbox.tail->next = entry;
     } else {
-        recipient->mbox.head = entry;
+        recipient->mailbox.head = entry;
     }
-    recipient->mbox.tail = entry;
-    recipient->mbox.count++;
+    recipient->mailbox.tail = entry;
+    recipient->mailbox.count++;
 
     // Wake actor if blocked and message matches its filter
-    if (recipient->state == ACTOR_STATE_BLOCKED) {
+    if (recipient->state == ACTOR_STATE_WAITING) {
         // Check if message matches receive filter
         bool matches = true;
 
@@ -198,11 +198,11 @@ static mailbox_entry *mailbox_find_match(mailbox *mbox, actor_id from,
 
 // Dequeue the head entry from an actor's mailbox
 mailbox_entry *rt_ipc_dequeue_head(actor *a) {
-    if (!a || !a->mbox.head) {
+    if (!a || !a->mailbox.head) {
         return NULL;
     }
-    mailbox_entry *entry = a->mbox.head;
-    mailbox_unlink(&a->mbox, entry);
+    mailbox_entry *entry = a->mailbox.head;
+    mailbox_unlink(&a->mailbox, entry);
     return entry;
 }
 
@@ -213,8 +213,8 @@ rt_status rt_mailbox_handle_timeout(actor *current, timer_id timeout_timer, cons
     }
 
     // Check if first message is from OUR specific timeout timer
-    if (current->mbox.head && current->mbox.head->len >= RT_MSG_HEADER_SIZE) {
-        uint32_t header = *(uint32_t *)current->mbox.head->data;
+    if (current->mailbox.head && current->mailbox.head->len >= RT_MSG_HEADER_SIZE) {
+        uint32_t header = *(uint32_t *)current->mailbox.head->data;
         rt_msg_class msg_class;
         uint32_t msg_tag;
         decode_header(header, &msg_class, &msg_tag);
@@ -323,7 +323,7 @@ rt_status rt_ipc_recv_match(const actor_id *from, const rt_msg_class *class,
     timer_id timeout_timer = TIMER_ID_INVALID;
 
     // Search mailbox for matching message
-    mailbox_entry *entry = mailbox_find_match(&current->mbox, filter_from, filter_class, filter_tag);
+    mailbox_entry *entry = mailbox_find_match(&current->mailbox, filter_from, filter_class, filter_tag);
 
     if (!entry) {
         if (timeout_ms == 0) {
@@ -346,7 +346,7 @@ rt_status rt_ipc_recv_match(const actor_id *from, const rt_msg_class *class,
         }
 
         // Block and wait
-        current->state = ACTOR_STATE_BLOCKED;
+        current->state = ACTOR_STATE_WAITING;
         rt_scheduler_yield();
 
         // Clear filters after waking
@@ -363,14 +363,14 @@ rt_status rt_ipc_recv_match(const actor_id *from, const rt_msg_class *class,
         }
 
         // Re-scan mailbox for match
-        entry = mailbox_find_match(&current->mbox, filter_from, filter_class, filter_tag);
+        entry = mailbox_find_match(&current->mailbox, filter_from, filter_class, filter_tag);
         if (!entry) {
             return RT_ERROR(RT_ERR_WOULDBLOCK, "No matching messages available after wakeup");
         }
     }
 
     // Found a match - unlink from mailbox
-    mailbox_unlink(&current->mbox, entry);
+    mailbox_unlink(&current->mailbox, entry);
 
     // Fill in message structure
     msg->sender = entry->sender;
@@ -483,7 +483,7 @@ bool rt_ipc_pending(void) {
     if (!current) {
         return false;
     }
-    return current->mbox.head != NULL;
+    return current->mailbox.head != NULL;
 }
 
 size_t rt_ipc_count(void) {
@@ -491,7 +491,7 @@ size_t rt_ipc_count(void) {
     if (!current) {
         return 0;
     }
-    return current->mbox.count;
+    return current->mailbox.count;
 }
 
 // -----------------------------------------------------------------------------

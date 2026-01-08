@@ -171,7 +171,7 @@ static void actor_unlinks_before_death(void *arg) {
     actor_id target = *(actor_id *)arg;
 
     rt_link(target);
-    rt_unlink(target);
+    rt_link_remove(target);
 
     // Wait for any exit notification
     rt_message msg;
@@ -548,13 +548,13 @@ static void test10_unlink_non_linked(void *arg) {
     }
 
     // Try to unlink from an actor we're not linked to
-    rt_status status = rt_unlink(target);
+    rt_status status = rt_link_remove(target);
 
     // Should either fail or be a no-op
     if (RT_FAILED(status)) {
-        TEST_PASS("rt_unlink non-linked actor fails gracefully");
+        TEST_PASS("rt_link_remove non-linked actor fails gracefully");
     } else {
-        TEST_PASS("rt_unlink non-linked actor is no-op");
+        TEST_PASS("rt_link_remove non-linked actor is no-op");
     }
 
     // Wait for target to exit
@@ -575,18 +575,18 @@ static void test11_unlink_invalid(void *arg) {
     printf("\nTest 11: Unlink invalid actor\n");
     fflush(stdout);
 
-    rt_status status = rt_unlink(ACTOR_ID_INVALID);
+    rt_status status = rt_link_remove(ACTOR_ID_INVALID);
     if (RT_FAILED(status)) {
-        TEST_PASS("rt_unlink rejects ACTOR_ID_INVALID");
+        TEST_PASS("rt_link_remove rejects ACTOR_ID_INVALID");
     } else {
-        TEST_FAIL("rt_unlink should reject ACTOR_ID_INVALID");
+        TEST_FAIL("rt_link_remove should reject ACTOR_ID_INVALID");
     }
 
-    status = rt_unlink(9999);
+    status = rt_link_remove(9999);
     if (RT_FAILED(status)) {
-        TEST_PASS("rt_unlink rejects non-existent actor");
+        TEST_PASS("rt_link_remove rejects non-existent actor");
     } else {
-        TEST_FAIL("rt_unlink should reject non-existent actor");
+        TEST_FAIL("rt_link_remove should reject non-existent actor");
     }
 
     rt_exit();

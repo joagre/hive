@@ -11,11 +11,11 @@ typedef struct {
 
 // Bidirectional linking - both actors notified when either dies
 rt_status rt_link(actor_id target);
-rt_status rt_unlink(actor_id target);
+rt_status rt_link_remove(actor_id target);
 
 // Unidirectional monitoring - only monitor notified when target dies
-rt_status rt_monitor(actor_id target, uint32_t *monitor_ref);
-rt_status rt_demonitor(uint32_t monitor_ref);
+rt_status rt_monitor(actor_id target, uint32_t *monitor_id);
+rt_status rt_monitor_cancel(uint32_t monitor_id);
 
 // Exit message helpers
 bool rt_is_exit_msg(const rt_message *msg);

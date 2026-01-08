@@ -140,7 +140,7 @@ static void producer_actor(void *arg) {
     rt_exit();
 }
 
-// Demo simple message passing (fire-and-forget vs request/reply)
+// Demo simple message passing (async notify vs request/reply)
 static void demo_actor(void *arg) {
     actor_id peer_id = (actor_id)(uintptr_t)arg;
     (void)peer_id;

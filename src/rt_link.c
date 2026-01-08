@@ -33,7 +33,7 @@ static rt_pool g_monitor_pool_mgr;
 
 // Global state
 static struct {
-    uint32_t next_monitor_ref;
+    uint32_t next_monitor_id;
     bool     initialized;
 } g_link_state = {0};
 
@@ -48,7 +48,7 @@ rt_status rt_link_init(void) {
     rt_pool_init(&g_monitor_pool_mgr, g_monitor_pool, g_monitor_used,
                  sizeof(monitor_entry), RT_MONITOR_ENTRY_POOL_SIZE);
 
-    g_link_state.next_monitor_ref = 1;
+    g_link_state.next_monitor_id = 1;
     g_link_state.initialized = true;
 
     RT_LOG_DEBUG("Link subsystem initialized");
@@ -122,7 +122,7 @@ rt_status rt_link(actor_id target_id) {
 }
 
 // Remove bidirectional link
-rt_status rt_unlink(actor_id target_id) {
+rt_status rt_link_remove(actor_id target_id) {
     RT_REQUIRE_ACTOR_CONTEXT();
     actor *current = rt_actor_current();
 
@@ -163,14 +163,14 @@ rt_status rt_unlink(actor_id target_id) {
         }
     }
 
-    RT_LOG_DEBUG("Actor %u unlinked from actor %u", current->id, target_id);
+    RT_LOG_DEBUG("Actor %u removed link to actor %u", current->id, target_id);
     return RT_SUCCESS;
 }
 
 // Create unidirectional monitor
-rt_status rt_monitor(actor_id target_id, uint32_t *monitor_ref) {
-    if (!monitor_ref) {
-        return RT_ERROR(RT_ERR_INVALID, "Invalid monitor_ref pointer");
+rt_status rt_monitor(actor_id target_id, uint32_t *monitor_id) {
+    if (!monitor_id) {
+        return RT_ERROR(RT_ERR_INVALID, "Invalid monitor_id pointer");
     }
 
     RT_REQUIRE_ACTOR_CONTEXT();
@@ -193,21 +193,21 @@ rt_status rt_monitor(actor_id target_id, uint32_t *monitor_ref) {
         return RT_ERROR(RT_ERR_NOMEM, "Monitor pool exhausted");
     }
 
-    // Generate unique monitor reference
-    entry->ref = g_link_state.next_monitor_ref++;
+    // Generate unique monitor ID
+    entry->ref = g_link_state.next_monitor_id++;
     entry->target = target_id;
     entry->next = NULL;
 
     // Add to current actor's monitor list
     SLIST_APPEND(current->monitors, entry);
 
-    *monitor_ref = entry->ref;
+    *monitor_id = entry->ref;
     RT_LOG_DEBUG("Actor %u monitoring actor %u (ref=%u)", current->id, target_id, entry->ref);
     return RT_SUCCESS;
 }
 
-// Remove unidirectional monitor
-rt_status rt_demonitor(uint32_t monitor_ref) {
+// Cancel unidirectional monitor
+rt_status rt_monitor_cancel(uint32_t monitor_id) {
     RT_REQUIRE_ACTOR_CONTEXT();
     actor *current = rt_actor_current();
 
@@ -216,9 +216,9 @@ rt_status rt_demonitor(uint32_t monitor_ref) {
     monitor_entry *entry = current->monitors;
 
     while (entry) {
-        if (entry->ref == monitor_ref) {
+        if (entry->ref == monitor_id) {
             *prev = entry->next;
-            RT_LOG_DEBUG("Actor %u stopped monitoring (ref=%u)", current->id, monitor_ref);
+            RT_LOG_DEBUG("Actor %u cancelled monitor (id=%u)", current->id, monitor_id);
             rt_pool_free(&g_monitor_pool_mgr, entry);
             return RT_SUCCESS;
         }
