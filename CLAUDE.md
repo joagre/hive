@@ -98,7 +98,7 @@ Convenience macros:
 Exit messages are received when linked/monitored actors die:
 ```c
 if (msg.class == ACRT_MSG_EXIT) {
-    acrt_exit_msg *exit_info = (acrt_exit_msg *)msg.data;  // Direct cast
+    acrt_exit_msg *exit_info = (acrt_exit_msg *)msg.data;
     printf("Actor %u died: %s\n", exit_info->actor, acrt_exit_reason_str(exit_info->reason));
 }
 ```

@@ -73,7 +73,6 @@ static void supervisor_actor(void *arg) {
         }
 
         if (msg.class == ACRT_MSG_EXIT) {
-            // Direct cast - no acrt_decode_exit() needed
             acrt_exit_msg *exit_info = (acrt_exit_msg *)msg.data;
 
             printf("Supervisor: Worker died (Actor ID: %u, reason: %s)\n",

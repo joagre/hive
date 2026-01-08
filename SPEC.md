@@ -701,7 +701,6 @@ acrt_message msg;
 acrt_ipc_recv(&msg, -1);
 
 if (msg.class == ACRT_MSG_EXIT) {
-    // Direct cast - preferred approach
     acrt_exit_msg *exit_info = (acrt_exit_msg *)msg.data;
     printf("Actor %u died: %s\n", exit_info->actor, acrt_exit_reason_str(exit_info->reason));
 }
@@ -1100,13 +1099,12 @@ Timer and system messages use the same mailbox and message format as IPC.
 - Tag: `ACRT_TAG_NONE`
 - Payload: `acrt_exit_msg` struct
 
-**Checking message type (direct access - no decode needed):**
+**Checking message type:**
 
 ```c
 acrt_message msg;
 acrt_ipc_recv(&msg, -1);
 
-// Direct access to pre-decoded fields
 switch (msg.class) {
     case ACRT_MSG_NOTIFY:
         handle_cast(msg.sender, msg.data, msg.len);

@@ -39,7 +39,6 @@ static void actor_a(void *arg) {
     acrt_ipc_recv(&msg, -1);
 
     if (msg.class == ACRT_MSG_EXIT) {
-        // Direct cast - no acrt_decode_exit() needed
         acrt_exit_msg *exit_info = (acrt_exit_msg *)msg.data;
 
         printf("Actor A: Received exit notification!\n");
