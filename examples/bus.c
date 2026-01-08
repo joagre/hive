@@ -43,7 +43,7 @@ static void publisher_actor(void *arg) {
             break;
         }
 
-        if (!rt_timer_is_tick(&msg)) {
+        if (!rt_msg_is_timer(&msg)) {
             printf("Publisher: Unexpected message\n");
             continue;
         }

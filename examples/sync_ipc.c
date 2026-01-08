@@ -1,24 +1,18 @@
 /*
- * IPC_SYNC Example - Synchronous Message Passing with Backpressure
+ * RPC Example - Request/Response Pattern with Blocking Calls
  *
- * This example demonstrates IPC_SYNC mode, which provides flow control
- * by blocking the sender until the receiver explicitly releases the message.
+ * This example demonstrates the RPC pattern using rt_ipc_call/rt_ipc_reply,
+ * which provides natural backpressure by blocking the caller until a reply.
  *
  * KEY CONCEPTS:
- * - Sender blocks until receiver calls rt_ipc_release()
- * - Provides natural backpressure (fast sender waits for slow receiver)
- * - Message data is copied to a pinned runtime buffer (safe if sender dies)
- * - Receiver MUST call rt_ipc_release() to unblock sender
- *
- * DEADLOCK WARNING:
- * - NEVER do circular sync sends: A sends SYNC to B, B sends SYNC to A
- * - NEVER send SYNC to self: rt_ipc_send(rt_self(), ..., IPC_SYNC)
- * - NEVER nest sync sends without releasing first
+ * - Caller blocks until callee sends a reply (natural backpressure)
+ * - Tag-based correlation ensures replies match requests
+ * - No risk of deadlock from circular calls (each direction is independent)
  *
  * USE CASES:
+ * - Request-response patterns (database queries, API calls)
  * - Flow control between fast producer and slow consumer
- * - Request-response patterns where sender needs confirmation
- * - Backpressure in pipelines to prevent buffer overflow
+ * - When sender needs confirmation before proceeding
  */
 
 #include "rt_runtime.h"
@@ -32,8 +26,13 @@ typedef struct {
     int data;
 } work_request;
 
+// Work result sent back from consumer to producer
+typedef struct {
+    int job_id;
+    int result;
+} work_result;
+
 // Slow consumer that processes work requests
-// Demonstrates: receiving SYNC messages and releasing them
 static void consumer_actor(void *arg) {
     (void)arg;
 
@@ -41,7 +40,7 @@ static void consumer_actor(void *arg) {
     printf("Consumer: I process slowly to demonstrate backpressure\n\n");
 
     for (int jobs_processed = 0; jobs_processed < 5; jobs_processed++) {
-        // Wait for work request
+        // Wait for work request (RT_MSG_CALL)
         rt_message msg;
         rt_status status = rt_ipc_recv(&msg, 5000);  // 5 second timeout
 
@@ -55,7 +54,18 @@ static void consumer_actor(void *arg) {
             break;
         }
 
-        work_request *req = (work_request *)msg.data;
+        // Decode the message
+        rt_msg_class class;
+        const void *payload;
+        size_t payload_len;
+        rt_msg_decode(&msg, &class, NULL, &payload, &payload_len);
+
+        if (class != RT_MSG_CALL) {
+            printf("Consumer: Unexpected message class %d, skipping\n", class);
+            continue;
+        }
+
+        work_request *req = (work_request *)payload;
         printf("Consumer: Received job #%d (data=%d) from producer %u\n",
                req->job_id, req->data, msg.sender);
 
@@ -67,15 +77,21 @@ static void consumer_actor(void *arg) {
         for (int i = 0; i < 1000000; i++) {
             sum += i;
         }
-        (void)sum;
 
-        printf("Consumer: Finished job #%d, releasing message\n", req->job_id);
+        // Prepare result
+        work_result result = {
+            .job_id = req->job_id,
+            .result = req->data * 2  // Simple processing: double the input
+        };
 
-        // CRITICAL: Release the message to unblock the sender
-        // Note: rt_ipc_release() explicitly unblocks the sender
-        // If we called rt_ipc_recv() again, it would auto-release,
-        // but explicit release is clearer and recommended for SYNC
-        rt_ipc_release(&msg);
+        printf("Consumer: Finished job #%d, sending reply (result=%d)\n",
+               req->job_id, result.result);
+
+        // Send reply to unblock the caller
+        status = rt_ipc_reply(&msg, &result, sizeof(result));
+        if (RT_FAILED(status)) {
+            printf("Consumer: Failed to send reply: %s\n", status.msg);
+        }
 
         printf("Consumer: Producer is now unblocked\n\n");
     }
@@ -85,12 +101,11 @@ static void consumer_actor(void *arg) {
 }
 
 // Fast producer that sends work requests
-// Demonstrates: sending SYNC messages and being blocked until release
 static void producer_actor(void *arg) {
     actor_id consumer_id = (actor_id)(uintptr_t)arg;
 
     printf("Producer: Started (ID: %u)\n", rt_self());
-    printf("Producer: Sending 5 jobs with IPC_SYNC (will block on each)\n\n");
+    printf("Producer: Sending 5 jobs with rt_ipc_call (blocks until reply)\n\n");
 
     for (int i = 1; i <= 5; i++) {
         work_request req = {
@@ -98,63 +113,63 @@ static void producer_actor(void *arg) {
             .data = i * 100
         };
 
-        printf("Producer: Sending job #%d (will block until consumer releases)...\n", i);
+        printf("Producer: Calling consumer with job #%d (will block until reply)...\n", i);
 
-        // Send with IPC_SYNC - this BLOCKS until consumer calls rt_ipc_release()
-        rt_status status = rt_ipc_send(consumer_id, &req, sizeof(req), IPC_SYNC);
+        // Call consumer - this BLOCKS until consumer sends rt_ipc_reply()
+        rt_message reply;
+        rt_status status = rt_ipc_call(consumer_id, &req, sizeof(req), &reply, 10000);
 
         if (RT_FAILED(status)) {
-            if (status.code == RT_ERR_CLOSED) {
-                printf("Producer: Consumer died before releasing! (job #%d)\n", i);
+            if (status.code == RT_ERR_TIMEOUT) {
+                printf("Producer: Timeout waiting for reply on job #%d\n", i);
             } else {
-                printf("Producer: Send failed: %s\n", status.msg);
+                printf("Producer: Call failed: %s\n", status.msg);
             }
             break;
         }
 
-        // We only reach here AFTER consumer has released the message
-        printf("Producer: Job #%d acknowledged (consumer released)\n\n", i);
+        // Decode and display result
+        const void *payload;
+        rt_msg_decode(&reply, NULL, NULL, &payload, NULL);
+        work_result *result = (work_result *)payload;
+
+        printf("Producer: Job #%d completed! Result=%d\n\n", result->job_id, result->result);
     }
 
-    printf("Producer: All jobs sent and acknowledged, exiting\n");
+    printf("Producer: All jobs sent and completed, exiting\n");
     rt_exit();
 }
 
-// Demonstrate what happens with improper SYNC usage (deadlock scenarios)
-static void deadlock_demo_actor(void *arg) {
-    (void)arg;
+// Demo simple message passing (fire-and-forget vs RPC)
+static void demo_actor(void *arg) {
+    actor_id peer_id = (actor_id)(uintptr_t)arg;
+    (void)peer_id;
 
-    printf("\n--- Deadlock Prevention Demo ---\n");
+    printf("\n--- Message Passing Patterns Demo ---\n");
 
-    // Example 1: Self-send with SYNC is forbidden (detected and rejected)
-    printf("Demo: Attempting self-send with IPC_SYNC...\n");
+    // Pattern 1: Fire-and-forget with rt_ipc_send()
+    printf("Demo: Fire-and-forget (rt_ipc_send) - sender continues immediately\n");
     int data = 42;
-    rt_status status = rt_ipc_send(rt_self(), &data, sizeof(data), IPC_SYNC);
-
-    if (RT_FAILED(status)) {
-        printf("Demo: Self-send correctly rejected: %s\n", status.msg);
-    }
-
-    // Example 2: ASYNC self-send works fine
-    printf("Demo: Self-send with IPC_ASYNC works...\n");
-    status = rt_ipc_send(rt_self(), &data, sizeof(data), IPC_ASYNC);
+    rt_status status = rt_ipc_send(rt_self(), &data, sizeof(data));
     if (!RT_FAILED(status)) {
         rt_message msg;
         rt_ipc_recv(&msg, 0);
-        printf("Demo: Received self-sent ASYNC message: %d\n", *(int *)msg.data);
+        const void *payload;
+        rt_msg_decode(&msg, NULL, NULL, &payload, NULL);
+        printf("Demo: Received self-sent message: %d\n", *(int *)payload);
     }
 
-    printf("--- End Deadlock Demo ---\n\n");
+    printf("--- End Demo ---\n\n");
     rt_exit();
 }
 
 int main(void) {
-    printf("=== IPC_SYNC Example - Synchronous Message Passing ===\n\n");
+    printf("=== RPC Example - Request/Response Pattern ===\n\n");
 
     printf("This example shows:\n");
-    printf("1. Producer sends jobs with IPC_SYNC (blocks until acknowledged)\n");
-    printf("2. Consumer processes slowly, creating natural backpressure\n");
-    printf("3. Producer can only send next job after consumer releases previous\n\n");
+    printf("1. Producer sends jobs with rt_ipc_call() (blocks until reply)\n");
+    printf("2. Consumer processes and replies with rt_ipc_reply()\n");
+    printf("3. Producer only proceeds after receiving reply\n\n");
 
     rt_status status = rt_init();
     if (RT_FAILED(status)) {
@@ -162,8 +177,8 @@ int main(void) {
         return 1;
     }
 
-    // First, run the deadlock prevention demo
-    actor_id demo = rt_spawn(deadlock_demo_actor, NULL);
+    // First, run the demo actor
+    actor_id demo = rt_spawn(demo_actor, NULL);
     if (demo == ACTOR_ID_INVALID) {
         fprintf(stderr, "Failed to spawn demo actor\n");
         rt_cleanup();
@@ -196,10 +211,10 @@ int main(void) {
 
     printf("\n=== Example completed ===\n");
     printf("\nKey takeaways:\n");
-    printf("- IPC_SYNC provides natural flow control (backpressure)\n");
-    printf("- Sender blocks until receiver explicitly releases\n");
-    printf("- Always call rt_ipc_release() for SYNC messages\n");
-    printf("- Never do circular SYNC sends (deadlock)\n");
+    printf("- rt_ipc_call() blocks until rt_ipc_reply() is received\n");
+    printf("- Tag-based correlation matches replies to requests\n");
+    printf("- Natural backpressure without explicit release calls\n");
+    printf("- Simpler than old IPC_SYNC mode\n");
 
     return 0;
 }

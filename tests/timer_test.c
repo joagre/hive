@@ -41,7 +41,7 @@ static void run_timer_tests(void *arg) {
 
             if (RT_FAILED(status)) {
                 TEST_FAIL("did not receive timer message");
-            } else if (!rt_timer_is_tick(&msg)) {
+            } else if (!rt_msg_is_timer(&msg)) {
                 TEST_FAIL("message is not a timer tick");
             } else if (elapsed >= 80 && elapsed <= 200) {
                 printf("    Timer fired after %lu ms (expected ~100ms)\n", (unsigned long)elapsed);
@@ -72,7 +72,7 @@ static void run_timer_tests(void *arg) {
                 TEST_PASS("cancelled timer does not fire");
             } else if (RT_FAILED(status)) {
                 TEST_PASS("cancelled timer does not fire (no message)");
-            } else if (rt_timer_is_tick(&msg)) {
+            } else if (rt_msg_is_timer(&msg)) {
                 TEST_FAIL("received timer tick after cancellation");
             } else {
                 TEST_PASS("cancelled timer does not fire");
@@ -81,9 +81,9 @@ static void run_timer_tests(void *arg) {
     }
 
     // ========================================================================
-    // Test 3: Timer sender ID is RT_SENDER_TIMER
+    // Test 3: Timer sender is the owning actor
     // ========================================================================
-    printf("\nTest 3: Timer sender ID is RT_SENDER_TIMER\n");
+    printf("\nTest 3: Timer sender is the owning actor\n");
     {
         timer_id timer;
         rt_timer_after(50000, &timer);
@@ -93,18 +93,18 @@ static void run_timer_tests(void *arg) {
 
         if (RT_FAILED(status)) {
             TEST_FAIL("did not receive timer message");
-        } else if (msg.sender == RT_SENDER_TIMER) {
-            TEST_PASS("timer message has RT_SENDER_TIMER sender");
+        } else if (msg.sender == rt_self()) {
+            TEST_PASS("timer message sender is the owning actor");
         } else {
-            printf("    Sender: %u, expected: %u\n", msg.sender, RT_SENDER_TIMER);
+            printf("    Sender: %u, expected: %u (self)\n", msg.sender, rt_self());
             TEST_FAIL("wrong sender ID");
         }
     }
 
     // ========================================================================
-    // Test 4: rt_timer_is_tick correctly identifies timer messages
+    // Test 4: rt_msg_is_timer correctly identifies timer messages
     // ========================================================================
-    printf("\nTest 4: rt_timer_is_tick identifies timer messages\n");
+    printf("\nTest 4: rt_msg_is_timer identifies timer messages\n");
     {
         timer_id timer;
         rt_timer_after(50000, &timer);
@@ -112,8 +112,8 @@ static void run_timer_tests(void *arg) {
         rt_message msg;
         rt_status status = rt_ipc_recv(&msg, -1);
 
-        if (!RT_FAILED(status) && rt_timer_is_tick(&msg)) {
-            TEST_PASS("timer message detected by rt_timer_is_tick");
+        if (!RT_FAILED(status) && rt_msg_is_timer(&msg)) {
+            TEST_PASS("timer message detected by rt_msg_is_timer");
         } else {
             TEST_FAIL("timer message not detected");
         }
@@ -121,10 +121,10 @@ static void run_timer_tests(void *arg) {
         // Now test that regular messages are NOT detected as timer ticks
         actor_id self = rt_self();
         const char *data = "not a timer";
-        rt_ipc_send(self, data, 12, IPC_ASYNC);
+        rt_ipc_send(self, data, 12);
 
         status = rt_ipc_recv(&msg, 100);
-        if (!RT_FAILED(status) && !rt_timer_is_tick(&msg)) {
+        if (!RT_FAILED(status) && !rt_msg_is_timer(&msg)) {
             TEST_PASS("regular message NOT detected as timer tick");
         } else {
             TEST_FAIL("could not distinguish regular message");
@@ -166,7 +166,7 @@ static void run_timer_tests(void *arg) {
 
         uint64_t elapsed = time_ms() - start;
 
-        if (!RT_FAILED(status) && rt_timer_is_tick(&msg)) {
+        if (!RT_FAILED(status) && rt_msg_is_timer(&msg)) {
             printf("    Short timer fired after %lu ms\n", (unsigned long)elapsed);
             TEST_PASS("short delay timer works");
         } else {
@@ -197,7 +197,7 @@ static void run_timer_tests(void *arg) {
                     printf("    Tick %d: recv failed (timeout or error)\n", i + 1);
                     break;
                 }
-                if (rt_timer_is_tick(&msg)) {
+                if (rt_msg_is_timer(&msg)) {
                     tick_count++;
                 }
             }
@@ -241,7 +241,7 @@ static void run_timer_tests(void *arg) {
                     printf("    Timer %d: recv failed\n", i + 1);
                     continue;
                 }
-                if (rt_timer_is_tick(&msg)) {
+                if (rt_msg_is_timer(&msg)) {
                     uint64_t elapsed = time_ms() - start;
                     printf("    Timer tick %d received at %lu ms\n", received + 1, (unsigned long)elapsed);
                     received++;
@@ -272,7 +272,7 @@ static void run_timer_tests(void *arg) {
             for (int i = 0; i < 3; i++) {
                 rt_message msg;
                 status = rt_ipc_recv(&msg, 100);  // 100ms timeout
-                if (!RT_FAILED(status) && rt_timer_is_tick(&msg)) {
+                if (!RT_FAILED(status) && rt_msg_is_timer(&msg)) {
                     ticks++;
                 }
             }
@@ -289,7 +289,7 @@ static void run_timer_tests(void *arg) {
                 if (status.code == RT_ERR_TIMEOUT) {
                     printf("    Received %d ticks before cancel, then stopped\n", ticks);
                     TEST_PASS("periodic timer stops after cancel");
-                } else if (!RT_FAILED(status) && rt_timer_is_tick(&msg)) {
+                } else if (!RT_FAILED(status) && rt_msg_is_timer(&msg)) {
                     TEST_FAIL("received tick after cancel");
                 } else {
                     TEST_PASS("periodic timer stops after cancel");
@@ -346,7 +346,7 @@ static void run_timer_tests(void *arg) {
             status = rt_ipc_recv(&msg, 100);  // 100ms timeout
             uint64_t elapsed = time_ms() - start;
 
-            if (!RT_FAILED(status) && rt_timer_is_tick(&msg)) {
+            if (!RT_FAILED(status) && rt_msg_is_timer(&msg)) {
                 printf("    Zero delay timer fired after %lu ms\n", (unsigned long)elapsed);
                 TEST_PASS("zero delay timer fires immediately");
             } else {
@@ -375,7 +375,7 @@ static void run_timer_tests(void *arg) {
             for (int i = 0; i < 5; i++) {
                 rt_message msg;
                 status = rt_ipc_recv(&msg, 10);  // 10ms timeout
-                if (!RT_FAILED(status) && rt_timer_is_tick(&msg)) {
+                if (!RT_FAILED(status) && rt_msg_is_timer(&msg)) {
                     ticks++;
                 }
             }

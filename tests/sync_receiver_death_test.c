@@ -23,7 +23,7 @@ void sender_actor(void *arg) {
     printf("Sender: Sending SYNC message to receiver...\n");
 
     char data[100] = "Test data on sender's stack";
-    rt_status status = rt_ipc_send(receiver, data, sizeof(data), IPC_SYNC);
+    rt_status status = rt_ipc_send(receiver, data, sizeof(data));
 
     // If we reach here, we were unblocked
     if (status.code == RT_ERR_CLOSED) {

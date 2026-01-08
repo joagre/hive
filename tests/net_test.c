@@ -726,7 +726,7 @@ static void test12_actor_death_during_recv(void *arg) {
 
     if (!RT_FAILED(status) && rt_is_exit_msg(&msg)) {
         TEST_PASS("actor cleaned up after socket closed during recv");
-    } else if (rt_timer_is_tick(&msg)) {
+    } else if (rt_msg_is_timer(&msg)) {
         // Actor didn't die - might still be blocked
         printf("    Actor still running (may be blocked)\n");
         TEST_PASS("system stable with blocked actor");

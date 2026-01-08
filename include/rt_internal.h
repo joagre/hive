@@ -52,25 +52,21 @@ typedef struct {
 // Internal helper functions (implemented in rt_ipc.c)
 
 // Add mailbox entry to actor's mailbox and wake if blocked
-// Used by: IPC, link, timer subsystems
+// Used by: timer, link subsystems (via rt_ipc_send_ex)
 void rt_mailbox_add_entry(actor *recipient, mailbox_entry *entry);
 
 // Check for timeout message in mailbox and dequeue if present
 // Returns RT_ERR_TIMEOUT if timeout occurred, otherwise cancels timer and returns RT_SUCCESS
-// Used by: IPC recv, network I/O
+// Used by: IPC recv, network I/O, bus
 rt_status rt_mailbox_handle_timeout(actor *current, timer_id timeout_timer, const char *operation);
 
-// Free a mailbox entry and its associated data buffers (sync and/or async)
-// Used by: IPC recv, release, mailbox clear, actor cleanup
+// Free a mailbox entry and its associated data buffers
+// Used by: IPC, mailbox clear, actor cleanup
 void rt_ipc_free_entry(mailbox_entry *entry);
-
-// Unblock a sender that was waiting for IPC_SYNC release
-// Used by: IPC recv (auto-release), IPC release, actor cleanup
-void rt_ipc_unblock_sender(actor_id sender_id, actor_id receiver_id);
 
 // Dequeue the head entry from an actor's mailbox
 // Returns NULL if mailbox is empty
-// Used by: IPC recv, timeout handling
+// Used by: IPC recv, timeout handling, bus
 mailbox_entry *rt_ipc_dequeue_head(actor *a);
 
 // Actor crash handler (called when actor returns without rt_exit)

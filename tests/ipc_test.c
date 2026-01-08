@@ -33,7 +33,7 @@ static void test1_async_basic(void *arg) {
     actor_id self = rt_self();
     const char *msg_data = "Hello ASYNC";
 
-    rt_status status = rt_ipc_send(self, msg_data, strlen(msg_data) + 1, IPC_ASYNC);
+    rt_status status = rt_ipc_send(self, msg_data, strlen(msg_data) + 1);
     if (RT_FAILED(status)) {
         TEST_FAIL("rt_ipc_send ASYNC failed");
         rt_exit();
@@ -46,10 +46,12 @@ static void test1_async_basic(void *arg) {
         rt_exit();
     }
 
-    if (strcmp((const char *)msg.data, "Hello ASYNC") == 0) {
+    const void *payload;
+    rt_msg_decode(&msg, NULL, NULL, &payload, NULL);
+    if (strcmp((const char *)payload, "Hello ASYNC") == 0) {
         TEST_PASS("ASYNC send/recv works");
     } else {
-        printf("    Received: '%s'\n", (const char *)msg.data);
+        printf("    Received: '%s'\n", (const char *)payload);
         TEST_FAIL("data mismatch");
     }
 
@@ -72,14 +74,14 @@ static void test2_async_invalid_receiver(void *arg) {
 
     int data = 42;
 
-    rt_status status = rt_ipc_send(ACTOR_ID_INVALID, &data, sizeof(data), IPC_ASYNC);
+    rt_status status = rt_ipc_send(ACTOR_ID_INVALID, &data, sizeof(data));
     if (RT_FAILED(status)) {
         TEST_PASS("send to ACTOR_ID_INVALID fails");
     } else {
         TEST_FAIL("send to ACTOR_ID_INVALID should fail");
     }
 
-    status = rt_ipc_send(9999, &data, sizeof(data), IPC_ASYNC);
+    status = rt_ipc_send(9999, &data, sizeof(data));
     if (RT_FAILED(status)) {
         TEST_PASS("send to non-existent actor fails");
     } else {
@@ -101,7 +103,7 @@ static void test3_message_ordering(void *arg) {
 
     // Send 5 messages
     for (int i = 1; i <= 5; i++) {
-        rt_ipc_send(self, &i, sizeof(i), IPC_ASYNC);
+        rt_ipc_send(self, &i, sizeof(i));
     }
 
     // Receive and verify order
@@ -113,7 +115,9 @@ static void test3_message_ordering(void *arg) {
             order_correct = false;
             break;
         }
-        int received = *(int *)msg.data;
+        const void *payload;
+        rt_msg_decode(&msg, NULL, NULL, &payload, NULL);
+        int received = *(int *)payload;
         if (received != i) {
             printf("    Expected %d, got %d\n", i, received);
             order_correct = false;
@@ -138,7 +142,7 @@ static int g_messages_received = 0;
 
 static void sender_actor(void *arg) {
     int id = *(int *)arg;
-    rt_ipc_send(g_receiver_id, &id, sizeof(id), IPC_ASYNC);
+    rt_ipc_send(g_receiver_id, &id, sizeof(id));
     rt_exit();
 }
 
@@ -166,8 +170,10 @@ static void test4_multiple_senders(void *arg) {
         rt_status status = rt_ipc_recv(&msg, 500);
         if (RT_FAILED(status)) break;
 
-        if (msg.sender != RT_SENDER_TIMER) {
-            received_sum += *(int *)msg.data;
+        if (!rt_msg_is_timer(&msg)) {
+            const void *payload;
+            rt_msg_decode(&msg, NULL, NULL, &payload, NULL);
+            received_sum += *(int *)payload;
             g_messages_received++;
         }
     }
@@ -184,85 +190,101 @@ static void test4_multiple_senders(void *arg) {
 }
 
 // ============================================================================
-// Test 5: SYNC send to self should fail (deadlock prevention)
+// Test 5: Send to self (allowed - no deadlock since all sends are async-style)
 // ============================================================================
 
-static void test5_sync_self_deadlock(void *arg) {
+static void test5_send_to_self(void *arg) {
     (void)arg;
-    printf("\nTest 5: SYNC send to self should fail (deadlock prevention)\n");
+    printf("\nTest 5: Send to self (allowed)\n");
 
     actor_id self = rt_self();
     int data = 42;
 
-    rt_status status = rt_ipc_send(self, &data, sizeof(data), IPC_SYNC);
-    if (RT_FAILED(status)) {
-        TEST_PASS("SYNC send to self is rejected (deadlock prevention)");
+    rt_status status = rt_ipc_send(self, &data, sizeof(data));
+    if (!RT_FAILED(status)) {
+        // Receive the message we sent to ourselves
+        rt_message msg;
+        status = rt_ipc_recv(&msg, 100);
+        if (!RT_FAILED(status)) {
+            const void *payload;
+            rt_msg_decode(&msg, NULL, NULL, &payload, NULL);
+            if (*(int *)payload == 42) {
+                TEST_PASS("send to self works");
+            } else {
+                TEST_FAIL("wrong data received from self-send");
+            }
+        } else {
+            TEST_FAIL("failed to receive self-sent message");
+        }
     } else {
-        TEST_FAIL("SYNC send to self should be rejected");
+        TEST_FAIL("send to self should succeed");
     }
 
     rt_exit();
 }
 
 // ============================================================================
-// Test 6: SYNC send/recv with release
+// Test 6: RPC call/reply pattern
 // ============================================================================
 
-static void sync_receiver_actor(void *arg) {
-    actor_id sender = *(actor_id *)arg;
+static void rpc_server_actor(void *arg) {
+    (void)arg;
 
-    // Wait for SYNC message
+    // Wait for RPC call
     rt_message msg;
     rt_status status = rt_ipc_recv(&msg, 1000);
     if (RT_FAILED(status)) {
         rt_exit();
     }
 
-    // Verify data
-    if (strcmp((const char *)msg.data, "SYNC_DATA") == 0) {
-        // Release the message - this unblocks the sender
-        rt_ipc_release(&msg);
-    }
+    // Decode call and verify it's a CALL message
+    rt_msg_class class;
+    const void *payload;
+    rt_msg_decode(&msg, &class, NULL, &payload, NULL);
 
-    // Notify sender we're done
-    int done = 1;
-    rt_ipc_send(sender, &done, sizeof(done), IPC_ASYNC);
+    if (class == RT_MSG_CALL) {
+        // Send reply
+        int result = *(int *)payload * 2;  // Double the input
+        rt_ipc_reply(&msg, &result, sizeof(result));
+    }
 
     rt_exit();
 }
 
-static void test6_sync_send_release(void *arg) {
+static void test6_rpc_call_reply(void *arg) {
     (void)arg;
-    printf("\nTest 6: SYNC send/recv with release\n");
+    printf("\nTest 6: RPC call/reply pattern\n");
 
-    actor_id self = rt_self();
-    actor_id receiver = rt_spawn(sync_receiver_actor, &self);
+    actor_id server = rt_spawn(rpc_server_actor, NULL);
 
-    // Give receiver time to start
+    // Give server time to start
     rt_yield();
 
-    // Send SYNC message
-    const char *data = "SYNC_DATA";
+    // Make RPC call
+    int request = 21;
+    rt_message reply;
     uint64_t start = time_ms();
-    rt_status status = rt_ipc_send(receiver, data, strlen(data) + 1, IPC_SYNC);
+    rt_status status = rt_ipc_call(server, &request, sizeof(request), &reply, 1000);
     uint64_t elapsed = time_ms() - start;
 
     if (RT_FAILED(status)) {
-        TEST_FAIL("SYNC send failed");
+        printf("    rt_ipc_call failed: %s\n", status.msg ? status.msg : "unknown");
+        TEST_FAIL("rt_ipc_call failed");
         rt_exit();
     }
 
-    // We should have blocked until receiver called rt_ipc_release
-    if (elapsed < 1000) {  // Should be fast if release works
-        TEST_PASS("SYNC send blocked until release");
-    } else {
-        printf("    Send took %lu ms\n", (unsigned long)elapsed);
-        TEST_FAIL("SYNC send did not unblock after release");
-    }
+    // Verify reply
+    const void *payload;
+    rt_msg_decode(&reply, NULL, NULL, &payload, NULL);
+    int result = *(int *)payload;
 
-    // Wait for receiver to confirm
-    rt_message msg;
-    rt_ipc_recv(&msg, 1000);
+    if (result == 42) {
+        printf("    RPC completed in %lu ms\n", (unsigned long)elapsed);
+        TEST_PASS("rt_ipc_call/reply works correctly");
+    } else {
+        printf("    Expected 42, got %d\n", result);
+        TEST_FAIL("wrong RPC result");
+    }
 
     rt_exit();
 }
@@ -292,9 +314,9 @@ static void test7_pending_count(void *arg) {
 
     // Send 3 messages
     int data = 42;
-    rt_ipc_send(self, &data, sizeof(data), IPC_ASYNC);
-    rt_ipc_send(self, &data, sizeof(data), IPC_ASYNC);
-    rt_ipc_send(self, &data, sizeof(data), IPC_ASYNC);
+    rt_ipc_send(self, &data, sizeof(data));
+    rt_ipc_send(self, &data, sizeof(data));
+    rt_ipc_send(self, &data, sizeof(data));
 
     if (rt_ipc_pending()) {
         TEST_PASS("rt_ipc_pending returns true with messages");
@@ -354,7 +376,7 @@ static void test8_nonblocking_recv(void *arg) {
     // With a message in queue
     actor_id self = rt_self();
     int data = 42;
-    rt_ipc_send(self, &data, sizeof(data), IPC_ASYNC);
+    rt_ipc_send(self, &data, sizeof(data));
 
     status = rt_ipc_recv(&msg, 0);
     if (!RT_FAILED(status)) {
@@ -412,7 +434,7 @@ static void delayed_sender_actor(void *arg) {
     rt_ipc_recv(&msg, -1);
 
     int data = 123;
-    rt_ipc_send(target, &data, sizeof(data), IPC_ASYNC);
+    rt_ipc_send(target, &data, sizeof(data));
 
     rt_exit();
 }
@@ -457,13 +479,16 @@ static void test11_message_size_limits(void *arg) {
 
     actor_id self = rt_self();
 
-    // Send message at max size
-    char max_msg[RT_MAX_MESSAGE_SIZE];
-    memset(max_msg, 'A', RT_MAX_MESSAGE_SIZE);
+    // Max payload size is RT_MAX_MESSAGE_SIZE - RT_MSG_HEADER_SIZE (4 bytes for header)
+    size_t max_payload_size = RT_MAX_MESSAGE_SIZE - RT_MSG_HEADER_SIZE;
 
-    rt_status status = rt_ipc_send(self, max_msg, RT_MAX_MESSAGE_SIZE, IPC_ASYNC);
+    // Send message at max payload size
+    char max_msg[RT_MAX_MESSAGE_SIZE];  // Oversize buffer for safety
+    memset(max_msg, 'A', sizeof(max_msg));
+
+    rt_status status = rt_ipc_send(self, max_msg, max_payload_size);
     if (!RT_FAILED(status)) {
-        TEST_PASS("can send message at RT_MAX_MESSAGE_SIZE");
+        TEST_PASS("can send message at max payload size");
     } else {
         printf("    Error: %s\n", status.msg ? status.msg : "unknown");
         TEST_FAIL("failed to send max size message");
@@ -472,17 +497,16 @@ static void test11_message_size_limits(void *arg) {
     // Receive it
     rt_message msg;
     status = rt_ipc_recv(&msg, 100);
+    // msg.len includes header, so total should be max_payload_size + 4
     if (!RT_FAILED(status) && msg.len == RT_MAX_MESSAGE_SIZE) {
         TEST_PASS("received max size message");
     } else {
+        printf("    msg.len = %zu, expected %d\n", msg.len, RT_MAX_MESSAGE_SIZE);
         TEST_FAIL("failed to receive max size message");
     }
 
-    // Send message exceeding max size
-    char oversized[RT_MAX_MESSAGE_SIZE + 1];
-    memset(oversized, 'B', sizeof(oversized));
-
-    status = rt_ipc_send(self, oversized, RT_MAX_MESSAGE_SIZE + 1, IPC_ASYNC);
+    // Send message exceeding max size (payload larger than max_payload_size)
+    status = rt_ipc_send(self, max_msg, max_payload_size + 1);
     if (RT_FAILED(status)) {
         TEST_PASS("oversized message is rejected");
     } else {
@@ -495,59 +519,56 @@ static void test11_message_size_limits(void *arg) {
 }
 
 // ============================================================================
-// Test 12: SYNC auto-release on next recv
-// Documentation: rt_types.h says "SYNC: valid until rt_ipc_release() (next recv auto-releases)"
+// Test 12: Selective receive (rt_ipc_recv_match)
 // ============================================================================
 
-static void sync_sender_for_auto_release(void *arg) {
+static void selective_sender_actor(void *arg) {
     actor_id target = *(actor_id *)arg;
 
-    const char *data = "AUTO_RELEASE_TEST";
-    rt_status status = rt_ipc_send(target, data, strlen(data) + 1, IPC_SYNC);
-    if (!RT_FAILED(status)) {
-        // Send notification that we were unblocked
-        int done = 1;
-        rt_ipc_send(target, &done, sizeof(done), IPC_ASYNC);
-    }
+    // Send three messages with different data
+    int a = 1, b = 2, c = 3;
+    rt_ipc_send(target, &a, sizeof(a));
+    rt_ipc_send(target, &b, sizeof(b));
+    rt_ipc_send(target, &c, sizeof(c));
 
     rt_exit();
 }
 
-static void test12_sync_auto_release(void *arg) {
+static void test12_selective_receive(void *arg) {
     (void)arg;
-    printf("\nTest 12: SYNC auto-release on next recv\n");
+    printf("\nTest 12: Selective receive (rt_ipc_recv_match)\n");
     fflush(stdout);
 
     actor_id self = rt_self();
-    actor_id sender = rt_spawn(sync_sender_for_auto_release, &self);
-    rt_link(sender);
+    actor_id sender = rt_spawn(selective_sender_actor, &self);
 
-    // First recv gets the SYNC message
-    rt_message msg1;
-    rt_status status = rt_ipc_recv(&msg1, 1000);
-    if (RT_FAILED(status)) {
-        printf("    First recv failed: %s\n", status.msg ? status.msg : "unknown");
-        TEST_FAIL("failed to receive SYNC message");
-        rt_exit();
-    }
+    // Wait for sender to send all messages
+    timer_id timer;
+    rt_timer_after(50000, &timer);
+    rt_message timer_msg;
+    rt_ipc_recv(&timer_msg, -1);
 
-    // Don't call rt_ipc_release - the next recv should auto-release
-    // According to rt_types.h: "SYNC: valid until rt_ipc_release() (next recv auto-releases)"
-    rt_message msg2;
-    status = rt_ipc_recv(&msg2, 1000);
+    // Use selective receive to filter by sender
+    rt_message msg;
+    rt_status status = rt_ipc_recv_match(&sender, NULL, NULL, &msg, 100);
 
     if (!RT_FAILED(status)) {
-        if (rt_is_exit_msg(&msg2)) {
-            // Got exit notification instead of the "done" message
-            printf("    Received exit notification instead of 'done' message\n");
-            TEST_FAIL("sender died before sending confirmation (auto-release bug)");
+        if (msg.sender == sender) {
+            const void *payload;
+            rt_msg_decode(&msg, NULL, NULL, &payload, NULL);
+            int val = *(int *)payload;
+            printf("    Received value %d from sender %u\n", val, sender);
+            TEST_PASS("rt_ipc_recv_match filters by sender");
         } else {
-            TEST_PASS("next recv auto-released previous SYNC message");
+            TEST_FAIL("wrong sender in filtered message");
         }
     } else {
-        printf("    Second recv failed: %s\n", status.msg ? status.msg : "unknown");
-        TEST_FAIL("auto-release did not unblock SYNC sender");
+        printf("    recv_match failed: %s\n", status.msg ? status.msg : "unknown");
+        TEST_FAIL("rt_ipc_recv_match failed");
     }
+
+    // Drain remaining messages
+    while (!RT_FAILED(rt_ipc_recv(&msg, 0))) {}
 
     rt_exit();
 }
@@ -558,20 +579,24 @@ static void test12_sync_auto_release(void *arg) {
 
 static void test13_zero_length_message(void *arg) {
     (void)arg;
-    printf("\nTest 13: Send with zero length\n");
+    printf("\nTest 13: Send with zero length payload\n");
 
     actor_id self = rt_self();
 
-    rt_status status = rt_ipc_send(self, NULL, 0, IPC_ASYNC);
+    rt_status status = rt_ipc_send(self, NULL, 0);
     if (!RT_FAILED(status)) {
-        TEST_PASS("can send zero-length message");
+        TEST_PASS("can send zero-length payload");
 
         rt_message msg;
         status = rt_ipc_recv(&msg, 100);
-        if (!RT_FAILED(status) && msg.len == 0) {
-            TEST_PASS("received zero-length message");
+        // msg.len includes 4-byte header, so zero-payload message has len=4
+        size_t payload_len;
+        rt_msg_decode(&msg, NULL, NULL, NULL, &payload_len);
+        if (!RT_FAILED(status) && payload_len == 0) {
+            TEST_PASS("received zero-length payload message");
         } else {
-            TEST_FAIL("failed to receive zero-length message");
+            printf("    payload_len = %zu (expected 0)\n", payload_len);
+            TEST_FAIL("failed to receive zero-length payload message");
         }
     } else {
         TEST_FAIL("failed to send zero-length message");
@@ -581,7 +606,7 @@ static void test13_zero_length_message(void *arg) {
 }
 
 // ============================================================================
-// Test 14: SYNC send to dead actor
+// Test 14: Send to dead actor
 // ============================================================================
 
 static void quickly_dying_actor(void *arg) {
@@ -589,9 +614,9 @@ static void quickly_dying_actor(void *arg) {
     rt_exit();
 }
 
-static void test14_sync_to_dead_actor(void *arg) {
+static void test14_send_to_dead_actor(void *arg) {
     (void)arg;
-    printf("\nTest 14: SYNC send to dead actor\n");
+    printf("\nTest 14: Send to dead actor\n");
 
     actor_id target = rt_spawn(quickly_dying_actor, NULL);
     rt_link(target);
@@ -600,104 +625,60 @@ static void test14_sync_to_dead_actor(void *arg) {
     rt_message msg;
     rt_ipc_recv(&msg, 1000);
 
-    // Now try to send SYNC to dead actor
+    // Now try to send to dead actor
     int data = 42;
-    rt_status status = rt_ipc_send(target, &data, sizeof(data), IPC_SYNC);
+    rt_status status = rt_ipc_send(target, &data, sizeof(data));
 
     if (RT_FAILED(status)) {
-        TEST_PASS("SYNC send to dead actor fails");
+        TEST_PASS("send to dead actor fails");
     } else {
-        TEST_FAIL("SYNC send to dead actor should fail");
+        TEST_FAIL("send to dead actor should fail");
     }
 
     rt_exit();
 }
 
 // ============================================================================
-// Test 15: Sync buffer pool exhaustion
-// Pool size: RT_SYNC_BUFFER_POOL_SIZE = 64
+// Test 15: Message pool exhaustion
+// Pool size: RT_MESSAGE_DATA_POOL_SIZE
 // ============================================================================
 
-static volatile int g_sync_senders_blocked = 0;
-static volatile int g_sync_senders_failed = 0;
-
-static void sync_sender_exhaustion(void *arg) {
-    actor_id target = *(actor_id *)arg;
-    const char *data = "SYNC_EXHAUST";
-
-    rt_status status = rt_ipc_send(target, data, strlen(data) + 1, IPC_SYNC);
-    if (RT_FAILED(status)) {
-        g_sync_senders_failed++;
-    } else {
-        g_sync_senders_blocked++;
-    }
-
-    rt_exit();
-}
-
-static void test15_sync_pool_exhaustion(void *arg) {
+static void test15_message_pool_info(void *arg) {
     (void)arg;
-    printf("\nTest 15: Sync buffer pool exhaustion (RT_SYNC_BUFFER_POOL_SIZE=%d)\n",
-           RT_SYNC_BUFFER_POOL_SIZE);
+    printf("\nTest 15: Message pool info (RT_MESSAGE_DATA_POOL_SIZE=%d)\n",
+           RT_MESSAGE_DATA_POOL_SIZE);
     fflush(stdout);
 
-    g_sync_senders_blocked = 0;
-    g_sync_senders_failed = 0;
-
+    // Simple test: just verify we can send many messages
     actor_id self = rt_self();
+    int sent = 0;
 
-    // Spawn more senders than sync buffer pool size
-    // Use malloc stacks to avoid arena exhaustion
-    int num_senders = RT_SYNC_BUFFER_POOL_SIZE + 10;
-    actor_id senders[RT_SYNC_BUFFER_POOL_SIZE + 10];
-
-    for (int i = 0; i < num_senders; i++) {
-        actor_config cfg = RT_ACTOR_CONFIG_DEFAULT;
-        cfg.malloc_stack = true;
-        cfg.stack_size = 8 * 1024;  // Small stacks to fit more actors
-
-        senders[i] = rt_spawn_ex(sync_sender_exhaustion, &self, &cfg);
-        if (senders[i] == ACTOR_ID_INVALID) {
-            num_senders = i;
+    for (int i = 0; i < 100; i++) {
+        int data = i;
+        rt_status status = rt_ipc_send(self, &data, sizeof(data));
+        if (RT_FAILED(status)) {
+            printf("    Send failed at %d: %s\n", i, status.msg ? status.msg : "unknown");
             break;
         }
+        sent++;
     }
 
-    printf("    Spawned %d sender actors\n", num_senders);
+    printf("    Sent %d messages to self\n", sent);
 
-    // Yield to let senders attempt to send
-    for (int i = 0; i < num_senders; i++) {
-        rt_yield();
-    }
-
-    // Some should have failed with NOMEM (if we spawned more than pool size)
-    if (g_sync_senders_failed > 0) {
-        printf("    %d senders got RT_ERR_NOMEM (pool exhausted)\n", g_sync_senders_failed);
-        TEST_PASS("sync buffer pool exhaustion returns RT_ERR_NOMEM");
-    } else if (num_senders > RT_SYNC_BUFFER_POOL_SIZE) {
-        printf("    All %d senders blocked, expected some NOMEM\n", num_senders);
-        TEST_FAIL("expected some senders to fail with NOMEM");
-    } else {
-        // We couldn't spawn enough actors to exhaust the pool (actor table limit)
-        printf("    Only %d senders (limited by actor table), pool size is %d\n",
-               num_senders, RT_SYNC_BUFFER_POOL_SIZE);
-        printf("    %d blocked, %d failed\n", g_sync_senders_blocked, g_sync_senders_failed);
-        TEST_PASS("sync pool handles concurrent senders correctly");
-    }
-
-    // Release all blocked senders by receiving their messages
+    // Drain all messages
     rt_message msg;
-    while (rt_ipc_pending()) {
-        rt_status status = rt_ipc_recv(&msg, 0);
-        if (!RT_FAILED(status)) {
-            rt_ipc_release(&msg);
-        }
+    int received = 0;
+    while (!RT_FAILED(rt_ipc_recv(&msg, 0))) {
+        received++;
     }
 
-    // Wait for senders to exit
-    timer_id timer;
-    rt_timer_after(100000, &timer);
-    rt_ipc_recv(&msg, -1);
+    printf("    Received %d messages\n", received);
+
+    if (sent == received && sent == 100) {
+        TEST_PASS("can send and receive 100 messages");
+    } else {
+        TEST_FAIL("message count mismatch");
+    }
 
     rt_exit();
 }
@@ -714,7 +695,7 @@ static void test16_null_data_send(void *arg) {
     actor_id self = rt_self();
 
     // Sending NULL data with len > 0 should fail or be handled safely
-    rt_status status = rt_ipc_send(self, NULL, 10, IPC_ASYNC);
+    rt_status status = rt_ipc_send(self, NULL, 10);
     if (RT_FAILED(status)) {
         TEST_PASS("rt_ipc_send rejects NULL data with non-zero length");
     } else {
@@ -735,7 +716,7 @@ static void short_lived_actor(void *arg) {
     actor_id parent = *(actor_id *)arg;
     // Send a message then die
     int data = 42;
-    rt_ipc_send(parent, &data, sizeof(data), IPC_ASYNC);
+    rt_ipc_send(parent, &data, sizeof(data));
     rt_exit();
 }
 
@@ -789,17 +770,17 @@ static void (*test_funcs[])(void *) = {
     test2_async_invalid_receiver,
     test3_message_ordering,
     test4_multiple_senders,
-    test5_sync_self_deadlock,
-    test6_sync_send_release,
+    test5_send_to_self,
+    test6_rpc_call_reply,
     test7_pending_count,
     test8_nonblocking_recv,
     test9_timed_recv,
     test10_block_forever_recv,
     test11_message_size_limits,
-    test12_sync_auto_release,
+    test12_selective_receive,
     test13_zero_length_message,
-    test14_sync_to_dead_actor,
-    test15_sync_pool_exhaustion,
+    test14_send_to_dead_actor,
+    test15_message_pool_info,
     test16_null_data_send,
     test17_spawn_death_cycle_leak,
 };

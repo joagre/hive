@@ -63,7 +63,7 @@ void sender_actor(void *arg) {
 
     for (int i = 0; i < MESSAGES_TO_FILL_POOL; i++) {
         data++;
-        rt_status status = rt_ipc_send(receiver, &data, sizeof(data), IPC_ASYNC);
+        rt_status status = rt_ipc_send(receiver, &data, sizeof(data));
 
         if (RT_FAILED(status)) {
             if (status.code == RT_ERR_NOMEM) {
@@ -83,7 +83,7 @@ void sender_actor(void *arg) {
     int failed_count = 0;
     for (int i = 0; i < 20; i++) {
         data++;
-        rt_status status = rt_ipc_send(receiver, &data, sizeof(data), IPC_ASYNC);
+        rt_status status = rt_ipc_send(receiver, &data, sizeof(data));
 
         if (status.code == RT_ERR_NOMEM) {
             failed_count++;
@@ -105,14 +105,14 @@ void sender_actor(void *arg) {
 
     // Signal controller to tell receiver to start
     char start_cmd = 'S';
-    rt_ipc_send(args->controller, &start_cmd, sizeof(start_cmd), IPC_ASYNC);
+    rt_ipc_send(args->controller, &start_cmd, sizeof(start_cmd));
 
     // Now retry with backoff
     for (int attempt = 0; attempt < 20; attempt++) {
         rt_yield();  // Give receiver chance to process
 
         data++;
-        rt_status status = rt_ipc_send(receiver, &data, sizeof(data), IPC_ASYNC);
+        rt_status status = rt_ipc_send(receiver, &data, sizeof(data));
 
         if (!RT_FAILED(status)) {
             printf("Sender: ✓ Send succeeded on attempt %d!\n", attempt + 1);
@@ -155,7 +155,7 @@ void controller_actor(void *arg) {
     char *cmd = (char *)msg.data;
     if (*cmd == 'S') {
         printf("Controller: Got START command, forwarding to receiver...\n");
-        rt_ipc_send(args->receiver, cmd, sizeof(*cmd), IPC_ASYNC);
+        rt_ipc_send(args->receiver, cmd, sizeof(*cmd));
     }
 
     rt_exit();

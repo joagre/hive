@@ -38,7 +38,7 @@ static void server_actor(void *arg) {
 
     // Notify client that server is ready via IPC
     coord_msg ready_msg = { .type = MSG_SERVER_READY };
-    status = rt_ipc_send(client_id, &ready_msg, sizeof(ready_msg), IPC_ASYNC);
+    status = rt_ipc_send(client_id, &ready_msg, sizeof(ready_msg));
     if (RT_FAILED(status)) {
         printf("Server: Failed to send ready message: %s\n",
                status.msg ? status.msg : "unknown error");
@@ -100,7 +100,9 @@ static void server_actor(void *arg) {
     if (RT_FAILED(status)) {
         printf("Server: Timeout waiting for client done message\n");
     } else {
-        coord_msg *coord = (coord_msg *)done_msg.data;
+        const void *payload;
+        rt_msg_decode(&done_msg, NULL, NULL, &payload, NULL);
+        coord_msg *coord = (coord_msg *)payload;
         if (coord->type == MSG_CLIENT_DONE) {
             printf("Server: Received done notification from client via IPC\n");
         }
@@ -137,7 +139,9 @@ static void client_actor(void *arg) {
 
     // Get server ID from message sender
     actor_id server_id = msg.sender;
-    coord_msg *coord = (coord_msg *)msg.data;
+    const void *payload;
+    rt_msg_decode(&msg, NULL, NULL, &payload, NULL);
+    coord_msg *coord = (coord_msg *)payload;
     if (coord->type == MSG_SERVER_READY) {
         printf("Client: Received server ready notification via IPC (from actor %u)\n", server_id);
     }
@@ -186,7 +190,7 @@ static void client_actor(void *arg) {
 
     // Notify server that client is done via IPC
     coord_msg done_msg = { .type = MSG_CLIENT_DONE };
-    status = rt_ipc_send(server_id, &done_msg, sizeof(done_msg), IPC_ASYNC);
+    status = rt_ipc_send(server_id, &done_msg, sizeof(done_msg));
     if (RT_FAILED(status)) {
         printf("Client: Failed to send done message: %s\n",
                status.msg ? status.msg : "unknown error");

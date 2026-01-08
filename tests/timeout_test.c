@@ -28,7 +28,7 @@ void test_timeout_actor(void *arg) {
     printf("\nTest 2: Message arrives before timeout\n");
     actor_id self = rt_self();
     int data = 42;
-    rt_ipc_send(self, &data, sizeof(data), IPC_ASYNC);
+    rt_ipc_send(self, &data, sizeof(data));
 
     start = get_time_ms();
     status = rt_ipc_recv(&msg, 100);  // 100ms timeout

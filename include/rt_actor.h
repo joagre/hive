@@ -16,9 +16,9 @@ typedef enum {
 typedef struct mailbox_entry {
     actor_id                sender;
     size_t                  len;
-    void                   *data;       // NULL for synchronous messages
-    const void             *sync_ptr;   // Non-NULL for synchronous messages
+    void                   *data;
     struct mailbox_entry   *next;
+    struct mailbox_entry   *prev;  // For unlinking in selective receive
 } mailbox_entry;
 
 // Mailbox
@@ -60,9 +60,10 @@ typedef struct {
     // Active message (for proper cleanup)
     mailbox_entry *active_msg;
 
-    // For blocked IPC_SYNC sends
-    bool           waiting_for_release;
-    actor_id       blocked_on_actor;
+    // For selective receive: filters to match against
+    actor_id       recv_filter_from;
+    rt_msg_class   recv_filter_class;
+    uint32_t       recv_filter_tag;
 
     // For I/O completion results
     rt_status      io_status;

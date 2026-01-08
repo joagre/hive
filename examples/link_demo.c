@@ -21,7 +21,7 @@ static void actor_a(void *arg) {
 
     rt_message msg;
     rt_ipc_recv(&msg, -1);
-    if (rt_timer_is_tick(&msg)) {
+    if (rt_msg_is_timer(&msg)) {
         printf("Actor A: Timer fired, linking to Actor B...\n");
     }
 

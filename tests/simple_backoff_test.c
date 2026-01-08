@@ -46,7 +46,7 @@ void aggressive_sender_actor(void *arg) {
     // Phase 1: Fill the pool
     for (int i = 0; i < 300; i++) {
         int data = i;
-        rt_status status = rt_ipc_send(processor, &data, sizeof(data), IPC_ASYNC);
+        rt_status status = rt_ipc_send(processor, &data, sizeof(data));
 
         if (!RT_FAILED(status)) {
             sent++;
@@ -70,7 +70,7 @@ void aggressive_sender_actor(void *arg) {
             }
 
             // Retry the send
-            status = rt_ipc_send(processor, &data, sizeof(data), IPC_ASYNC);
+            status = rt_ipc_send(processor, &data, sizeof(data));
             if (!RT_FAILED(status)) {
                 succeeded_after_retry++;
                 if (succeeded_after_retry == 1) {

@@ -28,7 +28,7 @@ A minimalistic actor-based runtime designed for **embedded and safety-critical s
 
 **Forbidden heap use** (exhaustive):
 - Scheduler loop (`rt_run()`, `rt_yield()`, context switching)
-- IPC (`rt_ipc_send()`, `rt_ipc_recv()`, `rt_ipc_release()`)
+- IPC (`rt_ipc_send()`, `rt_ipc_recv()`, `rt_ipc_recv_match()`, `rt_ipc_call()`, `rt_ipc_reply()`)
 - Timers (`rt_timer_after()`, `rt_timer_every()`, timer delivery)
 - Bus (`rt_bus_publish()`, `rt_bus_read()`, `rt_bus_read_wait()`)
 - Network I/O (`rt_net_*()` functions, event loop dispatch)
@@ -118,7 +118,8 @@ When an actor calls a blocking API, the following contract applies:
 
 **Operations that block (actor yields, other actors run):**
 - `rt_ipc_recv()` with timeout > 0 or timeout < 0 (block until message or timeout)
-- `rt_ipc_send()` with `IPC_SYNC` (block until receiver releases)
+- `rt_ipc_recv_match()` (block until matching message or timeout)
+- `rt_ipc_call()` (block until reply or timeout)
 - `rt_net_send()`, `rt_net_recv()` (block until at least 1 byte transferred or timeout)
 - `rt_bus_read_wait()` (block until data available or timeout)
 
@@ -132,10 +133,9 @@ When an actor calls a blocking API, the following contract applies:
 **Unblock conditions:**
 - I/O readiness signaled (network socket becomes readable/writable)
 - Timer expires (for APIs with timeout)
-- Message arrives in mailbox (for `rt_ipc_recv()`)
+- Message arrives in mailbox (for `rt_ipc_recv()`, `rt_ipc_recv_match()`, `rt_ipc_call()`)
 - Bus data published (for `rt_bus_read_wait()`)
-- Explicit release occurs (for `IPC_SYNC` sender)
-- **Important**: Mailbox arrival only unblocks actors blocked in `rt_ipc_recv()`, not actors blocked on network I/O, bus read, or `IPC_SYNC` send
+- **Important**: Mailbox arrival only unblocks actors blocked in IPC receive operations, not actors blocked on network I/O or bus read
 
 **Scheduling phase definition:**
 
@@ -188,7 +188,6 @@ Each blocking network request has an implicit state: `PENDING` → `COMPLETED` o
 
 **Note:** This serialization model does NOT apply to:
 - **File I/O**: Stalls scheduler synchronously (no event loop involvement)
-- **IPC_SYNC**: Sender blocks until receiver releases (no event loop, no timeout race)
 
 **Determinism guarantee (qualified):**
 
@@ -311,7 +310,7 @@ void socket_reader_actor(void *arg) {
     while (1) {
         size_t received;
         rt_net_recv(sock, buf, len, &received, -1);  // Blocks in event loop
-        rt_ipc_send(worker, buf, received, IPC_ASYNC);  // Forward to actors
+        rt_ipc_send(worker, buf, received);  // Forward to actors
     }
 }
 ```
@@ -425,7 +424,7 @@ The runtime uses static allocation for deterministic behavior and suitability fo
   - Optional: malloc via `actor_config.malloc_stack = true`
 - **IPC pools:** Static pools with O(1) allocation (hot path)
   - Mailbox entry pool: `RT_MAILBOX_ENTRY_POOL_SIZE` (256)
-  - Message data pool: `RT_MESSAGE_DATA_POOL_SIZE` (256), fixed-size entries of `RT_MAX_MESSAGE_SIZE` (256 bytes)
+  - Message data pool: `RT_MESSAGE_DATA_POOL_SIZE` (256), fixed-size entries of `RT_MAX_MESSAGE_SIZE` bytes
 - **Link/Monitor pools:** Static pools for actor relationships
   - Link entry pool: `RT_LINK_ENTRY_POOL_SIZE` (128)
   - Monitor entry pool: `RT_MONITOR_ENTRY_POOL_SIZE` (128)
@@ -445,12 +444,11 @@ The runtime uses static allocation for deterministic behavior and suitability fo
   - Actor table: ~10–15 KB
   - Mailbox pool: ~10–15 KB
   - Message pool: 64 KB (256 × 256 bytes, configurable)
-  - Sync buffer pool: 16 KB (64 × 256 bytes, configurable)
   - Link/monitor pools: ~5 KB
   - Timer pool: ~5 KB
   - Bus tables: ~90 KB
   - I/O source pool: ~5 KB
-- Without stack arena: ~200 KB
+- Without stack arena: ~190 KB
 
 **Total:** ~1.2 MB static (verify with `size` command; no heap allocation with default arena)
 
@@ -506,7 +504,7 @@ This runtime makes deliberate design choices that favor **determinism, performan
 
 **Accept these consciously before using this runtime:**
 
-### 1. IPC_ASYNC Lifetime Rule is Sharp and Error-Prone
+### 1. Message Lifetime Rule is Sharp and Error-Prone
 
 **Trade-off:** Message payload pointer valid only until next `rt_ipc_recv()` call.
 
@@ -519,7 +517,7 @@ This runtime makes deliberate design choices that favor **determinism, performan
 
 **This is not beginner-friendly.** Code must copy data immediately if needed beyond current iteration.
 
-**Mitigation:** Documented with WARNING box and correct/incorrect examples in IPC_ASYNC section. But developers will still make mistakes.
+**Mitigation:** Documented with WARNING box and correct/incorrect examples in IPC section. But developers will still make mistakes.
 
 **Acceptable if:** You optimize for determinism over ergonomics, and code reviews catch pointer misuse.
 
@@ -544,22 +542,22 @@ This runtime makes deliberate design choices that favor **determinism, performan
 
 ---
 
-### 3. IPC_SYNC is Deadlock-Prone by Design
+### 3. Selective Receive is O(n) per Mailbox Scan
 
-**Trade-off:** Synchronous IPC provides backpressure but enables deadlock.
+**Trade-off:** Selective receive scans mailbox linearly, which is O(n) where n = mailbox depth.
 
 **Why this design:**
-- Flow control: Natural rate limiting via sender blocking
-- Memory safety: Pinned buffers prevent UAF if sender dies
-- Simplicity: No complex async state machines needed
+- Erlang-proven: Battle-tested pattern for building complex protocols
+- Simplicity: No index structures, no additional memory overhead
+- Flexibility: Any filter criteria supported without pre-registration
 
-**Consequence:** Circular dependencies, self-send, nested calls all deadlock immediately.
+**Consequence:** Deep mailboxes slow down selective receive. If 100 messages are queued and you're waiting for a specific tag, each wake scans all 100.
 
-**IPC_SYNC must be used rarely.** Code reviews must treat SYNC usage as suspicious.
+**Keep mailboxes shallow.** The RPC pattern naturally does this (block waiting for reply).
 
-**Mitigation:** Documented deadlock scenarios in IPC_SYNC section, runtime detects self-send, auto-release prevents some deadlocks.
+**Mitigation:** Process messages promptly. Don't let mailbox grow deep. Use `rt_ipc_call()` which blocks until reply.
 
-**Acceptable if:** You use SYNC sparingly for validated request-response patterns, not general communication.
+**Acceptable if:** Typical mailbox depth is small (< 20 messages) and RPC pattern is followed.
 
 ---
 
@@ -572,7 +570,7 @@ This runtime makes deliberate design choices that favor **determinism, performan
 - Flexibility: Pool space shared dynamically based on actual usage
 - Memory efficiency: No wasted dedicated pools
 
-**Consequence:** Misconfigured bus can cause all `IPC_ASYNC` sends to fail with `RT_ERR_NOMEM`.
+**Consequence:** Misconfigured bus can cause all IPC sends to fail with `RT_ERR_NOMEM`.
 
 **Mitigation:** WARNING box in Bus section, size pool for combined load, monitor exhaustion.
 
@@ -605,9 +603,8 @@ typedef uint32_t timer_id;
 #define BUS_ID_INVALID    ((bus_id)0)
 #define TIMER_ID_INVALID  ((timer_id)0)
 
-// Special sender IDs
-#define RT_SENDER_TIMER   ((actor_id)0xFFFFFFFF)
-#define RT_SENDER_SYSTEM  ((actor_id)0xFFFFFFFE)
+// Wildcard for selective receive filtering
+#define RT_SENDER_ANY     ((actor_id)0xFFFFFFFF)
 
 // Actor entry point
 typedef void (*actor_fn)(void *arg);
@@ -694,172 +691,211 @@ rt_status rt_decode_exit(const rt_message *msg, rt_exit_msg *out);
 
 ## IPC API
 
-Inter-process communication via mailboxes. Each actor has one mailbox.
+Inter-process communication via mailboxes. Each actor has one mailbox. All messages are asynchronous (fire-and-forget). RPC (request/reply) is built on top using message tags for correlation.
+
+### Message Header Format
+
+All messages have a 4-byte header prepended to the payload:
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│ class (4 bits) │ gen (1 bit) │ tag (27 bits) │ payload (len) │
+└──────────────────────────────────────────────────────────────┘
+```
+
+- **class**: Message type (4 bits, 16 possible values)
+- **gen**: Generated flag (1 = runtime-generated tag, 0 = user-provided tag)
+- **tag**: Correlation identifier (27 bits, 134M unique values)
+- **payload**: Application data (up to `RT_MAX_MESSAGE_SIZE - 4` = 252 bytes)
+
+**Header overhead:** 4 bytes per message.
+
+### Message Classes
+
+```c
+typedef enum {
+    RT_MSG_CAST = 0,   // Fire-and-forget message
+    RT_MSG_CALL,       // Request expecting a reply
+    RT_MSG_REPLY,      // Response to a CALL
+    RT_MSG_TIMER,      // Timer tick
+    RT_MSG_SYSTEM,     // System notifications (actor death)
+    // 5-14 reserved for future use
+    RT_MSG_ANY = 15,   // Wildcard for selective receive filtering
+} rt_msg_class;
+```
+
+### Tag System
+
+```c
+#define RT_TAG_NONE      0                // No tag (for simple CAST messages)
+#define RT_TAG_GENERATE  ((uint32_t)-1)   // Request runtime to generate unique tag
+#define RT_TAG_ANY       ((uint32_t)-2)   // Wildcard for selective receive filtering
+
+#define RT_TAG_GEN_BIT    (1u << 27)      // Generated flag bit
+#define RT_TAG_VALUE_MASK 0x07FFFFFFu     // 27-bit value mask
+```
+
+**Tag semantics:**
+- **RT_TAG_NONE**: Used for simple CAST messages where no correlation is needed
+- **RT_TAG_GENERATE**: Pass pointer to `rt_ipc_send_ex()`, runtime generates unique 27-bit value with gen bit set, returns via pointer
+- **RT_TAG_ANY**: Used in `rt_ipc_recv_match()` to match any tag
+- **User-provided tags**: Any value 0 to 2^27-1 (gen bit must be 0)
+
+**Tag generation:** Global counter, increments on each `RT_TAG_GENERATE` request. Generated tags have `RT_TAG_GEN_BIT` set. Wraps at 2^27 (134M values).
+
+**Namespace separation:** Generated tags (gen=1) and user tags (gen=0) can never collide.
 
 ### Message Structure
 
 ```c
 typedef struct {
     actor_id    sender;
-    size_t      len;
-    const void *data;   // ASYNC: valid until next rt_ipc_recv()
-                        // SYNC: valid until rt_ipc_release() (next recv auto-releases)
+    size_t      len;        // Total length including 4-byte header
+    const void *data;       // Points to header + payload
 } rt_message;
 ```
 
-### Send Modes
+**Lifetime rule:** Data is valid until the next successful `rt_ipc_recv()` or `rt_ipc_recv_match()` call. Copy immediately if needed beyond current iteration.
+
+### Functions
+
+#### Basic Messaging
 
 ```c
-typedef enum {
-    IPC_ASYNC,    // copy to message pool, sender continues immediately
-    IPC_SYNC,     // copy to sync buffer pool, sender blocks until receiver releases
-} rt_ipc_mode;
+// Fire-and-forget message (class=CAST, tag=0)
+rt_status rt_ipc_send(actor_id to, const void *data, size_t len);
+
+// Receive any message (no filtering)
+// timeout_ms == 0:  non-blocking, returns RT_ERR_WOULDBLOCK if empty
+// timeout_ms < 0:   block forever
+// timeout_ms > 0:   block up to timeout, returns RT_ERR_TIMEOUT if exceeded
+rt_status rt_ipc_recv(rt_message *msg, int32_t timeout_ms);
 ```
 
-**IPC_ASYNC:** Payload copied to message data pool (RT_MESSAGE_DATA_POOL_SIZE). Sender continues immediately. Suitable for small messages and general-purpose communication.
+#### Selective Receive (Erlang-style)
 
-**IPC_SYNC:** Payload copied to sync buffer pool (RT_SYNC_BUFFER_POOL_SIZE). Sender blocks until receiver calls `rt_ipc_release()`. Provides implicit backpressure and memory safety (no UAF if sender dies).
+```c
+// Receive with filtering on sender, class, and/or tag
+// Blocks until message matches ALL non-wildcard criteria, or timeout
+// On return, actual values are written back to non-NULL pointers
+rt_status rt_ipc_recv_match(actor_id *from, rt_msg_class *class,
+                            uint32_t *tag, rt_message *msg, int32_t timeout_ms);
+```
+
+**Filter semantics:**
+- `*from == RT_SENDER_ANY` → match any sender
+- `*class == RT_MSG_ANY` → match any class
+- `*tag == RT_TAG_ANY` → match any tag
+- Non-wildcard values must match exactly
+
+#### RPC (Request/Reply)
+
+```c
+// Send CALL, block until REPLY with matching tag, or timeout
+rt_status rt_ipc_call(actor_id to, const void *request, size_t req_len,
+                      rt_message *reply, int32_t timeout_ms);
+
+// Reply to a received CALL (extracts sender and tag from request automatically)
+rt_status rt_ipc_reply(const rt_message *request, const void *data, size_t len);
+```
+
+**RPC implementation:**
+```c
+// rt_ipc_call internally does:
+// 1. Generate unique tag
+// 2. Send message with class=CALL
+// 3. Block on rt_ipc_recv_match() for REPLY with matching tag
+// 4. Return reply or timeout error
+
+// rt_ipc_reply internally does:
+// 1. Decode sender and tag from request
+// 2. Send message with class=REPLY and same tag
+```
+
+#### Message Decoding
+
+```c
+// Decode header from received message
+// All output parameters are optional (may be NULL)
+rt_status rt_msg_decode(const rt_message *msg,
+                        rt_msg_class *class,    // out: message class
+                        uint32_t *tag,          // out: tag value (with gen bit)
+                        const void **payload,   // out: points past 4-byte header
+                        size_t *payload_len);   // out: len minus 4-byte header
+```
 
 ### API Contract: rt_ipc_send()
 
-**Signature:**
-```c
-rt_status rt_ipc_send(actor_id to, const void *data, size_t len, rt_ipc_mode mode);
-```
-
 **Parameter validation:**
-- If `data == NULL && len > 0`: Returns `RT_ERR_INVALID` (NULL pointer with non-zero length)
-- If `len > RT_MAX_MESSAGE_SIZE` (256 bytes): Returns `RT_ERR_INVALID`
-- Message data pools use fixed-size entries of `RT_MAX_MESSAGE_SIZE` bytes
+- If `data == NULL && len > 0`: Returns `RT_ERR_INVALID`
+- If `len > RT_MAX_MESSAGE_SIZE - 4` (252 bytes payload): Returns `RT_ERR_INVALID`
 - Oversized messages are rejected immediately, not truncated
 
 **Behavior when pools are exhausted:**
 
-`rt_ipc_send()` uses three global pools (mode-dependent):
-1. **Mailbox entry pool** (`RT_MAILBOX_ENTRY_POOL_SIZE` = 256) - **all modes** (ASYNC and SYNC)
-2. **Message data pool** (`RT_MESSAGE_DATA_POOL_SIZE` = 256) - **IPC_ASYNC only**
-3. **Sync buffer pool** (`RT_SYNC_BUFFER_POOL_SIZE` = 64) - **IPC_SYNC only**
+`rt_ipc_send()` uses two global pools:
+1. **Mailbox entry pool** (`RT_MAILBOX_ENTRY_POOL_SIZE` = 256)
+2. **Message data pool** (`RT_MESSAGE_DATA_POOL_SIZE` = 256)
 
-Each mode uses mailbox entry pool plus one mode-specific data pool.
+**Fail-fast semantics:**
 
-**Fail-fast semantics** (chosen for deterministic embedded behavior):
-
-- **Returns `RT_ERR_NOMEM` immediately** if either required pool is exhausted
-- **Does NOT block** waiting for pool space to become available
-- **Does NOT drop** the message silently
-- **Does NOT enqueue** the message (atomic operation: either succeeds completely or fails)
-
-**Specific cases:**
-
-| Mode | Mailbox Pool Full | Message Pool Full | Result |
-|------|-------------------|-------------------|--------|
-| **IPC_ASYNC** | Returns `RT_ERR_NOMEM` | Returns `RT_ERR_NOMEM` | Fail immediately |
-| **IPC_SYNC** | Returns `RT_ERR_NOMEM` | Returns `RT_ERR_NOMEM` (sync buffer pool) | Fail immediately |
+- **Returns `RT_ERR_NOMEM` immediately** if either pool is exhausted
+- **Does NOT block** waiting for pool space
+- **Does NOT drop** messages silently
+- **Atomic operation:** Either succeeds completely or fails
 
 **Caller responsibilities:**
 - **MUST** check return value and handle `RT_ERR_NOMEM`
 - **MUST** implement backpressure/retry logic if needed
 - **MUST NOT** assume message was delivered if `RT_FAILED(status)`
 
-**Design rationale:**
-- **Deterministic**: Fail-fast behavior is predictable and testable
-- **No deadlock**: No blocking on pool exhaustion (see "Deadlock Freedom" below)
-- **No silent drops**: Caller knows immediately if send failed
-- **Explicit backpressure**: Caller controls retry policy (backoff, drop, etc.)
-- **Safety-critical friendly**: No hidden surprises, all failures explicit
-
 **Example: Handling pool exhaustion**
 
 ```c
-// Bad: Ignoring RT_ERR_NOMEM (message lost, caller unaware)
-rt_ipc_send(target, &data, sizeof(data), IPC_ASYNC);  // WRONG
+// Bad: Ignoring RT_ERR_NOMEM
+rt_ipc_send(target, &data, sizeof(data));  // WRONG
 
-// Good: Check and handle pool exhaustion
-rt_status status = rt_ipc_send(target, &data, sizeof(data), IPC_ASYNC);
+// Good: Check and handle
+rt_status status = rt_ipc_send(target, &data, sizeof(data));
 if (status.code == RT_ERR_NOMEM) {
     // Pool exhausted - implement backpressure
-    // Option 1: Drop with telemetry
     log_dropped_message(target);
-
-    // Option 2: Retry with backoff
-    rt_message msg;
-    rt_ipc_recv(&msg, 10);  // Backoff 10ms, process messages
-    rt_ipc_release(&msg);
-    // Retry send...
-
-    // Option 3: Fail-fast to caller
-    return RT_ERR_NOMEM;
+    // Or: backoff and retry
 }
 ```
 
 ### Message Data Lifetime
 
-The lifetime of `rt_message.data` depends on the send mode:
-
-**IPC_ASYNC:**
-
 **CRITICAL LIFETIME RULE:**
-- **Data is ONLY valid until the next *successful* `rt_ipc_recv()` call**
+- **Data is ONLY valid until the next successful `rt_ipc_recv()` or `rt_ipc_recv_match()` call**
 - **Per actor: only ONE message payload pointer is valid at a time**
 - **Storing `msg.data` across receive iterations causes use-after-free**
 - **If you need the data later, COPY IT IMMEDIATELY**
 
 **Failed recv does NOT invalidate:**
-- If `rt_ipc_recv()` returns `RT_ERR_TIMEOUT` or `RT_ERR_WOULDBLOCK`, the previous message buffer remains valid
-- Only a *successful* recv (returns `RT_SUCCESS` with a new message) invalidates the previous pointer
-- Other runtime calls (timers, bus, network) do NOT affect IPC_ASYNC buffer validity
+- If recv returns `RT_ERR_TIMEOUT` or `RT_ERR_WOULDBLOCK`, previous buffer remains valid
+- Only a successful recv invalidates the previous pointer
 
-**Correct pattern (copy immediately if needed):**
+**Correct pattern:**
 ```c
 rt_message msg;
 rt_ipc_recv(&msg, -1);
 
-// SAFE: Copy data immediately
+// SAFE: Decode and copy immediately
+rt_msg_class class;
+uint32_t tag;
+const void *payload;
+size_t payload_len;
+rt_msg_decode(&msg, &class, &tag, &payload, &payload_len);
+
 char local_copy[256];
-memcpy(local_copy, msg.data, msg.len);
+memcpy(local_copy, payload, payload_len);
 // local_copy is safe to use indefinitely
 
-// UNSAFE: Storing pointer
-const char *ptr = msg.data;  // DANGER
-rt_ipc_recv(&msg, -1);       // ptr now INVALID (use-after-free)
+// UNSAFE: Storing pointer across recv calls
+const char *ptr = payload;   // DANGER
+rt_ipc_recv(&msg, -1);       // ptr now INVALID
 ```
-
-**Implementation details:**
-- Data lives in a pool-allocated buffer
-- Next recv frees the previous message's buffer and reuses the pool entry
-- Calling `rt_ipc_release()` is optional (safe no-op for ASYNC, see "`rt_ipc_release()` semantics" below)
-
-**IPC_SYNC:**
-- Data is **valid until `rt_ipc_release()`** is called
-- Data lives in pinned runtime buffer (persists even if sender dies)
-- Sender is blocked until `rt_ipc_release()` is called
-- **Auto-release:** If `rt_ipc_recv()` is called without releasing the previous SYNC message, the sender is automatically unblocked (prevents deadlock)
-
-**Auto-release behavior:**
-
-```c
-// Safe: explicit release (recommended)
-rt_message msg;
-rt_ipc_recv(&msg, -1);
-if (msg.data) {
-    process(msg.data);
-}
-rt_ipc_release(&msg);  // Unblocks sender (if SYNC)
-
-// Also safe: auto-release on next recv (forgiving)
-rt_message msg1, msg2;
-rt_ipc_recv(&msg1, -1);  // msg1 is SYNC
-process(msg1.data);
-rt_ipc_recv(&msg2, -1);  // msg1 auto-released, sender unblocked
-// No explicit release needed, but calling it is harmless
-```
-
-**Design rationale:**
-- Auto-release prevents deadlock if receiver forgets to call `rt_ipc_release()`
-- Forgiving API reduces cognitive load (one code path handles both ASYNC and SYNC)
-- Explicit release is still recommended for clarity and to minimize sender blocking time
-
-**Auto-release limitation:** Auto-release only occurs when the receiver calls `rt_ipc_recv()` again. A receiver that processes one SYNC message and then runs forever without calling `rt_ipc_recv()` will still deadlock SYNC senders. Auto-release mitigates forgetfulness, not infinite loops.
 
 ### Mailbox Semantics
 
@@ -869,31 +905,66 @@ Per-actor mailbox limits: **No per-actor quota** - capacity is constrained by gl
 
 Global pool limits: **Yes** - all actors share:
 - `RT_MAILBOX_ENTRY_POOL_SIZE` (256 default) - mailbox entries
-- `RT_MESSAGE_DATA_POOL_SIZE` (256 default) - message data (ASYNC mode only)
+- `RT_MESSAGE_DATA_POOL_SIZE` (256 default) - message data
 
 **Important:** One slow receiver can consume all mailbox entries, starving other actors.
 
 **Fairness guarantees:** The runtime does not provide per-actor fairness guarantees; resource exhaustion caused by a misbehaving actor is considered an application-level fault. Applications requiring protection against resource starvation should implement supervisor actors or application-level quotas.
 
-**Behavior when pools are exhausted:**
+### Selective Receive Semantics (Erlang-style)
 
-| Mode        | Pool Exhausted Behavior | Blocks Waiting for Pool? | Drops Messages? |
-|-------------|-------------------------|--------------------------|-----------------|
-| **IPC_ASYNC**    | Returns `RT_ERR_NOMEM` immediately | No | No |
-| **IPC_SYNC**  | Returns `RT_ERR_NOMEM` immediately | No | No |
+`rt_ipc_recv_match()` implements Erlang-style selective receive. This is the key mechanism for building complex protocols like RPC.
 
-**IPC_SYNC blocking semantics:**
-- Blocks **after** message is in mailbox, waiting for receiver to call `rt_ipc_release()`
-- Does **not** block waiting for pool availability (fails immediately if pool exhausted)
-- Sender blocks after successful mailbox insertion (not during pool allocation)
+**Blocking behavior:**
 
-**Design rationale:**
-- Explicit failure (`RT_ERR_NOMEM`) enables testable, predictable behavior
-- No implicit message drops (principle of least surprise)
-- No blocking on pool exhaustion (prevents deadlock)
-- Caller controls backpressure via retry logic
+1. Scan mailbox from head for message matching all filter criteria
+2. If found → remove from mailbox, return immediately
+3. If not found → block, yield to scheduler
+4. When any message arrives → wake, rescan from head
+5. If match → return
+6. If no match → go back to sleep
+7. Repeat until match or timeout
 
-See "Pool Exhaustion Behavior" section below for mitigation strategies and examples.
+**Key properties:**
+
+- **Non-matching messages are NOT dropped** — they stay in mailbox
+- **Order preserved** — messages remain in FIFO order
+- **Later retrieval** — non-matching messages retrieved by subsequent `rt_ipc_recv()` calls
+- **Scan complexity** — O(n) where n = mailbox depth
+
+**Example: Waiting for specific reply**
+
+```c
+// Send RPC request with generated tag
+uint32_t tag = RT_TAG_GENERATE;
+// (internally rt_ipc_call does this)
+
+// Wait for reply with matching tag
+actor_id from = server;
+rt_msg_class class = RT_MSG_REPLY;
+rt_ipc_recv_match(&from, &class, &tag, &reply, 5000);
+
+// During the wait:
+// - CAST messages from other actors: skipped, stay in mailbox
+// - TIMER messages: skipped, stay in mailbox
+// - REPLY from server with wrong tag: skipped
+// - REPLY from server with matching tag: returned!
+
+// After returning, skipped messages can be retrieved:
+rt_ipc_recv(&msg, 0);  // Gets first skipped message
+```
+
+**When selective receive is efficient:**
+
+- Typical RPC: mailbox is empty or near-empty while waiting for reply
+- Shallow mailbox: O(n) scan is fast when n is small
+
+**When selective receive is less efficient:**
+
+- Deep mailbox with many non-matching messages
+- Example: 100 pending CASTs while waiting for specific REPLY → scans 100 messages
+
+**Mitigation:** Process messages promptly. Don't let mailbox grow deep. The RPC pattern naturally keeps mailbox shallow because you block waiting for reply.
 
 ### Message Ordering
 
@@ -904,326 +975,155 @@ See "Pool Exhaustion Behavior" section below for mitigation strategies and examp
 **Single sender to single receiver:**
 - Messages are received in the order they were sent
 - **FIFO guaranteed**
-- Example: If actor A sends M1, M2, M3 to actor B, B receives them in order M1 -> M2 -> M3
+- Example: If actor A sends M1, M2, M3 to actor B, B receives them in order M1 → M2 → M3
 
 **Multiple senders to single receiver:**
 - Message order depends on scheduling (which sender runs first)
 - **Arrival order is scheduling-dependent**
-- No fairness guarantee (one sender can monopolize if scheduled more often)
-- Example: If actor A sends M1 and actor B sends M2, receiver may get M1->M2 or M2->M1 depending on scheduler
+- Example: If actor A sends M1 and actor B sends M2, receiver may get M1→M2 or M2→M1
 
-**Timer messages interleaving with IPC:**
-- Timer messages use the **same mailbox** as regular IPC messages
-- Timer messages are enqueued to tail when the event loop processes timer events (epoll returns timerfd ready)
-- **No bypass, no special priority** - timers follow FIFO with other messages
-- Interleave based on when the event loop dispatches timer events relative to other sends
-- Example: If actor receives IPC message M1, then timer fires, then IPC message M2, mailbox order is M1 -> timer_tick -> M2
-
-**System messages (actor death notifications):**
-- Exit messages (sender == RT_SENDER_SYSTEM) also use the same mailbox
-- Follow FIFO ordering like all other messages
-- No special delivery priority
+**Selective receive and ordering:**
+- Selective receive can retrieve messages out of FIFO order
+- Non-matching messages are skipped but not reordered
+- Example: Mailbox has [CAST, TIMER, REPLY]. Filtering for REPLY returns REPLY first.
 
 **Consequences:**
 
 ```c
 // Single sender - FIFO guaranteed
 void sender_actor(void *arg) {
-    rt_ipc_send(receiver, &msg1, sizeof(msg1), IPC_ASYNC);  // Sent first
-    rt_ipc_send(receiver, &msg2, sizeof(msg2), IPC_ASYNC);  // Sent second
+    rt_ipc_send(receiver, &msg1, sizeof(msg1));  // Sent first
+    rt_ipc_send(receiver, &msg2, sizeof(msg2));  // Sent second
     // Receiver will see: msg1, then msg2 (guaranteed)
 }
 
 // Multiple senders - order depends on scheduling
 void sender_A(void *arg) {
-    rt_ipc_send(receiver, &msgA, sizeof(msgA), IPC_ASYNC);
+    rt_ipc_send(receiver, &msgA, sizeof(msgA));
 }
 void sender_B(void *arg) {
-    rt_ipc_send(receiver, &msgB, sizeof(msgB), IPC_ASYNC);
+    rt_ipc_send(receiver, &msgB, sizeof(msgB));
 }
-// Receiver may see: msgA then msgB, OR msgB then msgA (depends on scheduler)
+// Receiver may see: msgA then msgB, OR msgB then msgA
 
-// Timer + IPC interleaving
-void actor_with_timer(void *arg) {
-    timer_id timer;
-    rt_timer_every(100000, &timer);  // 100ms periodic
+// Selective receive - can retrieve out of order
+void rpc_actor(void *arg) {
+    // Start timer
+    timer_id t;
+    rt_timer_after(1000000, &t);
 
-    rt_message msg;
-    while (1) {
-        rt_ipc_recv(&msg, -1);
+    // Do RPC
+    rt_message reply;
+    rt_ipc_call(server, &req, sizeof(req), &reply, 5000);
+    // Timer tick arrived during RPC wait - it's in mailbox
 
-        if (rt_timer_is_tick(&msg)) {
-            // Timer tick received in FIFO order with other messages
-        } else {
-            // Regular IPC message
-        }
-        // No guarantee which arrives first - depends on timing
-    }
+    // Now process timer
+    rt_message timer_msg;
+    rt_ipc_recv(&timer_msg, 0);  // Gets the timer tick
 }
 ```
 
-**Design rationale:**
-- Single FIFO mailbox = simple, predictable within single sender
-- Scheduling-dependent ordering across senders = unavoidable in cooperative scheduler
-- No message priorities = simpler implementation, deterministic behavior
+### Timer and System Messages
 
-### IPC_SYNC Safety Considerations
+Timer and system messages use the same mailbox and message format as IPC.
 
-**WARNING: IPC_SYNC requires careful use.** It trades simplicity and performance for strict constraints.
+**Timer messages:**
+- Class: `RT_MSG_TIMER`
+- Sender: Actor that owns the timer
+- Tag: `timer_id`
+- Payload: Empty (len = 0 after decoding header)
 
-**Design rationale:**
-- Separate sync buffer pool (RT_SYNC_BUFFER_POOL_SIZE) isolates ASYNC/SYNC resource contention
-- Pinned runtime buffers for memory safety (prevents UAF if sender dies)
-- Blocking provides implicit backpressure (sender cannot proceed until receiver consumes)
-- Static pool allocation for deterministic memory
-- Simple implementation suitable for embedded/safety-critical systems
+**System messages (exit notifications):**
+- Class: `RT_MSG_SYSTEM`
+- Sender: Actor that died
+- Tag: `RT_TAG_NONE`
+- Payload: `rt_exit_msg` struct
 
-**Mandatory preconditions:**
-
-1. **Actor context only**: SYNC can ONLY be used from actor context
-   - OK: From actor's main function
-   - FORBIDDEN: From event loop callbacks (timer/network event handlers)
-   - FORBIDDEN: From interrupt contexts (signal handlers, ISRs)
-
-2. **Sender blocks until release**: Sender cannot process other messages while waiting
-   - Sender's state = ACTOR_STATE_BLOCKED
-   - Sender cannot receive messages
-   - Sender cannot send other SYNC messages
-
-3. **Data copied to pinned buffer**: Sender's data is copied once to a runtime buffer
-   - Buffer persists even if sender dies (memory safe)
-   - Pool size: RT_SYNC_BUFFER_POOL_SIZE (64 default)
-   - Exhaustion: Returns RT_ERR_NOMEM (caller must retry or use IPC_ASYNC)
-
-**Deadlock scenarios (avoid these):**
+**Checking message type:**
 
 ```c
-// DEADLOCK: Circular synchronous send
-Actor A: rt_ipc_send(B, &data, len, IPC_SYNC);  // A blocks
-Actor B: rt_ipc_send(A, &data, len, IPC_SYNC);  // B blocks -> DEADLOCK
+rt_message msg;
+rt_ipc_recv(&msg, -1);
 
-// DEADLOCK: Nested synchronous send
-Actor A: rt_ipc_send(B, &data, len, IPC_SYNC);  // A blocks
-         // A cannot receive release notification!
+rt_msg_class class;
+uint32_t tag;
+const void *payload;
+size_t payload_len;
+rt_msg_decode(&msg, &class, &tag, &payload, &payload_len);
 
-// DEADLOCK: Sync send then receive
-Actor A: rt_ipc_send(B, &data, len, IPC_SYNC);
-         rt_ipc_recv(&msg, -1);  // Can't receive - already blocked!
-
-// CORRECT: Sync send and wait for completion
-Actor A: rt_ipc_send(B, &data, len, IPC_SYNC);  // Blocks until B releases
-         // Automatically unblocks when B calls rt_ipc_release()
+switch (class) {
+    case RT_MSG_CAST:
+        handle_cast(msg.sender, payload, payload_len);
+        break;
+    case RT_MSG_CALL:
+        handle_call_and_reply(&msg, payload, payload_len);
+        break;
+    case RT_MSG_TIMER:
+        handle_timer_tick(tag);  // tag is timer_id
+        break;
+    case RT_MSG_SYSTEM:
+        handle_exit_notification(msg.sender, payload);
+        break;
+    default:
+        break;
+}
 ```
 
-**When to use each mode:**
-
-| Scenario | Use Mode | Reason |
-|----------|----------|--------|
-| Small messages (< 256 bytes) | IPC_ASYNC | Simple, no blocking |
-| Fire-and-forget messaging | IPC_ASYNC | Sender doesn't wait |
-| Untrusted receivers | IPC_ASYNC | Sender not vulnerable to deadlock |
-| General communication | IPC_ASYNC | Safest default |
-| Implicit backpressure needed | IPC_SYNC | Sender blocks until consumed |
-| Trusted cooperating actors | IPC_SYNC | Both sides understand protocol |
-| Flow control required | IPC_SYNC | Natural rate limiting via blocking |
-
-**Failure handling:**
-
-If receiver crashes or exits without releasing:
-- Sender is automatically unblocked during receiver's actor cleanup
-- `rt_ipc_send()` returns `RT_ERR_CLOSED` (receiver death is not success)
-- If sender is unblocked because receiver released normally: returns `RT_SUCCESS`
-- Message data is no longer referenced by receiver
-- Principle of least surprise: sender is not stuck forever
-- **Important:** Sender does NOT receive notification of receiver death (unless explicitly linked/monitoring)
-
-**Semantic note:** `RT_SUCCESS` means receiver explicitly released (via `rt_ipc_release()` or auto-release), but does NOT guarantee the receiver processed the message successfully. `RT_ERR_CLOSED` means receiver died before releasing. If the sender requires confirmation that the message was processed correctly, it must use an explicit acknowledgment protocol (e.g., receiver sends reply after processing).
-
-Best practice: Design actors to always release sync messages, but receiver crashes are handled gracefully.
-
-**Edge cases (explicit semantics):**
-
-1. **Calling `rt_ipc_recv()` again without releasing previous SYNC:**
-   - **Legal:** Auto-release semantics apply
-   - Behavior: Previous SYNC sender is automatically unblocked
-   - Implementation: Auto-release logic in `rt_ipc_recv()`
-   - Rationale: Prevents deadlock if receiver forgets to release
-   - Example:
-   ```c
-   rt_message msg1, msg2;
-   rt_ipc_recv(&msg1, -1);  // msg1 is SYNC from actor A
-   // ... process msg1.data ...
-   rt_ipc_recv(&msg2, -1);  // msg1 AUTO-RELEASED, actor A unblocked
-   // msg1.data now invalid, msg2.data valid
-   ```
-
-2. **Receiver death while holding sync message:**
-   - **Auto-release:** Sender is automatically unblocked during receiver's actor cleanup
-   - Sender's `rt_ipc_send()` returns `RT_ERR_CLOSED` (receiver died, not normal release)
-   - Message data no longer referenced by dead receiver
-   - **Sender CAN distinguish** receiver crash (RT_ERR_CLOSED) from normal release (RT_SUCCESS)
-   - Rationale: Honest failure reporting - don't lie to caller about receiver death
-   - Consistent with file/net I/O semantics (connection closed = error)
-
-3. **Sender death while blocked in SYNC:**
-   - **Memory safety:** Data in pinned runtime buffer, NOT sender's stack
-   - **Receiver sees:** Normal message with `msg.data` pointing to valid runtime buffer
-   - **Data validity:** VALID - buffer persists even after sender dies
-   - **Receiver behavior:** Can safely read `msg.data` as normal
-   - **Cleanup:** Buffer freed when receiver calls `rt_ipc_release()` or dies
-   - **Rationale:** Eliminates use-after-free vulnerability for safety-critical systems
-   - **Note:** This is a key difference from stack-based approach (no UAF possible)
-
-4. **Self-send with SYNC (`rt_ipc_send(rt_self(), ..., IPC_SYNC)`):**
-   - **Forbidden:** Immediate deadlock
-   - **Behavior:** Sender enqueues message to own mailbox, then blocks waiting for self to release
-   - **Result:** Actor blocks forever (cannot receive while blocked)
-   - **Detection:** Implementation returns `RT_ERR_INVALID` for self-send with SYNC
-   - **Enforcement:** Self-send detection in `rt_ipc_send()` for SYNC mode
-   - **Rationale:** Prevent guaranteed deadlock
-   - Example:
-   ```c
-   // DEADLOCK: Self-send with SYNC
-   rt_status status = rt_ipc_send(rt_self(), &data, len, IPC_SYNC);
-   // Returns RT_ERR_INVALID, prevents deadlock
-   assert(status.code == RT_ERR_INVALID);
-
-   // OK: Self-send with ASYNC
-   rt_ipc_send(rt_self(), &data, len, IPC_ASYNC);  // Works fine
-   ```
-
-5. **Cannot receive other messages while holding SYNC (single active message constraint):**
-   - **Constraint:** An actor can hold only ONE active message at a time
-   - **Implication:** Calling `rt_ipc_recv()` to receive ANY message (timer, IPC, etc.) auto-releases the previously held SYNC message
-   - **Affected patterns:** Receiver cannot wait for timer ticks or other messages while holding a SYNC message
-   - **Rationale:** Simplifies memory management, prevents message accumulation, ensures predictable resource usage
-   - Example:
-   ```c
-   // PROBLEM: Trying to use timer while holding SYNC message
-   rt_message work_msg;
-   rt_ipc_recv(&work_msg, -1);  // Receive SYNC work request
-
-   // Want to simulate slow processing with timer...
-   timer_id delay;
-   rt_timer_after(100000, &delay);
-
-   rt_message timer_msg;
-   rt_ipc_recv(&timer_msg, -1);  // OOPS: work_msg AUTO-RELEASED here!
-   // Sender already unblocked, work_msg.data now invalid
-
-   rt_ipc_release(&work_msg);  // Too late, already released
-
-   // SOLUTION: Do processing synchronously without rt_ipc_recv()
-   rt_message work_msg;
-   rt_ipc_recv(&work_msg, -1);  // Receive SYNC work request
-   do_processing(work_msg.data);  // Process without calling rt_ipc_recv()
-   rt_ipc_release(&work_msg);     // Explicit release when done
-   ```
-
-**Lifetime rule (strict definition):**
-
-For `IPC_SYNC`, `rt_message.data` is valid:
-- **From:** When `rt_ipc_recv()` returns the message
-- **Until:** EARLIEST of:
-  1. `rt_ipc_release(&msg)` called explicitly, OR
-  2. Next `rt_ipc_recv()` called (auto-release), OR
-  3. Receiver actor dies (cleanup frees buffer)
-- **After:** Data pointer is INVALID, use triggers undefined behavior
-- **Note:** Sender death does NOT invalidate data (pinned buffer persists)
-
-**Safety-critical recommendation:**
-
-In safety-critical systems:
-- **IPC_ASYNC** remains the safest default (no blocking, simpler semantics)
-- **IPC_SYNC** is now memory-safe (pinned buffers eliminate UAF)
-- Use SYNC when:
-  - Implicit backpressure is desired (flow control)
-  - Between trusted, cooperating actors (deadlock awareness)
-  - Validated communication patterns
-- Document all SYNC usage in code reviews (deadlock risk remains)
-- Test deadlock scenarios explicitly
-
-### Functions
+**Convenience function for timer checking:**
 
 ```c
-// Send message to actor
-// Blocks if mode == IPC_SYNC (until receiver consumes)
-rt_status rt_ipc_send(actor_id to, const void *data, size_t len, rt_ipc_mode mode);
+// Returns true if message is a timer tick
+bool rt_msg_is_timer(const rt_message *msg);
+```
 
-// Receive message
-// timeout_ms == 0:  non-blocking, returns RT_ERR_WOULDBLOCK if empty
-// timeout_ms < 0:   block forever
-// timeout_ms > 0:   block up to timeout, returns RT_ERR_TIMEOUT if exceeded
-rt_status rt_ipc_recv(rt_message *msg, int32_t timeout_ms);
+### Query Functions
 
-// Release sync message (must call after consuming IPC_SYNC message)
-void rt_ipc_release(const rt_message *msg);
-
-// Query mailbox state (current actor only)
+```c
+// Check if any message is pending in current actor's mailbox
 bool rt_ipc_pending(void);
+
+// Count messages in current actor's mailbox
 size_t rt_ipc_count(void);
 ```
 
-**`rt_ipc_release()` semantics:**
-- Takes `const rt_message *` because release state is stored in actor context, not in the message
-- **Safe no-op** in edge cases (release builds):
-  - If `msg` is NULL: returns silently
-  - If called outside actor context: returns silently
-  - If `msg->sender` is not a blocked SYNC sender waiting on this actor: no effect
-  - If message was ASYNC (not SYNC): no effect (no sender to unblock)
-  - If already released or never received: no effect
-- Does not return status; callers need not check for errors
-
-**Debug build behavior (recommended):**
-- Define `RT_DEBUG` to enable assertions in edge cases
-- "Called outside actor context" triggers `assert()` failure
-- Helps catch bugs during development that silent no-ops would hide
-- Release builds retain no-op semantics for robustness
-
-**`rt_ipc_pending()` and `rt_ipc_count()` semantics:**
-- Query the **current actor's** mailbox only (actor-local operations)
+**Semantics:**
+- Query the **current actor's** mailbox only
 - Cannot query another actor's mailbox
 - Return `false` / `0` if called outside actor context
 
 ### Pool Exhaustion Behavior
 
-IPC uses global pools shared by all actors:
-- **Mailbox entry pool**: `RT_MAILBOX_ENTRY_POOL_SIZE` (256 default, shared by ASYNC and SYNC)
-- **Message data pool**: `RT_MESSAGE_DATA_POOL_SIZE` (256 default, ASYNC mode only)
-- **Sync buffer pool**: `RT_SYNC_BUFFER_POOL_SIZE` (64 default, SYNC mode only)
+IPC uses two global pools shared by all actors:
+- **Mailbox entry pool**: `RT_MAILBOX_ENTRY_POOL_SIZE` (256 default)
+- **Message data pool**: `RT_MESSAGE_DATA_POOL_SIZE` (256 default)
 
 **When pools are exhausted:**
 - `rt_ipc_send()` returns `RT_ERR_NOMEM` immediately
 - Send operation **does NOT block** waiting for space
 - Send operation **does NOT drop** messages automatically
 - Caller **must check** return value and handle failure
-- Both IPC_ASYNC and IPC_SYNC share the mailbox entry pool
-- IPC_ASYNC additionally requires message data pool space
 
-**No per-actor mailbox limit**: All actors share the global pools. A single actor can consume all available mailbox entries if receivers don't process messages.
+**No per-actor mailbox limit**: All actors share the global pools. A single actor can consume all available entries if receivers don't process messages.
 
 **Mitigation strategies:**
 - Size pools appropriately: `1.5× peak concurrent messages`
 - Check return values and implement retry logic or backpressure
-- Use IPC_SYNC for large messages to avoid data pool exhaustion
+- Use `rt_ipc_call()` for natural backpressure (sender waits for reply)
 - Ensure receivers process messages promptly
 
 **Backoff-retry example:**
 ```c
-rt_status status = rt_ipc_send(target, data, len, IPC_ASYNC);
+rt_status status = rt_ipc_send(target, data, len);
 if (status.code == RT_ERR_NOMEM) {
     // Pool exhausted - backoff before retry
     rt_message msg;
     status = rt_ipc_recv(&msg, 10);  // Backoff 10ms
 
-    if (status.code == RT_ERR_TIMEOUT) {
-        // No messages during backoff, retry send
-        rt_ipc_send(target, data, len, IPC_ASYNC);
-    } else if (!RT_FAILED(status)) {
+    if (!RT_FAILED(status)) {
         // Got message during backoff, handle it first
         handle_message(&msg);
-        // Then retry send
     }
+    // Retry send...
 }
 ```
 
@@ -1364,7 +1264,7 @@ rt_bus_read(bus, buf, len, &actual);
 **Implications:**
 - Slow subscribers lose data without notification
 - Fast subscribers never lose data (assuming buffer sized for publish rate)
-- No backpressure mechanism (unlike IPC_SYNC)
+- No backpressure mechanism (unlike `rt_ipc_call()` RPC pattern)
 - Real-time principle: Prefer fresh data over old data
 
 **Example (data loss):**
@@ -1500,7 +1400,7 @@ Entries can be removed by **three mechanisms** (whichever occurs first):
 
 **WARNING: Resource Contention Between IPC and Bus**
 
-Bus publishing consumes the same message data pool as IPC (`RT_MESSAGE_DATA_POOL_SIZE`). A misconfigured or high-rate bus can exhaust the message pool and cause **all** IPC_ASYNC sends to fail with `RT_ERR_NOMEM`, potentially starving critical actor communication.
+Bus publishing consumes the same message data pool as IPC (`RT_MESSAGE_DATA_POOL_SIZE`). A misconfigured or high-rate bus can exhaust the message pool and cause **all** IPC sends to fail with `RT_ERR_NOMEM`, potentially starving critical actor communication.
 
 **Architectural consequences:**
 - Bus auto-evicts oldest entries when its ring buffer fills (graceful degradation)
@@ -1561,11 +1461,11 @@ rt_status rt_timer_every(uint32_t interval_us, timer_id *out);
 // Cancel timer
 rt_status rt_timer_cancel(timer_id id);
 
-// Check if message is from timer
-bool rt_timer_is_tick(const rt_message *msg);
+// Check if message is a timer tick (convenience wrapper for rt_msg_decode)
+bool rt_msg_is_timer(const rt_message *msg);
 ```
 
-Timer wake-ups are delivered as messages with `sender == RT_SENDER_TIMER`. The actor receives these in its normal `rt_ipc_recv()` loop.
+Timer wake-ups are delivered as messages with `class == RT_MSG_TIMER`. The tag contains the `timer_id`. The actor receives these in its normal `rt_ipc_recv()` loop and can use `rt_msg_is_timer()` or `rt_msg_decode()` to identify timer messages.
 
 ### Timer Tick Coalescing (Periodic Timers)
 
@@ -1588,7 +1488,7 @@ rt_timer_every(10000, &timer);  // 10ms = 10000us
 
 while (1) {
     rt_ipc_recv(&msg, -1);
-    if (rt_timer_is_tick(&msg)) {
+    if (rt_msg_is_timer(&msg)) {
         // Even if 35ms passed (3-4 intervals), actor receives ONE tick
         // timerfd read returned expirations=3 or 4, but only one message sent
         do_work();  // Takes 35ms
@@ -1836,11 +1736,11 @@ When an actor dies (via `rt_exit()`, crash, or external kill):
 
 **Normal death cleanup:**
 
-1. **Mailbox cleared:** All pending messages are discarded. Actors blocked on `IPC_SYNC` send receive `RT_ERR_CLOSED`.
+1. **Mailbox cleared:** All pending messages are discarded.
 
-2. **Links notified:** All linked actors receive an exit message with `sender == RT_SENDER_SYSTEM`.
+2. **Links notified:** All linked actors receive an exit message (class=`RT_MSG_SYSTEM`, sender=dying actor).
 
-3. **Monitors notified:** All monitoring actors receive an exit message.
+3. **Monitors notified:** All monitoring actors receive an exit message (class=`RT_MSG_SYSTEM`).
 
 4. **Bus subscriptions removed:** Actor is unsubscribed from all buses.
 
@@ -1870,7 +1770,6 @@ Exit notifications (steps 2-3 above) are enqueued in recipient mailboxes **durin
    - Dying actor's mailbox is **cleared** (step 1)
    - All pending messages are **discarded**
    - Senders are **not** notified of message loss
-   - Exception: IPC_SYNC senders are unblocked (see IPC_SYNC safety section)
 
 4. **Multiple recipients:**
    - Each recipient's exit notification is enqueued independently
@@ -1882,16 +1781,16 @@ Exit notifications (steps 2-3 above) are enqueued in recipient mailboxes **durin
 ```c
 // Dying actor sends messages before death
 void actor_A(void *arg) {
-    rt_ipc_send(B, &msg1, sizeof(msg1), IPC_ASYNC);  // Enqueued in B's mailbox
-    rt_ipc_send(C, &msg2, sizeof(msg2), IPC_ASYNC);  // Enqueued in C's mailbox
+    rt_ipc_send(B, &msg1, sizeof(msg1));  // Enqueued in B's mailbox
+    rt_ipc_send(C, &msg2, sizeof(msg2));  // Enqueued in C's mailbox
     rt_exit();  // Exit notifications sent to links/monitors
 }
-// Linked actor B will receive: msg1, then EXIT(A)
+// Linked actor B will receive: msg1, then EXIT(A) (class=RT_MSG_SYSTEM)
 // Actor C will receive: msg2 (no exit notification, not linked)
 
 // Messages sent TO dying actor are lost
 void actor_B(void *arg) {
-    rt_ipc_send(A, &msg, sizeof(msg), IPC_ASYNC);  // Enqueued in A's mailbox
+    rt_ipc_send(A, &msg, sizeof(msg));  // Enqueued in A's mailbox
 }
 void actor_A(void *arg) {
     // ... does some work ...

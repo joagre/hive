@@ -39,7 +39,7 @@ static void switch_actor_a(void *arg) {
     while (ctx->count < ctx->max_count) {
         // Send ping to B
         int msg = 1;
-        rt_ipc_send(ctx->partner, &msg, sizeof(msg), IPC_ASYNC);
+        rt_ipc_send(ctx->partner, &msg, sizeof(msg));
 
         // Wait for pong from B
         rt_message reply;
@@ -62,7 +62,7 @@ static void switch_actor_b(void *arg) {
 
         // Send pong back to A
         int reply = 2;
-        rt_ipc_send(ctx->partner, &reply, sizeof(reply), IPC_ASYNC);
+        rt_ipc_send(ctx->partner, &reply, sizeof(reply));
 
         ctx->count++;
     }
@@ -144,7 +144,7 @@ static void ipc_sender(void *arg) {
     ctx->start_time = get_nanos();
 
     for (uint64_t i = 0; i < ctx->max_count; i++) {
-        rt_ipc_send(ctx->partner, buffer, ctx->msg_size, IPC_ASYNC);
+        rt_ipc_send(ctx->partner, buffer, ctx->msg_size);
 
         // Wait for ack
         rt_message ack;
@@ -164,7 +164,7 @@ static void ipc_receiver(void *arg) {
         rt_ipc_recv(&msg, -1);
 
         // Send ack
-        rt_ipc_send(ctx->partner, &ack, sizeof(ack), IPC_ASYNC);
+        rt_ipc_send(ctx->partner, &ack, sizeof(ack));
     }
 
     rt_exit();

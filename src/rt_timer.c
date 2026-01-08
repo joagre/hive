@@ -17,9 +17,6 @@
 #include <sys/timerfd.h>
 #include <sys/epoll.h>
 
-// External IPC pools (defined in rt_ipc.c)
-extern rt_pool g_mailbox_pool_mgr;
-extern rt_pool g_message_pool_mgr;
 
 // Active timer entry
 typedef struct timer_entry {
@@ -80,31 +77,16 @@ void rt_timer_handle_event(io_source *source) {
         return;
     }
 
-    // Send timer tick message to actor's mailbox
-    mailbox_entry *mbox_entry = rt_pool_alloc(&g_mailbox_pool_mgr);
-    if (!mbox_entry) {
-        RT_LOG_ERROR("Failed to send timer tick (mailbox pool exhausted)");
+    // Send timer tick message to actor
+    // Use RT_MSG_TIMER class with timer_id as tag, sender is the owning actor
+    // No payload needed - timer_id is encoded in the tag
+    rt_status status = rt_ipc_send_ex(entry->owner, entry->owner, RT_MSG_TIMER,
+                                       entry->id, NULL, 0);
+    if (RT_FAILED(status)) {
+        RT_LOG_ERROR("Failed to send timer tick: %s", status.msg);
         // Don't cleanup timer - try again next tick
         return;
     }
-
-    mbox_entry->sender = RT_SENDER_TIMER;
-    mbox_entry->len = sizeof(timer_id);
-
-    message_data_entry *msg_data = rt_pool_alloc(&g_message_pool_mgr);
-    if (!msg_data) {
-        rt_pool_free(&g_mailbox_pool_mgr, mbox_entry);
-        RT_LOG_ERROR("Failed to allocate timer tick data (message pool exhausted)");
-        return;
-    }
-
-    mbox_entry->data = msg_data->data;
-    *(timer_id *)mbox_entry->data = entry->id;
-    mbox_entry->sync_ptr = NULL;
-    mbox_entry->next = NULL;
-
-    // Add to actor's mailbox and wake if blocked
-    rt_mailbox_add_entry(a, mbox_entry);
 
     // If one-shot, cleanup
     if (!entry->periodic) {
@@ -262,8 +244,4 @@ rt_status rt_timer_cancel(timer_id id) {
     }
 
     return RT_ERROR(RT_ERR_INVALID, "Timer not found");
-}
-
-bool rt_timer_is_tick(const rt_message *msg) {
-    return msg && msg->sender == RT_SENDER_TIMER;
 }

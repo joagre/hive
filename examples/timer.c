@@ -45,14 +45,16 @@ static void timer_actor(void *arg) {
             break;
         }
 
-        if (rt_timer_is_tick(&msg)) {
-            timer_id *tick_id = (timer_id *)msg.data;
-            printf("Timer tick from timer ID: %u\n", *tick_id);
+        if (rt_msg_is_timer(&msg)) {
+            // Timer ID is encoded in the message tag
+            uint32_t tick_id;
+            rt_msg_decode(&msg, NULL, &tick_id, NULL, NULL);
+            printf("Timer tick from timer ID: %u\n", tick_id);
 
-            if (*tick_id == oneshot) {
+            if (tick_id == oneshot) {
                 printf("One-shot timer fired!\n");
                 oneshot_received = true;
-            } else if (*tick_id == periodic) {
+            } else if (tick_id == periodic) {
                 periodic_count++;
                 printf("Periodic timer tick #%d\n", periodic_count);
 

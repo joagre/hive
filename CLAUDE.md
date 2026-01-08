@@ -39,7 +39,7 @@ The runtime consists of:
 
 1. **Actors**: Cooperative tasks with individual stacks and mailboxes
 2. **Scheduler**: Priority-based round-robin scheduler with 4 priority levels (0=CRITICAL to 3=LOW), integrated event loop (epoll on Linux, WFI on STM32)
-3. **IPC**: Inter-process communication via mailboxes with ASYNC (fire-and-forget) and SYNC (blocking with backpressure) modes
+3. **IPC**: Inter-process communication via mailboxes with selective receive and RPC support (Erlang-style)
 4. **Bus**: Publish-subscribe system with configurable retention policies (max_readers, max_age_ms)
 5. **Timers**: timerfd registered in epoll (Linux), hardware timers on STM32 (SysTick/TIM)
 6. **Network**: Non-blocking sockets registered in epoll (Linux), lwIP NO_SYS mode on STM32
@@ -71,7 +71,7 @@ The runtime consists of:
   - Optional: malloc via `actor_config.malloc_stack = true`
 - Actor table: Static array (RT_MAX_ACTORS), configured at compile time
 - Hot path structures: Static pools with O(1) allocation
-  - IPC: Mailbox entry pool (256), message data pool (256), sync buffer pool (64)
+  - IPC: Mailbox entry pool (256), message data pool (256)
   - Links/Monitors: Dedicated pools (128 each)
   - Timers: Timer entry pool (64)
   - Bus: Uses message pool for entry data
@@ -88,25 +88,30 @@ All runtime functions return `rt_status` with a code and optional string literal
 - Actors can link (bidirectional) or monitor (unidirectional) other actors for death notifications
 - When an actor dies: mailbox cleared, links/monitors notified, bus subscriptions removed, timers cancelled, resources freed
 
-### IPC Modes
-- **IPC_ASYNC**: Payload copied to receiver's mailbox, sender continues immediately
-  - Use for: Small messages, general communication, fire-and-forget
-  - Safe default for most use cases
-  - Suitable for untrusted actors and general communication
+### IPC Message Format
+All messages have a 4-byte header prepended to payload:
+- **class** (4 bits): Message type (CAST, CALL, REPLY, TIMER, SYSTEM)
+- **gen** (1 bit): Generated tag flag (1 = runtime-generated, 0 = user-provided)
+- **tag** (27 bits): Correlation identifier for RPC
 
-- **IPC_SYNC**: Payload copied to sync buffer pool, sender blocks until receiver calls `rt_ipc_release()`
-  - Use for: Flow control, backpressure, trusted cooperating actors
-  - WARNING: Requires careful use - actor context only, sender blocks until release
-  - Data copied to pinned runtime buffer (NOT sender's stack, eliminates use-after-free)
-  - Risk of deadlock with circular/nested synchronous sends
-  - Preconditions: Actor context only, sender cannot process other messages while blocked
-  - See SPEC.md "IPC_SYNC Safety Considerations" for full details
+### IPC API
+- **`rt_ipc_send(to, data, len)`**: Fire-and-forget message (class=CAST)
+- **`rt_ipc_recv(msg, timeout)`**: Receive any message
+- **`rt_ipc_recv_match(from, class, tag, msg, timeout)`**: Selective receive with filtering (Erlang-style)
+- **`rt_ipc_call(to, req, len, reply, timeout)`**: Blocking RPC (send CALL, wait for REPLY)
+- **`rt_ipc_reply(request, data, len)`**: Reply to a CALL message
+- **`rt_msg_decode(msg, class, tag, payload, len)`**: Decode message header
+
+### Selective Receive (Erlang-style)
+- `rt_ipc_recv_match()` scans mailbox for messages matching filter criteria
+- Non-matching messages are **skipped but not dropped** - they remain in mailbox
+- Filter on sender (`RT_SENDER_ANY` = wildcard), class (`RT_MSG_ANY`), tag (`RT_TAG_ANY`)
+- Enables RPC pattern: send CALL with generated tag, wait for REPLY with matching tag
 
 ### IPC Pool Exhaustion
 IPC uses global pools shared by all actors:
 - **Mailbox entry pool**: `RT_MAILBOX_ENTRY_POOL_SIZE` (256 default)
-- **Message data pool**: `RT_MESSAGE_DATA_POOL_SIZE` (256 default, ASYNC mode only)
-- **Sync buffer pool**: `RT_SYNC_BUFFER_POOL_SIZE` (64 default, SYNC mode only)
+- **Message data pool**: `RT_MESSAGE_DATA_POOL_SIZE` (256 default)
 
 **When pools are exhausted:**
 - `rt_ipc_send()` returns `RT_ERR_NOMEM` immediately
@@ -116,8 +121,7 @@ IPC uses global pools shared by all actors:
 
 **Notes:**
 - No per-actor mailbox limit - pools are shared globally
-- ASYNC mode uses message data pool (copied to receiver's mailbox)
-- SYNC mode uses separate sync buffer pool (pinned until release)
+- Use `rt_ipc_call()` for natural backpressure (sender waits for reply)
 - Pool exhaustion indicates system overload - increase pool sizes or add backpressure
 
 ### Bus Retention
@@ -161,12 +165,11 @@ The runtime uses **compile-time configuration** for deterministic memory allocat
 - `RT_MAX_ACTORS`: Maximum concurrent actors (64)
 - `RT_MAX_BUSES`: Maximum concurrent buses (32)
 - `RT_MAILBOX_ENTRY_POOL_SIZE`: Mailbox entry pool (256)
-- `RT_MESSAGE_DATA_POOL_SIZE`: Message data pool for ASYNC (256)
-- `RT_SYNC_BUFFER_POOL_SIZE`: Sync buffer pool for SYNC (64)
+- `RT_MESSAGE_DATA_POOL_SIZE`: Message data pool (256)
 - `RT_LINK_ENTRY_POOL_SIZE`: Link entry pool (128)
 - `RT_MONITOR_ENTRY_POOL_SIZE`: Monitor entry pool (128)
 - `RT_TIMER_ENTRY_POOL_SIZE`: Timer entry pool (64)
-- `RT_MAX_MESSAGE_SIZE`: Maximum message size in bytes (256)
+- `RT_MAX_MESSAGE_SIZE`: Maximum message size in bytes (256, with 4-byte header = 252 payload)
 - `RT_STACK_ARENA_SIZE`: Stack arena size (1*1024*1024) // 1 MB default
 - `RT_DEFAULT_STACK_SIZE`: Default actor stack size (65536)
 
@@ -215,6 +218,13 @@ Different implementations for Linux (dev) vs STM32 bare metal (prod):
 - Network: Non-blocking BSD sockets + epoll vs lwIP NO_SYS mode
 - File: Synchronous POSIX vs synchronous FATFS/littlefs
 
-### Special Sender IDs
-- `RT_SENDER_TIMER` (0xFFFFFFFF): Timer tick messages
-- `RT_SENDER_SYSTEM` (0xFFFFFFFE): System messages (e.g., actor death notifications)
+### Message Classes
+Messages are identified by class (not special sender IDs):
+- `RT_MSG_CAST`: Fire-and-forget message
+- `RT_MSG_CALL`: Request expecting a reply
+- `RT_MSG_REPLY`: Response to a CALL
+- `RT_MSG_TIMER`: Timer tick (tag contains timer_id)
+- `RT_MSG_SYSTEM`: System notification (e.g., actor death)
+- `RT_MSG_ANY`: Wildcard for selective receive filtering
+
+Use `rt_msg_decode()` or `rt_msg_is_timer()` to check message type.

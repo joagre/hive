@@ -282,19 +282,7 @@ void rt_actor_free(actor *a) {
     }
 
     // Free active message
-    // If actor dies with an active SYNC message, unblock the sender
     if (a->active_msg) {
-        if (a->active_msg->sync_ptr != NULL) {
-            // This is a SYNC message - unblock the sender
-            actor *sender = rt_actor_get(a->active_msg->sender);
-            if (sender && sender->waiting_for_release && sender->blocked_on_actor == a->id) {
-                // Receiver died - unblock sender with RT_ERR_CLOSED
-                sender->waiting_for_release = false;
-                sender->blocked_on_actor = ACTOR_ID_INVALID;
-                sender->io_status = RT_ERROR(RT_ERR_CLOSED, "Receiver died without releasing");
-                sender->state = ACTOR_STATE_READY;
-            }
-        }
         rt_ipc_free_active_msg(a->active_msg);
         a->active_msg = NULL;
     }

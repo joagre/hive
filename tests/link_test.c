@@ -647,7 +647,7 @@ static void test12_link_pool_exhaustion(void *arg) {
     // Signal all actors to exit
     for (int i = 0; i < spawned; i++) {
         int done = 1;
-        rt_ipc_send(targets[i], &done, sizeof(done), IPC_ASYNC);
+        rt_ipc_send(targets[i], &done, sizeof(done));
     }
 
     // Wait for cleanup

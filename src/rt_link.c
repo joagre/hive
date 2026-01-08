@@ -22,9 +22,6 @@
         } \
     } while(0)
 
-// External IPC pools (defined in rt_ipc.c)
-extern rt_pool g_mailbox_pool_mgr;
-extern rt_pool g_message_pool_mgr;
 
 // Forward declarations
 rt_status rt_link_init(void);
@@ -244,12 +241,15 @@ rt_status rt_demonitor(uint32_t monitor_ref) {
 
 // Check if message is an exit notification
 bool rt_is_exit_msg(const rt_message *msg) {
-    if (!msg) {
+    if (!msg || !msg->data || msg->len < RT_MSG_HEADER_SIZE) {
         return false;
     }
 
-    return msg->sender == RT_SENDER_SYSTEM &&
-           msg->len == sizeof(rt_exit_msg);
+    // Check message class
+    rt_msg_class class;
+    rt_msg_decode(msg, &class, NULL, NULL, NULL);
+
+    return class == RT_MSG_SYSTEM;
 }
 
 // Decode exit message
@@ -262,40 +262,38 @@ rt_status rt_decode_exit(const rt_message *msg, rt_exit_msg *out) {
         return RT_ERROR(RT_ERR_INVALID, "Not an exit message");
     }
 
-    memcpy(out, msg->data, sizeof(rt_exit_msg));
+    // Extract payload (after header)
+    const void *payload;
+    size_t payload_len;
+    rt_status status = rt_msg_decode(msg, NULL, NULL, &payload, &payload_len);
+    if (RT_FAILED(status)) {
+        return status;
+    }
+
+    if (payload_len != sizeof(rt_exit_msg)) {
+        return RT_ERROR(RT_ERR_INVALID, "Invalid exit message size");
+    }
+
+    memcpy(out, payload, sizeof(rt_exit_msg));
     return RT_SUCCESS;
 }
 
 // Helper: Send exit notification to an actor
 static bool send_exit_notification(actor *recipient, actor_id dying_id, rt_exit_reason reason) {
-    mailbox_entry *entry = rt_pool_alloc(&g_mailbox_pool_mgr);
-    if (!entry) {
-        RT_LOG_ERROR("Failed to send exit notification (mailbox pool exhausted)");
+    // Build exit message payload
+    rt_exit_msg exit_data = {
+        .actor = dying_id,
+        .reason = reason
+    };
+
+    // Send using rt_ipc_send_ex with RT_MSG_SYSTEM class
+    // Sender is the dying actor so recipient knows who died
+    rt_status status = rt_ipc_send_ex(recipient->id, dying_id, RT_MSG_SYSTEM,
+                                       RT_TAG_NONE, &exit_data, sizeof(exit_data));
+    if (RT_FAILED(status)) {
+        RT_LOG_ERROR("Failed to send exit notification: %s", status.msg);
         return false;
     }
-
-    entry->sender = RT_SENDER_SYSTEM;
-    entry->len = sizeof(rt_exit_msg);
-
-    message_data_entry *msg_data = rt_pool_alloc(&g_message_pool_mgr);
-    if (!msg_data) {
-        rt_pool_free(&g_mailbox_pool_mgr, entry);
-        RT_LOG_ERROR("Failed to allocate exit message data (message pool exhausted)");
-        return false;
-    }
-
-    entry->data = msg_data->data;
-
-    // Populate exit message
-    rt_exit_msg *exit_data = (rt_exit_msg *)entry->data;
-    exit_data->actor = dying_id;
-    exit_data->reason = reason;
-
-    entry->sync_ptr = NULL;
-    entry->next = NULL;
-
-    // Inject into recipient's mailbox and wake if blocked
-    rt_mailbox_add_entry(recipient, entry);
 
     return true;
 }

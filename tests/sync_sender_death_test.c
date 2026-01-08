@@ -47,7 +47,7 @@ void receiver_actor(void *arg) {
         printf("Receiver: ✓ PASS - Pinned buffer prevents UAF even though sender died\n");
     }
 
-    rt_ipc_release(&msg);
+    // rt_ipc_release removed;
     rt_exit();
 }
 
@@ -64,7 +64,7 @@ void sender_actor(void *arg) {
              "This message should survive sender death!");
 
     printf("Sender: Sending SYNC message to receiver %u...\n", receiver);
-    rt_status status = rt_ipc_send(receiver, &data, sizeof(data), IPC_SYNC);
+    rt_status status = rt_ipc_send(receiver, &data, sizeof(data));
 
     if (RT_FAILED(status)) {
         printf("Sender: ✗ FAIL - Send failed: %s\n", status.msg);

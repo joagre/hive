@@ -10,9 +10,27 @@ typedef uint32_t actor_id;
 
 #define ACTOR_ID_INVALID  ((actor_id)0)
 
-// Special sender IDs
-#define RT_SENDER_TIMER   ((actor_id)0xFFFFFFFF)
-#define RT_SENDER_SYSTEM  ((actor_id)0xFFFFFFFE)
+// Wildcard sender for filtering (use with rt_ipc_recv_match)
+#define RT_SENDER_ANY     ((actor_id)0xFFFFFFFF)
+
+// Message header size (prepended to all messages)
+#define RT_MSG_HEADER_SIZE 4
+
+// Message classes (4 bits, stored in header bits 31-28)
+typedef enum {
+    RT_MSG_CAST   = 0,  // Fire-and-forget message
+    RT_MSG_CALL   = 1,  // Request expecting reply
+    RT_MSG_REPLY  = 2,  // Response to call
+    RT_MSG_TIMER  = 3,  // Timer tick
+    RT_MSG_SYSTEM = 4,  // System message (exit notifications, etc.)
+    RT_MSG_ANY    = 15, // Wildcard for filtering (use with rt_ipc_recv_match)
+} rt_msg_class;
+
+// Tag constants
+#define RT_TAG_NONE        0           // No tag
+#define RT_TAG_ANY         0x0FFFFFFF  // Wildcard for filtering
+#define RT_TAG_GEN_BIT     0x08000000  // Bit 27: distinguishes generated tags
+#define RT_TAG_VALUE_MASK  0x07FFFFFF  // Lower 27 bits: tag value
 
 // Priority levels (lower value = higher priority)
 typedef enum {
@@ -68,15 +86,8 @@ typedef struct {
 typedef struct {
     actor_id    sender;
     size_t      len;
-    const void *data;   // ASYNC: valid until next rt_ipc_recv()
-                        // SYNC: valid until rt_ipc_release() (next recv auto-releases)
+    const void *data;   // Valid until next rt_ipc_recv() or rt_ipc_recv_match()
 } rt_message;
-
-// IPC send mode
-typedef enum {
-    IPC_ASYNC,   // asynchronous send, sender continues immediately
-    IPC_SYNC,    // synchronous send, sender blocks until receiver consumes
-} rt_ipc_mode;
 
 // Exit reason codes
 typedef enum {

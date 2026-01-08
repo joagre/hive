@@ -16,21 +16,41 @@ static bool g_mailbox_used[RT_MAILBOX_ENTRY_POOL_SIZE];
 rt_pool g_mailbox_pool_mgr;  // Non-static so rt_link.c can access
 
 // Message data pool - fixed size entries (type defined in rt_internal.h)
-
 static message_data_entry g_message_pool[RT_MESSAGE_DATA_POOL_SIZE];
 static bool g_message_used[RT_MESSAGE_DATA_POOL_SIZE];
 rt_pool g_message_pool_mgr;  // Non-static so rt_link.c can access
 
-// Borrow buffer pool - for IPC_SYNC to avoid UAF when sender dies
-// Using pinned runtime buffers instead of sender's stack eliminates use-after-free
-static message_data_entry g_sync_pool[RT_SYNC_BUFFER_POOL_SIZE];
-static bool g_sync_used[RT_SYNC_BUFFER_POOL_SIZE];
-static rt_pool g_sync_pool_mgr;
+// Tag generator for RPC correlation
+static uint32_t g_next_tag = 1;
 
 // Forward declaration for init function
 rt_status rt_ipc_init(void);
 
-// Initialize IPC pools
+// -----------------------------------------------------------------------------
+// Header Encoding/Decoding
+// -----------------------------------------------------------------------------
+
+static inline uint32_t encode_header(rt_msg_class class, uint32_t tag) {
+    return ((uint32_t)class << 28) | (tag & 0x0FFFFFFF);
+}
+
+static inline void decode_header(uint32_t header, rt_msg_class *class, uint32_t *tag) {
+    if (class) *class = (rt_msg_class)(header >> 28);
+    if (tag) *tag = header & 0x0FFFFFFF;
+}
+
+static uint32_t generate_tag(void) {
+    uint32_t tag = (g_next_tag++ & RT_TAG_VALUE_MASK) | RT_TAG_GEN_BIT;
+    if ((g_next_tag & RT_TAG_VALUE_MASK) == 0) {
+        g_next_tag = 1;  // Skip 0 on wrap
+    }
+    return tag;
+}
+
+// -----------------------------------------------------------------------------
+// Initialization
+// -----------------------------------------------------------------------------
+
 rt_status rt_ipc_init(void) {
     rt_pool_init(&g_mailbox_pool_mgr, g_mailbox_pool, g_mailbox_used,
                  sizeof(mailbox_entry), RT_MAILBOX_ENTRY_POOL_SIZE);
@@ -38,15 +58,30 @@ rt_status rt_ipc_init(void) {
     rt_pool_init(&g_message_pool_mgr, g_message_pool, g_message_used,
                  sizeof(message_data_entry), RT_MESSAGE_DATA_POOL_SIZE);
 
-    rt_pool_init(&g_sync_pool_mgr, g_sync_pool, g_sync_used,
-                 sizeof(message_data_entry), RT_SYNC_BUFFER_POOL_SIZE);
-
     return RT_SUCCESS;
 }
 
-// Internal helper: Add mailbox entry to actor's mailbox and wake if blocked
+// -----------------------------------------------------------------------------
+// Internal Helpers
+// -----------------------------------------------------------------------------
+
+// Free a mailbox entry and its associated data buffer
+void rt_ipc_free_entry(mailbox_entry *entry) {
+    if (!entry) {
+        return;
+    }
+    if (entry->data) {
+        message_data_entry *msg_data = DATA_TO_MSG_ENTRY(entry->data);
+        rt_pool_free(&g_message_pool_mgr, msg_data);
+    }
+    rt_pool_free(&g_mailbox_pool_mgr, entry);
+}
+
+// Add mailbox entry to actor's mailbox (doubly-linked list) and wake if blocked
 void rt_mailbox_add_entry(actor *recipient, mailbox_entry *entry) {
-    // Append to mailbox list
+    entry->next = NULL;
+    entry->prev = recipient->mbox.tail;
+
     if (recipient->mbox.tail) {
         recipient->mbox.tail->next = entry;
     } else {
@@ -55,66 +90,130 @@ void rt_mailbox_add_entry(actor *recipient, mailbox_entry *entry) {
     recipient->mbox.tail = entry;
     recipient->mbox.count++;
 
-    // Wake actor if blocked
+    // Wake actor if blocked and message matches its filter
     if (recipient->state == ACTOR_STATE_BLOCKED) {
-        recipient->state = ACTOR_STATE_READY;
+        // Check if message matches receive filter
+        bool matches = true;
+
+        // Check sender filter
+        if (recipient->recv_filter_from != RT_SENDER_ANY) {
+            if (entry->sender != recipient->recv_filter_from) {
+                matches = false;
+            }
+        }
+
+        // Check class filter (need to decode header)
+        if (matches && recipient->recv_filter_class != RT_MSG_ANY) {
+            if (entry->len >= RT_MSG_HEADER_SIZE) {
+                uint32_t header = *(uint32_t *)entry->data;
+                rt_msg_class msg_class;
+                decode_header(header, &msg_class, NULL);
+                if (msg_class != recipient->recv_filter_class) {
+                    matches = false;
+                }
+            } else {
+                matches = false;  // Invalid message
+            }
+        }
+
+        // Check tag filter
+        if (matches && recipient->recv_filter_tag != RT_TAG_ANY) {
+            if (entry->len >= RT_MSG_HEADER_SIZE) {
+                uint32_t header = *(uint32_t *)entry->data;
+                uint32_t msg_tag;
+                decode_header(header, NULL, &msg_tag);
+                if (msg_tag != recipient->recv_filter_tag) {
+                    matches = false;
+                }
+            } else {
+                matches = false;  // Invalid message
+            }
+        }
+
+        if (matches) {
+            recipient->state = ACTOR_STATE_READY;
+        }
     }
 }
 
-// Internal helper: Free a mailbox entry and its associated data buffers
-void rt_ipc_free_entry(mailbox_entry *entry) {
-    if (!entry) {
-        return;
+// Unlink entry from mailbox (supports unlinking from middle)
+static void mailbox_unlink(mailbox *mbox, mailbox_entry *entry) {
+    if (entry->prev) {
+        entry->prev->next = entry->next;
+    } else {
+        mbox->head = entry->next;
     }
-    // Free sync buffer if SYNC mode
-    if (entry->sync_ptr) {
-        message_data_entry *sync_data = DATA_TO_MSG_ENTRY(entry->sync_ptr);
-        rt_pool_free(&g_sync_pool_mgr, sync_data);
+
+    if (entry->next) {
+        entry->next->prev = entry->prev;
+    } else {
+        mbox->tail = entry->prev;
     }
-    // Free ASYNC buffer if ASYNC mode
-    if (entry->data) {
-        message_data_entry *msg_data = DATA_TO_MSG_ENTRY(entry->data);
-        rt_pool_free(&g_message_pool_mgr, msg_data);
-    }
-    rt_pool_free(&g_mailbox_pool_mgr, entry);
+
+    entry->next = NULL;
+    entry->prev = NULL;
+    mbox->count--;
 }
 
-// Internal helper: Unblock a sender waiting for IPC_SYNC release
-void rt_ipc_unblock_sender(actor_id sender_id, actor_id receiver_id) {
-    actor *sender = rt_actor_get(sender_id);
-    if (sender && sender->waiting_for_release && sender->blocked_on_actor == receiver_id) {
-        sender->waiting_for_release = false;
-        sender->blocked_on_actor = ACTOR_ID_INVALID;
-        sender->state = ACTOR_STATE_READY;
+// Scan mailbox for matching message
+static mailbox_entry *mailbox_find_match(mailbox *mbox, actor_id from,
+                                          rt_msg_class class, uint32_t tag) {
+    for (mailbox_entry *entry = mbox->head; entry; entry = entry->next) {
+        // Check sender filter
+        if (from != RT_SENDER_ANY && entry->sender != from) {
+            continue;
+        }
+
+        // Need valid header to check class/tag
+        if (entry->len < RT_MSG_HEADER_SIZE) {
+            continue;  // Skip malformed messages
+        }
+
+        uint32_t header = *(uint32_t *)entry->data;
+        rt_msg_class msg_class;
+        uint32_t msg_tag;
+        decode_header(header, &msg_class, &msg_tag);
+
+        // Check class filter
+        if (class != RT_MSG_ANY && msg_class != class) {
+            continue;
+        }
+
+        // Check tag filter
+        if (tag != RT_TAG_ANY && msg_tag != tag) {
+            continue;
+        }
+
+        // Found a match
+        return entry;
     }
+    return NULL;
 }
 
-// Internal helper: Dequeue the head entry from an actor's mailbox
+// Dequeue the head entry from an actor's mailbox
 mailbox_entry *rt_ipc_dequeue_head(actor *a) {
     if (!a || !a->mbox.head) {
         return NULL;
     }
     mailbox_entry *entry = a->mbox.head;
-    a->mbox.head = entry->next;
-    if (a->mbox.head == NULL) {
-        a->mbox.tail = NULL;
-    }
-    a->mbox.count--;
-    entry->next = NULL;
+    mailbox_unlink(&a->mbox, entry);
     return entry;
 }
 
-// Internal helper: Check for timeout message and handle it
+// Check for timeout message and handle it
 rt_status rt_mailbox_handle_timeout(actor *current, timer_id timeout_timer, const char *operation) {
     if (timeout_timer == TIMER_ID_INVALID) {
         return RT_SUCCESS;  // No timeout was set
     }
 
     // Check if first message is from OUR specific timeout timer
-    if (current->mbox.head && current->mbox.head->sender == RT_SENDER_TIMER) {
-        // Timer message - check if it's from our timeout timer (not a periodic or other timer)
-        timer_id msg_timer_id = *(timer_id *)current->mbox.head->data;
-        if (msg_timer_id == timeout_timer) {
+    if (current->mbox.head && current->mbox.head->len >= RT_MSG_HEADER_SIZE) {
+        uint32_t header = *(uint32_t *)current->mbox.head->data;
+        rt_msg_class msg_class;
+        uint32_t msg_tag;
+        decode_header(header, &msg_class, &msg_tag);
+
+        if (msg_class == RT_MSG_TIMER && msg_tag == timeout_timer) {
             // This IS our timeout timer - dequeue, free, and return timeout error
             mailbox_entry *entry = rt_ipc_dequeue_head(current);
             rt_ipc_free_entry(entry);
@@ -122,34 +221,28 @@ rt_status rt_mailbox_handle_timeout(actor *current, timer_id timeout_timer, cons
         }
     }
 
-    // Not our timeout timer - another message arrived first (regular, different timer, etc.)
+    // Not our timeout timer - another message arrived first
     // Cancel our timeout timer and return success
     rt_timer_cancel(timeout_timer);
     return RT_SUCCESS;
 }
 
-rt_status rt_ipc_send(actor_id to, const void *data, size_t len, rt_ipc_mode mode) {
-    RT_REQUIRE_ACTOR_CONTEXT();
-    actor *sender = rt_actor_current();
+// -----------------------------------------------------------------------------
+// Core Send/Receive
+// -----------------------------------------------------------------------------
 
-    // Validate data pointer - NULL with len > 0 would cause memcpy crash
-    if (data == NULL && len > 0) {
-        return RT_ERROR(RT_ERR_INVALID, "NULL data with non-zero length");
-    }
-
+// Internal send with explicit class and tag (used by timer, link, etc.)
+rt_status rt_ipc_send_ex(actor_id to, actor_id sender, rt_msg_class class,
+                         uint32_t tag, const void *data, size_t len) {
     actor *receiver = rt_actor_get(to);
     if (!receiver) {
         return RT_ERROR(RT_ERR_INVALID, "Invalid receiver actor ID");
     }
 
-    // Validate message size
-    if (len > RT_MAX_MESSAGE_SIZE) {
+    // Validate message size (payload + header)
+    size_t total_len = len + RT_MSG_HEADER_SIZE;
+    if (total_len > RT_MAX_MESSAGE_SIZE) {
         return RT_ERROR(RT_ERR_INVALID, "Message exceeds RT_MAX_MESSAGE_SIZE");
-    }
-
-    // Prevent self-send with SYNC (guaranteed deadlock)
-    if (mode == IPC_SYNC && to == sender->id) {
-        return RT_ERROR(RT_ERR_INVALID, "Self-send with IPC_SYNC is forbidden (deadlock)");
     }
 
     // Allocate mailbox entry from pool
@@ -158,129 +251,125 @@ rt_status rt_ipc_send(actor_id to, const void *data, size_t len, rt_ipc_mode mod
         return RT_ERROR(RT_ERR_NOMEM, "Mailbox entry pool exhausted");
     }
 
-    entry->sender = sender->id;
-    entry->len = len;
-    entry->next = NULL;
-
-    if (mode == IPC_ASYNC) {
-        // Copy mode: allocate and copy data from pool
-        message_data_entry *msg_data = rt_pool_alloc(&g_message_pool_mgr);
-        if (!msg_data) {
-            rt_pool_free(&g_mailbox_pool_mgr, entry);
-            return RT_ERROR(RT_ERR_NOMEM, "Message data pool exhausted");
-        }
-        memcpy(msg_data->data, data, len);
-        entry->data = msg_data->data;
-        entry->sync_ptr = NULL;
-
-        // Add to receiver's mailbox and wake if blocked
-        rt_mailbox_add_entry(receiver, entry);
-
-        RT_LOG_TRACE("IPC: Message sent from %u to %u (ASYNC mode)", sender->id, to);
-        return RT_SUCCESS;
-
-    } else { // IPC_SYNC
-        // Borrow mode: Copy to pinned runtime buffer (not sender's stack)
-        // This prevents use-after-free if sender dies while receiver holds message
-        message_data_entry *sync_buf = rt_pool_alloc(&g_sync_pool_mgr);
-        if (!sync_buf) {
-            rt_pool_free(&g_mailbox_pool_mgr, entry);
-            return RT_ERROR(RT_ERR_NOMEM, "Borrow buffer pool exhausted");
-        }
-        memcpy(sync_buf->data, data, len);
-        entry->data = NULL;
-        entry->sync_ptr = sync_buf->data;
-
-        // Add to receiver's mailbox and wake if blocked
-        rt_mailbox_add_entry(receiver, entry);
-
-        // Block sender until receiver releases
-        sender->waiting_for_release = true;
-        sender->blocked_on_actor = to;
-        sender->io_status = RT_SUCCESS;  // Assume success, will be overridden if receiver dies
-        sender->state = ACTOR_STATE_BLOCKED;
-
-        // Yield to scheduler
-        rt_scheduler_yield();
-
-        // When we return here, the message has been released (or receiver died)
-        // Return status set by either rt_ipc_release() (RT_SUCCESS) or receiver death (RT_ERR_CLOSED)
-        return sender->io_status;
+    // Allocate message data from pool
+    message_data_entry *msg_data = rt_pool_alloc(&g_message_pool_mgr);
+    if (!msg_data) {
+        rt_pool_free(&g_mailbox_pool_mgr, entry);
+        return RT_ERROR(RT_ERR_NOMEM, "Message data pool exhausted");
     }
+
+    // Build message: header + payload
+    uint32_t header = encode_header(class, tag);
+    memcpy(msg_data->data, &header, RT_MSG_HEADER_SIZE);
+    if (data && len > 0) {
+        memcpy(msg_data->data + RT_MSG_HEADER_SIZE, data, len);
+    }
+
+    entry->sender = sender;
+    entry->len = total_len;
+    entry->data = msg_data->data;
+    entry->next = NULL;
+    entry->prev = NULL;
+
+    // Add to receiver's mailbox and wake if blocked
+    rt_mailbox_add_entry(receiver, entry);
+
+    RT_LOG_TRACE("IPC: Message sent from %u to %u (class=%d, tag=%u)", sender, to, class, tag);
+    return RT_SUCCESS;
+}
+
+rt_status rt_ipc_send(actor_id to, const void *data, size_t len) {
+    RT_REQUIRE_ACTOR_CONTEXT();
+    actor *sender = rt_actor_current();
+
+    // Validate data pointer - NULL with len > 0 would cause memcpy crash
+    if (data == NULL && len > 0) {
+        return RT_ERROR(RT_ERR_INVALID, "NULL data with non-zero length");
+    }
+
+    return rt_ipc_send_ex(to, sender->id, RT_MSG_CAST, RT_TAG_NONE, data, len);
 }
 
 rt_status rt_ipc_recv(rt_message *msg, int32_t timeout_ms) {
+    // Use recv_match with wildcards for all filters
+    return rt_ipc_recv_match(NULL, NULL, NULL, msg, timeout_ms);
+}
+
+rt_status rt_ipc_recv_match(const actor_id *from, const rt_msg_class *class,
+                            const uint32_t *tag, rt_message *msg, int32_t timeout_ms) {
     RT_REQUIRE_ACTOR_CONTEXT();
     actor *current = rt_actor_current();
 
-    RT_LOG_TRACE("IPC recv: actor %u checking mailbox (count=%zu)", current->id, current->mbox.count);
+    // Convert filter pointers to values (use wildcards if NULL)
+    actor_id filter_from = from ? *from : RT_SENDER_ANY;
+    rt_msg_class filter_class = class ? *class : RT_MSG_ANY;
+    uint32_t filter_tag = tag ? *tag : RT_TAG_ANY;
 
-    // Auto-release previous active message if any (must happen BEFORE blocking)
-    // This ensures SYNC senders are unblocked even if this recv times out
+    RT_LOG_TRACE("IPC recv_match: actor %u (from=%u, class=%d, tag=%u)",
+                 current->id, filter_from, filter_class, filter_tag);
+
+    // Auto-release previous active message if any
     if (current->active_msg) {
-        if (current->active_msg->sync_ptr) {
-            rt_ipc_unblock_sender(current->active_msg->sender, current->id);
-        }
         rt_ipc_free_entry(current->active_msg);
         current->active_msg = NULL;
     }
 
     timer_id timeout_timer = TIMER_ID_INVALID;
 
-    // Check if there's a message in the mailbox
-    if (current->mbox.head == NULL) {
+    // Search mailbox for matching message
+    mailbox_entry *entry = mailbox_find_match(&current->mbox, filter_from, filter_class, filter_tag);
+
+    if (!entry) {
         if (timeout_ms == 0) {
             // Non-blocking
-            return RT_ERROR(RT_ERR_WOULDBLOCK, "No messages available");
-        } else if (timeout_ms > 0) {
+            return RT_ERROR(RT_ERR_WOULDBLOCK, "No matching messages available");
+        }
+
+        // Set up filters for wake-on-match
+        current->recv_filter_from = filter_from;
+        current->recv_filter_class = filter_class;
+        current->recv_filter_tag = filter_tag;
+
+        if (timeout_ms > 0) {
             // Blocking with timeout - create a timer
-            RT_LOG_TRACE("IPC recv: actor %u blocking with %d ms timeout", current->id, timeout_ms);
+            RT_LOG_TRACE("IPC recv_match: actor %u blocking with %d ms timeout", current->id, timeout_ms);
             rt_status status = rt_timer_after((uint32_t)timeout_ms * 1000, &timeout_timer);
             if (RT_FAILED(status)) {
                 return status;
             }
+        }
 
-            // Block and wait for message (timer or real)
-            current->state = ACTOR_STATE_BLOCKED;
-            rt_scheduler_yield();
+        // Block and wait
+        current->state = ACTOR_STATE_BLOCKED;
+        rt_scheduler_yield();
 
-            // When we wake up, check mailbox
-            RT_LOG_TRACE("IPC recv: actor %u woke up, mailbox count=%zu", current->id, current->mbox.count);
-            if (current->mbox.head == NULL) {
-                // Shouldn't happen, but handle gracefully
-                if (timeout_timer != TIMER_ID_INVALID) {
-                    rt_timer_cancel(timeout_timer);
-                }
-                return RT_ERROR(RT_ERR_WOULDBLOCK, "No messages available after wakeup");
+        // Clear filters after waking
+        current->recv_filter_from = RT_SENDER_ANY;
+        current->recv_filter_class = RT_MSG_ANY;
+        current->recv_filter_tag = RT_TAG_ANY;
+
+        // Check for timeout
+        if (timeout_timer != TIMER_ID_INVALID) {
+            rt_status timeout_status = rt_mailbox_handle_timeout(current, timeout_timer, "Receive timeout");
+            if (RT_FAILED(timeout_status)) {
+                return timeout_status;
             }
-        } else {
-            // Blocking forever (timeout_ms < 0)
-            RT_LOG_TRACE("IPC recv: actor %u blocking, waiting for message", current->id);
-            current->state = ACTOR_STATE_BLOCKED;
-            rt_scheduler_yield();
+        }
 
-            // When we wake up, check again
-            RT_LOG_TRACE("IPC recv: actor %u woke up, mailbox count=%zu", current->id, current->mbox.count);
-            if (current->mbox.head == NULL) {
-                return RT_ERROR(RT_ERR_WOULDBLOCK, "No messages available after wakeup");
-            }
+        // Re-scan mailbox for match
+        entry = mailbox_find_match(&current->mbox, filter_from, filter_class, filter_tag);
+        if (!entry) {
+            return RT_ERROR(RT_ERR_WOULDBLOCK, "No matching messages available after wakeup");
         }
     }
 
-    // At this point, mailbox has at least one message
-    // Check for timeout and handle it
-    rt_status timeout_status = rt_mailbox_handle_timeout(current, timeout_timer, "Receive timeout");
-    if (RT_FAILED(timeout_status)) {
-        return timeout_status;
-    }
-
-    // Dequeue message
-    mailbox_entry *entry = rt_ipc_dequeue_head(current);
+    // Found a match - unlink from mailbox
+    mailbox_unlink(&current->mbox, entry);
 
     // Fill in message structure
     msg->sender = entry->sender;
     msg->len = entry->len;
-    msg->data = entry->sync_ptr ? entry->sync_ptr : entry->data;
+    msg->data = entry->data;
 
     // Store entry as active message for later cleanup
     current->active_msg = entry;
@@ -288,25 +377,100 @@ rt_status rt_ipc_recv(rt_message *msg, int32_t timeout_ms) {
     return RT_SUCCESS;
 }
 
-void rt_ipc_release(const rt_message *msg) {
-    if (!msg) {
-        return;
+// -----------------------------------------------------------------------------
+// RPC Pattern
+// -----------------------------------------------------------------------------
+
+rt_status rt_ipc_call(actor_id to, const void *request, size_t req_len,
+                      rt_message *reply, int32_t timeout_ms) {
+    RT_REQUIRE_ACTOR_CONTEXT();
+    actor *sender = rt_actor_current();
+
+    // Validate data pointer
+    if (request == NULL && req_len > 0) {
+        return RT_ERROR(RT_ERR_INVALID, "NULL request with non-zero length");
     }
 
-    actor *current = rt_actor_current();
-    if (!current) {
-        return;
+    // Generate unique tag for this call
+    uint32_t call_tag = generate_tag();
+
+    // Send RT_MSG_CALL with generated tag
+    rt_status status = rt_ipc_send_ex(to, sender->id, RT_MSG_CALL, call_tag, request, req_len);
+    if (RT_FAILED(status)) {
+        return status;
     }
 
-    // Unblock sender if this was a synced message
-    rt_ipc_unblock_sender(msg->sender, current->id);
-
-    // Free the active message
-    if (current->active_msg) {
-        rt_ipc_free_entry(current->active_msg);
-        current->active_msg = NULL;
-    }
+    // Wait for RT_MSG_REPLY with matching tag from the callee
+    rt_msg_class reply_class = RT_MSG_REPLY;
+    return rt_ipc_recv_match(&to, &reply_class, &call_tag, reply, timeout_ms);
 }
+
+rt_status rt_ipc_reply(const rt_message *request, const void *data, size_t len) {
+    RT_REQUIRE_ACTOR_CONTEXT();
+    actor *current = rt_actor_current();
+
+    if (!request || !request->data || request->len < RT_MSG_HEADER_SIZE) {
+        return RT_ERROR(RT_ERR_INVALID, "Invalid request message");
+    }
+
+    // Extract tag from request header
+    uint32_t header = *(uint32_t *)request->data;
+    rt_msg_class req_class;
+    uint32_t req_tag;
+    decode_header(header, &req_class, &req_tag);
+
+    // Verify this is a CALL message
+    if (req_class != RT_MSG_CALL) {
+        return RT_ERROR(RT_ERR_INVALID, "Can only reply to RT_MSG_CALL messages");
+    }
+
+    // Validate data pointer
+    if (data == NULL && len > 0) {
+        return RT_ERROR(RT_ERR_INVALID, "NULL data with non-zero length");
+    }
+
+    // Send RT_MSG_REPLY with same tag back to caller
+    return rt_ipc_send_ex(request->sender, current->id, RT_MSG_REPLY, req_tag, data, len);
+}
+
+// -----------------------------------------------------------------------------
+// Message Inspection
+// -----------------------------------------------------------------------------
+
+rt_status rt_msg_decode(const rt_message *msg, rt_msg_class *class,
+                        uint32_t *tag, const void **payload, size_t *payload_len) {
+    if (!msg || !msg->data || msg->len < RT_MSG_HEADER_SIZE) {
+        return RT_ERROR(RT_ERR_INVALID, "Invalid message");
+    }
+
+    uint32_t header = *(uint32_t *)msg->data;
+    decode_header(header, class, tag);
+
+    if (payload) {
+        *payload = (const uint8_t *)msg->data + RT_MSG_HEADER_SIZE;
+    }
+    if (payload_len) {
+        *payload_len = msg->len - RT_MSG_HEADER_SIZE;
+    }
+
+    return RT_SUCCESS;
+}
+
+bool rt_msg_is_timer(const rt_message *msg) {
+    if (!msg || !msg->data || msg->len < RT_MSG_HEADER_SIZE) {
+        return false;
+    }
+
+    uint32_t header = *(uint32_t *)msg->data;
+    rt_msg_class class;
+    decode_header(header, &class, NULL);
+
+    return class == RT_MSG_TIMER;
+}
+
+// -----------------------------------------------------------------------------
+// Query Functions
+// -----------------------------------------------------------------------------
 
 bool rt_ipc_pending(void) {
     actor *current = rt_actor_current();
@@ -323,6 +487,10 @@ size_t rt_ipc_count(void) {
     }
     return current->mbox.count;
 }
+
+// -----------------------------------------------------------------------------
+// Cleanup Functions
+// -----------------------------------------------------------------------------
 
 // Clear all entries from a mailbox (called during actor cleanup)
 void rt_ipc_mailbox_clear(mailbox *mbox) {
@@ -342,7 +510,6 @@ void rt_ipc_mailbox_clear(mailbox *mbox) {
 }
 
 // Free an active message entry (called during actor cleanup)
-// Note: This is now just a wrapper around rt_ipc_free_entry for API compatibility
 void rt_ipc_free_active_msg(mailbox_entry *entry) {
     rt_ipc_free_entry(entry);
 }

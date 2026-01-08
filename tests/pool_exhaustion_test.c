@@ -31,7 +31,7 @@ void sender_actor(void *arg) {
 
     while (true) {
         data++;
-        status = rt_ipc_send(receiver, &data, sizeof(data), IPC_ASYNC);
+        status = rt_ipc_send(receiver, &data, sizeof(data));
 
         if (RT_FAILED(status)) {
             if (status.code == RT_ERR_NOMEM) {
@@ -63,7 +63,7 @@ void sender_actor(void *arg) {
         printf("Sender: Attempt %d - trying to send...\n", attempt + 1);
 
         data++;
-        status = rt_ipc_send(receiver, &data, sizeof(data), IPC_ASYNC);
+        status = rt_ipc_send(receiver, &data, sizeof(data));
 
         if (!RT_FAILED(status)) {
             printf("Sender: ✓ Send succeeded on attempt %d!\n", attempt + 1);

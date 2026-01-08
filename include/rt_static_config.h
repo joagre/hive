@@ -35,25 +35,18 @@
 // -----------------------------------------------------------------------------
 
 // Size of global mailbox entry pool (shared by all actors)
-// Each IPC_ASYNC send consumes one entry until message is received
+// Each send consumes one entry until message is received
 #ifndef RT_MAILBOX_ENTRY_POOL_SIZE
 #define RT_MAILBOX_ENTRY_POOL_SIZE 256
 #endif
 
-// Size of global message data pool (for IPC_ASYNC payloads)
+// Size of global message data pool (for message payloads)
 // Messages are allocated from this pool
 #ifndef RT_MESSAGE_DATA_POOL_SIZE
 #define RT_MESSAGE_DATA_POOL_SIZE 256
 #endif
 
-// Size of global sync buffer pool (for IPC_SYNC payloads)
-// Each concurrent IPC_SYNC send consumes one buffer until released
-// Separate pool prevents IPC_ASYNC/SYNC contention
-#ifndef RT_SYNC_BUFFER_POOL_SIZE
-#define RT_SYNC_BUFFER_POOL_SIZE 64
-#endif
-
-// Maximum message size (bytes)
+// Maximum message size (bytes, includes 4-byte header)
 #ifndef RT_MAX_MESSAGE_SIZE
 #define RT_MAX_MESSAGE_SIZE 256
 #endif

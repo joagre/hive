@@ -32,12 +32,17 @@ static void pong_actor(void *arg) {
             ping_id = msg.sender;
         }
 
-        ping_msg *pm = (ping_msg *)msg.data;
-        printf("Pong: Received ping #%d from actor %u\n", pm->count, msg.sender);
+        // Decode message payload
+        const void *payload;
+        size_t payload_len;
+        rt_msg_decode(&msg, NULL, NULL, &payload, &payload_len);
+
+        ping_msg pm_copy = *(ping_msg *)payload;
+        printf("Pong: Received ping #%d from actor %u\n", pm_copy.count, msg.sender);
 
         // Send pong back
-        pm->count++;
-        status = rt_ipc_send(ping_id, pm, sizeof(ping_msg), IPC_ASYNC);
+        pm_copy.count++;
+        status = rt_ipc_send(ping_id, &pm_copy, sizeof(ping_msg));
 
         if (RT_FAILED(status)) {
             printf("Pong: Failed to send message: %s\n",
@@ -45,7 +50,7 @@ static void pong_actor(void *arg) {
             break;
         }
 
-        printf("Pong: Sent pong #%d\n", pm->count);
+        printf("Pong: Sent pong #%d\n", pm_copy.count);
     }
 
     printf("Pong actor exiting\n");
@@ -60,7 +65,7 @@ static void ping_actor(void *arg) {
 
     // Send first ping
     ping_msg pm = { .count = 0 };
-    rt_status status = rt_ipc_send(pong_id, &pm, sizeof(ping_msg), IPC_ASYNC);
+    rt_status status = rt_ipc_send(pong_id, &pm, sizeof(ping_msg));
 
     if (RT_FAILED(status)) {
         printf("Ping: Failed to send initial message: %s\n",
@@ -81,12 +86,16 @@ static void ping_actor(void *arg) {
             break;
         }
 
-        ping_msg *recv_pm = (ping_msg *)msg.data;
-        printf("Ping: Received pong #%d from actor %u\n", recv_pm->count, msg.sender);
+        // Decode message payload
+        const void *payload;
+        rt_msg_decode(&msg, NULL, NULL, &payload, NULL);
+
+        ping_msg recv_pm = *(ping_msg *)payload;
+        printf("Ping: Received pong #%d from actor %u\n", recv_pm.count, msg.sender);
 
         // Send ping back
-        recv_pm->count++;
-        status = rt_ipc_send(pong_id, recv_pm, sizeof(ping_msg), IPC_ASYNC);
+        recv_pm.count++;
+        status = rt_ipc_send(pong_id, &recv_pm, sizeof(ping_msg));
 
         if (RT_FAILED(status)) {
             printf("Ping: Failed to send message: %s\n",
@@ -94,7 +103,7 @@ static void ping_actor(void *arg) {
             break;
         }
 
-        printf("Ping: Sent ping #%d\n", recv_pm->count);
+        printf("Ping: Sent ping #%d\n", recv_pm.count);
     }
 
     printf("Ping actor exiting\n");
