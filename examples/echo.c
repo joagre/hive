@@ -95,7 +95,6 @@ static void server_actor(void *arg) {
     if (HIVE_FAILED(status)) {
         printf("Server: Timeout waiting for client done message\n");
     } else {
-        // Direct payload access - no decode needed
         coord_msg *coord = (coord_msg *)done_msg.data;
         if (coord->type == MSG_CLIENT_DONE) {
             printf("Server: Received done notification from client via IPC\n");
@@ -130,7 +129,6 @@ static void client_actor(void *arg) {
         hive_exit();
     }
 
-    // Direct payload access - no decode needed
     actor_id server_id = msg.sender;
     coord_msg *coord = (coord_msg *)msg.data;
     if (coord->type == MSG_SERVER_READY) {

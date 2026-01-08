@@ -31,7 +31,6 @@ static void pong_actor(void *arg) {
             ping_id = msg.sender;
         }
 
-        // Direct payload access - no decode needed
         ping_msg pm_copy = *(ping_msg *)msg.data;
         printf("Pong: Received ping #%d from actor %u\n", pm_copy.count, msg.sender);
 
@@ -78,7 +77,6 @@ static void ping_actor(void *arg) {
             break;
         }
 
-        // Direct payload access - no decode needed
         ping_msg recv_pm = *(ping_msg *)msg.data;
         printf("Ping: Received pong #%d from actor %u\n", recv_pm.count, msg.sender);
 
