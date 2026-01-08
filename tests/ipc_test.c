@@ -224,13 +224,13 @@ static void test5_send_to_self(void *arg) {
 }
 
 // ============================================================================
-// Test 6: RPC call/reply pattern
+// Test 6: Request/reply pattern
 // ============================================================================
 
-static void rpc_server_actor(void *arg) {
+static void request_reply_server_actor(void *arg) {
     (void)arg;
 
-    // Wait for RPC call
+    // Wait for request
     rt_message msg;
     rt_status status = rt_ipc_recv(&msg, 1000);
     if (RT_FAILED(status)) {
@@ -251,16 +251,16 @@ static void rpc_server_actor(void *arg) {
     rt_exit();
 }
 
-static void test6_rpc_call_reply(void *arg) {
+static void test6_request_reply(void *arg) {
     (void)arg;
-    printf("\nTest 6: RPC call/reply pattern\n");
+    printf("\nTest 6: Request/reply pattern\n");
 
-    actor_id server = rt_spawn(rpc_server_actor, NULL);
+    actor_id server = rt_spawn(request_reply_server_actor, NULL);
 
     // Give server time to start
     rt_yield();
 
-    // Make RPC call
+    // Make request
     int request = 21;
     rt_message reply;
     uint64_t start = time_ms();
@@ -279,11 +279,11 @@ static void test6_rpc_call_reply(void *arg) {
     int result = *(int *)payload;
 
     if (result == 42) {
-        printf("    RPC completed in %lu ms\n", (unsigned long)elapsed);
+        printf("    Request/reply completed in %lu ms\n", (unsigned long)elapsed);
         TEST_PASS("rt_ipc_request/reply works correctly");
     } else {
         printf("    Expected 42, got %d\n", result);
-        TEST_FAIL("wrong RPC result");
+        TEST_FAIL("wrong request/reply result");
     }
 
     rt_exit();
@@ -771,7 +771,7 @@ static void (*test_funcs[])(void *) = {
     test3_message_ordering,
     test4_multiple_senders,
     test5_send_to_self,
-    test6_rpc_call_reply,
+    test6_request_reply,
     test7_pending_count,
     test8_nonblocking_recv,
     test9_timed_recv,

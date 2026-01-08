@@ -9,7 +9,7 @@ A complete actor-based runtime designed for **embedded and safety-critical syste
 
 **Safety-critical caveat:** File I/O stalls the entire scheduler. Restrict file I/O to initialization, shutdown, or non–time-critical phases.
 
-The runtime uses **statically bounded memory** for deterministic behavior with zero heap fragmentation (heap allocation optional only for actor stacks). It features **priority-based scheduling** (4 levels: CRITICAL, HIGH, NORMAL, LOW) with fast context switching. Provides Erlang-style message passing (IPC with selective receive and RPC), linking, monitoring, timers, pub-sub messaging (bus), network I/O, and file I/O.
+The runtime uses **statically bounded memory** for deterministic behavior with zero heap fragmentation (heap allocation optional only for actor stacks). It features **priority-based scheduling** (4 levels: CRITICAL, HIGH, NORMAL, LOW) with fast context switching. Provides Erlang-style message passing (IPC with selective receive and request/reply), linking, monitoring, timers, pub-sub messaging (bus), network I/O, and file I/O.
 
 ## Quick Links
 
@@ -24,8 +24,8 @@ The runtime uses **statically bounded memory** for deterministic behavior with z
 - Priority-based round-robin scheduler (4 priority levels)
 - Stack overflow detection with guard patterns (16-byte overhead per actor)
 - Actor lifecycle management (spawn, exit)
-- Erlang-style IPC with selective receive and RPC (request/reply)
-- Message classes: NOTIFY (fire-and-forget), REQUEST/REPLY (RPC), TIMER, SYSTEM
+- Erlang-style IPC with selective receive and request/reply
+- Message classes: NOTIFY (fire-and-forget), REQUEST/REPLY, TIMER, SYSTEM
 - Actor linking and monitoring (bidirectional links, unidirectional monitors)
 - Exit notifications with exit reasons (normal, crash, stack overflow, killed)
 - Timers (one-shot and periodic with timerfd/epoll)
@@ -94,7 +94,7 @@ All structures are statically allocated. Actor stacks use a static arena allocat
 # Bus pub-sub example
 ./build/bus
 
-# RPC example (request/reply pattern with rt_ipc_request)
+# Request/reply example (with rt_ipc_request)
 ./build/sync_ipc
 
 # Priority scheduling example (4 levels, starvation demo)
@@ -150,7 +150,7 @@ if (RT_FAILED(status)) {
     // Retry notify...
 }
 
-// RPC pattern: Send request and wait for reply
+// Request/reply pattern: Send request and wait for reply
 rt_message reply;
 status = rt_ipc_request(target, &data, sizeof(data), &reply, 5000);  // 5s timeout
 if (RT_FAILED(status)) {
@@ -277,7 +277,7 @@ if (rt_is_exit_msg(&msg)) {
 - `rt_ipc_notify(to, data, len)` - Fire-and-forget notification
 - `rt_ipc_recv(msg, timeout)` - Receive any message
 - `rt_ipc_recv_match(from, class, tag, msg, timeout)` - Selective receive with filtering
-- `rt_ipc_request(to, req, len, reply, timeout)` - Blocking RPC (request and wait for reply)
+- `rt_ipc_request(to, req, len, reply, timeout)` - Blocking request/reply
 - `rt_ipc_reply(request, data, len)` - Reply to a REQUEST message
 - `rt_msg_decode(msg, class, tag, payload, len)` - Decode message header
 - `rt_msg_is_timer(msg)` - Check if message is a timer tick

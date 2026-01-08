@@ -20,7 +20,7 @@ static message_data_entry g_message_pool[RT_MESSAGE_DATA_POOL_SIZE];
 static bool g_message_used[RT_MESSAGE_DATA_POOL_SIZE];
 rt_pool g_message_pool_mgr;  // Non-static so rt_link.c can access
 
-// Tag generator for RPC correlation
+// Tag generator for request/reply correlation
 static uint32_t g_next_tag = 1;
 
 // Forward declaration for init function
@@ -384,7 +384,7 @@ rt_status rt_ipc_recv_match(const actor_id *from, const rt_msg_class *class,
 }
 
 // -----------------------------------------------------------------------------
-// RPC Pattern
+// Request/Reply Pattern
 // -----------------------------------------------------------------------------
 
 rt_status rt_ipc_request(actor_id to, const void *request, size_t req_len,

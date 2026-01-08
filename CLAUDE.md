@@ -39,7 +39,7 @@ The runtime consists of:
 
 1. **Actors**: Cooperative tasks with individual stacks and mailboxes
 2. **Scheduler**: Priority-based round-robin scheduler with 4 priority levels (0=CRITICAL to 3=LOW), integrated event loop (epoll on Linux, WFI on STM32)
-3. **IPC**: Inter-process communication via mailboxes with selective receive and RPC support (Erlang-style)
+3. **IPC**: Inter-process communication via mailboxes with selective receive and request/reply support (Erlang-style)
 4. **Bus**: Publish-subscribe system with configurable retention policies (max_readers, max_age_ms)
 5. **Timers**: timerfd registered in epoll (Linux), hardware timers on STM32 (SysTick/TIM)
 6. **Network**: Non-blocking sockets registered in epoll (Linux), lwIP NO_SYS mode on STM32
@@ -92,13 +92,13 @@ All runtime functions return `rt_status` with a code and optional string literal
 All messages have a 4-byte header prepended to payload:
 - **class** (4 bits): Message type (NOTIFY, REQUEST, REPLY, TIMER, SYSTEM)
 - **gen** (1 bit): Generated tag flag (1 = runtime-generated, 0 = user-provided)
-- **tag** (27 bits): Correlation identifier for RPC
+- **tag** (27 bits): Correlation identifier for request/reply
 
 ### IPC API
 - **`rt_ipc_notify(to, data, len)`**: Fire-and-forget notification (class=NOTIFY)
 - **`rt_ipc_recv(msg, timeout)`**: Receive any message
 - **`rt_ipc_recv_match(from, class, tag, msg, timeout)`**: Selective receive with filtering (Erlang-style)
-- **`rt_ipc_request(to, req, len, reply, timeout)`**: Blocking RPC (send REQUEST, wait for REPLY)
+- **`rt_ipc_request(to, req, len, reply, timeout)`**: Blocking request/reply (send REQUEST, wait for REPLY)
 - **`rt_ipc_reply(request, data, len)`**: Reply to a REQUEST message
 - **`rt_msg_decode(msg, class, tag, payload, len)`**: Decode message header
 
@@ -106,7 +106,7 @@ All messages have a 4-byte header prepended to payload:
 - `rt_ipc_recv_match()` scans mailbox for messages matching filter criteria
 - Non-matching messages are **skipped but not dropped** - they remain in mailbox
 - Filter on sender (`RT_SENDER_ANY` = wildcard), class (`RT_MSG_ANY`), tag (`RT_TAG_ANY`)
-- Enables RPC pattern: send REQUEST with generated tag, wait for REPLY with matching tag
+- Enables request/reply pattern: send REQUEST with generated tag, wait for REPLY with matching tag
 
 ### IPC Pool Exhaustion
 IPC uses global pools shared by all actors:

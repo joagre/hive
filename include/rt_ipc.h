@@ -27,10 +27,10 @@ rt_status rt_ipc_recv_match(const actor_id *from, const rt_msg_class *class,
                             const uint32_t *tag, rt_message *msg, int32_t timeout_ms);
 
 // -----------------------------------------------------------------------------
-// RPC Pattern (Request/Reply)
+// Request/Reply Pattern
 // -----------------------------------------------------------------------------
 
-// Send request and wait for reply (blocking RPC)
+// Send request and wait for reply (blocking)
 // Sends RT_MSG_REQUEST with generated tag, blocks until RT_MSG_REPLY received.
 // The reply message is returned in 'reply'.
 rt_status rt_ipc_request(actor_id to, const void *request, size_t req_len,

@@ -1,7 +1,7 @@
 /*
- * RPC Example - Request/Response Pattern with Blocking Calls
+ * Request/Reply Example - Request/Response Pattern with Blocking Calls
  *
- * This example demonstrates the RPC pattern using rt_ipc_request/rt_ipc_reply,
+ * This example demonstrates the request/reply pattern using rt_ipc_request/rt_ipc_reply,
  * which provides natural backpressure by blocking the caller until a reply.
  *
  * KEY CONCEPTS:
@@ -140,7 +140,7 @@ static void producer_actor(void *arg) {
     rt_exit();
 }
 
-// Demo simple message passing (fire-and-forget vs RPC)
+// Demo simple message passing (fire-and-forget vs request/reply)
 static void demo_actor(void *arg) {
     actor_id peer_id = (actor_id)(uintptr_t)arg;
     (void)peer_id;
@@ -164,7 +164,7 @@ static void demo_actor(void *arg) {
 }
 
 int main(void) {
-    printf("=== RPC Example - Request/Response Pattern ===\n\n");
+    printf("=== Request/Reply Example - Request/Response Pattern ===\n\n");
 
     printf("This example shows:\n");
     printf("1. Producer sends jobs with rt_ipc_request() (blocks until reply)\n");

@@ -553,11 +553,11 @@ This runtime makes deliberate design choices that favor **determinism, performan
 
 **Consequence:** Deep mailboxes slow down selective receive. If 100 messages are queued and you're waiting for a specific tag, each wake scans all 100.
 
-**Keep mailboxes shallow.** The RPC pattern naturally does this (block waiting for reply).
+**Keep mailboxes shallow.** The request/reply pattern naturally does this (block waiting for reply).
 
 **Mitigation:** Process messages promptly. Don't let mailbox grow deep. Use `rt_ipc_request()` which blocks until reply.
 
-**Acceptable if:** Typical mailbox depth is small (< 20 messages) and RPC pattern is followed.
+**Acceptable if:** Typical mailbox depth is small (< 20 messages) and request/reply pattern is followed.
 
 ---
 
@@ -691,7 +691,7 @@ rt_status rt_decode_exit(const rt_message *msg, rt_exit_msg *out);
 
 ## IPC API
 
-Inter-process communication via mailboxes. Each actor has one mailbox. All messages are asynchronous (fire-and-forget). RPC (request/reply) is built on top using message tags for correlation.
+Inter-process communication via mailboxes. Each actor has one mailbox. All messages are asynchronous (fire-and-forget). Request/reply is built on top using message tags for correlation.
 
 ### Message Header Format
 
@@ -736,7 +736,7 @@ typedef enum {
 **Tag semantics:**
 - **RT_TAG_NONE**: Used for simple NOTIFY messages where no correlation is needed
 - **RT_TAG_ANY**: Used in `rt_ipc_recv_match()` to match any tag
-- **Generated tags**: Created automatically by `rt_ipc_request()` for RPC correlation
+- **Generated tags**: Created automatically by `rt_ipc_request()` for request/reply correlation
 
 **Tag generation:** Internal to `rt_ipc_request()`. Global counter increments on each call. Generated tags have `RT_TAG_GEN_BIT` set. Wraps at 2^27 (134M values).
 
@@ -785,7 +785,7 @@ rt_status rt_ipc_recv_match(const actor_id *from, const rt_msg_class *class,
 - `tag == NULL` or `*tag == RT_TAG_ANY` → match any tag
 - Non-wildcard values must match exactly
 
-#### RPC (Request/Reply)
+#### Request/Reply
 
 ```c
 // Send REQUEST, block until REPLY with matching tag, or timeout
@@ -796,7 +796,7 @@ rt_status rt_ipc_request(actor_id to, const void *request, size_t req_len,
 rt_status rt_ipc_reply(const rt_message *request, const void *data, size_t len);
 ```
 
-**RPC implementation:**
+**Request/reply implementation:**
 ```c
 // rt_ipc_request internally does:
 // 1. Generate unique tag
@@ -910,7 +910,7 @@ Global pool limits: **Yes** - all actors share:
 
 ### Selective Receive Semantics (Erlang-style)
 
-`rt_ipc_recv_match()` implements Erlang-style selective receive. This is the key mechanism for building complex protocols like RPC.
+`rt_ipc_recv_match()` implements Erlang-style selective receive. This is the key mechanism for building complex protocols like request/reply.
 
 **Blocking behavior:**
 
@@ -932,7 +932,7 @@ Global pool limits: **Yes** - all actors share:
 **Example: Waiting for specific reply**
 
 ```c
-// Using rt_ipc_request() for RPC (recommended - handles tag generation internally)
+// Using rt_ipc_request() for request/reply (recommended - handles tag generation internally)
 rt_message reply;
 rt_ipc_request(server, &request, sizeof(request), &reply, 5000);
 
@@ -954,7 +954,7 @@ rt_ipc_recv(&msg, 0);  // Gets first skipped message
 
 **When selective receive is efficient:**
 
-- Typical RPC: mailbox is empty or near-empty while waiting for reply
+- Typical request/reply: mailbox is empty or near-empty while waiting for reply
 - Shallow mailbox: O(n) scan is fast when n is small
 
 **When selective receive is less efficient:**
@@ -962,7 +962,7 @@ rt_ipc_recv(&msg, 0);  // Gets first skipped message
 - Deep mailbox with many non-matching messages
 - Example: 100 pending NOTIFYs while waiting for specific REPLY → scans 100 messages
 
-**Mitigation:** Process messages promptly. Don't let mailbox grow deep. The RPC pattern naturally keeps mailbox shallow because you block waiting for reply.
+**Mitigation:** Process messages promptly. Don't let mailbox grow deep. The request/reply pattern naturally keeps mailbox shallow because you block waiting for reply.
 
 ### Message Ordering
 
@@ -1005,15 +1005,15 @@ void sender_B(void *arg) {
 // Receiver may see: msgA then msgB, OR msgB then msgA
 
 // Selective receive - can retrieve out of order
-void rpc_actor(void *arg) {
+void request_reply_actor(void *arg) {
     // Start timer
     timer_id t;
     rt_timer_after(1000000, &t);
 
-    // Do RPC
+    // Do request/reply
     rt_message reply;
     rt_ipc_request(server, &req, sizeof(req), &reply, 5000);
-    // Timer tick arrived during RPC wait - it's in mailbox
+    // Timer tick arrived during request/reply wait - it's in mailbox
 
     // Now process timer
     rt_message timer_msg;
@@ -1262,7 +1262,7 @@ rt_bus_read(bus, buf, len, &actual);
 **Implications:**
 - Slow subscribers lose data without notification
 - Fast subscribers never lose data (assuming buffer sized for publish rate)
-- No backpressure mechanism (unlike `rt_ipc_request()` RPC pattern)
+- No backpressure mechanism (unlike `rt_ipc_request()` request/reply pattern)
 - Real-time principle: Prefer fresh data over old data
 
 **Example (data loss):**
