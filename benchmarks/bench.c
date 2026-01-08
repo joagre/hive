@@ -219,12 +219,14 @@ static void bench_ipc_copy(size_t msg_size, const char *label) {
 
 static void bench_ipc(void) __attribute__((unused));
 static void bench_ipc(void) {
-    printf("IPC Performance (COPY mode)\n");
-    printf("---------------------------\n");
+    printf("IPC Performance\n");
+    printf("---------------\n");
+    printf("  (Max payload: %d bytes = RT_MAX_MESSAGE_SIZE - 4 byte header)\n\n",
+           RT_MAX_MESSAGE_SIZE - 4);
 
     bench_ipc_copy(8, "8 bytes:");
     bench_ipc_copy(64, "64 bytes:");
-    bench_ipc_copy(256, "256 bytes:");
+    bench_ipc_copy(252, "252 bytes (max):");
 
     printf("\n");
 }
