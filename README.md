@@ -118,7 +118,8 @@ void my_actor(void *arg) {
 int main(void) {
     acrt_init();
 
-    acrt_spawn(my_actor, NULL);
+    actor_id id;
+    acrt_spawn(my_actor, NULL, &id);
 
     acrt_run();
     acrt_cleanup();
@@ -135,7 +136,8 @@ actor_config cfg = ACRT_ACTOR_CONFIG_DEFAULT;
 cfg.priority = 0;             // 0-3, lower is higher
 cfg.stack_size = 128 * 1024;
 cfg.malloc_stack = false;     // false=arena (default), true=malloc
-actor_id worker = acrt_spawn_ex(worker_actor, &args, &cfg);
+actor_id worker;
+acrt_spawn_ex(worker_actor, &args, &cfg, &worker);
 
 // Notify (async message)
 int data = 42;
@@ -219,7 +221,7 @@ acrt_net_connect("127.0.0.1", 8080, &server_fd, 5000);
 
 ```c
 acrt_bus_config cfg = ACRT_BUS_CONFIG_DEFAULT;
-cfg.max_readers = 0;   // 0=persist, N=remove after N reads
+cfg.consume_after_reads = 0;   // 0=persist, N=remove after N reads
 cfg.max_age_ms = 0;    // 0=no expiry, T=expire after T ms
 // Note: Maximum 32 subscribers per bus (architectural limit)
 
@@ -241,9 +243,11 @@ acrt_bus_read_wait(bus, &received, sizeof(received), &actual_len, -1);
 ### Linking and Monitoring
 
 ```c
-actor_id other = acrt_spawn(other_actor, NULL);
+actor_id other;
+acrt_spawn(other_actor, NULL, &other);
 acrt_link(other);     // Bidirectional - both get exit notifications
-acrt_monitor(other, &ref);  // Unidirectional - only monitor gets notifications
+uint32_t mon_id;
+acrt_monitor(other, &mon_id);  // Unidirectional - only monitor gets notifications
 
 acrt_message msg;
 acrt_ipc_recv(&msg, -1);
@@ -266,15 +270,15 @@ if (acrt_is_exit_msg(&msg)) {
 
 ### Actor Management
 
-- `acrt_spawn(fn, arg)` - Spawn actor with default config
-- `acrt_spawn_ex(fn, arg, config)` - Spawn actor with custom config
+- `acrt_spawn(fn, arg, out)` - Spawn actor with default config
+- `acrt_spawn_ex(fn, arg, config, out)` - Spawn actor with custom config
 - `acrt_exit()` - Terminate current actor
 - `acrt_self()` - Get current actor's ID
 - `acrt_yield()` - Voluntarily yield to scheduler
 
 ### IPC
 
-- `acrt_ipc_notify(to, data, len)` - Fire-and-forget notification
+- `acrt_ipc_notify(to, data, len)` - Async message (fire-and-forget)
 - `acrt_ipc_recv(msg, timeout)` - Receive any message
 - `acrt_ipc_recv_match(from, class, tag, msg, timeout)` - Selective receive with filtering
 - `acrt_ipc_request(to, req, len, reply, timeout)` - Blocking request/reply
@@ -288,8 +292,8 @@ if (acrt_is_exit_msg(&msg)) {
 
 - `acrt_link(target)` - Create bidirectional link
 - `acrt_link_remove(target)` - Remove bidirectional link
-- `acrt_monitor(target, monitor_id)` - Create unidirectional monitor
-- `acrt_monitor_cancel(monitor_id)` - Cancel monitor
+- `acrt_monitor(target, out)` - Create unidirectional monitor
+- `acrt_monitor_cancel(id)` - Cancel monitor
 - `acrt_is_exit_msg(msg)` - Check if message is exit notification
 - `acrt_decode_exit(msg, out)` - Extract exit information
 

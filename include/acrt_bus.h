@@ -12,17 +12,17 @@ typedef uint32_t bus_id;
 
 // Bus configuration
 typedef struct {
-    uint8_t  max_subscribers; // max concurrent subscribers (1..ACRT_MAX_BUS_SUBSCRIBERS)
-    uint8_t  max_readers;     // consume after N reads, 0 = unlimited (0..max_subscribers)
-    uint32_t max_age_ms;      // expire entries after ms, 0 = no expiry
-    size_t   max_entries;     // ring buffer capacity
-    size_t   max_entry_size;  // max payload bytes per entry
+    uint8_t  max_subscribers;     // max concurrent subscribers (1..ACRT_MAX_BUS_SUBSCRIBERS)
+    uint8_t  consume_after_reads; // remove entry after N reads, 0 = keep until aged out
+    uint32_t max_age_ms;          // expire entries after ms, 0 = no expiry
+    size_t   max_entries;         // ring buffer capacity
+    size_t   max_entry_size;      // max payload bytes per entry
 } acrt_bus_config;
 
 // Default bus configuration
 #define ACRT_BUS_CONFIG_DEFAULT { \
     .max_subscribers = 32, \
-    .max_readers = 0, \
+    .consume_after_reads = 0, \
     .max_age_ms = 0, \
     .max_entries = 16, \
     .max_entry_size = 256 \
@@ -45,11 +45,11 @@ acrt_status acrt_bus_unsubscribe(bus_id bus);
 
 // Read entry (non-blocking)
 // Returns ACRT_ERR_WOULDBLOCK if no data available
-acrt_status acrt_bus_read(bus_id bus, void *buf, size_t max_len, size_t *actual_len);
+acrt_status acrt_bus_read(bus_id bus, void *buf, size_t max_len, size_t *bytes_read);
 
 // Read with blocking
 acrt_status acrt_bus_read_wait(bus_id bus, void *buf, size_t max_len,
-                           size_t *actual_len, int32_t timeout_ms);
+                               size_t *bytes_read, int32_t timeout_ms);
 
 // Query bus state
 size_t acrt_bus_entry_count(bus_id bus);

@@ -216,10 +216,10 @@ int main(void) {
     // Spawn client actor first (so we know its ID to pass to server)
     actor_config client_cfg = ACRT_ACTOR_CONFIG_DEFAULT;
     client_cfg.name = "client";
-    client_cfg.priority = ACRT_PRIO_NORMAL;
+    client_cfg.priority = ACRT_PRIORITY_NORMAL;
 
-    actor_id client_id = acrt_spawn_ex(client_actor, NULL, &client_cfg);
-    if (client_id == ACTOR_ID_INVALID) {
+    actor_id client_id;
+    if (ACRT_FAILED(acrt_spawn_ex(client_actor, NULL, &client_cfg, &client_id))) {
         fprintf(stderr, "Failed to spawn client actor\n");
         acrt_cleanup();
         return 1;
@@ -228,10 +228,10 @@ int main(void) {
     // Spawn server actor with client ID so it can send ready notification
     actor_config server_cfg = ACRT_ACTOR_CONFIG_DEFAULT;
     server_cfg.name = "server";
-    server_cfg.priority = ACRT_PRIO_NORMAL;
+    server_cfg.priority = ACRT_PRIORITY_NORMAL;
 
-    actor_id server_id = acrt_spawn_ex(server_actor, (void *)(uintptr_t)client_id, &server_cfg);
-    if (server_id == ACTOR_ID_INVALID) {
+    actor_id server_id;
+    if (ACRT_FAILED(acrt_spawn_ex(server_actor, (void *)(uintptr_t)client_id, &server_cfg, &server_id))) {
         fprintf(stderr, "Failed to spawn server actor\n");
         acrt_cleanup();
         return 1;

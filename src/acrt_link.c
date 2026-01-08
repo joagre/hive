@@ -239,7 +239,7 @@ bool acrt_is_exit_msg(const acrt_message *msg) {
     acrt_msg_class class;
     acrt_msg_decode(msg, &class, NULL, NULL, NULL);
 
-    return class == ACRT_MSG_SYSTEM;
+    return class == ACRT_MSG_EXIT;
 }
 
 // Decode exit message
@@ -276,9 +276,9 @@ static bool send_exit_notification(actor *recipient, actor_id dying_id, acrt_exi
         .reason = reason
     };
 
-    // Send using acrt_ipc_notify_ex with ACRT_MSG_SYSTEM class
+    // Send using acrt_ipc_notify_ex with ACRT_MSG_EXIT class
     // Sender is the dying actor so recipient knows who died
-    acrt_status status = acrt_ipc_notify_ex(recipient->id, dying_id, ACRT_MSG_SYSTEM,
+    acrt_status status = acrt_ipc_notify_ex(recipient->id, dying_id, ACRT_MSG_EXIT,
                                        ACRT_TAG_NONE, &exit_data, sizeof(exit_data));
     if (ACRT_FAILED(status)) {
         ACRT_LOG_ERROR("Failed to send exit notification: %s", status.msg);

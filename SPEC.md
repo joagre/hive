@@ -243,10 +243,10 @@ Four priority levels, lower value means higher priority:
 
 | Level | Name | Typical Use |
 |-------|------|-------------|
-| 0 | `ACRT_PRIO_CRITICAL` | Flight control loop |
-| 1 | `ACRT_PRIO_HIGH` | Sensor fusion |
-| 2 | `ACRT_PRIO_NORMAL` | Telemetry |
-| 3 | `ACRT_PRIO_LOW` | Logging |
+| 0 | `ACRT_PRIORITY_CRITICAL` | Flight control loop |
+| 1 | `ACRT_PRIORITY_HIGH` | Sensor fusion |
+| 2 | `ACRT_PRIORITY_NORMAL` | Telemetry |
+| 3 | `ACRT_PRIORITY_LOW` | Logging |
 
 The scheduler always picks the highest-priority runnable actor. Within the same priority level, actors are scheduled round-robin.
 
@@ -473,10 +473,10 @@ typedef enum {
     ACRT_ERR_CLOSED,
     ACRT_ERR_WOULDBLOCK,
     ACRT_ERR_IO,
-} acrt_status_code;
+} acrt_error_code;
 
 typedef struct {
-    acrt_status_code code;
+    acrt_error_code code;
     const char    *msg;   // string literal or NULL, never heap-allocated
 } acrt_status;
 ```
@@ -612,7 +612,7 @@ typedef void (*actor_fn)(void *arg);
 // Actor configuration
 typedef struct {
     size_t      stack_size;   // bytes, 0 = default
-    acrt_priority priority;
+    acrt_priority_level priority;
     const char *name;         // for debugging, may be NULL
     bool        malloc_stack; // false = use static arena (default), true = malloc
 } actor_config;
@@ -665,8 +665,8 @@ acrt_status acrt_link(actor_id target);
 acrt_status acrt_link_remove(actor_id target);
 
 // Unidirectional monitor: receive notification when target dies
-acrt_status acrt_monitor(actor_id target, uint32_t *monitor_id);
-acrt_status acrt_monitor_cancel(uint32_t monitor_id);
+acrt_status acrt_monitor(actor_id target, uint32_t *out);
+acrt_status acrt_monitor_cancel(uint32_t id);
 ```
 
 Exit message structure:
@@ -714,11 +714,11 @@ All messages have a 4-byte header prepended to the payload:
 
 ```c
 typedef enum {
-    ACRT_MSG_NOTIFY = 0,   // Fire-and-forget message
+    ACRT_MSG_ASYNC = 0,   // Fire-and-forget message
     ACRT_MSG_REQUEST,       // Request expecting a reply
     ACRT_MSG_REPLY,      // Response to a REQUEST
     ACRT_MSG_TIMER,      // Timer tick
-    ACRT_MSG_SYSTEM,     // System notifications (actor death)
+    ACRT_MSG_EXIT,     // System notifications (actor death)
     // 5-14 reserved for future use
     ACRT_MSG_ANY = 15,   // Wildcard for selective receive filtering
 } acrt_msg_class;
@@ -1032,7 +1032,7 @@ Timer and system messages use the same mailbox and message format as IPC.
 - Payload: Empty (len = 0 after decoding header)
 
 **System messages (exit notifications):**
-- Class: `ACRT_MSG_SYSTEM`
+- Class: `ACRT_MSG_EXIT`
 - Sender: Actor that died
 - Tag: `ACRT_TAG_NONE`
 - Payload: `acrt_exit_msg` struct
@@ -1050,7 +1050,7 @@ size_t payload_len;
 acrt_msg_decode(&msg, &class, &tag, &payload, &payload_len);
 
 switch (class) {
-    case ACRT_MSG_NOTIFY:
+    case ACRT_MSG_ASYNC:
         handle_cast(msg.sender, payload, payload_len);
         break;
     case ACRT_MSG_REQUEST:
@@ -1059,7 +1059,7 @@ switch (class) {
     case ACRT_MSG_TIMER:
         handle_timer_tick(tag);  // tag is timer_id
         break;
-    case ACRT_MSG_SYSTEM:
+    case ACRT_MSG_EXIT:
         handle_exit_notification(msg.sender, payload);
         break;
     default:
@@ -1134,7 +1134,7 @@ Publish-subscribe communication with configurable retention policy.
 ```c
 typedef struct {
     uint8_t  max_subscribers; // max concurrent subscribers (1..ACRT_MAX_BUS_SUBSCRIBERS)
-    uint8_t  max_readers;     // consume after N reads, 0 = unlimited (0..max_subscribers)
+    uint8_t  consume_after_reads;     // consume after N reads, 0 = unlimited (0..max_subscribers)
     uint32_t max_age_ms;      // expire entries after ms, 0 = no expiry
     size_t   max_entries;     // ring buffer capacity
     size_t   max_entry_size;  // max payload bytes per entry
@@ -1146,7 +1146,7 @@ typedef struct {
   - Valid range: 1..32
   - `ACRT_MAX_BUS_SUBSCRIBERS = 32` is a hard architectural invariant, not a tunable parameter
   - Attempts to configure `max_subscribers > 32` return `ACRT_ERR_INVALID`
-- `max_readers`: Valid range: 0..max_subscribers
+- `consume_after_reads`: Valid range: 0..max_subscribers
 - Subscriber index assignment is stable for the lifetime of a subscription (affects `readers_mask` bit position)
 
 ### Functions
@@ -1289,16 +1289,16 @@ acrt_bus_publish(bus, &E4, sizeof(E4));
 
 ---
 
-#### **RULE 3: max_readers Counting Semantics**
+#### **RULE 3: consume_after_reads Counting Semantics**
 
-**Contract:** `max_readers` counts **unique subscribers** who have read an entry, **NOT** total reads.
+**Contract:** `consume_after_reads` counts **unique subscribers** who have read an entry, **NOT** total reads.
 
 **Guaranteed semantics:**
 - Each entry has a `readers_mask` bitmask (32 bits, max 32 subscribers per bus)
 - When subscriber N reads an entry:
   1. Check if bit N is set in `readers_mask` -> if yes, skip (already read)
   2. If no, set bit N, increment `read_count`, return entry
-- Entry is removed when `read_count >= max_readers` (N unique subscribers have read)
+- Entry is removed when `read_count >= consume_after_reads` (N unique subscribers have read)
 - Same subscriber CANNOT read the same entry twice (deduplication)
 
 **Implementation mechanism:**
@@ -1312,21 +1312,21 @@ if (entry->readers_mask & (1u << subscriber_idx)) {
 entry->readers_mask |= (1u << subscriber_idx);
 entry->read_count++;
 
-// Remove if max_readers reached
-if (config.max_readers > 0 && entry->read_count >= config.max_readers) {
+// Remove if consume_after_reads reached
+if (config.consume_after_reads > 0 && entry->read_count >= config.consume_after_reads) {
     // Free entry from pool, invalidate
 }
 ```
 
 **Implications:**
-- `max_readers=3` means "remove after 3 **different** subscribers read it"
+- `consume_after_reads=3` means "remove after 3 **different** subscribers read it"
 - If subscriber A reads entry twice (e.g., re-subscribes), that's still 1 read
 - If 3 subscribers each read entry once, that's 3 reads -> entry removed
-- Set `max_readers=0` to disable (entry persists until aged out or evicted)
+- Set `consume_after_reads=0` to disable (entry persists until aged out or evicted)
 
 **Example (unique counting):**
 ```c
-// Bus with max_readers=2
+// Bus with consume_after_reads=2
 // Subscribers: A, B, C
 
 acrt_bus_publish(bus, &E1, sizeof(E1));
@@ -1344,7 +1344,7 @@ acrt_bus_read(bus, ...);
 // Subscriber B reads E1
 acrt_bus_read(bus, ...);
 //   -> E1: readers_mask=0b011, read_count=2 (B's bit set)
-//   -> read_count >= max_readers (2) -> E1 REMOVED, freed from pool
+//   -> read_count >= consume_after_reads (2) -> E1 REMOVED, freed from pool
 ```
 
 ---
@@ -1355,7 +1355,7 @@ acrt_bus_read(bus, ...);
 |------|----------|
 | **1. Subscription start position** | New subscribers start at "next publish" (cannot read history) |
 | **2. Cursor storage & eviction** | Per-subscriber cursors; slow readers may miss entries on wraparound (no notification) |
-| **3. max_readers counting** | Counts UNIQUE subscribers (deduplication), not total reads |
+| **3. consume_after_reads counting** | Counts UNIQUE subscribers (deduplication), not total reads |
 
 ---
 
@@ -1363,8 +1363,8 @@ acrt_bus_read(bus, ...);
 
 Entries can be removed by **three mechanisms** (whichever occurs first):
 
-1. **max_readers (unique subscriber counting):**
-   - Entry removed when `read_count >= max_readers` (N unique subscribers have read it)
+1. **consume_after_reads (unique subscriber counting):**
+   - Entry removed when `read_count >= consume_after_reads` (N unique subscribers have read it)
    - Value `0` = disabled (entry persists until aged out or evicted)
    - See **RULE 3** above for exact counting semantics
 
@@ -1380,7 +1380,7 @@ Entries can be removed by **three mechanisms** (whichever occurs first):
 
 **Typical configurations:**
 
-| Use Case | max_readers | max_age_ms | Behavior |
+| Use Case | consume_after_reads | max_age_ms | Behavior |
 |----------|-------------|------------|----------|
 | **Sensor data** | `0` | `100` | Multiple readers, data stale after 100ms |
 | **Configuration** | `0` | `0` | Persistent until buffer wraps |
@@ -1389,7 +1389,7 @@ Entries can be removed by **three mechanisms** (whichever occurs first):
 
 **Interaction of mechanisms:**
 - Entry is removed when **FIRST** condition is met (OR, not AND)
-- Example: `max_readers=3, max_age_ms=1000`
+- Example: `consume_after_reads=3, max_age_ms=1000`
   - Entry removed after 3 subscribers read it, **OR**
   - Entry removed after 1 second, **OR**
   - Entry removed when buffer full (forced eviction)
@@ -1442,7 +1442,7 @@ The bus can encounter two types of resource limits:
 **Mitigation strategies:**
 - Size message pool appropriately for combined IPC + bus load
 - Configure per-bus `max_entries` based on publish rate vs read rate
-- Use retention policies (`max_readers`, `max_age_ms`) to prevent accumulation
+- Use retention policies (`consume_after_reads`, `max_age_ms`) to prevent accumulation
 - Monitor `acrt_bus_entry_count()` to detect slow readers
 
 ## Timer API
@@ -1736,9 +1736,9 @@ When an actor dies (via `acrt_exit()`, crash, or external kill):
 
 1. **Mailbox cleared:** All pending messages are discarded.
 
-2. **Links notified:** All linked actors receive an exit message (class=`ACRT_MSG_SYSTEM`, sender=dying actor).
+2. **Links notified:** All linked actors receive an exit message (class=`ACRT_MSG_EXIT`, sender=dying actor).
 
-3. **Monitors notified:** All monitoring actors receive an exit message (class=`ACRT_MSG_SYSTEM`).
+3. **Monitors notified:** All monitoring actors receive an exit message (class=`ACRT_MSG_EXIT`).
 
 4. **Bus subscriptions removed:** Actor is unsubscribed from all buses.
 
@@ -1783,7 +1783,7 @@ void actor_A(void *arg) {
     acrt_ipc_notify(C, &msg2, sizeof(msg2));  // Enqueued in C's mailbox
     acrt_exit();  // Exit notifications sent to links/monitors
 }
-// Linked actor B will receive: msg1, then EXIT(A) (class=ACRT_MSG_SYSTEM)
+// Linked actor B will receive: msg1, then EXIT(A) (class=ACRT_MSG_EXIT)
 // Actor C will receive: msg2 (no exit notification, not linked)
 
 // Messages sent TO dying actor are lost

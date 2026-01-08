@@ -113,15 +113,18 @@ void acrt_cleanup(void) {
     acrt_actor_cleanup();
 }
 
-actor_id acrt_spawn(actor_fn fn, void *arg) {
+acrt_status acrt_spawn(actor_fn fn, void *arg, actor_id *out) {
     actor_config cfg = ACRT_ACTOR_CONFIG_DEFAULT;
     cfg.stack_size = ACRT_DEFAULT_STACK_SIZE;
-    return acrt_spawn_ex(fn, arg, &cfg);
+    return acrt_spawn_ex(fn, arg, &cfg, out);
 }
 
-actor_id acrt_spawn_ex(actor_fn fn, void *arg, const actor_config *cfg) {
+acrt_status acrt_spawn_ex(actor_fn fn, void *arg, const actor_config *cfg, actor_id *out) {
     if (!fn) {
-        return ACTOR_ID_INVALID;
+        return ACRT_ERROR(ACRT_ERR_INVALID, "NULL function pointer");
+    }
+    if (!out) {
+        return ACRT_ERROR(ACRT_ERR_INVALID, "NULL output pointer");
     }
 
     // Copy config field by field instead of struct copy to avoid alignment issues
@@ -137,10 +140,11 @@ actor_id acrt_spawn_ex(actor_fn fn, void *arg, const actor_config *cfg) {
 
     actor *a = acrt_actor_alloc(fn, arg, &actual_cfg);
     if (!a) {
-        return ACTOR_ID_INVALID;
+        return ACRT_ERROR(ACRT_ERR_NOMEM, "Actor table or stack arena exhausted");
     }
 
-    return a->id;
+    *out = a->id;
+    return ACRT_SUCCESS;
 }
 
 _Noreturn void acrt_exit(void) {

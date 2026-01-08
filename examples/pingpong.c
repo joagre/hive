@@ -126,10 +126,10 @@ int main(void) {
     // Spawn pong actor first
     actor_config pong_cfg = ACRT_ACTOR_CONFIG_DEFAULT;
     pong_cfg.name = "pong";
-    pong_cfg.priority = ACRT_PRIO_NORMAL;
+    pong_cfg.priority = ACRT_PRIORITY_NORMAL;
 
-    actor_id pong_id = acrt_spawn_ex(pong_actor, NULL, &pong_cfg);
-    if (pong_id == ACTOR_ID_INVALID) {
+    actor_id pong_id;
+    if (ACRT_FAILED(acrt_spawn_ex(pong_actor, NULL, &pong_cfg, &pong_id))) {
         fprintf(stderr, "Failed to spawn pong actor\n");
         acrt_cleanup();
         return 1;
@@ -140,10 +140,10 @@ int main(void) {
     // Spawn ping actor with pong's ID
     actor_config ping_cfg = ACRT_ACTOR_CONFIG_DEFAULT;
     ping_cfg.name = "ping";
-    ping_cfg.priority = ACRT_PRIO_NORMAL;
+    ping_cfg.priority = ACRT_PRIORITY_NORMAL;
 
-    actor_id ping_id = acrt_spawn_ex(ping_actor, (void *)(uintptr_t)pong_id, &ping_cfg);
-    if (ping_id == ACTOR_ID_INVALID) {
+    actor_id ping_id;
+    if (ACRT_FAILED(acrt_spawn_ex(ping_actor, (void *)(uintptr_t)pong_id, &ping_cfg, &ping_id))) {
         fprintf(stderr, "Failed to spawn ping actor\n");
         acrt_cleanup();
         return 1;

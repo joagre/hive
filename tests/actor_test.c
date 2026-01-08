@@ -32,9 +32,9 @@ static void test1_basic_spawn(void *arg) {
 
     g_basic_spawn_ran = false;
 
-    actor_id id = acrt_spawn(basic_actor, NULL);
-    if (id == ACTOR_ID_INVALID) {
-        TEST_FAIL("acrt_spawn returned ACTOR_ID_INVALID");
+    actor_id id;
+    if (ACRT_FAILED(acrt_spawn(basic_actor, NULL, &id))) {
+        TEST_FAIL("acrt_spawn returned error");
         acrt_exit();
     }
 
@@ -70,7 +70,8 @@ static void test2_rt_self(void *arg) {
 
     g_self_id_from_actor = ACTOR_ID_INVALID;
 
-    actor_id spawned_id = acrt_spawn(self_reporter_actor, NULL);
+    actor_id spawned_id;
+    acrt_spawn(self_reporter_actor, NULL, &spawned_id);
     acrt_link(spawned_id);
 
     acrt_message msg;
@@ -105,7 +106,8 @@ static void test3_argument_passing(void *arg) {
     static int test_value = 12345;
     g_received_arg = 0;
 
-    actor_id id = acrt_spawn(arg_receiver_actor, &test_value);
+    actor_id id;
+    acrt_spawn(arg_receiver_actor, &test_value, &id);
     acrt_link(id);
 
     acrt_message msg;
@@ -157,8 +159,10 @@ static void test4_yield(void *arg) {
     g_yielder_done = false;
     g_counter_done = false;
 
-    actor_id counter = acrt_spawn(counter_actor, NULL);
-    actor_id yielder = acrt_spawn(yielder_actor, NULL);
+    actor_id counter;
+    acrt_spawn(counter_actor, NULL, &counter);
+    actor_id yielder;
+    acrt_spawn(yielder_actor, NULL, &yielder);
 
     acrt_link(counter);
     acrt_link(yielder);
@@ -192,7 +196,8 @@ static void test5_actor_alive(void *arg) {
     (void)arg;
     printf("\nTest 5: acrt_actor_alive\n");
 
-    actor_id id = acrt_spawn(short_lived_actor, NULL);
+    actor_id id;
+    acrt_spawn(short_lived_actor, NULL, &id);
     acrt_link(id);
 
     // Actor should be alive right after spawn (before it gets chance to run)
@@ -232,12 +237,12 @@ static void test5_actor_alive(void *arg) {
 // Test 6: Spawn with custom priority
 // ============================================================================
 
-static acrt_priority g_captured_priority = ACRT_PRIO_NORMAL;
+static acrt_priority_level g_captured_priority = ACRT_PRIORITY_NORMAL;
 
 static void priority_reporter_actor(void *arg) {
     (void)arg;
     // Can't directly access priority, but we can verify the actor runs
-    g_captured_priority = ACRT_PRIO_HIGH;  // Indicate we ran with expected priority
+    g_captured_priority = ACRT_PRIORITY_HIGH;  // Indicate we ran with expected priority
     acrt_exit();
 }
 
@@ -245,13 +250,13 @@ static void test6_custom_priority(void *arg) {
     (void)arg;
     printf("\nTest 6: Spawn with custom priority\n");
 
-    g_captured_priority = ACRT_PRIO_NORMAL;
+    g_captured_priority = ACRT_PRIORITY_NORMAL;
 
     actor_config cfg = ACRT_ACTOR_CONFIG_DEFAULT;
-    cfg.priority = ACRT_PRIO_HIGH;
+    cfg.priority = ACRT_PRIORITY_HIGH;
 
-    actor_id id = acrt_spawn_ex(priority_reporter_actor, NULL, &cfg);
-    if (id == ACTOR_ID_INVALID) {
+    actor_id id;
+    if (ACRT_FAILED(acrt_spawn_ex(priority_reporter_actor, NULL, &cfg, &id))) {
         TEST_FAIL("acrt_spawn_ex with custom priority failed");
         acrt_exit();
     }
@@ -291,8 +296,8 @@ static void test7_custom_stack_size(void *arg) {
     actor_config cfg = ACRT_ACTOR_CONFIG_DEFAULT;
     cfg.stack_size = 64 * 1024;  // 64KB
 
-    actor_id id = acrt_spawn_ex(large_stack_actor, NULL, &cfg);
-    if (id == ACTOR_ID_INVALID) {
+    actor_id id;
+    if (ACRT_FAILED(acrt_spawn_ex(large_stack_actor, NULL, &cfg, &id))) {
         TEST_FAIL("acrt_spawn_ex with custom stack size failed");
         acrt_exit();
     }
@@ -332,8 +337,8 @@ static void test8_malloc_stack(void *arg) {
     cfg.malloc_stack = true;
     cfg.stack_size = 32 * 1024;
 
-    actor_id id = acrt_spawn_ex(malloc_stack_actor, NULL, &cfg);
-    if (id == ACTOR_ID_INVALID) {
+    actor_id id;
+    if (ACRT_FAILED(acrt_spawn_ex(malloc_stack_actor, NULL, &cfg, &id))) {
         TEST_FAIL("acrt_spawn_ex with malloc_stack failed");
         acrt_exit();
     }
@@ -367,8 +372,8 @@ static void test9_named_actor(void *arg) {
     actor_config cfg = ACRT_ACTOR_CONFIG_DEFAULT;
     cfg.name = "test_actor_name";
 
-    actor_id id = acrt_spawn_ex(named_actor, NULL, &cfg);
-    if (id == ACTOR_ID_INVALID) {
+    actor_id id;
+    if (ACRT_FAILED(acrt_spawn_ex(named_actor, NULL, &cfg, &id))) {
         TEST_FAIL("acrt_spawn_ex with name failed");
         acrt_exit();
     }
@@ -390,8 +395,8 @@ static void test10_spawn_null_fn(void *arg) {
     (void)arg;
     printf("\nTest 10: Spawn with NULL function\n");
 
-    actor_id id = acrt_spawn(NULL, NULL);
-    if (id == ACTOR_ID_INVALID) {
+    actor_id id;
+    if (ACRT_FAILED(acrt_spawn(NULL, NULL, &id))) {
         TEST_PASS("acrt_spawn rejects NULL function");
     } else {
         TEST_FAIL("acrt_spawn should reject NULL function");
@@ -420,8 +425,7 @@ static void test11_multiple_spawns(void *arg) {
 
     actor_id ids[10];
     for (int i = 0; i < 10; i++) {
-        ids[i] = acrt_spawn(counting_actor, NULL);
-        if (ids[i] == ACTOR_ID_INVALID) {
+        if (ACRT_FAILED(acrt_spawn(counting_actor, NULL, &ids[i]))) {
             printf("    Failed to spawn actor %d\n", i);
             TEST_FAIL("multiple spawns failed");
             acrt_exit();
@@ -460,8 +464,8 @@ static void test12_actor_crash(void *arg) {
     printf("\nTest 12: Actor returns without acrt_exit (crash detection)\n");
     fflush(stdout);
 
-    actor_id crasher = acrt_spawn(crashing_actor, NULL);
-    if (crasher == ACTOR_ID_INVALID) {
+    actor_id crasher;
+    if (ACRT_FAILED(acrt_spawn(crashing_actor, NULL, &crasher))) {
         TEST_FAIL("failed to spawn crashing actor");
         acrt_exit();
     }
@@ -528,8 +532,8 @@ static void test13_actor_table_exhaustion(void *arg) {
     int spawned = 0;
 
     for (int i = 0; i < ACRT_MAX_ACTORS; i++) {
-        actor_id id = acrt_spawn_ex(wait_for_signal_actor, NULL, &cfg);
-        if (id == ACTOR_ID_INVALID) {
+        actor_id id;
+        if (ACRT_FAILED(acrt_spawn_ex(wait_for_signal_actor, NULL, &cfg, &id))) {
             // Exhaustion reached
             break;
         }
@@ -591,8 +595,8 @@ static void run_all_tests(void *arg) {
         actor_config cfg = ACRT_ACTOR_CONFIG_DEFAULT;
         cfg.stack_size = 64 * 1024;
 
-        actor_id test = acrt_spawn_ex(test_funcs[i], NULL, &cfg);
-        if (test == ACTOR_ID_INVALID) {
+        actor_id test;
+        if (ACRT_FAILED(acrt_spawn_ex(test_funcs[i], NULL, &cfg, &test))) {
             printf("Failed to spawn test %zu\n", i);
             continue;
         }
@@ -620,8 +624,8 @@ int main(void) {
     actor_config cfg = ACRT_ACTOR_CONFIG_DEFAULT;
     cfg.stack_size = 128 * 1024;
 
-    actor_id runner = acrt_spawn_ex(run_all_tests, NULL, &cfg);
-    if (runner == ACTOR_ID_INVALID) {
+    actor_id runner;
+    if (ACRT_FAILED(acrt_spawn_ex(run_all_tests, NULL, &cfg, &runner))) {
         fprintf(stderr, "Failed to spawn test runner\n");
         acrt_cleanup();
         return 1;

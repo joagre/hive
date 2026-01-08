@@ -18,28 +18,30 @@ typedef uint32_t actor_id;
 
 // Message classes (4 bits, stored in header bits 31-28)
 typedef enum {
-    ACRT_MSG_NOTIFY  = 0,  // Fire-and-forget notification
+    ACRT_MSG_ASYNC   = 0,  // Async message (sender doesn't wait)
     ACRT_MSG_REQUEST = 1,  // Request expecting reply
-    ACRT_MSG_REPLY   = 2,  // Response to request
+    ACRT_MSG_REPLY   = 2,  // Reply to request
     ACRT_MSG_TIMER   = 3,  // Timer tick
-    ACRT_MSG_SYSTEM  = 4,  // System message (exit notifications, etc.)
-    ACRT_MSG_ANY     = 15, // Wildcard for filtering (use with acrt_ipc_recv_match)
+    ACRT_MSG_EXIT    = 4,  // Exit notification (actor died)
+    ACRT_MSG_ANY     = 15, // Wildcard for filtering
 } acrt_msg_class;
 
 // Tag constants
 #define ACRT_TAG_NONE        0           // No tag
 #define ACRT_TAG_ANY         0x0FFFFFFF  // Wildcard for filtering
-#define ACRT_TAG_GEN_BIT     0x08000000  // Bit 27: distinguishes generated tags
-#define ACRT_TAG_VALUE_MASK  0x07FFFFFF  // Lower 27 bits: tag value
+
+// Timeout constants for blocking operations
+#define ACRT_TIMEOUT_INFINITE    ((int32_t)-1)  // Block forever
+#define ACRT_TIMEOUT_NONBLOCKING ((int32_t)0)   // Return immediately
 
 // Priority levels (lower value = higher priority)
 typedef enum {
-    ACRT_PRIO_CRITICAL = 0,
-    ACRT_PRIO_HIGH     = 1,
-    ACRT_PRIO_NORMAL   = 2,
-    ACRT_PRIO_LOW      = 3,
-    ACRT_PRIO_COUNT    = 4
-} acrt_priority;
+    ACRT_PRIORITY_CRITICAL = 0,
+    ACRT_PRIORITY_HIGH     = 1,
+    ACRT_PRIORITY_NORMAL   = 2,
+    ACRT_PRIORITY_LOW      = 3,
+    ACRT_PRIORITY_COUNT    = 4
+} acrt_priority_level;
 
 // Error codes
 typedef enum {
@@ -50,11 +52,11 @@ typedef enum {
     ACRT_ERR_CLOSED,
     ACRT_ERR_WOULDBLOCK,
     ACRT_ERR_IO,
-} acrt_status_code;
+} acrt_error_code;
 
 // Status with optional message
 typedef struct {
-    acrt_status_code code;
+    acrt_error_code code;
     const char    *msg;   // string literal or NULL, never heap-allocated
 } acrt_status;
 
@@ -69,7 +71,7 @@ typedef void (*actor_fn)(void *arg);
 // Actor configuration
 typedef struct {
     size_t      stack_size;   // bytes, 0 = default
-    acrt_priority priority;
+    acrt_priority_level priority;
     const char *name;         // for debugging, may be NULL
     bool        malloc_stack; // false = use static arena (default), true = malloc
 } actor_config;
@@ -77,7 +79,7 @@ typedef struct {
 // Default configuration
 #define ACRT_ACTOR_CONFIG_DEFAULT { \
     .stack_size = 0, \
-    .priority = ACRT_PRIO_NORMAL, \
+    .priority = ACRT_PRIORITY_NORMAL, \
     .name = NULL, \
     .malloc_stack = false \
 }

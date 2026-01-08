@@ -66,7 +66,8 @@ void test_timeout_actor(void *arg) {
 
 int main(void) {
     acrt_init();
-    acrt_spawn(test_timeout_actor, NULL);
+    actor_id test;
+    acrt_spawn(test_timeout_actor, NULL, &test);
     acrt_run();
     acrt_cleanup();
     return 0;

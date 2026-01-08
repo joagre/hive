@@ -92,18 +92,21 @@ int main(void) {
     // Spawn actor with small stack (8KB) to make overflow easy
     actor_config cfg = ACRT_ACTOR_CONFIG_DEFAULT;
     cfg.stack_size = 8 * 1024;  // 8KB stack
-    cfg.priority = ACRT_PRIO_NORMAL;
+    cfg.priority = ACRT_PRIORITY_NORMAL;
 
-    actor_id overflow = acrt_spawn_ex(overflow_actor, NULL, &cfg);
+    actor_id overflow;
+    acrt_spawn_ex(overflow_actor, NULL, &cfg, &overflow);
     printf("Main: Spawned overflow actor (ID: %u) with %zu byte stack\n",
            overflow, cfg.stack_size);
 
     // Spawn linked actor to verify exit notification
-    acrt_spawn(linked_actor, &overflow);
+    actor_id linked;
+    acrt_spawn(linked_actor, &overflow, &linked);
     printf("Main: Spawned linked actor\n");
 
     // Spawn witness actor to prove system still works after overflow
-    acrt_spawn(witness_actor, NULL);
+    actor_id witness;
+    acrt_spawn(witness_actor, NULL, &witness);
     printf("Main: Spawned witness actor\n\n");
 
     acrt_run();

@@ -5,10 +5,10 @@
  * Higher priority actors (lower number) run before lower priority actors.
  *
  * PRIORITY LEVELS:
- *   ACRT_PRIO_CRITICAL (0) - Safety-critical tasks (flight control, emergency stop)
- *   ACRT_PRIO_HIGH     (1) - Time-sensitive tasks (sensor fusion, control loops)
- *   ACRT_PRIO_NORMAL   (2) - Standard tasks (telemetry, logging)
- *   ACRT_PRIO_LOW      (3) - Background tasks (diagnostics, housekeeping)
+ *   ACRT_PRIORITY_CRITICAL (0) - Safety-critical tasks (flight control, emergency stop)
+ *   ACRT_PRIORITY_HIGH     (1) - Time-sensitive tasks (sensor fusion, control loops)
+ *   ACRT_PRIORITY_NORMAL   (2) - Standard tasks (telemetry, logging)
+ *   ACRT_PRIORITY_LOW      (3) - Background tasks (diagnostics, housekeeping)
  *
  * SCHEDULING RULES:
  * - Scheduler always picks highest priority (lowest number) runnable actor
@@ -119,13 +119,15 @@ static void starving_demo(void) {
 
     // Spawn low priority first (but it won't run until high is done)
     actor_config low_cfg = ACRT_ACTOR_CONFIG_DEFAULT;
-    low_cfg.priority = ACRT_PRIO_LOW;
-    acrt_spawn_ex(waiting_low_actor, NULL, &low_cfg);
+    low_cfg.priority = ACRT_PRIORITY_LOW;
+    actor_id low_id;
+    acrt_spawn_ex(waiting_low_actor, NULL, &low_cfg, &low_id);
 
     // Spawn high priority - it will run first and block low
     actor_config high_cfg = ACRT_ACTOR_CONFIG_DEFAULT;
-    high_cfg.priority = ACRT_PRIO_HIGH;
-    acrt_spawn_ex(busy_high_actor, NULL, &high_cfg);
+    high_cfg.priority = ACRT_PRIORITY_HIGH;
+    actor_id high_id;
+    acrt_spawn_ex(busy_high_actor, NULL, &high_cfg, &high_id);
 
     printf("  Spawned: BUSY_HIGH and WAITING_LOW\n");
     printf("  LOW will be starved until HIGH finishes or yields.\n\n");
@@ -135,10 +137,10 @@ int main(void) {
     printf("=== Priority Scheduling Example ===\n\n");
 
     printf("Priority levels (lower number = higher priority):\n");
-    printf("  ACRT_PRIO_CRITICAL = %d (highest)\n", ACRT_PRIO_CRITICAL);
-    printf("  ACRT_PRIO_HIGH     = %d\n", ACRT_PRIO_HIGH);
-    printf("  ACRT_PRIO_NORMAL   = %d\n", ACRT_PRIO_NORMAL);
-    printf("  ACRT_PRIO_LOW      = %d (lowest)\n\n", ACRT_PRIO_LOW);
+    printf("  ACRT_PRIORITY_CRITICAL = %d (highest)\n", ACRT_PRIORITY_CRITICAL);
+    printf("  ACRT_PRIORITY_HIGH     = %d\n", ACRT_PRIORITY_HIGH);
+    printf("  ACRT_PRIORITY_NORMAL   = %d\n", ACRT_PRIORITY_NORMAL);
+    printf("  ACRT_PRIORITY_LOW      = %d (lowest)\n\n", ACRT_PRIORITY_LOW);
 
     acrt_status status = acrt_init();
     if (ACRT_FAILED(status)) {
@@ -154,23 +156,27 @@ int main(void) {
     // Spawn in reverse order to show priority matters, not spawn order
     {
         actor_config cfg = ACRT_ACTOR_CONFIG_DEFAULT;
-        cfg.priority = ACRT_PRIO_LOW;
-        acrt_spawn_ex(low_actor, (void *)(uintptr_t)4, &cfg);
+        cfg.priority = ACRT_PRIORITY_LOW;
+        actor_id id;
+        acrt_spawn_ex(low_actor, (void *)(uintptr_t)4, &cfg, &id);
     }
     {
         actor_config cfg = ACRT_ACTOR_CONFIG_DEFAULT;
-        cfg.priority = ACRT_PRIO_NORMAL;
-        acrt_spawn_ex(normal_actor, (void *)(uintptr_t)3, &cfg);
+        cfg.priority = ACRT_PRIORITY_NORMAL;
+        actor_id id;
+        acrt_spawn_ex(normal_actor, (void *)(uintptr_t)3, &cfg, &id);
     }
     {
         actor_config cfg = ACRT_ACTOR_CONFIG_DEFAULT;
-        cfg.priority = ACRT_PRIO_HIGH;
-        acrt_spawn_ex(high_actor, (void *)(uintptr_t)2, &cfg);
+        cfg.priority = ACRT_PRIORITY_HIGH;
+        actor_id id;
+        acrt_spawn_ex(high_actor, (void *)(uintptr_t)2, &cfg, &id);
     }
     {
         actor_config cfg = ACRT_ACTOR_CONFIG_DEFAULT;
-        cfg.priority = ACRT_PRIO_CRITICAL;
-        acrt_spawn_ex(critical_actor, (void *)(uintptr_t)1, &cfg);
+        cfg.priority = ACRT_PRIORITY_CRITICAL;
+        actor_id id;
+        acrt_spawn_ex(critical_actor, (void *)(uintptr_t)1, &cfg, &id);
     }
 
     printf("Spawned 4 actors (LOW, NORMAL, HIGH, CRITICAL)\n");
@@ -182,9 +188,10 @@ int main(void) {
 
     {
         actor_config cfg = ACRT_ACTOR_CONFIG_DEFAULT;
-        cfg.priority = ACRT_PRIO_NORMAL;
-        acrt_spawn_ex(normal_actor, (void *)(uintptr_t)5, &cfg);
-        acrt_spawn_ex(normal_actor, (void *)(uintptr_t)6, &cfg);
+        cfg.priority = ACRT_PRIORITY_NORMAL;
+        actor_id id5, id6;
+        acrt_spawn_ex(normal_actor, (void *)(uintptr_t)5, &cfg, &id5);
+        acrt_spawn_ex(normal_actor, (void *)(uintptr_t)6, &cfg, &id6);
     }
 
     // --- Demo 3: Starvation ---

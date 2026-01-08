@@ -40,7 +40,7 @@ The runtime consists of:
 1. **Actors**: Cooperative tasks with individual stacks and mailboxes
 2. **Scheduler**: Priority-based round-robin scheduler with 4 priority levels (0=CRITICAL to 3=LOW), integrated event loop (epoll on Linux, WFI on STM32)
 3. **IPC**: Inter-process communication via mailboxes with selective receive and request/reply support
-4. **Bus**: Publish-subscribe system with configurable retention policies (max_readers, max_age_ms)
+4. **Bus**: Publish-subscribe system with configurable retention policies (consume_after_reads, max_age_ms)
 5. **Timers**: timerfd registered in epoll (Linux), hardware timers on STM32 (SysTick/TIM)
 6. **Network**: Non-blocking sockets registered in epoll (Linux), lwIP NO_SYS mode on STM32
 7. **File**: Synchronous I/O (stalls scheduler; regular files don't work with epoll; embedded filesystems are fast). **Safety-critical caveat:** Restrict file I/O to initialization, shutdown, or non–time-critical phases
@@ -125,7 +125,7 @@ IPC uses global pools shared by all actors:
 - Pool exhaustion indicates system overload - increase pool sizes or add backpressure
 
 ### Bus Retention
-- **max_readers**: Remove entry after N actors read it (0 = persist until aged out or buffer wraps)
+- **consume_after_reads**: Remove entry after N actors read it (0 = persist until aged out or buffer wraps)
 - **max_age_ms**: Remove entry after time expires (0 = no time-based expiry)
 - Buffer full: Oldest entry evicted on publish
 
@@ -220,11 +220,11 @@ Different implementations for Linux (dev) vs STM32 bare metal (prod):
 
 ### Message Classes
 Messages are identified by class (not special sender IDs):
-- `ACRT_MSG_NOTIFY`: Fire-and-forget notification
+- `ACRT_MSG_ASYNC`: Fire-and-forget notification
 - `ACRT_MSG_REQUEST`: Request expecting a reply
 - `ACRT_MSG_REPLY`: Response to a REQUEST
 - `ACRT_MSG_TIMER`: Timer tick (tag contains timer_id)
-- `ACRT_MSG_SYSTEM`: System notification (e.g., actor death)
+- `ACRT_MSG_EXIT`: System notification (e.g., actor death)
 - `ACRT_MSG_ANY`: Wildcard for selective receive filtering
 
 Use `acrt_msg_decode()` or `acrt_msg_is_timer()` to check message type.

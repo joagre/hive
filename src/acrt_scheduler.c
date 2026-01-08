@@ -24,7 +24,7 @@ static struct {
     acrt_context scheduler_ctx;
     bool       shutdown_requested;
     bool       initialized;
-    size_t     last_run_idx[ACRT_PRIO_COUNT];  // Last run actor index for each priority
+    size_t     last_run_idx[ACRT_PRIORITY_COUNT];  // Last run actor index for each priority
     int        epoll_fd;                      // Event loop file descriptor
 } g_scheduler = {0};
 
@@ -70,7 +70,7 @@ static actor *find_next_runnable(void) {
     }
 
     // Search by priority level
-    for (acrt_priority prio = ACRT_PRIO_CRITICAL; prio < ACRT_PRIO_COUNT; prio++) {
+    for (acrt_priority_level prio = ACRT_PRIORITY_CRITICAL; prio < ACRT_PRIORITY_COUNT; prio++) {
         // Round-robin within priority level - start from after last run actor
         size_t start_idx = (g_scheduler.last_run_idx[prio] + 1) % table->max_actors;
 

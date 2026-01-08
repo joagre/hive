@@ -110,7 +110,7 @@ void sender_actor(void *arg) {
 
     for (int i = 0; i < MESSAGES_TO_FILL_POOL; i++) {
         data++;
-        acrt_status status = acrt_ipc_notify_ex(receiver, self, ACRT_MSG_NOTIFY, TAG_DATA, &data, sizeof(data));
+        acrt_status status = acrt_ipc_notify_ex(receiver, self, ACRT_MSG_ASYNC, TAG_DATA, &data, sizeof(data));
         if (ACRT_FAILED(status)) {
             if (status.code == ACRT_ERR_NOMEM) {
                 printf("Sender: Pool exhausted after %d messages\n", sent_count);
@@ -129,7 +129,7 @@ void sender_actor(void *arg) {
     int failed_count = 0;
     for (int i = 0; i < 50; i++) {
         data++;
-        acrt_status status = acrt_ipc_notify_ex(receiver, self, ACRT_MSG_NOTIFY, TAG_DATA, &data, sizeof(data));
+        acrt_status status = acrt_ipc_notify_ex(receiver, self, ACRT_MSG_ASYNC, TAG_DATA, &data, sizeof(data));
         if (status.code == ACRT_ERR_NOMEM) {
             failed_count++;
         } else if (!ACRT_FAILED(status)) {
@@ -146,7 +146,7 @@ void sender_actor(void *arg) {
     // Send START signal
     printf("\nSender: Sending START signal (tag=%d)...\n", TAG_START);
     fflush(stdout);
-    acrt_status status = acrt_ipc_notify_ex(receiver, self, ACRT_MSG_NOTIFY, TAG_START, NULL, 0);
+    acrt_status status = acrt_ipc_notify_ex(receiver, self, ACRT_MSG_ASYNC, TAG_START, NULL, 0);
     if (ACRT_FAILED(status)) {
         printf("Sender: Failed to send START: %s\n", status.msg ? status.msg : "unknown");
     } else {
@@ -169,7 +169,7 @@ void sender_actor(void *arg) {
         acrt_yield();
 
         data++;
-        status = acrt_ipc_notify_ex(receiver, self, ACRT_MSG_NOTIFY, TAG_DATA, &data, sizeof(data));
+        status = acrt_ipc_notify_ex(receiver, self, ACRT_MSG_ASYNC, TAG_DATA, &data, sizeof(data));
 
         if (!ACRT_FAILED(status)) {
             printf("Sender: ✓ Send succeeded on attempt %d!\n", attempt + 1);
@@ -192,7 +192,7 @@ void sender_actor(void *arg) {
 
     // Send DONE signal
     printf("\nSender: Sending DONE signal...\n");
-    acrt_ipc_notify_ex(receiver, self, ACRT_MSG_NOTIFY, TAG_DONE, NULL, 0);
+    acrt_ipc_notify_ex(receiver, self, ACRT_MSG_ASYNC, TAG_DONE, NULL, 0);
 
     if (send_succeeded) {
         printf("\nSender: ✓ Backoff-retry SUCCESS!\n");
@@ -215,10 +215,10 @@ int main(void) {
 
     test_args args = {0};
 
-    args.receiver = acrt_spawn(receiver_actor, &args);
+    acrt_spawn(receiver_actor, &args, &args.receiver);
     printf("Main: Spawned receiver (ID: %u)\n", args.receiver);
 
-    args.sender = acrt_spawn(sender_actor, &args);
+    acrt_spawn(sender_actor, &args, &args.sender);
     printf("Main: Spawned sender (ID: %u)\n", args.sender);
     fflush(stdout);
 

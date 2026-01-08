@@ -28,8 +28,8 @@ static void test1_monitor_actor(void *arg) {
     printf("\nTest 1: Basic monitor (normal exit)\n");
 
     // Spawn target
-    actor_id target = acrt_spawn(target_normal_exit, NULL);
-    if (target == ACTOR_ID_INVALID) {
+    actor_id target;
+    if (ACRT_FAILED(acrt_spawn(target_normal_exit, NULL, &target))) {
         TEST_FAIL("spawn target");
         acrt_exit();
     }
@@ -102,8 +102,7 @@ static void test3_multi_monitor_actor(void *arg) {
     uint32_t refs[3];
 
     for (int i = 0; i < 3; i++) {
-        targets[i] = acrt_spawn(target_delayed_exit, &delays[i]);
-        if (targets[i] == ACTOR_ID_INVALID) {
+        if (ACRT_FAILED(acrt_spawn(target_delayed_exit, &delays[i], &targets[i]))) {
             TEST_FAIL("spawn target");
             acrt_exit();
         }
@@ -169,8 +168,8 @@ static void test4_monitor_cancel_actor(void *arg) {
     printf("\nTest 4: Demonitor\n");
 
     // Spawn target
-    actor_id target = acrt_spawn(target_slow_exit, NULL);
-    if (target == ACTOR_ID_INVALID) {
+    actor_id target;
+    if (ACRT_FAILED(acrt_spawn(target_slow_exit, NULL, &target))) {
         TEST_FAIL("spawn target");
         acrt_exit();
     }
@@ -246,15 +245,15 @@ static void test5_coordinator(void *arg) {
     printf("\nTest 5: Monitor is unidirectional (target not notified when monitor dies)\n");
 
     // Spawn target first
-    actor_id target = acrt_spawn(target_waits_for_exit, NULL);
-    if (target == ACTOR_ID_INVALID) {
+    actor_id target;
+    if (ACRT_FAILED(acrt_spawn(target_waits_for_exit, NULL, &target))) {
         TEST_FAIL("spawn target");
         acrt_exit();
     }
 
     // Spawn monitor that will monitor target then die
-    actor_id monitor = acrt_spawn(monitor_dies_early, &target);
-    if (monitor == ACTOR_ID_INVALID) {
+    actor_id monitor;
+    if (ACRT_FAILED(acrt_spawn(monitor_dies_early, &target, &monitor))) {
         TEST_FAIL("spawn monitor");
         acrt_exit();
     }
@@ -346,8 +345,8 @@ static void test8_double_monitor_cancel(void *arg) {
     (void)arg;
     printf("\nTest 8: Double monitor_cancel (same ref twice)\n");
 
-    actor_id target = acrt_spawn(double_monitor_cancel_target, NULL);
-    if (target == ACTOR_ID_INVALID) {
+    actor_id target;
+    if (ACRT_FAILED(acrt_spawn(double_monitor_cancel_target, NULL, &target))) {
         TEST_FAIL("spawn target");
         acrt_exit();
     }
@@ -411,8 +410,8 @@ static void test9_monitor_pool_exhaustion(void *arg) {
         cfg.malloc_stack = true;
         cfg.stack_size = 8 * 1024;
 
-        actor_id target = acrt_spawn_ex(monitor_pool_target, NULL, &cfg);
-        if (target == ACTOR_ID_INVALID) {
+        actor_id target;
+        if (ACRT_FAILED(acrt_spawn_ex(monitor_pool_target, NULL, &cfg, &target))) {
             break;
         }
         targets[spawned++] = target;
@@ -476,8 +475,8 @@ static void run_all_tests(void *arg) {
         actor_config cfg = ACRT_ACTOR_CONFIG_DEFAULT;
         cfg.stack_size = 64 * 1024;
 
-        actor_id test = acrt_spawn_ex(test_funcs[i], NULL, &cfg);
-        if (test == ACTOR_ID_INVALID) {
+        actor_id test;
+        if (ACRT_FAILED(acrt_spawn_ex(test_funcs[i], NULL, &cfg, &test))) {
             printf("Failed to spawn test %zu\n", i);
             continue;
         }
@@ -506,8 +505,8 @@ int main(void) {
     actor_config cfg = ACRT_ACTOR_CONFIG_DEFAULT;
     cfg.stack_size = 128 * 1024;
 
-    actor_id runner = acrt_spawn_ex(run_all_tests, NULL, &cfg);
-    if (runner == ACTOR_ID_INVALID) {
+    actor_id runner;
+    if (ACRT_FAILED(acrt_spawn_ex(run_all_tests, NULL, &cfg, &runner))) {
         fprintf(stderr, "Failed to spawn test runner\n");
         acrt_cleanup();
         return 1;

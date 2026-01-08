@@ -1,6 +1,6 @@
 #include "acrt_actor.h"
 #include "acrt_static_config.h"
-#include "acrt_ipc.h"
+#include "acrt_internal.h"
 #include "acrt_log.h"
 #include <stdlib.h>
 #include <string.h>
@@ -245,7 +245,7 @@ actor *acrt_actor_alloc(actor_fn fn, void *arg, const actor_config *cfg) {
     a->stack_is_malloced = is_malloced;  // Track allocation method
 
     // Initialize receive filters to wildcards (accept any message)
-    a->recv_filter_from = ACRT_SENDER_ANY;
+    a->recv_filter_sender = ACRT_SENDER_ANY;
     a->recv_filter_class = ACRT_MSG_ANY;
     a->recv_filter_tag = ACRT_TAG_ANY;
 

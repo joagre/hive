@@ -132,7 +132,7 @@ int main(void) {
 
     // Create bus with retention policy
     acrt_bus_config bus_cfg = ACRT_BUS_CONFIG_DEFAULT;
-    bus_cfg.max_readers = 0;        // Unlimited readers (data persists)
+    bus_cfg.consume_after_reads = 0;        // Unlimited readers (data persists)
     bus_cfg.max_age_ms = 0;         // No time-based expiry
     bus_cfg.max_entries = 16;       // Ring buffer size
     bus_cfg.max_entry_size = 256;   // Max payload size
@@ -152,16 +152,16 @@ int main(void) {
     actor_config actor_cfg = ACRT_ACTOR_CONFIG_DEFAULT;
     actor_cfg.name = "subscriber_a";
     actor_cfg.stack_size = 128 * 1024;  // Increase stack size
-    actor_id sub_a = acrt_spawn_ex(subscriber_actor, (void *)"Subscriber A", &actor_cfg);
-    if (sub_a == ACTOR_ID_INVALID) {
+    actor_id sub_a;
+    if (ACRT_FAILED(acrt_spawn_ex(subscriber_actor, (void *)"Subscriber A", &actor_cfg, &sub_a))) {
         fprintf(stderr, "Failed to spawn subscriber A\n");
         acrt_cleanup();
         return 1;
     }
 
     actor_cfg.name = "subscriber_b";
-    actor_id sub_b = acrt_spawn_ex(subscriber_actor, (void *)"Subscriber B", &actor_cfg);
-    if (sub_b == ACTOR_ID_INVALID) {
+    actor_id sub_b;
+    if (ACRT_FAILED(acrt_spawn_ex(subscriber_actor, (void *)"Subscriber B", &actor_cfg, &sub_b))) {
         fprintf(stderr, "Failed to spawn subscriber B\n");
         acrt_cleanup();
         return 1;
@@ -170,8 +170,8 @@ int main(void) {
     // Spawn publisher actor
     actor_cfg.name = "publisher";
     actor_cfg.stack_size = 128 * 1024;  // Increase stack size
-    actor_id pub = acrt_spawn_ex(publisher_actor, NULL, &actor_cfg);
-    if (pub == ACTOR_ID_INVALID) {
+    actor_id pub;
+    if (ACRT_FAILED(acrt_spawn_ex(publisher_actor, NULL, &actor_cfg, &pub))) {
         fprintf(stderr, "Failed to spawn publisher\n");
         acrt_cleanup();
         return 1;

@@ -102,8 +102,8 @@ void acrt_mailbox_add_entry(actor *recipient, mailbox_entry *entry) {
         bool matches = true;
 
         // Check sender filter
-        if (recipient->recv_filter_from != ACRT_SENDER_ANY) {
-            if (entry->sender != recipient->recv_filter_from) {
+        if (recipient->recv_filter_sender != ACRT_SENDER_ANY) {
+            if (entry->sender != recipient->recv_filter_sender) {
                 matches = false;
             }
         }
@@ -293,7 +293,7 @@ acrt_status acrt_ipc_notify(actor_id to, const void *data, size_t len) {
         return ACRT_ERROR(ACRT_ERR_INVALID, "NULL data with non-zero length");
     }
 
-    return acrt_ipc_notify_ex(to, sender->id, ACRT_MSG_NOTIFY, ACRT_TAG_NONE, data, len);
+    return acrt_ipc_notify_ex(to, sender->id, ACRT_MSG_ASYNC, ACRT_TAG_NONE, data, len);
 }
 
 acrt_status acrt_ipc_recv(acrt_message *msg, int32_t timeout_ms) {
@@ -332,7 +332,7 @@ acrt_status acrt_ipc_recv_match(const actor_id *from, const acrt_msg_class *clas
         }
 
         // Set up filters for wake-on-match
-        current->recv_filter_from = filter_from;
+        current->recv_filter_sender = filter_from;
         current->recv_filter_class = filter_class;
         current->recv_filter_tag = filter_tag;
 
@@ -350,7 +350,7 @@ acrt_status acrt_ipc_recv_match(const actor_id *from, const acrt_msg_class *clas
         acrt_scheduler_yield();
 
         // Clear filters after waking
-        current->recv_filter_from = ACRT_SENDER_ANY;
+        current->recv_filter_sender = ACRT_SENDER_ANY;
         current->recv_filter_class = ACRT_MSG_ANY;
         current->recv_filter_tag = ACRT_TAG_ANY;
 

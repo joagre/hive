@@ -88,8 +88,7 @@ int main(void) {
     // Spawn Actor B first
     actor_config actor_cfg = ACRT_ACTOR_CONFIG_DEFAULT;
     actor_cfg.name = "actor_b";
-    g_actor_b = acrt_spawn_ex(actor_b, NULL, &actor_cfg);
-    if (g_actor_b == ACTOR_ID_INVALID) {
+    if (ACRT_FAILED(acrt_spawn_ex(actor_b, NULL, &actor_cfg, &g_actor_b))) {
         fprintf(stderr, "Failed to spawn Actor B\n");
         acrt_cleanup();
         return 1;
@@ -97,8 +96,7 @@ int main(void) {
 
     // Spawn Actor A
     actor_cfg.name = "actor_a";
-    g_actor_a = acrt_spawn_ex(actor_a, NULL, &actor_cfg);
-    if (g_actor_a == ACTOR_ID_INVALID) {
+    if (ACRT_FAILED(acrt_spawn_ex(actor_a, NULL, &actor_cfg, &g_actor_a))) {
         fprintf(stderr, "Failed to spawn Actor A\n");
         acrt_cleanup();
         return 1;

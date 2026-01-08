@@ -471,7 +471,7 @@ acrt_status acrt_bus_read(bus_id id, void *buf, size_t max_len, size_t *actual_l
     ACRT_LOG_TRACE("Actor %u read %zu bytes from bus %u", current->id, copy_len, id);
 
     // Check if entry should be removed (max_readers)
-    if (bus->config.max_readers > 0 && entry->read_count >= bus->config.max_readers) {
+    if (bus->config.consume_after_reads > 0 && entry->read_count >= bus->config.consume_after_reads) {
         acrt_msg_pool_free(entry->data);
         entry->valid = false;
         entry->data = NULL;

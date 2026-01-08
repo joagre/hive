@@ -112,11 +112,13 @@ int main(void) {
     acrt_init();
 
     // Spawn receiver that won't process messages
-    actor_id receiver = acrt_spawn(slow_receiver_actor, NULL);
+    actor_id receiver;
+    acrt_spawn(slow_receiver_actor, NULL, &receiver);
     printf("Main: Spawned slow receiver (ID: %u)\n", receiver);
 
     // Spawn sender that will exhaust pool and retry
-    actor_id sender = acrt_spawn(sender_actor, &receiver);
+    actor_id sender;
+    acrt_spawn(sender_actor, &receiver, &sender);
     printf("Main: Spawned sender (ID: %u)\n", sender);
 
     acrt_run();

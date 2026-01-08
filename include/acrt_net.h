@@ -5,10 +5,9 @@
 #include <stdint.h>
 
 // Network operations
-// All operations with timeout parameter support:
-//   timeout_ms == 0:  non-blocking, returns ACRT_ERR_WOULDBLOCK if would block
-//   timeout_ms < 0:   block forever
-//   timeout_ms > 0:   block up to timeout, returns ACRT_ERR_TIMEOUT if exceeded
+// timeout_ms: ACRT_TIMEOUT_NONBLOCKING (0) returns ACRT_ERR_WOULDBLOCK if would block
+//             ACRT_TIMEOUT_INFINITE (-1) blocks forever
+//             positive value blocks up to timeout, returns ACRT_ERR_TIMEOUT if exceeded
 
 // Listen on a port for incoming connections
 acrt_status acrt_net_listen(uint16_t port, int *fd_out);

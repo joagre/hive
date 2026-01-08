@@ -12,6 +12,10 @@
 // Internal shared types and macros for runtime implementation
 // This header is NOT part of the public API
 
+// Internal tag constants (not exposed in public API)
+#define ACRT_TAG_GEN_BIT     0x08000000  // Bit 27: distinguishes generated tags
+#define ACRT_TAG_VALUE_MASK  0x07FFFFFF  // Lower 27 bits: tag value
+
 // Message data entry type (shared by IPC, bus, link, timer subsystems)
 typedef struct {
     uint8_t data[ACRT_MAX_MESSAGE_SIZE];
@@ -135,5 +139,15 @@ void acrt_timer_handle_event(io_source *source);
 
 // Handle network event (socket ready)
 void acrt_net_handle_event(io_source *source);
+
+// Clear mailbox entries (used during actor cleanup)
+void acrt_ipc_mailbox_clear(mailbox *mailbox);
+
+// Free active message entry (used during actor cleanup)
+void acrt_ipc_free_active_msg(mailbox_entry *entry);
+
+// Send with explicit class and tag (used internally by timer, link, etc.)
+acrt_status acrt_ipc_notify_ex(actor_id to, actor_id sender, acrt_msg_class class,
+                               uint32_t tag, const void *data, size_t len);
 
 #endif // ACRT_INTERNAL_H

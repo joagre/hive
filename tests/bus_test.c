@@ -114,7 +114,8 @@ static void test2_multi_subscriber(void *arg) {
     static int ids[3] = {0, 1, 2};
     for (int i = 0; i < 3; i++) {
         g_subscriber_received[i] = 0;
-        acrt_spawn(subscriber_actor, &ids[i]);
+        actor_id sub;
+        acrt_spawn(subscriber_actor, &ids[i], &sub);
     }
 
     // Give subscribers time to subscribe
@@ -180,7 +181,7 @@ static void test3_max_readers(void *arg) {
 
     // Create bus with max_readers = 2 (entry consumed after 2 subscribers read)
     acrt_bus_config cfg = ACRT_BUS_CONFIG_DEFAULT;
-    cfg.max_readers = 2;
+    cfg.consume_after_reads = 2;
     acrt_status status = acrt_bus_create(&cfg, &g_max_readers_bus);
     if (ACRT_FAILED(status)) {
         TEST_FAIL("acrt_bus_create");
@@ -195,7 +196,8 @@ static void test3_max_readers(void *arg) {
     // Spawn 3 subscribers
     static int ids[3] = {0, 1, 2};
     for (int i = 0; i < 3; i++) {
-        acrt_spawn(max_readers_subscriber, &ids[i]);
+        actor_id sub;
+        acrt_spawn(max_readers_subscriber, &ids[i], &sub);
     }
 
     // Give subscribers time to subscribe
@@ -695,8 +697,8 @@ static void run_all_tests(void *arg) {
         actor_config cfg = ACRT_ACTOR_CONFIG_DEFAULT;
         cfg.stack_size = 64 * 1024;
 
-        actor_id test = acrt_spawn_ex(test_funcs[i], NULL, &cfg);
-        if (test == ACTOR_ID_INVALID) {
+        actor_id test;
+        if (ACRT_FAILED(acrt_spawn_ex(test_funcs[i], NULL, &cfg, &test))) {
             printf("Failed to spawn test %zu\n", i);
             continue;
         }
@@ -723,8 +725,8 @@ int main(void) {
     actor_config cfg = ACRT_ACTOR_CONFIG_DEFAULT;
     cfg.stack_size = 128 * 1024;
 
-    actor_id runner = acrt_spawn_ex(run_all_tests, NULL, &cfg);
-    if (runner == ACTOR_ID_INVALID) {
+    actor_id runner;
+    if (ACRT_FAILED(acrt_spawn_ex(run_all_tests, NULL, &cfg, &runner))) {
         fprintf(stderr, "Failed to spawn test runner\n");
         acrt_cleanup();
         return 1;

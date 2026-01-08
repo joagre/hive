@@ -111,7 +111,7 @@ void acrt_net_handle_event(io_source *source) {
                     status = ACRT_ERROR(ACRT_ERR_IO, strerror(errno));
                 }
             } else {
-                a->io_result_nbytes = (size_t)n;
+                a->io_result_bytes = (size_t)n;
             }
             break;
         }
@@ -126,7 +126,7 @@ void acrt_net_handle_event(io_source *source) {
                     status = ACRT_ERROR(ACRT_ERR_IO, strerror(errno));
                 }
             } else {
-                a->io_result_nbytes = (size_t)n;
+                a->io_result_bytes = (size_t)n;
             }
             break;
         }
@@ -411,7 +411,7 @@ acrt_status acrt_net_recv(int fd, void *buf, size_t len, size_t *received, int32
     }
 
     // Result stored by event handler
-    *received = current->io_result_nbytes;
+    *received = current->io_result_bytes;
     return ACRT_SUCCESS;
 }
 
@@ -447,6 +447,6 @@ acrt_status acrt_net_send(int fd, const void *buf, size_t len, size_t *sent, int
     }
 
     // Result stored by event handler
-    *sent = current->io_result_nbytes;
+    *sent = current->io_result_bytes;
     return ACRT_SUCCESS;
 }

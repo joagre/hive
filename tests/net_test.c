@@ -131,11 +131,13 @@ static void test1_listen_accept(void *arg) {
     actor_id self = acrt_self();
 
     // Spawn server
-    actor_id server = acrt_spawn(server_actor, &self);
+    actor_id server;
+    acrt_spawn(server_actor, &self, &server);
     acrt_link(server);
 
     // Spawn client
-    actor_id client = acrt_spawn(client_actor, NULL);
+    actor_id client;
+    acrt_spawn(client_actor, NULL, &client);
     acrt_link(client);
 
     // Wait for both to complete
@@ -240,10 +242,12 @@ static void test2_send_receive(void *arg) {
     memset(g_received_data, 0, sizeof(g_received_data));
     memset(g_echo_reply, 0, sizeof(g_echo_reply));
 
-    actor_id server = acrt_spawn(echo_server_actor, NULL);
+    actor_id server;
+    acrt_spawn(echo_server_actor, NULL, &server);
     acrt_link(server);
 
-    actor_id client = acrt_spawn(echo_client_actor, NULL);
+    actor_id client;
+    acrt_spawn(echo_client_actor, NULL, &client);
     acrt_link(client);
 
     acrt_message msg;
@@ -694,8 +698,8 @@ static void test12_actor_death_during_recv(void *arg) {
 
     // Spawn actor that will block on recv
     g_recv_actor_started = false;
-    actor_id recv_actor = acrt_spawn(blocked_recv_actor, &server_fd);
-    if (recv_actor == ACTOR_ID_INVALID) {
+    actor_id recv_actor;
+    if (ACRT_FAILED(acrt_spawn(blocked_recv_actor, &server_fd, &recv_actor))) {
         TEST_FAIL("spawn blocked_recv_actor");
         acrt_net_close(server_fd);
         acrt_net_close(client_fd);
@@ -767,8 +771,8 @@ static void run_all_tests(void *arg) {
         actor_config cfg = ACRT_ACTOR_CONFIG_DEFAULT;
         cfg.stack_size = 64 * 1024;
 
-        actor_id test = acrt_spawn_ex(test_funcs[i], NULL, &cfg);
-        if (test == ACTOR_ID_INVALID) {
+        actor_id test;
+        if (ACRT_FAILED(acrt_spawn_ex(test_funcs[i], NULL, &cfg, &test))) {
             printf("Failed to spawn test %zu\n", i);
             continue;
         }
@@ -795,8 +799,8 @@ int main(void) {
     actor_config cfg = ACRT_ACTOR_CONFIG_DEFAULT;
     cfg.stack_size = 128 * 1024;
 
-    actor_id runner = acrt_spawn_ex(run_all_tests, NULL, &cfg);
-    if (runner == ACTOR_ID_INVALID) {
+    actor_id runner;
+    if (ACRT_FAILED(acrt_spawn_ex(run_all_tests, NULL, &cfg, &runner))) {
         fprintf(stderr, "Failed to spawn test runner\n");
         acrt_cleanup();
         return 1;

@@ -178,24 +178,24 @@ int main(void) {
     }
 
     // First, run the demo actor
-    actor_id demo = acrt_spawn(demo_actor, NULL);
-    if (demo == ACTOR_ID_INVALID) {
+    actor_id demo;
+    if (ACRT_FAILED(acrt_spawn(demo_actor, NULL, &demo))) {
         fprintf(stderr, "Failed to spawn demo actor\n");
         acrt_cleanup();
         return 1;
     }
 
     // Spawn consumer first (it will wait for messages)
-    actor_id consumer = acrt_spawn(consumer_actor, NULL);
-    if (consumer == ACTOR_ID_INVALID) {
+    actor_id consumer;
+    if (ACRT_FAILED(acrt_spawn(consumer_actor, NULL, &consumer))) {
         fprintf(stderr, "Failed to spawn consumer\n");
         acrt_cleanup();
         return 1;
     }
 
     // Spawn producer with consumer's ID
-    actor_id producer = acrt_spawn(producer_actor, (void *)(uintptr_t)consumer);
-    if (producer == ACTOR_ID_INVALID) {
+    actor_id producer;
+    if (ACRT_FAILED(acrt_spawn(producer_actor, (void *)(uintptr_t)consumer, &producer))) {
         fprintf(stderr, "Failed to spawn producer\n");
         acrt_cleanup();
         return 1;

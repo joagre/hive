@@ -14,8 +14,8 @@ acrt_status acrt_link(actor_id target);
 acrt_status acrt_link_remove(actor_id target);
 
 // Unidirectional monitoring - only monitor notified when target dies
-acrt_status acrt_monitor(actor_id target, uint32_t *monitor_id);
-acrt_status acrt_monitor_cancel(uint32_t monitor_id);
+acrt_status acrt_monitor(actor_id target, uint32_t *out);
+acrt_status acrt_monitor_cancel(uint32_t id);
 
 // Exit message helpers
 bool acrt_is_exit_msg(const acrt_message *msg);

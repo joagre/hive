@@ -116,10 +116,12 @@ int main(void) {
 
     acrt_init();
 
-    actor_id processor = acrt_spawn(slow_processor_actor, NULL);
+    actor_id processor;
+    acrt_spawn(slow_processor_actor, NULL, &processor);
     printf("Main: Spawned slow processor (ID: %u)\n", processor);
 
-    acrt_spawn(aggressive_sender_actor, &processor);
+    actor_id sender;
+    acrt_spawn(aggressive_sender_actor, &processor, &sender);
     printf("Main: Spawned aggressive sender\n");
 
     acrt_run();

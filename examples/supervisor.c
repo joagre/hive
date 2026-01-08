@@ -43,8 +43,8 @@ static void supervisor_actor(void *arg) {
         actor_config worker_cfg = ACRT_ACTOR_CONFIG_DEFAULT;
         worker_cfg.name = "worker";
 
-        actor_id worker = acrt_spawn_ex(worker_actor, &worker_ids[i], &worker_cfg);
-        if (worker == ACTOR_ID_INVALID) {
+        actor_id worker;
+        if (ACRT_FAILED(acrt_spawn_ex(worker_actor, &worker_ids[i], &worker_cfg, &worker))) {
             printf("Supervisor: Failed to spawn worker %d\n", i + 1);
             continue;
         }
@@ -108,8 +108,8 @@ int main(void) {
     sup_cfg.name = "supervisor";
     sup_cfg.stack_size = 128 * 1024;  // 128KB stack
 
-    actor_id supervisor = acrt_spawn_ex(supervisor_actor, NULL, &sup_cfg);
-    if (supervisor == ACTOR_ID_INVALID) {
+    actor_id supervisor;
+    if (ACRT_FAILED(acrt_spawn_ex(supervisor_actor, NULL, &sup_cfg, &supervisor))) {
         fprintf(stderr, "Failed to spawn supervisor\n");
         acrt_cleanup();
         return 1;

@@ -43,20 +43,21 @@ static void test1_coordinator(void *arg) {
 
     // Spawn LOW priority first
     actor_config cfg = ACRT_ACTOR_CONFIG_DEFAULT;
-    cfg.priority = ACRT_PRIO_LOW;
-    acrt_spawn_ex(priority_actor, &ids[0], &cfg);
+    cfg.priority = ACRT_PRIORITY_LOW;
+    actor_id id;
+    acrt_spawn_ex(priority_actor, &ids[0], &cfg, &id);
 
     // Spawn NORMAL priority
-    cfg.priority = ACRT_PRIO_NORMAL;
-    acrt_spawn_ex(priority_actor, &ids[1], &cfg);
+    cfg.priority = ACRT_PRIORITY_NORMAL;
+    acrt_spawn_ex(priority_actor, &ids[1], &cfg, &id);
 
     // Spawn HIGH priority
-    cfg.priority = ACRT_PRIO_HIGH;
-    acrt_spawn_ex(priority_actor, &ids[2], &cfg);
+    cfg.priority = ACRT_PRIORITY_HIGH;
+    acrt_spawn_ex(priority_actor, &ids[2], &cfg, &id);
 
     // Spawn CRITICAL priority
-    cfg.priority = ACRT_PRIO_CRITICAL;
-    acrt_spawn_ex(priority_actor, &ids[3], &cfg);
+    cfg.priority = ACRT_PRIORITY_CRITICAL;
+    acrt_spawn_ex(priority_actor, &ids[3], &cfg, &id);
 
     // Yield to let them all run
     // Since we're NORMAL priority, CRITICAL and HIGH should run before us
@@ -142,10 +143,11 @@ static void test2_coordinator(void *arg) {
     // Spawn 3 actors at NORMAL priority
     static int ids[3] = {1, 2, 3};
     actor_config cfg = ACRT_ACTOR_CONFIG_DEFAULT;
-    cfg.priority = ACRT_PRIO_NORMAL;
+    cfg.priority = ACRT_PRIORITY_NORMAL;
 
     for (int i = 0; i < 3; i++) {
-        acrt_spawn_ex(rr_actor, &ids[i], &cfg);
+        actor_id id;
+        acrt_spawn_ex(rr_actor, &ids[i], &cfg, &id);
     }
 
     // Wait for them to complete
@@ -206,8 +208,9 @@ static void low_prio_spawner(void *arg) {
 
     // Spawn a high-priority actor
     actor_config cfg = ACRT_ACTOR_CONFIG_DEFAULT;
-    cfg.priority = ACRT_PRIO_HIGH;
-    acrt_spawn_ex(high_prio_late_spawn, NULL, &cfg);
+    cfg.priority = ACRT_PRIORITY_HIGH;
+    actor_id id;
+    acrt_spawn_ex(high_prio_late_spawn, NULL, &cfg, &id);
 
     // Yield - high priority should run now
     acrt_yield();
@@ -225,8 +228,9 @@ static void test3_coordinator(void *arg) {
 
     // Spawn a LOW priority actor that will spawn a HIGH priority actor
     actor_config cfg = ACRT_ACTOR_CONFIG_DEFAULT;
-    cfg.priority = ACRT_PRIO_LOW;
-    acrt_spawn_ex(low_prio_spawner, NULL, &cfg);
+    cfg.priority = ACRT_PRIORITY_LOW;
+    actor_id id;
+    acrt_spawn_ex(low_prio_spawner, NULL, &cfg, &id);
 
     // Wait for completion
     timer_id timer;
@@ -266,8 +270,9 @@ static void test4_coordinator(void *arg) {
 
     for (int i = 0; i < 4; i++) {
         actor_config cfg = ACRT_ACTOR_CONFIG_DEFAULT;
-        cfg.priority = (acrt_priority)i;
-        acrt_spawn_ex(starvation_actor, &prios[i], &cfg);
+        cfg.priority = (acrt_priority_level)i;
+        actor_id id;
+        acrt_spawn_ex(starvation_actor, &prios[i], &cfg, &id);
     }
 
     // Wait for all to complete
@@ -296,7 +301,7 @@ static void test4_coordinator(void *arg) {
 // Test 5: Default priority is NORMAL
 // ============================================================================
 
-static acrt_priority g_default_prio = ACRT_PRIO_COUNT;
+static acrt_priority_level g_default_prio = ACRT_PRIORITY_COUNT;
 
 static void check_default_prio(void *arg) {
     (void)arg;
@@ -314,15 +319,16 @@ static void test5_coordinator(void *arg) {
     // Check ACRT_ACTOR_CONFIG_DEFAULT directly
     actor_config cfg = ACRT_ACTOR_CONFIG_DEFAULT;
 
-    if (cfg.priority == ACRT_PRIO_NORMAL) {
+    if (cfg.priority == ACRT_PRIORITY_NORMAL) {
         TEST_PASS("ACRT_ACTOR_CONFIG_DEFAULT has NORMAL priority");
     } else {
         TEST_FAIL("default priority is not NORMAL");
-        printf("    default priority = %d (expected %d)\n", cfg.priority, ACRT_PRIO_NORMAL);
+        printf("    default priority = %d (expected %d)\n", cfg.priority, ACRT_PRIORITY_NORMAL);
     }
 
     // Also spawn an actor with default config to verify
-    acrt_spawn(check_default_prio, NULL);
+    actor_id checker;
+    acrt_spawn(check_default_prio, NULL, &checker);
 
     timer_id timer;
     acrt_timer_after(50000, &timer);
@@ -353,8 +359,8 @@ static void run_all_tests(void *arg) {
         actor_config cfg = ACRT_ACTOR_CONFIG_DEFAULT;
         cfg.stack_size = 64 * 1024;
 
-        actor_id test = acrt_spawn_ex(test_funcs[i], NULL, &cfg);
-        if (test == ACTOR_ID_INVALID) {
+        actor_id test;
+        if (ACRT_FAILED(acrt_spawn_ex(test_funcs[i], NULL, &cfg, &test))) {
             printf("Failed to spawn test %zu\n", i);
             continue;
         }
@@ -383,8 +389,8 @@ int main(void) {
     actor_config cfg = ACRT_ACTOR_CONFIG_DEFAULT;
     cfg.stack_size = 128 * 1024;
 
-    actor_id runner = acrt_spawn_ex(run_all_tests, NULL, &cfg);
-    if (runner == ACTOR_ID_INVALID) {
+    actor_id runner;
+    if (ACRT_FAILED(acrt_spawn_ex(run_all_tests, NULL, &cfg, &runner))) {
         fprintf(stderr, "Failed to spawn test runner\n");
         acrt_cleanup();
         return 1;

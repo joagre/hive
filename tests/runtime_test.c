@@ -82,8 +82,10 @@ static void test3_yield(void *arg) {
     g_actor1_order = 0;
     g_actor2_order = 0;
 
-    actor_id a1 = acrt_spawn(yield_actor1, NULL);
-    actor_id a2 = acrt_spawn(yield_actor2, NULL);
+    actor_id a1;
+    acrt_spawn(yield_actor1, NULL, &a1);
+    actor_id a2;
+    acrt_spawn(yield_actor2, NULL, &a2);
 
     acrt_link(a1);
     acrt_link(a2);
@@ -142,7 +144,8 @@ static void test4_actor_alive(void *arg) {
     }
 
     // Spawn and check alive
-    actor_id child = acrt_spawn(quickly_exit_actor, NULL);
+    actor_id child;
+    acrt_spawn(quickly_exit_actor, NULL, &child);
     acrt_link(child);
 
     // Should be alive right after spawn
@@ -188,8 +191,8 @@ static void test5_many_actors(void *arg) {
     // Spawn actors without linking (simpler)
     int spawned = 0;
     for (int i = 0; i < MANY_ACTORS; i++) {
-        actor_id id = acrt_spawn(many_actor, NULL);
-        if (id == ACTOR_ID_INVALID) {
+        actor_id id;
+        if (ACRT_FAILED(acrt_spawn(many_actor, NULL, &id))) {
             printf("    Failed to spawn actor %d\n", i);
             fflush(stdout);
             break;
@@ -274,8 +277,8 @@ static void test7_stack_sizes(void *arg) {
     actor_config small_cfg = ACRT_ACTOR_CONFIG_DEFAULT;
     small_cfg.stack_size = 8 * 1024;  // 8KB
 
-    actor_id small = acrt_spawn_ex(small_stack_actor, NULL, &small_cfg);
-    if (small != ACTOR_ID_INVALID) {
+    actor_id small;
+    if (!ACRT_FAILED(acrt_spawn_ex(small_stack_actor, NULL, &small_cfg, &small))) {
         acrt_link(small);
         acrt_message msg;
         acrt_ipc_recv(&msg, 500);
@@ -293,8 +296,8 @@ static void test7_stack_sizes(void *arg) {
     actor_config large_cfg = ACRT_ACTOR_CONFIG_DEFAULT;
     large_cfg.stack_size = 32 * 1024;  // 32KB
 
-    actor_id large = acrt_spawn_ex(large_stack_actor, NULL, &large_cfg);
-    if (large != ACTOR_ID_INVALID) {
+    actor_id large;
+    if (!ACRT_FAILED(acrt_spawn_ex(large_stack_actor, NULL, &large_cfg, &large))) {
         acrt_link(large);
         acrt_message msg;
         acrt_ipc_recv(&msg, 500);
@@ -335,13 +338,13 @@ static void test8_priorities(void *arg) {
     }
 
     // Spawn actors in reverse priority order (LOW first, CRITICAL last)
-    static int levels[4] = {ACRT_PRIO_LOW, ACRT_PRIO_NORMAL, ACRT_PRIO_HIGH, ACRT_PRIO_CRITICAL};
+    static int levels[4] = {ACRT_PRIORITY_LOW, ACRT_PRIORITY_NORMAL, ACRT_PRIORITY_HIGH, ACRT_PRIORITY_CRITICAL};
     actor_id ids[4];
 
     for (int i = 0; i < 4; i++) {
         actor_config cfg = ACRT_ACTOR_CONFIG_DEFAULT;
         cfg.priority = levels[i];
-        ids[i] = acrt_spawn_ex(priority_actor, &levels[i], &cfg);
+        acrt_spawn_ex(priority_actor, &levels[i], &cfg, &ids[i]);
         acrt_link(ids[i]);
     }
 
@@ -354,13 +357,13 @@ static void test8_priorities(void *arg) {
     // Higher priority should run first (lower number = higher priority)
     // CRITICAL=0 should be first, LOW=3 should be last
     printf("    Execution order: CRITICAL=%d, HIGH=%d, NORMAL=%d, LOW=%d\n",
-           g_priority_order[ACRT_PRIO_CRITICAL],
-           g_priority_order[ACRT_PRIO_HIGH],
-           g_priority_order[ACRT_PRIO_NORMAL],
-           g_priority_order[ACRT_PRIO_LOW]);
+           g_priority_order[ACRT_PRIORITY_CRITICAL],
+           g_priority_order[ACRT_PRIORITY_HIGH],
+           g_priority_order[ACRT_PRIORITY_NORMAL],
+           g_priority_order[ACRT_PRIORITY_LOW]);
     fflush(stdout);
 
-    if (g_priority_order[ACRT_PRIO_CRITICAL] < g_priority_order[ACRT_PRIO_LOW]) {
+    if (g_priority_order[ACRT_PRIORITY_CRITICAL] < g_priority_order[ACRT_PRIORITY_LOW]) {
         TEST_PASS("higher priority actors run before lower priority");
     } else {
         TEST_FAIL("priority order not respected");
@@ -395,8 +398,8 @@ static void run_all_tests(void *arg) {
         actor_config cfg = ACRT_ACTOR_CONFIG_DEFAULT;
         cfg.stack_size = 64 * 1024;
 
-        actor_id test = acrt_spawn_ex(test_funcs[i], NULL, &cfg);
-        if (test == ACTOR_ID_INVALID) {
+        actor_id test;
+        if (ACRT_FAILED(acrt_spawn_ex(test_funcs[i], NULL, &cfg, &test))) {
             printf("Failed to spawn test %zu\n", i);
             fflush(stdout);
             continue;
@@ -425,8 +428,8 @@ int main(void) {
     actor_config cfg = ACRT_ACTOR_CONFIG_DEFAULT;
     cfg.stack_size = 128 * 1024;
 
-    actor_id runner = acrt_spawn_ex(run_all_tests, NULL, &cfg);
-    if (runner == ACTOR_ID_INVALID) {
+    actor_id runner;
+    if (ACRT_FAILED(acrt_spawn_ex(run_all_tests, NULL, &cfg, &runner))) {
         fprintf(stderr, "Failed to spawn test runner\n");
         acrt_cleanup();
         return 1;

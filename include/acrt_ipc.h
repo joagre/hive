@@ -8,15 +8,15 @@
 // Core Send/Receive
 // -----------------------------------------------------------------------------
 
-// Send an async notification (ACRT_MSG_NOTIFY)
+// Send an async notification (ACRT_MSG_ASYNC)
 // Payload is copied to receiver's mailbox, sender continues immediately.
 // Returns ACRT_ERR_NOMEM if IPC pools exhausted.
 acrt_status acrt_ipc_notify(actor_id to, const void *data, size_t len);
 
 // Receive any message (FIFO order)
-// timeout_ms == 0:  non-blocking, returns ACRT_ERR_WOULDBLOCK if empty
-// timeout_ms < 0:   block forever
-// timeout_ms > 0:   block up to timeout, returns ACRT_ERR_TIMEOUT if exceeded
+// timeout_ms: ACRT_TIMEOUT_NONBLOCKING (0) returns ACRT_ERR_WOULDBLOCK if empty
+//             ACRT_TIMEOUT_INFINITE (-1) blocks forever
+//             positive value blocks up to timeout, returns ACRT_ERR_TIMEOUT if exceeded
 acrt_status acrt_ipc_recv(acrt_message *msg, int32_t timeout_ms);
 
 // Receive message matching filters (selective receive)
@@ -61,19 +61,5 @@ bool acrt_msg_is_timer(const acrt_message *msg);
 // Query mailbox state
 bool acrt_ipc_pending(void);
 size_t acrt_ipc_count(void);
-
-// -----------------------------------------------------------------------------
-// Internal (used by runtime)
-// -----------------------------------------------------------------------------
-
-// Clear mailbox entries (used during actor cleanup)
-void acrt_ipc_mailbox_clear(mailbox *mbox);
-
-// Free active message entry (used during actor cleanup)
-void acrt_ipc_free_active_msg(mailbox_entry *entry);
-
-// Send with explicit class and tag (used internally by timer, link, etc.)
-acrt_status acrt_ipc_notify_ex(actor_id to, actor_id sender, acrt_msg_class class,
-                           uint32_t tag, const void *data, size_t len);
 
 #endif // ACRT_IPC_H

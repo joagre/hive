@@ -18,10 +18,10 @@ void acrt_cleanup(void);
 // Actor lifecycle API
 
 // Spawn a new actor with default configuration
-actor_id acrt_spawn(actor_fn fn, void *arg);
+acrt_status acrt_spawn(actor_fn fn, void *arg, actor_id *out);
 
 // Spawn with explicit configuration
-actor_id acrt_spawn_ex(actor_fn fn, void *arg, const actor_config *cfg);
+acrt_status acrt_spawn_ex(actor_fn fn, void *arg, const actor_config *cfg, actor_id *out);
 
 // Terminate current actor
 _Noreturn void acrt_exit(void);

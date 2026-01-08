@@ -117,10 +117,10 @@ int main(void) {
     // Spawn writer actor
     actor_config writer_cfg = ACRT_ACTOR_CONFIG_DEFAULT;
     writer_cfg.name = "writer";
-    writer_cfg.priority = ACRT_PRIO_NORMAL;
+    writer_cfg.priority = ACRT_PRIORITY_NORMAL;
 
-    actor_id writer_id = acrt_spawn_ex(writer_actor, NULL, &writer_cfg);
-    if (writer_id == ACTOR_ID_INVALID) {
+    actor_id writer_id;
+    if (ACRT_FAILED(acrt_spawn_ex(writer_actor, NULL, &writer_cfg, &writer_id))) {
         fprintf(stderr, "Failed to spawn writer actor\n");
         acrt_cleanup();
         return 1;
@@ -131,10 +131,10 @@ int main(void) {
     // Spawn reader actor
     actor_config reader_cfg = ACRT_ACTOR_CONFIG_DEFAULT;
     reader_cfg.name = "reader";
-    reader_cfg.priority = ACRT_PRIO_NORMAL;
+    reader_cfg.priority = ACRT_PRIORITY_NORMAL;
 
-    actor_id reader_id = acrt_spawn_ex(reader_actor, NULL, &reader_cfg);
-    if (reader_id == ACTOR_ID_INVALID) {
+    actor_id reader_id;
+    if (ACRT_FAILED(acrt_spawn_ex(reader_actor, NULL, &reader_cfg, &reader_id))) {
         fprintf(stderr, "Failed to spawn reader actor\n");
         acrt_cleanup();
         return 1;

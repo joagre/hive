@@ -156,7 +156,8 @@ static void test4_multiple_senders(void *arg) {
     // Spawn 5 senders
     static int sender_ids[5] = {1, 2, 3, 4, 5};
     for (int i = 0; i < 5; i++) {
-        acrt_spawn(sender_actor, &sender_ids[i]);
+        actor_id sender;
+        acrt_spawn(sender_actor, &sender_ids[i], &sender);
     }
 
     // Give senders time to run
@@ -255,7 +256,8 @@ static void test6_request_reply(void *arg) {
     (void)arg;
     printf("\nTest 6: Request/reply pattern\n");
 
-    actor_id server = acrt_spawn(request_reply_server_actor, NULL);
+    actor_id server;
+    acrt_spawn(request_reply_server_actor, NULL, &server);
 
     // Give server time to start
     acrt_yield();
@@ -444,7 +446,8 @@ static void test10_block_forever_recv(void *arg) {
     printf("\nTest 10: recv with timeout < 0 (block forever)\n");
 
     actor_id self = acrt_self();
-    acrt_spawn(delayed_sender_actor, &self);
+    actor_id sender;
+    acrt_spawn(delayed_sender_actor, &self, &sender);
 
     uint64_t start = time_ms();
     acrt_message msg;
@@ -540,7 +543,8 @@ static void test12_selective_receive(void *arg) {
     fflush(stdout);
 
     actor_id self = acrt_self();
-    actor_id sender = acrt_spawn(selective_sender_actor, &self);
+    actor_id sender;
+    acrt_spawn(selective_sender_actor, &self, &sender);
 
     // Wait for sender to send all messages
     timer_id timer;
@@ -618,7 +622,8 @@ static void test14_send_to_dead_actor(void *arg) {
     (void)arg;
     printf("\nTest 14: Send to dead actor\n");
 
-    actor_id target = acrt_spawn(quickly_dying_actor, NULL);
+    actor_id target;
+    acrt_spawn(quickly_dying_actor, NULL, &target);
     acrt_link(target);
 
     // Wait for it to die
@@ -734,8 +739,8 @@ static void test17_spawn_death_cycle_leak(void *arg) {
         cfg.malloc_stack = true;
         cfg.stack_size = 8 * 1024;
 
-        actor_id child = acrt_spawn_ex(short_lived_actor, &self, &cfg);
-        if (child == ACTOR_ID_INVALID) {
+        actor_id child;
+        if (ACRT_FAILED(acrt_spawn_ex(short_lived_actor, &self, &cfg, &child))) {
             printf("    Spawn failed at cycle %d\n", i);
             break;
         }
@@ -794,8 +799,8 @@ static void run_all_tests(void *arg) {
         actor_config cfg = ACRT_ACTOR_CONFIG_DEFAULT;
         cfg.stack_size = 64 * 1024;
 
-        actor_id test = acrt_spawn_ex(test_funcs[i], NULL, &cfg);
-        if (test == ACTOR_ID_INVALID) {
+        actor_id test;
+        if (ACRT_FAILED(acrt_spawn_ex(test_funcs[i], NULL, &cfg, &test))) {
             printf("Failed to spawn test %zu\n", i);
             continue;
         }
@@ -822,8 +827,8 @@ int main(void) {
     actor_config cfg = ACRT_ACTOR_CONFIG_DEFAULT;
     cfg.stack_size = 128 * 1024;
 
-    actor_id runner = acrt_spawn_ex(run_all_tests, NULL, &cfg);
-    if (runner == ACTOR_ID_INVALID) {
+    actor_id runner;
+    if (ACRT_FAILED(acrt_spawn_ex(run_all_tests, NULL, &cfg, &runner))) {
         fprintf(stderr, "Failed to spawn test runner\n");
         acrt_cleanup();
         return 1;

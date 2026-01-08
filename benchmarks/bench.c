@@ -81,8 +81,10 @@ static void bench_context_switch(void) {
     ctx_a_warmup->max_count = WARMUP_ITERATIONS;
     ctx_b_warmup->max_count = WARMUP_ITERATIONS;
 
-    actor_id b = acrt_spawn(switch_actor_b, ctx_b_warmup);
-    actor_id a = acrt_spawn(switch_actor_a, ctx_a_warmup);
+    actor_id b;
+    acrt_spawn(switch_actor_b, ctx_b_warmup, &b);
+    actor_id a;
+    acrt_spawn(switch_actor_a, ctx_a_warmup, &a);
     ctx_a_warmup->partner = b;
     ctx_b_warmup->partner = a;
 
@@ -100,8 +102,8 @@ static void bench_context_switch(void) {
 
     ctx_a->start_time = get_nanos();
 
-    b = acrt_spawn(switch_actor_b, ctx_b);
-    a = acrt_spawn(switch_actor_a, ctx_a);
+    acrt_spawn(switch_actor_b, ctx_b, &b);
+    acrt_spawn(switch_actor_a, ctx_a, &a);
     ctx_a->partner = b;
     ctx_b->partner = a;
 
@@ -180,8 +182,10 @@ static void bench_ipc_copy(size_t msg_size, const char *label) {
     ctx_recv_warmup->max_count = WARMUP_ITERATIONS;
     ctx_recv_warmup->msg_size = msg_size;
 
-    actor_id recv = acrt_spawn(ipc_receiver, ctx_recv_warmup);
-    actor_id send = acrt_spawn(ipc_sender, ctx_send_warmup);
+    actor_id recv;
+    acrt_spawn(ipc_receiver, ctx_recv_warmup, &recv);
+    actor_id send;
+    acrt_spawn(ipc_sender, ctx_send_warmup, &send);
     ctx_send_warmup->partner = recv;
     ctx_recv_warmup->partner = send;
 
@@ -199,8 +203,8 @@ static void bench_ipc_copy(size_t msg_size, const char *label) {
     ctx_recv->max_count = ITERATIONS;
     ctx_recv->msg_size = msg_size;
 
-    recv = acrt_spawn(ipc_receiver, ctx_recv);
-    send = acrt_spawn(ipc_sender, ctx_send);
+    acrt_spawn(ipc_receiver, ctx_recv, &recv);
+    acrt_spawn(ipc_sender, ctx_send, &send);
     ctx_send->partner = recv;
     ctx_recv->partner = send;
 
@@ -323,14 +327,16 @@ static void bench_actor_spawn(void) {
 
     // Warmup
     for (int i = 0; i < 10; i++) {
-        acrt_spawn(dummy_actor, NULL);
+        actor_id dummy;
+        acrt_spawn(dummy_actor, NULL, &dummy);
     }
     acrt_run();
 
     // Benchmark
     uint64_t start = get_nanos();
     for (int i = 0; i < 100; i++) {
-        acrt_spawn(dummy_actor, NULL);
+        actor_id dummy;
+        acrt_spawn(dummy_actor, NULL, &dummy);
     }
     acrt_run();
     uint64_t elapsed = get_nanos() - start;
@@ -406,7 +412,7 @@ static void bench_bus(void) {
         .max_entries = 64,  // Max allowed by ACRT_MAX_BUS_ENTRIES
         .max_entry_size = 256,  // Max size of each message
         .max_subscribers = 8,
-        .max_readers = 1,  // Remove entries after 1 reader reads them
+        .consume_after_reads = 1,  // Remove entries after 1 reader reads them
         .max_age_ms = 0
     };
     bus_id bus;
@@ -421,8 +427,10 @@ static void bench_bus(void) {
     ctx_sub_warmup->bus = bus;
     ctx_sub_warmup->max_count = 100;
 
-    acrt_spawn(bus_subscriber, ctx_sub_warmup);
-    acrt_spawn(bus_publisher, ctx_pub_warmup);
+    actor_id sub_warmup;
+    acrt_spawn(bus_subscriber, ctx_sub_warmup, &sub_warmup);
+    actor_id pub_warmup;
+    acrt_spawn(bus_publisher, ctx_pub_warmup, &pub_warmup);
     acrt_run();
 
     free(ctx_pub_warmup);
@@ -440,8 +448,10 @@ static void bench_bus(void) {
     ctx_sub->bus = bus;
     ctx_sub->max_count = BUS_ITERATIONS;
 
-    acrt_spawn(bus_subscriber, ctx_sub);
-    acrt_spawn(bus_publisher, ctx_pub);
+    actor_id sub;
+    acrt_spawn(bus_subscriber, ctx_sub, &sub);
+    actor_id pub;
+    acrt_spawn(bus_publisher, ctx_pub, &pub);
     acrt_run();
 
     uint64_t elapsed = ctx_pub->end_time - ctx_pub->start_time;

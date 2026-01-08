@@ -45,7 +45,7 @@ typedef struct monitor_entry {
 typedef struct {
     actor_id       id;
     actor_state    state;
-    acrt_priority    priority;
+    acrt_priority_level    priority;
     const char    *name;
 
     // Context and stack
@@ -61,14 +61,14 @@ typedef struct {
     mailbox_entry *active_msg;
 
     // For selective receive: filters to match against
-    actor_id       recv_filter_from;
+    actor_id       recv_filter_sender;
     acrt_msg_class   recv_filter_class;
     uint32_t       recv_filter_tag;
 
     // For I/O completion results
     acrt_status      io_status;
     int            io_result_fd;      // For file_open
-    size_t         io_result_nbytes;  // For file read/write
+    size_t         io_result_bytes;  // For file read/write
 
     // Links and monitors
     link_entry    *links;        // Bidirectional links to other actors

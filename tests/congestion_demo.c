@@ -116,12 +116,13 @@ int main(void) {
     static int worker_ids[NUM_WORKERS];
     for (int i = 0; i < NUM_WORKERS; i++) {
         worker_ids[i] = i + 1;
-        args.workers[i] = acrt_spawn(worker_actor, &worker_ids[i]);
+        acrt_spawn(worker_actor, &worker_ids[i], &args.workers[i]);
     }
     printf("Main: Spawned %d workers\n", NUM_WORKERS);
 
     // Spawn coordinator
-    acrt_spawn(coordinator_actor, &args);
+    actor_id coordinator;
+    acrt_spawn(coordinator_actor, &args, &coordinator);
     printf("Main: Spawned coordinator\n");
 
     acrt_run();

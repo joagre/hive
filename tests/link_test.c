@@ -63,15 +63,15 @@ static void test1_basic_link(void *arg) {
     g_actor_b_notified = false;
 
     // Spawn actor B first
-    actor_id actor_b = acrt_spawn(actor_b_exits_immediately, NULL);
-    if (actor_b == ACTOR_ID_INVALID) {
+    actor_id actor_b;
+    if (ACRT_FAILED(acrt_spawn(actor_b_exits_immediately, NULL, &actor_b))) {
         TEST_FAIL("spawn actor B");
         acrt_exit();
     }
 
     // Spawn actor A and pass actor B's ID
-    actor_id actor_a = acrt_spawn(actor_a_links_to_b, &actor_b);
-    if (actor_a == ACTOR_ID_INVALID) {
+    actor_id actor_a;
+    if (ACRT_FAILED(acrt_spawn(actor_a_links_to_b, &actor_b, &actor_a))) {
         TEST_FAIL("spawn actor A");
         acrt_exit();
     }
@@ -133,15 +133,14 @@ static void test2_bidirectional(void *arg) {
     g_target_notified = false;
 
     // Spawn target first
-    actor_id target = acrt_spawn(target_waits_for_linker, NULL);
-    if (target == ACTOR_ID_INVALID) {
+    actor_id target;
+    if (ACRT_FAILED(acrt_spawn(target_waits_for_linker, NULL, &target))) {
         TEST_FAIL("spawn target");
         acrt_exit();
     }
 
     // Spawn linker
-    g_linker_id = acrt_spawn(linker_dies_first, &target);
-    if (g_linker_id == ACTOR_ID_INVALID) {
+    if (ACRT_FAILED(acrt_spawn(linker_dies_first, &target, &g_linker_id))) {
         TEST_FAIL("spawn linker");
         acrt_exit();
     }
@@ -202,13 +201,14 @@ static void test3_unlink(void *arg) {
 
     g_unlinked_received_notification = false;
 
-    actor_id target = acrt_spawn(actor_dies_after_unlink, NULL);
-    if (target == ACTOR_ID_INVALID) {
+    actor_id target;
+    if (ACRT_FAILED(acrt_spawn(actor_dies_after_unlink, NULL, &target))) {
         TEST_FAIL("spawn target");
         acrt_exit();
     }
 
-    acrt_spawn(actor_unlinks_before_death, &target);
+    actor_id unlinker;
+    acrt_spawn(actor_unlinks_before_death, &target, &unlinker);
 
     timer_id timer;
     acrt_timer_after(500000, &timer);
@@ -297,15 +297,15 @@ static void test5_multiple_links(void *arg) {
     static actor_id targets[3];
 
     for (int i = 0; i < 3; i++) {
-        targets[i] = acrt_spawn(multi_link_target, &delays[i]);
-        if (targets[i] == ACTOR_ID_INVALID) {
+        if (ACRT_FAILED(acrt_spawn(multi_link_target, &delays[i], &targets[i]))) {
             TEST_FAIL("spawn target");
             acrt_exit();
         }
     }
 
     // Spawn linker
-    acrt_spawn(multi_linker, targets);
+    actor_id linker;
+    acrt_spawn(multi_linker, targets, &linker);
 
     // Wait for all to complete
     timer_id timer;
@@ -371,13 +371,17 @@ static void test6_link_vs_monitor(void *arg) {
     g_monitor_target_got_notification = false;
 
     // Test link: target should be notified when linker dies
-    actor_id link_target = acrt_spawn(link_target_waits, NULL);
-    actor_id linker = acrt_spawn(linker_actor, &link_target);
+    actor_id link_target;
+    acrt_spawn(link_target_waits, NULL, &link_target);
+    actor_id linker;
+    acrt_spawn(linker_actor, &link_target, &linker);
     (void)linker;
 
     // Test monitor: target should NOT be notified when monitor dies
-    actor_id monitor_target = acrt_spawn(monitor_target_waits, NULL);
-    actor_id monitor = acrt_spawn(monitor_actor, &monitor_target);
+    actor_id monitor_target;
+    acrt_spawn(monitor_target_waits, NULL, &monitor_target);
+    actor_id monitor;
+    acrt_spawn(monitor_actor, &monitor_target, &monitor);
     (void)monitor;
 
     // Wait for completion
@@ -438,8 +442,10 @@ static void test7_exit_reason(void *arg) {
 
     g_received_reason = (acrt_exit_reason)99;  // Invalid value
 
-    actor_id target = acrt_spawn(normal_exit_actor, NULL);
-    acrt_spawn(link_receiver_checks_reason, &target);
+    actor_id target;
+    acrt_spawn(normal_exit_actor, NULL, &target);
+    actor_id receiver;
+    acrt_spawn(link_receiver_checks_reason, &target, &receiver);
 
     timer_id timer;
     acrt_timer_after(300000, &timer);
@@ -471,8 +477,8 @@ static void test8_link_to_dead_actor(void *arg) {
     fflush(stdout);
 
     // Spawn an actor that exits immediately
-    actor_id target = acrt_spawn(quickly_exiting_actor, NULL);
-    if (target == ACTOR_ID_INVALID) {
+    actor_id target;
+    if (ACRT_FAILED(acrt_spawn(quickly_exiting_actor, NULL, &target))) {
         TEST_FAIL("failed to spawn target actor");
         acrt_exit();
     }
@@ -541,8 +547,8 @@ static void test10_unlink_non_linked(void *arg) {
     fflush(stdout);
 
     // Spawn an actor but don't link to it
-    actor_id target = acrt_spawn(unlink_target_actor, NULL);
-    if (target == ACTOR_ID_INVALID) {
+    actor_id target;
+    if (ACRT_FAILED(acrt_spawn(unlink_target_actor, NULL, &target))) {
         TEST_FAIL("spawn target");
         acrt_exit();
     }
@@ -623,8 +629,8 @@ static void test12_link_pool_exhaustion(void *arg) {
         cfg.malloc_stack = true;
         cfg.stack_size = 8 * 1024;
 
-        actor_id target = acrt_spawn_ex(link_pool_target_actor, NULL, &cfg);
-        if (target == ACTOR_ID_INVALID) {
+        actor_id target;
+        if (ACRT_FAILED(acrt_spawn_ex(link_pool_target_actor, NULL, &cfg, &target))) {
             break;
         }
         targets[spawned++] = target;
@@ -692,8 +698,8 @@ static void run_all_tests(void *arg) {
         actor_config cfg = ACRT_ACTOR_CONFIG_DEFAULT;
         cfg.stack_size = 64 * 1024;
 
-        actor_id test = acrt_spawn_ex(test_funcs[i], NULL, &cfg);
-        if (test == ACTOR_ID_INVALID) {
+        actor_id test;
+        if (ACRT_FAILED(acrt_spawn_ex(test_funcs[i], NULL, &cfg, &test))) {
             printf("Failed to spawn test %zu\n", i);
             continue;
         }
@@ -720,8 +726,8 @@ int main(void) {
     actor_config cfg = ACRT_ACTOR_CONFIG_DEFAULT;
     cfg.stack_size = 128 * 1024;
 
-    actor_id runner = acrt_spawn_ex(run_all_tests, NULL, &cfg);
-    if (runner == ACTOR_ID_INVALID) {
+    actor_id runner;
+    if (ACRT_FAILED(acrt_spawn_ex(run_all_tests, NULL, &cfg, &runner))) {
         fprintf(stderr, "Failed to spawn test runner\n");
         acrt_cleanup();
         return 1;

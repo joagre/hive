@@ -95,8 +95,8 @@ int main(void) {
     actor_config actor_cfg = ACRT_ACTOR_CONFIG_DEFAULT;
     actor_cfg.name = "timer";
 
-    actor_id id = acrt_spawn_ex(timer_actor, NULL, &actor_cfg);
-    if (id == ACTOR_ID_INVALID) {
+    actor_id id;
+    if (ACRT_FAILED(acrt_spawn_ex(timer_actor, NULL, &actor_cfg, &id))) {
         fprintf(stderr, "Failed to spawn timer actor\n");
         acrt_cleanup();
         return 1;
