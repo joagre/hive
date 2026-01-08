@@ -156,7 +156,8 @@ if (ACRT_FAILED(status)) {
 acrt_message reply;
 status = acrt_ipc_request(target, &data, sizeof(data), &reply, 5000);  // 5s timeout
 if (ACRT_FAILED(status)) {
-    // ACRT_ERR_TIMEOUT if no reply, ACRT_ERR_NOMEM if pool exhausted
+    // ACRT_ERR_TIMEOUT if no reply (or target died), ACRT_ERR_NOMEM if pool exhausted
+    // If linked/monitoring target, check for EXIT message to distinguish death from timeout
 }
 
 // Reply to a REQUEST message (in receiver actor)

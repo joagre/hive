@@ -118,6 +118,8 @@ All messages have a 4-byte header prepended to payload:
 - **`acrt_ipc_request(to, req, len, reply, timeout)`**: Blocking request/reply (send REQUEST, wait for REPLY)
 - **`acrt_ipc_reply(request, data, len)`**: Reply to a REQUEST message
 
+**`acrt_ipc_request()` errors**: Returns `ACRT_ERR_TIMEOUT` if no reply (including when target died), `ACRT_ERR_NOMEM` if pool exhausted, `ACRT_ERR_INVALID` for bad arguments. If linked/monitoring target, check for EXIT message after timeout to distinguish death from timeout.
+
 ### Message Structure (Pre-decoded)
 The `acrt_message` struct provides direct access to all fields - no `acrt_msg_decode()` needed:
 ```c
