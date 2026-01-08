@@ -120,7 +120,7 @@ All structures are statically allocated. Actor stacks use a static arena allocat
 ./build/bus
 
 # Request/reply example (with acrt_ipc_request)
-./build/sync_ipc
+./build/request_reply
 
 # Priority scheduling example (4 levels, starvation demo)
 ./build/priority
