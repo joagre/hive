@@ -147,10 +147,10 @@ static void demo_actor(void *arg) {
 
     printf("\n--- Message Passing Patterns Demo ---\n");
 
-    // Pattern 1: Fire-and-forget with rt_ipc_send()
-    printf("Demo: Fire-and-forget (rt_ipc_send) - sender continues immediately\n");
+    // Pattern 1: Fire-and-forget with rt_ipc_cast()
+    printf("Demo: Fire-and-forget (rt_ipc_cast) - sender continues immediately\n");
     int data = 42;
-    rt_status status = rt_ipc_send(rt_self(), &data, sizeof(data));
+    rt_status status = rt_ipc_cast(rt_self(), &data, sizeof(data));
     if (!RT_FAILED(status)) {
         rt_message msg;
         rt_ipc_recv(&msg, 0);

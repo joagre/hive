@@ -139,7 +139,7 @@ actor_id worker = rt_spawn_ex(worker_actor, &args, &cfg);
 
 // Send fire-and-forget message (RT_MSG_CAST)
 int data = 42;
-rt_status status = rt_ipc_send(target, &data, sizeof(data));
+rt_status status = rt_ipc_cast(target, &data, sizeof(data));
 if (RT_FAILED(status)) {
     // Pool exhausted: RT_MAILBOX_ENTRY_POOL_SIZE or RT_MESSAGE_DATA_POOL_SIZE
     // Send does NOT block or drop - caller must handle RT_ERR_NOMEM
@@ -274,7 +274,7 @@ if (rt_is_exit_msg(&msg)) {
 
 ### IPC
 
-- `rt_ipc_send(to, data, len)` - Send fire-and-forget message (RT_MSG_CAST)
+- `rt_ipc_cast(to, data, len)` - Send fire-and-forget message (RT_MSG_CAST)
 - `rt_ipc_recv(msg, timeout)` - Receive any message
 - `rt_ipc_recv_match(from, class, tag, msg, timeout)` - Selective receive with filtering
 - `rt_ipc_call(to, req, len, reply, timeout)` - Blocking RPC (send CALL, wait for REPLY)

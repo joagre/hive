@@ -8,10 +8,10 @@
 // Core Send/Receive
 // -----------------------------------------------------------------------------
 
-// Send a fire-and-forget message (RT_MSG_CAST)
+// Cast a fire-and-forget message (RT_MSG_CAST)
 // Payload is copied to receiver's mailbox, sender continues immediately.
 // Returns RT_ERR_NOMEM if IPC pools exhausted.
-rt_status rt_ipc_send(actor_id to, const void *data, size_t len);
+rt_status rt_ipc_cast(actor_id to, const void *data, size_t len);
 
 // Receive any message (FIFO order)
 // timeout_ms == 0:  non-blocking, returns RT_ERR_WOULDBLOCK if empty
@@ -72,8 +72,8 @@ void rt_ipc_mailbox_clear(mailbox *mbox);
 // Free active message entry (used during actor cleanup)
 void rt_ipc_free_active_msg(mailbox_entry *entry);
 
-// Send with explicit class and tag (used internally by timer, link, etc.)
-rt_status rt_ipc_send_ex(actor_id to, actor_id sender, rt_msg_class class,
+// Cast with explicit class and tag (used internally by timer, link, etc.)
+rt_status rt_ipc_cast_ex(actor_id to, actor_id sender, rt_msg_class class,
                          uint32_t tag, const void *data, size_t len);
 
 #endif // RT_IPC_H

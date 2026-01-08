@@ -33,9 +33,9 @@ static void test1_async_basic(void *arg) {
     actor_id self = rt_self();
     const char *msg_data = "Hello ASYNC";
 
-    rt_status status = rt_ipc_send(self, msg_data, strlen(msg_data) + 1);
+    rt_status status = rt_ipc_cast(self, msg_data, strlen(msg_data) + 1);
     if (RT_FAILED(status)) {
-        TEST_FAIL("rt_ipc_send ASYNC failed");
+        TEST_FAIL("rt_ipc_cast ASYNC failed");
         rt_exit();
     }
 
@@ -74,14 +74,14 @@ static void test2_async_invalid_receiver(void *arg) {
 
     int data = 42;
 
-    rt_status status = rt_ipc_send(ACTOR_ID_INVALID, &data, sizeof(data));
+    rt_status status = rt_ipc_cast(ACTOR_ID_INVALID, &data, sizeof(data));
     if (RT_FAILED(status)) {
         TEST_PASS("send to ACTOR_ID_INVALID fails");
     } else {
         TEST_FAIL("send to ACTOR_ID_INVALID should fail");
     }
 
-    status = rt_ipc_send(9999, &data, sizeof(data));
+    status = rt_ipc_cast(9999, &data, sizeof(data));
     if (RT_FAILED(status)) {
         TEST_PASS("send to non-existent actor fails");
     } else {
@@ -103,7 +103,7 @@ static void test3_message_ordering(void *arg) {
 
     // Send 5 messages
     for (int i = 1; i <= 5; i++) {
-        rt_ipc_send(self, &i, sizeof(i));
+        rt_ipc_cast(self, &i, sizeof(i));
     }
 
     // Receive and verify order
@@ -142,7 +142,7 @@ static int g_messages_received = 0;
 
 static void sender_actor(void *arg) {
     int id = *(int *)arg;
-    rt_ipc_send(g_receiver_id, &id, sizeof(id));
+    rt_ipc_cast(g_receiver_id, &id, sizeof(id));
     rt_exit();
 }
 
@@ -200,7 +200,7 @@ static void test5_send_to_self(void *arg) {
     actor_id self = rt_self();
     int data = 42;
 
-    rt_status status = rt_ipc_send(self, &data, sizeof(data));
+    rt_status status = rt_ipc_cast(self, &data, sizeof(data));
     if (!RT_FAILED(status)) {
         // Receive the message we sent to ourselves
         rt_message msg;
@@ -314,9 +314,9 @@ static void test7_pending_count(void *arg) {
 
     // Send 3 messages
     int data = 42;
-    rt_ipc_send(self, &data, sizeof(data));
-    rt_ipc_send(self, &data, sizeof(data));
-    rt_ipc_send(self, &data, sizeof(data));
+    rt_ipc_cast(self, &data, sizeof(data));
+    rt_ipc_cast(self, &data, sizeof(data));
+    rt_ipc_cast(self, &data, sizeof(data));
 
     if (rt_ipc_pending()) {
         TEST_PASS("rt_ipc_pending returns true with messages");
@@ -376,7 +376,7 @@ static void test8_nonblocking_recv(void *arg) {
     // With a message in queue
     actor_id self = rt_self();
     int data = 42;
-    rt_ipc_send(self, &data, sizeof(data));
+    rt_ipc_cast(self, &data, sizeof(data));
 
     status = rt_ipc_recv(&msg, 0);
     if (!RT_FAILED(status)) {
@@ -434,7 +434,7 @@ static void delayed_sender_actor(void *arg) {
     rt_ipc_recv(&msg, -1);
 
     int data = 123;
-    rt_ipc_send(target, &data, sizeof(data));
+    rt_ipc_cast(target, &data, sizeof(data));
 
     rt_exit();
 }
@@ -486,7 +486,7 @@ static void test11_message_size_limits(void *arg) {
     char max_msg[RT_MAX_MESSAGE_SIZE];  // Oversize buffer for safety
     memset(max_msg, 'A', sizeof(max_msg));
 
-    rt_status status = rt_ipc_send(self, max_msg, max_payload_size);
+    rt_status status = rt_ipc_cast(self, max_msg, max_payload_size);
     if (!RT_FAILED(status)) {
         TEST_PASS("can send message at max payload size");
     } else {
@@ -506,7 +506,7 @@ static void test11_message_size_limits(void *arg) {
     }
 
     // Send message exceeding max size (payload larger than max_payload_size)
-    status = rt_ipc_send(self, max_msg, max_payload_size + 1);
+    status = rt_ipc_cast(self, max_msg, max_payload_size + 1);
     if (RT_FAILED(status)) {
         TEST_PASS("oversized message is rejected");
     } else {
@@ -527,9 +527,9 @@ static void selective_sender_actor(void *arg) {
 
     // Send three messages with different data
     int a = 1, b = 2, c = 3;
-    rt_ipc_send(target, &a, sizeof(a));
-    rt_ipc_send(target, &b, sizeof(b));
-    rt_ipc_send(target, &c, sizeof(c));
+    rt_ipc_cast(target, &a, sizeof(a));
+    rt_ipc_cast(target, &b, sizeof(b));
+    rt_ipc_cast(target, &c, sizeof(c));
 
     rt_exit();
 }
@@ -583,7 +583,7 @@ static void test13_zero_length_message(void *arg) {
 
     actor_id self = rt_self();
 
-    rt_status status = rt_ipc_send(self, NULL, 0);
+    rt_status status = rt_ipc_cast(self, NULL, 0);
     if (!RT_FAILED(status)) {
         TEST_PASS("can send zero-length payload");
 
@@ -627,7 +627,7 @@ static void test14_send_to_dead_actor(void *arg) {
 
     // Now try to send to dead actor
     int data = 42;
-    rt_status status = rt_ipc_send(target, &data, sizeof(data));
+    rt_status status = rt_ipc_cast(target, &data, sizeof(data));
 
     if (RT_FAILED(status)) {
         TEST_PASS("send to dead actor fails");
@@ -655,7 +655,7 @@ static void test15_message_pool_info(void *arg) {
 
     for (int i = 0; i < 100; i++) {
         int data = i;
-        rt_status status = rt_ipc_send(self, &data, sizeof(data));
+        rt_status status = rt_ipc_cast(self, &data, sizeof(data));
         if (RT_FAILED(status)) {
             printf("    Send failed at %d: %s\n", i, status.msg ? status.msg : "unknown");
             break;
@@ -684,7 +684,7 @@ static void test15_message_pool_info(void *arg) {
 }
 
 // ============================================================================
-// Test 16: NULL pointer handling - rt_ipc_send with NULL data (non-zero len)
+// Test 16: NULL pointer handling - rt_ipc_cast with NULL data (non-zero len)
 // ============================================================================
 
 static void test16_null_data_send(void *arg) {
@@ -695,14 +695,14 @@ static void test16_null_data_send(void *arg) {
     actor_id self = rt_self();
 
     // Sending NULL data with len > 0 should fail or be handled safely
-    rt_status status = rt_ipc_send(self, NULL, 10);
+    rt_status status = rt_ipc_cast(self, NULL, 10);
     if (RT_FAILED(status)) {
-        TEST_PASS("rt_ipc_send rejects NULL data with non-zero length");
+        TEST_PASS("rt_ipc_cast rejects NULL data with non-zero length");
     } else {
         // If it succeeded, the implementation might handle it - drain the message
         rt_message msg;
         rt_ipc_recv(&msg, 0);
-        TEST_PASS("rt_ipc_send handles NULL data gracefully");
+        TEST_PASS("rt_ipc_cast handles NULL data gracefully");
     }
 
     rt_exit();
@@ -716,7 +716,7 @@ static void short_lived_actor(void *arg) {
     actor_id parent = *(actor_id *)arg;
     // Send a message then die
     int data = 42;
-    rt_ipc_send(parent, &data, sizeof(data));
+    rt_ipc_cast(parent, &data, sizeof(data));
     rt_exit();
 }
 

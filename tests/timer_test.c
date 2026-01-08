@@ -121,7 +121,7 @@ static void run_timer_tests(void *arg) {
         // Now test that regular messages are NOT detected as timer ticks
         actor_id self = rt_self();
         const char *data = "not a timer";
-        rt_ipc_send(self, data, 12);
+        rt_ipc_cast(self, data, 12);
 
         status = rt_ipc_recv(&msg, 100);
         if (!RT_FAILED(status) && !rt_msg_is_timer(&msg)) {

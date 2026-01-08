@@ -28,7 +28,7 @@ A minimalistic actor-based runtime designed for **embedded and safety-critical s
 
 **Forbidden heap use** (exhaustive):
 - Scheduler loop (`rt_run()`, `rt_yield()`, context switching)
-- IPC (`rt_ipc_send()`, `rt_ipc_recv()`, `rt_ipc_recv_match()`, `rt_ipc_call()`, `rt_ipc_reply()`)
+- IPC (`rt_ipc_cast()`, `rt_ipc_recv()`, `rt_ipc_recv_match()`, `rt_ipc_call()`, `rt_ipc_reply()`)
 - Timers (`rt_timer_after()`, `rt_timer_every()`, timer delivery)
 - Bus (`rt_bus_publish()`, `rt_bus_read()`, `rt_bus_read_wait()`)
 - Network I/O (`rt_net_*()` functions, event loop dispatch)
@@ -280,7 +280,7 @@ The runtime is **completely single-threaded**. All runtime operations execute in
 | API Category | Thread Safety | Enforcement |
 |-------------|---------------|-------------|
 | **Actor APIs** (`rt_spawn`, `rt_exit`, etc.) | Single-threaded only | Must call from actor context |
-| **IPC APIs** (`rt_ipc_send`, `rt_ipc_recv`) | Single-threaded only | Must call from actor context |
+| **IPC APIs** (`rt_ipc_cast`, `rt_ipc_recv`) | Single-threaded only | Must call from actor context |
 | **Bus APIs** (`rt_bus_publish`, `rt_bus_read`) | Single-threaded only | Must call from actor context |
 | **Timer APIs** (`rt_timer_after`, `rt_timer_every`) | Single-threaded only | Must call from actor context |
 | **File APIs** (`rt_file_read`, `rt_file_write`) | Single-threaded only | Must call from actor context; stalls scheduler |
@@ -310,7 +310,7 @@ void socket_reader_actor(void *arg) {
     while (1) {
         size_t received;
         rt_net_recv(sock, buf, len, &received, -1);  // Blocks in event loop
-        rt_ipc_send(worker, buf, received);  // Forward to actors
+        rt_ipc_cast(worker, buf, received);  // Forward to actors
     }
 }
 ```
@@ -318,7 +318,7 @@ void socket_reader_actor(void *arg) {
 This pattern is safe because:
 - External thread only touches OS-level socket (thread-safe by OS)
 - `rt_net_recv()` executes in scheduler thread (actor context)
-- `rt_ipc_send()` executes in scheduler thread (actor context)
+- `rt_ipc_cast()` executes in scheduler thread (actor context)
 - No direct runtime state access from external thread
 
 ### Synchronization Primitives
@@ -760,7 +760,7 @@ typedef struct {
 
 ```c
 // Fire-and-forget message (class=CAST, tag=0)
-rt_status rt_ipc_send(actor_id to, const void *data, size_t len);
+rt_status rt_ipc_cast(actor_id to, const void *data, size_t len);
 
 // Receive any message (no filtering)
 // timeout_ms == 0:  non-blocking, returns RT_ERR_WOULDBLOCK if empty
@@ -821,7 +821,7 @@ rt_status rt_msg_decode(const rt_message *msg,
                         size_t *payload_len);   // out: len minus 4-byte header
 ```
 
-### API Contract: rt_ipc_send()
+### API Contract: rt_ipc_cast()
 
 **Parameter validation:**
 - If `data == NULL && len > 0`: Returns `RT_ERR_INVALID`
@@ -830,7 +830,7 @@ rt_status rt_msg_decode(const rt_message *msg,
 
 **Behavior when pools are exhausted:**
 
-`rt_ipc_send()` uses two global pools:
+`rt_ipc_cast()` uses two global pools:
 1. **Mailbox entry pool** (`RT_MAILBOX_ENTRY_POOL_SIZE` = 256)
 2. **Message data pool** (`RT_MESSAGE_DATA_POOL_SIZE` = 256)
 
@@ -850,10 +850,10 @@ rt_status rt_msg_decode(const rt_message *msg,
 
 ```c
 // Bad: Ignoring RT_ERR_NOMEM
-rt_ipc_send(target, &data, sizeof(data));  // WRONG
+rt_ipc_cast(target, &data, sizeof(data));  // WRONG
 
 // Good: Check and handle
-rt_status status = rt_ipc_send(target, &data, sizeof(data));
+rt_status status = rt_ipc_cast(target, &data, sizeof(data));
 if (status.code == RT_ERR_NOMEM) {
     // Pool exhausted - implement backpressure
     log_dropped_message(target);
@@ -990,17 +990,17 @@ rt_ipc_recv(&msg, 0);  // Gets first skipped message
 ```c
 // Single sender - FIFO guaranteed
 void sender_actor(void *arg) {
-    rt_ipc_send(receiver, &msg1, sizeof(msg1));  // Sent first
-    rt_ipc_send(receiver, &msg2, sizeof(msg2));  // Sent second
+    rt_ipc_cast(receiver, &msg1, sizeof(msg1));  // Sent first
+    rt_ipc_cast(receiver, &msg2, sizeof(msg2));  // Sent second
     // Receiver will see: msg1, then msg2 (guaranteed)
 }
 
 // Multiple senders - order depends on scheduling
 void sender_A(void *arg) {
-    rt_ipc_send(receiver, &msgA, sizeof(msgA));
+    rt_ipc_cast(receiver, &msgA, sizeof(msgA));
 }
 void sender_B(void *arg) {
-    rt_ipc_send(receiver, &msgB, sizeof(msgB));
+    rt_ipc_cast(receiver, &msgB, sizeof(msgB));
 }
 // Receiver may see: msgA then msgB, OR msgB then msgA
 
@@ -1096,7 +1096,7 @@ IPC uses two global pools shared by all actors:
 - **Message data pool**: `RT_MESSAGE_DATA_POOL_SIZE` (256 default)
 
 **When pools are exhausted:**
-- `rt_ipc_send()` returns `RT_ERR_NOMEM` immediately
+- `rt_ipc_cast()` returns `RT_ERR_NOMEM` immediately
 - Send operation **does NOT block** waiting for space
 - Send operation **does NOT drop** messages automatically
 - Caller **must check** return value and handle failure
@@ -1111,7 +1111,7 @@ IPC uses two global pools shared by all actors:
 
 **Backoff-retry example:**
 ```c
-rt_status status = rt_ipc_send(target, data, len);
+rt_status status = rt_ipc_cast(target, data, len);
 if (status.code == RT_ERR_NOMEM) {
     // Pool exhausted - backoff before retry
     rt_message msg;
@@ -1779,8 +1779,8 @@ Exit notifications (steps 2-3 above) are enqueued in recipient mailboxes **durin
 ```c
 // Dying actor sends messages before death
 void actor_A(void *arg) {
-    rt_ipc_send(B, &msg1, sizeof(msg1));  // Enqueued in B's mailbox
-    rt_ipc_send(C, &msg2, sizeof(msg2));  // Enqueued in C's mailbox
+    rt_ipc_cast(B, &msg1, sizeof(msg1));  // Enqueued in B's mailbox
+    rt_ipc_cast(C, &msg2, sizeof(msg2));  // Enqueued in C's mailbox
     rt_exit();  // Exit notifications sent to links/monitors
 }
 // Linked actor B will receive: msg1, then EXIT(A) (class=RT_MSG_SYSTEM)
@@ -1788,7 +1788,7 @@ void actor_A(void *arg) {
 
 // Messages sent TO dying actor are lost
 void actor_B(void *arg) {
-    rt_ipc_send(A, &msg, sizeof(msg));  // Enqueued in A's mailbox
+    rt_ipc_cast(A, &msg, sizeof(msg));  // Enqueued in A's mailbox
 }
 void actor_A(void *arg) {
     // ... does some work ...

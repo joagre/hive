@@ -276,9 +276,9 @@ static bool send_exit_notification(actor *recipient, actor_id dying_id, rt_exit_
         .reason = reason
     };
 
-    // Send using rt_ipc_send_ex with RT_MSG_SYSTEM class
+    // Send using rt_ipc_cast_ex with RT_MSG_SYSTEM class
     // Sender is the dying actor so recipient knows who died
-    rt_status status = rt_ipc_send_ex(recipient->id, dying_id, RT_MSG_SYSTEM,
+    rt_status status = rt_ipc_cast_ex(recipient->id, dying_id, RT_MSG_SYSTEM,
                                        RT_TAG_NONE, &exit_data, sizeof(exit_data));
     if (RT_FAILED(status)) {
         RT_LOG_ERROR("Failed to send exit notification: %s", status.msg);

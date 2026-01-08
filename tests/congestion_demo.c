@@ -51,7 +51,7 @@ void coordinator_actor(void *arg) {
         for (int w = 0; w < args->worker_count; w++) {
             int data = burst * NUM_WORKERS + w;
 
-            rt_status status = rt_ipc_send(args->workers[w], &data, sizeof(data));
+            rt_status status = rt_ipc_cast(args->workers[w], &data, sizeof(data));
 
             if (status.code == RT_ERR_NOMEM) {
                 retry_needed++;
@@ -65,14 +65,14 @@ void coordinator_actor(void *arg) {
                 rt_ipc_recv(&msg, 5);  // Backoff 5ms
 
                 // Retry
-                status = rt_ipc_send(args->workers[w], &data, sizeof(data));
+                status = rt_ipc_cast(args->workers[w], &data, sizeof(data));
                 if (!RT_FAILED(status)) {
                     retry_success++;
                     total_sent++;
                 } else {
                     // Even retry failed - aggressive backoff
                     rt_ipc_recv(&msg, 20);
-                    status = rt_ipc_send(args->workers[w], &data, sizeof(data));
+                    status = rt_ipc_cast(args->workers[w], &data, sizeof(data));
                     if (!RT_FAILED(status)) {
                         retry_success++;
                         total_sent++;

@@ -551,7 +551,7 @@ static void test13_actor_table_exhaustion(void *arg) {
     // Signal all waiting actors to exit
     int dummy = 1;
     for (int i = 0; i < spawned; i++) {
-        rt_ipc_send(ids[i], &dummy, sizeof(dummy));
+        rt_ipc_cast(ids[i], &dummy, sizeof(dummy));
     }
 
     // Yield a few times to let them exit

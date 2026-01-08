@@ -38,7 +38,7 @@ static void server_actor(void *arg) {
 
     // Notify client that server is ready via IPC
     coord_msg ready_msg = { .type = MSG_SERVER_READY };
-    status = rt_ipc_send(client_id, &ready_msg, sizeof(ready_msg));
+    status = rt_ipc_cast(client_id, &ready_msg, sizeof(ready_msg));
     if (RT_FAILED(status)) {
         printf("Server: Failed to send ready message: %s\n",
                status.msg ? status.msg : "unknown error");
@@ -190,7 +190,7 @@ static void client_actor(void *arg) {
 
     // Notify server that client is done via IPC
     coord_msg done_msg = { .type = MSG_CLIENT_DONE };
-    status = rt_ipc_send(server_id, &done_msg, sizeof(done_msg));
+    status = rt_ipc_cast(server_id, &done_msg, sizeof(done_msg));
     if (RT_FAILED(status)) {
         printf("Client: Failed to send done message: %s\n",
                status.msg ? status.msg : "unknown error");

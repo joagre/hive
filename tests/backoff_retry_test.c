@@ -90,7 +90,7 @@ void receiver_actor(void *arg) {
 }
 
 // Internal send with custom tag
-extern rt_status rt_ipc_send_ex(actor_id to, actor_id sender, rt_msg_class class,
+extern rt_status rt_ipc_cast_ex(actor_id to, actor_id sender, rt_msg_class class,
                                  uint32_t tag, const void *data, size_t len);
 
 void sender_actor(void *arg) {
@@ -110,7 +110,7 @@ void sender_actor(void *arg) {
 
     for (int i = 0; i < MESSAGES_TO_FILL_POOL; i++) {
         data++;
-        rt_status status = rt_ipc_send_ex(receiver, self, RT_MSG_CAST, TAG_DATA, &data, sizeof(data));
+        rt_status status = rt_ipc_cast_ex(receiver, self, RT_MSG_CAST, TAG_DATA, &data, sizeof(data));
         if (RT_FAILED(status)) {
             if (status.code == RT_ERR_NOMEM) {
                 printf("Sender: Pool exhausted after %d messages\n", sent_count);
@@ -129,7 +129,7 @@ void sender_actor(void *arg) {
     int failed_count = 0;
     for (int i = 0; i < 50; i++) {
         data++;
-        rt_status status = rt_ipc_send_ex(receiver, self, RT_MSG_CAST, TAG_DATA, &data, sizeof(data));
+        rt_status status = rt_ipc_cast_ex(receiver, self, RT_MSG_CAST, TAG_DATA, &data, sizeof(data));
         if (status.code == RT_ERR_NOMEM) {
             failed_count++;
         } else if (!RT_FAILED(status)) {
@@ -146,7 +146,7 @@ void sender_actor(void *arg) {
     // Send START signal
     printf("\nSender: Sending START signal (tag=%d)...\n", TAG_START);
     fflush(stdout);
-    rt_status status = rt_ipc_send_ex(receiver, self, RT_MSG_CAST, TAG_START, NULL, 0);
+    rt_status status = rt_ipc_cast_ex(receiver, self, RT_MSG_CAST, TAG_START, NULL, 0);
     if (RT_FAILED(status)) {
         printf("Sender: Failed to send START: %s\n", status.msg ? status.msg : "unknown");
     } else {
@@ -169,7 +169,7 @@ void sender_actor(void *arg) {
         rt_yield();
 
         data++;
-        status = rt_ipc_send_ex(receiver, self, RT_MSG_CAST, TAG_DATA, &data, sizeof(data));
+        status = rt_ipc_cast_ex(receiver, self, RT_MSG_CAST, TAG_DATA, &data, sizeof(data));
 
         if (!RT_FAILED(status)) {
             printf("Sender: ✓ Send succeeded on attempt %d!\n", attempt + 1);
@@ -192,7 +192,7 @@ void sender_actor(void *arg) {
 
     // Send DONE signal
     printf("\nSender: Sending DONE signal...\n");
-    rt_ipc_send_ex(receiver, self, RT_MSG_CAST, TAG_DONE, NULL, 0);
+    rt_ipc_cast_ex(receiver, self, RT_MSG_CAST, TAG_DONE, NULL, 0);
 
     if (send_succeeded) {
         printf("\nSender: ✓ Backoff-retry SUCCESS!\n");

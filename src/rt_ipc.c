@@ -238,7 +238,7 @@ rt_status rt_mailbox_handle_timeout(actor *current, timer_id timeout_timer, cons
 // -----------------------------------------------------------------------------
 
 // Internal send with explicit class and tag (used by timer, link, etc.)
-rt_status rt_ipc_send_ex(actor_id to, actor_id sender, rt_msg_class class,
+rt_status rt_ipc_cast_ex(actor_id to, actor_id sender, rt_msg_class class,
                          uint32_t tag, const void *data, size_t len) {
     actor *receiver = rt_actor_get(to);
     if (!receiver) {
@@ -284,7 +284,7 @@ rt_status rt_ipc_send_ex(actor_id to, actor_id sender, rt_msg_class class,
     return RT_SUCCESS;
 }
 
-rt_status rt_ipc_send(actor_id to, const void *data, size_t len) {
+rt_status rt_ipc_cast(actor_id to, const void *data, size_t len) {
     RT_REQUIRE_ACTOR_CONTEXT();
     actor *sender = rt_actor_current();
 
@@ -293,7 +293,7 @@ rt_status rt_ipc_send(actor_id to, const void *data, size_t len) {
         return RT_ERROR(RT_ERR_INVALID, "NULL data with non-zero length");
     }
 
-    return rt_ipc_send_ex(to, sender->id, RT_MSG_CAST, RT_TAG_NONE, data, len);
+    return rt_ipc_cast_ex(to, sender->id, RT_MSG_CAST, RT_TAG_NONE, data, len);
 }
 
 rt_status rt_ipc_recv(rt_message *msg, int32_t timeout_ms) {
@@ -401,7 +401,7 @@ rt_status rt_ipc_call(actor_id to, const void *request, size_t req_len,
     uint32_t call_tag = generate_tag();
 
     // Send RT_MSG_CALL with generated tag
-    rt_status status = rt_ipc_send_ex(to, sender->id, RT_MSG_CALL, call_tag, request, req_len);
+    rt_status status = rt_ipc_cast_ex(to, sender->id, RT_MSG_CALL, call_tag, request, req_len);
     if (RT_FAILED(status)) {
         return status;
     }
@@ -436,7 +436,7 @@ rt_status rt_ipc_reply(const rt_message *request, const void *data, size_t len) 
     }
 
     // Send RT_MSG_REPLY with same tag back to caller
-    return rt_ipc_send_ex(request->sender, current->id, RT_MSG_REPLY, req_tag, data, len);
+    return rt_ipc_cast_ex(request->sender, current->id, RT_MSG_REPLY, req_tag, data, len);
 }
 
 // -----------------------------------------------------------------------------
