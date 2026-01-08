@@ -462,6 +462,42 @@ Setpoint Actor ──► Setpoint Bus ──► Altitude Actor
 
 ---
 
+## Memory Requirements
+
+### Code Size (Flash/ROM)
+
+| Component | Text (code) |
+|-----------|-------------|
+| Pilot application | ~4 KB |
+| Hive runtime | ~27 KB |
+| **Total** | **~31 KB** |
+
+Note: STM32 builds will differ slightly. Webots platform layer adds ~1.5 KB.
+
+### RAM (Static Memory)
+
+With default `hive_static_config.h`, the runtime uses ~1.2 MB RAM (mostly the 1 MB stack arena). This example needs far less.
+
+**Minimal configuration for hover example:**
+
+| Resource | Used | Default | Minimal |
+|----------|------|---------|---------|
+| Actors | 4 | 64 | 4 |
+| Buses | 3 | 32 | 4 |
+| Stack per actor | 1 KB | 64 KB | 1 KB |
+| Stack arena | 4 KB | 1 MB | 4 KB |
+| Mailbox entries | ~4 | 256 | 8 |
+| Message data | ~4 | 256 | 8 |
+| Timer entries | 0 | 64 | 4 |
+| Link entries | 0 | 128 | 4 |
+| Monitor entries | 0 | 128 | 4 |
+
+**Result: ~8 KB RAM** vs default ~1.2 MB
+
+This fits comfortably on small STM32 chips (e.g., STM32F103 with 20 KB RAM).
+
+---
+
 ## Future Extensions
 
 1. **Position hold** - Add XY GPS feedback, position PID
