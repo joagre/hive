@@ -244,6 +244,11 @@ actor *rt_actor_alloc(actor_fn fn, void *arg, const actor_config *cfg) {
     a->stack_size = stack_size;
     a->stack_is_malloced = is_malloced;  // Track allocation method
 
+    // Initialize receive filters to wildcards (accept any message)
+    a->recv_filter_from = RT_SENDER_ANY;
+    a->recv_filter_class = RT_MSG_ANY;
+    a->recv_filter_tag = RT_TAG_ANY;
+
     // Initialize context with usable stack area (excluding guards)
     void *usable_stack = (uint8_t *)stack + STACK_GUARD_SIZE;
     size_t usable_size = stack_size - (2 * STACK_GUARD_SIZE);
