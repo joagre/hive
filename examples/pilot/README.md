@@ -1,13 +1,18 @@
 # Pilot Example
 
-Minimal quadcopter example using hive actor runtime with Webots simulator.
+Quadcopter hover example using hive actor runtime with Webots simulator.
 
 ## What it does
 
-1. Main loop reads IMU sensors from Webots
+Demonstrates altitude-hold hover control with a Crazyflie quadcopter:
+
+1. Main loop reads IMU and GPS sensors from Webots
 2. Publishes sensor data to a bus
-3. Calls `hive_step()` to run actors
-4. Sensor actor reads from bus and prints roll/pitch/yaw every second
+3. Calls `hive_step()` to run the attitude actor
+4. Attitude actor runs PID controllers for roll, pitch, yaw, and altitude
+5. Motor commands are applied to Webots motors
+
+The drone rises to 1.0m altitude and holds position.
 
 ## Prerequisites
 
@@ -22,13 +27,69 @@ make
 make install
 ```
 
-Then open `worlds/hover_test.wbt` in Webots.
+Then open `worlds/hover_test.wbt` in Webots and start the simulation.
 
 ## Files
 
-- `pilot.c` - Main loop and sensor actor (~90 lines)
+- `pilot.c` - Complete hover controller (~260 lines)
 - `Makefile` - Build configuration
 - `worlds/hover_test.wbt` - Webots world with Crazyflie
+
+## Architecture
+
+The code is organized for portability to real hardware:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    PORTABLE CONTROL CODE                     │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐  │
+│  │ PID Control │  │    Mixer    │  │   Attitude Actor    │  │
+│  │  (generic)  │  │ (Crazyflie) │  │ (roll/pitch/yaw/alt)│  │
+│  └─────────────┘  └─────────────┘  └─────────────────────┘  │
+└─────────────────────────────────────────────────────────────┘
+                            │
+                    Platform abstraction
+                            │
+┌─────────────────────────────────────────────────────────────┐
+│                   WEBOTS PLATFORM LAYER                      │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐  │
+│  │ platform_   │  │ platform_   │  │  platform_write_    │  │
+│  │ init()      │  │ read_imu()  │  │  motors()           │  │
+│  └─────────────┘  └─────────────┘  └─────────────────────┘  │
+└─────────────────────────────────────────────────────────────┘
+```
+
+To port to real hardware, replace the platform layer functions.
+
+## Control System
+
+### PID Controllers
+
+| Controller | Kp   | Ki   | Kd    | Purpose |
+|------------|------|------|-------|---------|
+| Roll rate  | 0.02 | 0    | 0.001 | Stabilize roll |
+| Pitch rate | 0.02 | 0    | 0.001 | Stabilize pitch |
+| Yaw rate   | 0.02 | 0    | 0.001 | Stabilize yaw |
+| Altitude   | 0.3  | 0.05 | 0.15  | Hold 1.0m height |
+
+### Motor Mixer (+ Configuration)
+
+```
+        Front
+          M1
+           │
+    M4 ────┼──── M2
+           │
+          M3
+         Rear
+
+M1 = thrust - pitch - yaw
+M2 = thrust - roll  + yaw
+M3 = thrust + pitch - yaw
+M4 = thrust + roll  + yaw
+```
+
+Motor velocity signs: M1,M3 negative; M2,M4 positive (for torque cancellation).
 
 ## How Webots Controllers Work
 
@@ -90,20 +151,19 @@ With `TIME_STEP=4`:
 
 ### Integration with Hive Runtime
 
-In this example, we use `hive_step()` instead of `hive_run()`:
+We use `hive_step()` instead of `hive_run()`:
 
 ```c
 while (wb_robot_step(TIME_STEP) != -1) {
-    // Called every 4ms of simulation time
-
     // 1. Read sensors from Webots, publish to bus
-    const double *rpy = wb_inertial_unit_get_roll_pitch_yaw(imu);
-    hive_bus_publish(imu_bus, &data, sizeof(data));
+    platform_read_imu(&imu);
+    hive_bus_publish(g_imu_bus, &imu, sizeof(imu));
 
     // 2. Run each ready actor exactly once
     hive_step();
 
-    // 3. (Future: read motor commands from bus, write to Webots)
+    // 3. Apply motor commands to Webots
+    platform_write_motors();
 }
 ```
 
