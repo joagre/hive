@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is an actor-based runtime for embedded systems, targeting STM32 (ARM Cortex-M) autopilot applications. The runtime implements cooperative multitasking with message passing, inspired by Erlang's actor model.
+This is an actor-based runtime for embedded systems, targeting STM32 (ARM Cortex-M) autopilot applications. The runtime implements cooperative multitasking with message passing using the actor model.
 
 **Language:** Modern C (C11 or later)
 
@@ -39,7 +39,7 @@ The runtime consists of:
 
 1. **Actors**: Cooperative tasks with individual stacks and mailboxes
 2. **Scheduler**: Priority-based round-robin scheduler with 4 priority levels (0=CRITICAL to 3=LOW), integrated event loop (epoll on Linux, WFI on STM32)
-3. **IPC**: Inter-process communication via mailboxes with selective receive and request/reply support (Erlang-style)
+3. **IPC**: Inter-process communication via mailboxes with selective receive and request/reply support
 4. **Bus**: Publish-subscribe system with configurable retention policies (max_readers, max_age_ms)
 5. **Timers**: timerfd registered in epoll (Linux), hardware timers on STM32 (SysTick/TIM)
 6. **Network**: Non-blocking sockets registered in epoll (Linux), lwIP NO_SYS mode on STM32
@@ -97,12 +97,12 @@ All messages have a 4-byte header prepended to payload:
 ### IPC API
 - **`rt_ipc_notify(to, data, len)`**: Fire-and-forget notification (class=NOTIFY)
 - **`rt_ipc_recv(msg, timeout)`**: Receive any message
-- **`rt_ipc_recv_match(from, class, tag, msg, timeout)`**: Selective receive with filtering (Erlang-style)
+- **`rt_ipc_recv_match(from, class, tag, msg, timeout)`**: Selective receive with filtering
 - **`rt_ipc_request(to, req, len, reply, timeout)`**: Blocking request/reply (send REQUEST, wait for REPLY)
 - **`rt_ipc_reply(request, data, len)`**: Reply to a REQUEST message
 - **`rt_msg_decode(msg, class, tag, payload, len)`**: Decode message header
 
-### Selective Receive (Erlang-style)
+### Selective Receive
 - `rt_ipc_recv_match()` scans mailbox for messages matching filter criteria
 - Non-matching messages are **skipped but not dropped** - they remain in mailbox
 - Filter on sender (`RT_SENDER_ANY` = wildcard), class (`RT_MSG_ANY`), tag (`RT_TAG_ANY`)

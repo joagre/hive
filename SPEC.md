@@ -2,7 +2,7 @@
 
 ## Overview
 
-A minimalistic actor-based runtime designed for **embedded and safety-critical systems**. The runtime implements cooperative multitasking with priority-based scheduling and message passing, inspired by Erlang's actor model.
+A minimalistic actor-based runtime designed for **embedded and safety-critical systems**. The runtime implements cooperative multitasking with priority-based scheduling and message passing using the actor model.
 
 **Target use cases:** Drone autopilots, industrial sensor networks, robotics control systems, and other resource-constrained embedded applications requiring structured concurrency.
 
@@ -547,7 +547,7 @@ This runtime makes deliberate design choices that favor **determinism, performan
 **Trade-off:** Selective receive scans mailbox linearly, which is O(n) where n = mailbox depth.
 
 **Why this design:**
-- Erlang-proven: Battle-tested pattern for building complex protocols
+- Battle-tested: Proven pattern for building complex protocols
 - Simplicity: No index structures, no additional memory overhead
 - Flexibility: Any filter criteria supported without pre-registration
 
@@ -589,7 +589,7 @@ These design choices make the runtime:
 
 **This is intentional.** The runtime provides primitives for building robust systems, not a complete safe environment.
 
-If you want automatic safety, use Erlang. If you want deterministic embedded performance with full control, use this.
+This runtime provides primitives for deterministic embedded performance with full control.
 
 ## Core Types
 
@@ -769,7 +769,7 @@ rt_status rt_ipc_notify(actor_id to, const void *data, size_t len);
 rt_status rt_ipc_recv(rt_message *msg, int32_t timeout_ms);
 ```
 
-#### Selective Receive (Erlang-style)
+#### Selective Receive
 
 ```c
 // Receive with filtering on sender, class, and/or tag
@@ -908,9 +908,9 @@ Global pool limits: **Yes** - all actors share:
 
 **Fairness guarantees:** The runtime does not provide per-actor fairness guarantees; resource exhaustion caused by a misbehaving actor is considered an application-level fault. Applications requiring protection against resource starvation should implement supervisor actors or application-level quotas.
 
-### Selective Receive Semantics (Erlang-style)
+### Selective Receive Semantics
 
-`rt_ipc_recv_match()` implements Erlang-style selective receive. This is the key mechanism for building complex protocols like request/reply.
+`rt_ipc_recv_match()` implements selective receive. This is the key mechanism for building complex protocols like request/reply.
 
 **Blocking behavior:**
 
@@ -1802,9 +1802,7 @@ void actor_A(void *arg) {
 - Mailbox clearing = simple cleanup, no orphaned messages
 - No sender notification = simpler implementation, sender must handle recipient death via links/monitors
 
-**Comparison to Erlang:**
-
-Erlang provides stronger guarantees (signals are ordered with messages). This runtime provides simpler semantics: exit notifications follow standard FIFO mailbox ordering, enqueued at tail when death is processed.
+**Design choice:** Exit notifications follow standard FIFO mailbox ordering, enqueued at tail when death is processed. This provides simpler, more predictable semantics.
 
 ## Scheduler Main Loop
 

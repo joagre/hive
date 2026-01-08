@@ -1,15 +1,15 @@
 # Actor Runtime for Embedded Systems
 
-> **Erlang's actor model for embedded systems, with deterministic memory and no GC.**
+> **Lightweight actors for embedded systems. Deterministic memory, no GC.**
 
-A complete actor-based runtime designed for **embedded and safety-critical systems**. Features cooperative multitasking with priority-based scheduling and message passing inspired by Erlang's actor model.
+A complete actor-based runtime designed for **embedded and safety-critical systems**. Features cooperative multitasking with priority-based scheduling and message passing using the actor model.
 
 **Current platform:** x86-64 Linux (fully implemented)
 **Future platform:** STM32/ARM Cortex-M bare metal (see `SPEC.md`)
 
 **Safety-critical caveat:** File I/O stalls the entire scheduler. Restrict file I/O to initialization, shutdown, or non–time-critical phases.
 
-The runtime uses **statically bounded memory** for deterministic behavior with zero heap fragmentation (heap allocation optional only for actor stacks). It features **priority-based scheduling** (4 levels: CRITICAL, HIGH, NORMAL, LOW) with fast context switching. Provides Erlang-style message passing (IPC with selective receive and request/reply), linking, monitoring, timers, pub-sub messaging (bus), network I/O, and file I/O.
+The runtime uses **statically bounded memory** for deterministic behavior with zero heap fragmentation (heap allocation optional only for actor stacks). It features **priority-based scheduling** (4 levels: CRITICAL, HIGH, NORMAL, LOW) with fast context switching. Provides message passing (IPC with selective receive and request/reply), linking, monitoring, timers, pub-sub messaging (bus), network I/O, and file I/O.
 
 ## Quick Links
 
@@ -24,7 +24,7 @@ The runtime uses **statically bounded memory** for deterministic behavior with z
 - Priority-based round-robin scheduler (4 priority levels)
 - Stack overflow detection with guard patterns (16-byte overhead per actor)
 - Actor lifecycle management (spawn, exit)
-- Erlang-style IPC with selective receive and request/reply
+- IPC with selective receive and request/reply
 - Message classes: NOTIFY (fire-and-forget), REQUEST/REPLY, TIMER, SYSTEM
 - Actor linking and monitoring (bidirectional links, unidirectional monitors)
 - Exit notifications with exit reasons (normal, crash, stack overflow, killed)
