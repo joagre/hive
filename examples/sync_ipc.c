@@ -165,7 +165,7 @@ int main(void) {
 
     acrt_status status = acrt_init();
     if (ACRT_FAILED(status)) {
-        fprintf(stderr, "Failed to initialize runtime: %s\n", status.msg);
+        fprintf(stderr, "Failed to initialize runtime: %s\n", ACRT_ERR_STR(status));
         return 1;
     }
 

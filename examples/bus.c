@@ -25,8 +25,7 @@ static void publisher_actor(void *arg) {
     timer_id timer;
     acrt_status status = acrt_timer_every(200000, &timer);
     if (ACRT_FAILED(status)) {
-        printf("Publisher: Failed to create timer: %s\n",
-               status.msg ? status.msg : "unknown error");
+        printf("Publisher: Failed to create timer: %s\n", ACRT_ERR_STR(status));
         acrt_exit();
     }
 
@@ -38,8 +37,7 @@ static void publisher_actor(void *arg) {
         acrt_message msg;
         status = acrt_ipc_recv(&msg, -1);
         if (ACRT_FAILED(status)) {
-            printf("Publisher: Failed to receive: %s\n",
-                   status.msg ? status.msg : "unknown error");
+            printf("Publisher: Failed to receive: %s\n", ACRT_ERR_STR(status));
             break;
         }
 
@@ -57,8 +55,7 @@ static void publisher_actor(void *arg) {
         // Publish to bus
         status = acrt_bus_publish(g_sensor_bus, &data, sizeof(data));
         if (ACRT_FAILED(status)) {
-            printf("Publisher: Failed to publish: %s\n",
-                   status.msg ? status.msg : "unknown error");
+            printf("Publisher: Failed to publish: %s\n", ACRT_ERR_STR(status));
             break;
         }
 
@@ -81,8 +78,7 @@ static void subscriber_actor(void *arg) {
     // Subscribe to bus
     acrt_status status = acrt_bus_subscribe(g_sensor_bus);
     if (ACRT_FAILED(status)) {
-        printf("%s: Failed to subscribe: %s\n", name,
-               status.msg ? status.msg : "unknown error");
+        printf("%s: Failed to subscribe: %s\n", name, ACRT_ERR_STR(status));
         acrt_exit();
     }
 
@@ -99,8 +95,7 @@ static void subscriber_actor(void *arg) {
         status = acrt_bus_read_wait(g_sensor_bus, &data, sizeof(data),
                                   &actual_len, -1);
         if (ACRT_FAILED(status)) {
-            printf("%s: Failed to read: %s\n", name,
-                   status.msg ? status.msg : "unknown error");
+            printf("%s: Failed to read: %s\n", name, ACRT_ERR_STR(status));
             break;
         }
 
@@ -125,8 +120,7 @@ int main(void) {
     // Initialize runtime
     acrt_status status = acrt_init();
     if (ACRT_FAILED(status)) {
-        fprintf(stderr, "Failed to initialize runtime: %s\n",
-                status.msg ? status.msg : "unknown error");
+        fprintf(stderr, "Failed to initialize runtime: %s\n", ACRT_ERR_STR(status));
         return 1;
     }
 
@@ -140,8 +134,7 @@ int main(void) {
 
     status = acrt_bus_create(&bus_cfg, &g_sensor_bus);
     if (ACRT_FAILED(status)) {
-        fprintf(stderr, "Failed to create bus: %s\n",
-                status.msg ? status.msg : "unknown error");
+        fprintf(stderr, "Failed to create bus: %s\n", ACRT_ERR_STR(status));
         acrt_cleanup();
         return 1;
     }
@@ -188,8 +181,7 @@ int main(void) {
     // Destroy bus
     status = acrt_bus_destroy(g_sensor_bus);
     if (ACRT_FAILED(status)) {
-        printf("Warning: Failed to destroy bus: %s\n",
-               status.msg ? status.msg : "unknown error");
+        printf("Warning: Failed to destroy bus: %s\n", ACRT_ERR_STR(status));
     }
 
     // Cleanup

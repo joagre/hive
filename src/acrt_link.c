@@ -257,6 +257,17 @@ acrt_status acrt_decode_exit(const acrt_message *msg, acrt_exit_msg *out) {
     return ACRT_SUCCESS;
 }
 
+// Convert exit reason to string
+const char *acrt_exit_reason_str(acrt_exit_reason reason) {
+    switch (reason) {
+        case ACRT_EXIT_NORMAL:      return "NORMAL";
+        case ACRT_EXIT_CRASH:       return "CRASH";
+        case ACRT_EXIT_CRASH_STACK: return "STACK_OVERFLOW";
+        case ACRT_EXIT_KILLED:      return "KILLED";
+        default:                    return "UNKNOWN";
+    }
+}
+
 // Helper: Send exit notification to an actor
 static bool send_exit_notification(actor *recipient, actor_id dying_id, acrt_exit_reason reason) {
     // Build exit message payload

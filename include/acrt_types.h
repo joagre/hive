@@ -64,6 +64,7 @@ typedef struct {
 #define ACRT_SUCCESS ((acrt_status){ACRT_OK, NULL})
 #define ACRT_FAILED(s) ((s).code != ACRT_OK)
 #define ACRT_ERROR(c, m) ((acrt_status){(c), (m)})
+#define ACRT_ERR_STR(s) ((s).msg ? (s).msg : "unknown error")
 
 // Actor entry point
 typedef void (*actor_fn)(void *arg);

@@ -16,8 +16,7 @@ static void writer_actor(void *arg) {
     int fd;
     acrt_status status = acrt_file_open(filename, O_WRONLY | O_CREAT | O_TRUNC, 0644, &fd);
     if (ACRT_FAILED(status)) {
-        printf("Writer: Failed to open file: %s\n",
-               status.msg ? status.msg : "unknown error");
+        printf("Writer: Failed to open file: %s\n", ACRT_ERR_STR(status));
         acrt_exit();
     }
 
@@ -27,8 +26,7 @@ static void writer_actor(void *arg) {
     size_t written;
     status = acrt_file_write(fd, message, strlen(message), &written);
     if (ACRT_FAILED(status)) {
-        printf("Writer: Failed to write: %s\n",
-               status.msg ? status.msg : "unknown error");
+        printf("Writer: Failed to write: %s\n", ACRT_ERR_STR(status));
         acrt_file_close(fd);
         acrt_exit();
     }
@@ -38,15 +36,13 @@ static void writer_actor(void *arg) {
     // Sync to disk
     status = acrt_file_sync(fd);
     if (ACRT_FAILED(status)) {
-        printf("Writer: Failed to sync: %s\n",
-               status.msg ? status.msg : "unknown error");
+        printf("Writer: Failed to sync: %s\n", ACRT_ERR_STR(status));
     }
 
     // Close file
     status = acrt_file_close(fd);
     if (ACRT_FAILED(status)) {
-        printf("Writer: Failed to close: %s\n",
-               status.msg ? status.msg : "unknown error");
+        printf("Writer: Failed to close: %s\n", ACRT_ERR_STR(status));
     }
 
     printf("Writer: Done!\n");
@@ -70,8 +66,7 @@ static void reader_actor(void *arg) {
     int fd;
     acrt_status status = acrt_file_open(filename, O_RDONLY, 0, &fd);
     if (ACRT_FAILED(status)) {
-        printf("Reader: Failed to open file: %s\n",
-               status.msg ? status.msg : "unknown error");
+        printf("Reader: Failed to open file: %s\n", ACRT_ERR_STR(status));
         acrt_exit();
     }
 
@@ -82,8 +77,7 @@ static void reader_actor(void *arg) {
     size_t nread;
     status = acrt_file_read(fd, buffer, sizeof(buffer) - 1, &nread);
     if (ACRT_FAILED(status)) {
-        printf("Reader: Failed to read: %s\n",
-               status.msg ? status.msg : "unknown error");
+        printf("Reader: Failed to read: %s\n", ACRT_ERR_STR(status));
         acrt_file_close(fd);
         acrt_exit();
     }
@@ -93,8 +87,7 @@ static void reader_actor(void *arg) {
     // Close file
     status = acrt_file_close(fd);
     if (ACRT_FAILED(status)) {
-        printf("Reader: Failed to close: %s\n",
-               status.msg ? status.msg : "unknown error");
+        printf("Reader: Failed to close: %s\n", ACRT_ERR_STR(status));
     }
 
     printf("Reader: Done!\n");
@@ -107,8 +100,7 @@ int main(void) {
     // Initialize runtime
     acrt_status status = acrt_init();
     if (ACRT_FAILED(status)) {
-        fprintf(stderr, "Failed to initialize runtime: %s\n",
-                status.msg ? status.msg : "unknown error");
+        fprintf(stderr, "Failed to initialize runtime: %s\n", ACRT_ERR_STR(status));
         return 1;
     }
 

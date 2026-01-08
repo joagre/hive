@@ -52,8 +52,7 @@ static void supervisor_actor(void *arg) {
         // Monitor the worker
         acrt_status status = acrt_monitor(worker, &monitor_refs[i]);
         if (ACRT_FAILED(status)) {
-            printf("Supervisor: Failed to monitor worker %d: %s\n", i + 1,
-                   status.msg ? status.msg : "unknown error");
+            printf("Supervisor: Failed to monitor worker %d: %s\n", i + 1, ACRT_ERR_STR(status));
         } else {
             printf("Supervisor: Monitoring worker %d (Actor ID: %u, ref: %u)\n",
                    i + 1, worker, monitor_refs[i]);
@@ -73,14 +72,12 @@ static void supervisor_actor(void *arg) {
             break;
         }
 
-        if (acrt_is_exit_msg(&msg)) {
-            acrt_exit_msg exit_info;
-            acrt_decode_exit(&msg, &exit_info);
+        if (msg.class == ACRT_MSG_EXIT) {
+            // Direct cast - no acrt_decode_exit() needed
+            acrt_exit_msg *exit_info = (acrt_exit_msg *)msg.data;
 
             printf("Supervisor: Worker died (Actor ID: %u, reason: %s)\n",
-                   exit_info.actor,
-                   exit_info.reason == ACRT_EXIT_NORMAL ? "NORMAL" :
-                   exit_info.reason == ACRT_EXIT_CRASH ? "CRASH" : "KILLED");
+                   exit_info->actor, acrt_exit_reason_str(exit_info->reason));
 
             workers_completed++;
         } else {
@@ -98,8 +95,7 @@ int main(void) {
     // Initialize runtime
     acrt_status status = acrt_init();
     if (ACRT_FAILED(status)) {
-        fprintf(stderr, "Failed to initialize runtime: %s\n",
-                status.msg ? status.msg : "unknown error");
+        fprintf(stderr, "Failed to initialize runtime: %s\n", ACRT_ERR_STR(status));
         return 1;
     }
 

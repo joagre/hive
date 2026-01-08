@@ -489,6 +489,7 @@ Convenience macros:
 #define ACRT_SUCCESS ((acrt_status){ACRT_OK, NULL})
 #define ACRT_FAILED(s) ((s).code != ACRT_OK)
 #define ACRT_ERROR(code, msg) ((acrt_status){(code), (msg)})
+#define ACRT_ERR_STR(s) ((s).msg ? (s).msg : "unknown error")
 ```
 
 Usage example:
@@ -686,7 +687,24 @@ typedef struct {
 
 // Check if message is exit notification
 bool acrt_is_exit_msg(const acrt_message *msg);
-acrt_status acrt_decode_exit(const acrt_message *msg, acrt_exit_msg *out);
+
+// Convert exit reason to string (for logging/debugging)
+const char *acrt_exit_reason_str(acrt_exit_reason reason);
+```
+
+**Handling exit messages:**
+
+Exit messages can be accessed directly via cast (preferred) or decoded:
+
+```c
+acrt_message msg;
+acrt_ipc_recv(&msg, -1);
+
+if (msg.class == ACRT_MSG_EXIT) {
+    // Direct cast - preferred approach
+    acrt_exit_msg *exit_info = (acrt_exit_msg *)msg.data;
+    printf("Actor %u died: %s\n", exit_info->actor, acrt_exit_reason_str(exit_info->reason));
+}
 ```
 
 ## IPC API

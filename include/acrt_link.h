@@ -21,4 +21,7 @@ acrt_status acrt_monitor_cancel(uint32_t id);
 bool acrt_is_exit_msg(const acrt_message *msg);
 acrt_status acrt_decode_exit(const acrt_message *msg, acrt_exit_msg *out);
 
+// Convert exit reason to string (for logging/debugging)
+const char *acrt_exit_reason_str(acrt_exit_reason reason);
+
 #endif // ACRT_LINK_H

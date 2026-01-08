@@ -14,8 +14,7 @@ static void timer_actor(void *arg) {
     timer_id oneshot;
     acrt_status status = acrt_timer_after(500000, &oneshot);
     if (ACRT_FAILED(status)) {
-        printf("Failed to create one-shot timer: %s\n",
-               status.msg ? status.msg : "unknown error");
+        printf("Failed to create one-shot timer: %s\n", ACRT_ERR_STR(status));
         acrt_exit();
     }
     printf("One-shot timer created (ID: %u)\n", oneshot);
@@ -25,8 +24,7 @@ static void timer_actor(void *arg) {
     timer_id periodic;
     status = acrt_timer_every(200000, &periodic);
     if (ACRT_FAILED(status)) {
-        printf("Failed to create periodic timer: %s\n",
-               status.msg ? status.msg : "unknown error");
+        printf("Failed to create periodic timer: %s\n", ACRT_ERR_STR(status));
         acrt_exit();
     }
     printf("Periodic timer created (ID: %u)\n", periodic);
@@ -40,8 +38,7 @@ static void timer_actor(void *arg) {
         acrt_message msg;
         status = acrt_ipc_recv(&msg, -1);  // Block until message
         if (ACRT_FAILED(status)) {
-            printf("Failed to receive message: %s\n",
-                   status.msg ? status.msg : "unknown error");
+            printf("Failed to receive message: %s\n", ACRT_ERR_STR(status));
             break;
         }
 
@@ -60,8 +57,7 @@ static void timer_actor(void *arg) {
                     printf("Cancelling periodic timer...\n");
                     status = acrt_timer_cancel(periodic);
                     if (ACRT_FAILED(status)) {
-                        printf("Failed to cancel timer: %s\n",
-                               status.msg ? status.msg : "unknown error");
+                        printf("Failed to cancel timer: %s\n", ACRT_ERR_STR(status));
                     } else {
                         printf("Periodic timer cancelled\n");
                     }
@@ -84,8 +80,7 @@ int main(void) {
     // Initialize runtime
     acrt_status status = acrt_init();
     if (ACRT_FAILED(status)) {
-        fprintf(stderr, "Failed to initialize runtime: %s\n",
-                status.msg ? status.msg : "unknown error");
+        fprintf(stderr, "Failed to initialize runtime: %s\n", ACRT_ERR_STR(status));
         return 1;
     }
 

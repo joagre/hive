@@ -29,8 +29,7 @@ static void server_actor(void *arg) {
     acrt_status status = acrt_net_listen(ECHO_PORT, &listen_fd);
     ACRT_LOG_DEBUG("Server: acrt_net_listen returned, status=%d", status.code);
     if (ACRT_FAILED(status)) {
-        printf("Server: Failed to listen: %s\n",
-               status.msg ? status.msg : "unknown error");
+        printf("Server: Failed to listen: %s\n", ACRT_ERR_STR(status));
         acrt_exit();
     }
 
@@ -40,8 +39,7 @@ static void server_actor(void *arg) {
     coord_msg ready_msg = { .type = MSG_SERVER_READY };
     status = acrt_ipc_notify(client_id, &ready_msg, sizeof(ready_msg));
     if (ACRT_FAILED(status)) {
-        printf("Server: Failed to send ready message: %s\n",
-               status.msg ? status.msg : "unknown error");
+        printf("Server: Failed to send ready message: %s\n", ACRT_ERR_STR(status));
         acrt_net_close(listen_fd);
         acrt_exit();
     }
@@ -51,8 +49,7 @@ static void server_actor(void *arg) {
     int conn_fd;
     status = acrt_net_accept(listen_fd, &conn_fd, -1);
     if (ACRT_FAILED(status)) {
-        printf("Server: Failed to accept: %s\n",
-               status.msg ? status.msg : "unknown error");
+        printf("Server: Failed to accept: %s\n", ACRT_ERR_STR(status));
         acrt_net_close(listen_fd);
         acrt_exit();
     }
@@ -65,8 +62,7 @@ static void server_actor(void *arg) {
         size_t received;
         status = acrt_net_recv(conn_fd, buffer, sizeof(buffer) - 1, &received, -1);
         if (ACRT_FAILED(status)) {
-            printf("Server: Failed to receive: %s\n",
-                   status.msg ? status.msg : "unknown error");
+            printf("Server: Failed to receive: %s\n", ACRT_ERR_STR(status));
             break;
         }
 
@@ -82,8 +78,7 @@ static void server_actor(void *arg) {
         size_t sent;
         status = acrt_net_send(conn_fd, buffer, received, &sent, -1);
         if (ACRT_FAILED(status)) {
-            printf("Server: Failed to send: %s\n",
-                   status.msg ? status.msg : "unknown error");
+            printf("Server: Failed to send: %s\n", ACRT_ERR_STR(status));
             break;
         }
 
@@ -131,8 +126,7 @@ static void client_actor(void *arg) {
     acrt_message msg;
     acrt_status status = acrt_ipc_recv(&msg, -1);  // Block until message received
     if (ACRT_FAILED(status)) {
-        printf("Client: Failed to receive ready message: %s\n",
-               status.msg ? status.msg : "unknown error");
+        printf("Client: Failed to receive ready message: %s\n", ACRT_ERR_STR(status));
         acrt_exit();
     }
 
@@ -149,8 +143,7 @@ static void client_actor(void *arg) {
     int conn_fd;
     status = acrt_net_connect("127.0.0.1", ECHO_PORT, &conn_fd, 5000); // 5 second timeout
     if (ACRT_FAILED(status)) {
-        printf("Client: Failed to connect: %s\n",
-               status.msg ? status.msg : "unknown error");
+        printf("Client: Failed to connect: %s\n", ACRT_ERR_STR(status));
         acrt_exit();
     }
 
@@ -161,8 +154,7 @@ static void client_actor(void *arg) {
         size_t sent;
         status = acrt_net_send(conn_fd, messages[i], strlen(messages[i]), &sent, -1);
         if (ACRT_FAILED(status)) {
-            printf("Client: Failed to send: %s\n",
-                   status.msg ? status.msg : "unknown error");
+            printf("Client: Failed to send: %s\n", ACRT_ERR_STR(status));
             break;
         }
 
@@ -173,8 +165,7 @@ static void client_actor(void *arg) {
         size_t received;
         status = acrt_net_recv(conn_fd, buffer, sizeof(buffer) - 1, &received, -1);
         if (ACRT_FAILED(status)) {
-            printf("Client: Failed to receive: %s\n",
-                   status.msg ? status.msg : "unknown error");
+            printf("Client: Failed to receive: %s\n", ACRT_ERR_STR(status));
             break;
         }
 
@@ -189,8 +180,7 @@ static void client_actor(void *arg) {
     coord_msg done_msg = { .type = MSG_CLIENT_DONE };
     status = acrt_ipc_notify(server_id, &done_msg, sizeof(done_msg));
     if (ACRT_FAILED(status)) {
-        printf("Client: Failed to send done message: %s\n",
-               status.msg ? status.msg : "unknown error");
+        printf("Client: Failed to send done message: %s\n", ACRT_ERR_STR(status));
     } else {
         printf("Client: Sent done notification to server via IPC\n");
     }
@@ -205,8 +195,7 @@ int main(void) {
     // Initialize runtime
     acrt_status status = acrt_init();
     if (ACRT_FAILED(status)) {
-        fprintf(stderr, "Failed to initialize runtime: %s\n",
-                status.msg ? status.msg : "unknown error");
+        fprintf(stderr, "Failed to initialize runtime: %s\n", ACRT_ERR_STR(status));
         return 1;
     }
 

@@ -22,8 +22,7 @@ static void pong_actor(void *arg) {
         acrt_status status = acrt_ipc_recv(&msg, -1); // Block until message arrives
 
         if (ACRT_FAILED(status)) {
-            printf("Pong: Failed to receive message: %s\n",
-                   status.msg ? status.msg : "unknown error");
+            printf("Pong: Failed to receive message: %s\n", ACRT_ERR_STR(status));
             break;
         }
 
@@ -41,8 +40,7 @@ static void pong_actor(void *arg) {
         status = acrt_ipc_notify(ping_id, &pm_copy, sizeof(ping_msg));
 
         if (ACRT_FAILED(status)) {
-            printf("Pong: Failed to send message: %s\n",
-                   status.msg ? status.msg : "unknown error");
+            printf("Pong: Failed to send message: %s\n", ACRT_ERR_STR(status));
             break;
         }
 
@@ -64,8 +62,7 @@ static void ping_actor(void *arg) {
     acrt_status status = acrt_ipc_notify(pong_id, &pm, sizeof(ping_msg));
 
     if (ACRT_FAILED(status)) {
-        printf("Ping: Failed to send initial message: %s\n",
-               status.msg ? status.msg : "unknown error");
+        printf("Ping: Failed to send initial message: %s\n", ACRT_ERR_STR(status));
         acrt_exit();
     }
 
@@ -77,8 +74,7 @@ static void ping_actor(void *arg) {
         status = acrt_ipc_recv(&msg, -1); // Block until message arrives
 
         if (ACRT_FAILED(status)) {
-            printf("Ping: Failed to receive message: %s\n",
-                   status.msg ? status.msg : "unknown error");
+            printf("Ping: Failed to receive message: %s\n", ACRT_ERR_STR(status));
             break;
         }
 
@@ -91,8 +87,7 @@ static void ping_actor(void *arg) {
         status = acrt_ipc_notify(pong_id, &recv_pm, sizeof(ping_msg));
 
         if (ACRT_FAILED(status)) {
-            printf("Ping: Failed to send message: %s\n",
-                   status.msg ? status.msg : "unknown error");
+            printf("Ping: Failed to send message: %s\n", ACRT_ERR_STR(status));
             break;
         }
 
@@ -109,8 +104,7 @@ int main(void) {
     // Initialize runtime
     acrt_status status = acrt_init();
     if (ACRT_FAILED(status)) {
-        fprintf(stderr, "Failed to initialize runtime: %s\n",
-                status.msg ? status.msg : "unknown error");
+        fprintf(stderr, "Failed to initialize runtime: %s\n", ACRT_ERR_STR(status));
         return 1;
     }
 

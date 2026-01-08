@@ -144,7 +144,7 @@ int main(void) {
 
     acrt_status status = acrt_init();
     if (ACRT_FAILED(status)) {
-        fprintf(stderr, "Failed to init: %s\n", status.msg);
+        fprintf(stderr, "Failed to init: %s\n", ACRT_ERR_STR(status));
         return 1;
     }
 

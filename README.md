@@ -250,10 +250,11 @@ acrt_monitor(other, &mon_id);  // Unidirectional - only monitor gets notificatio
 
 acrt_message msg;
 acrt_ipc_recv(&msg, -1);
-if (acrt_is_exit_msg(&msg)) {
-    acrt_exit_msg exit_info;
-    acrt_decode_exit(&msg, &exit_info);
-    // exit_info.reason: ACRT_EXIT_NORMAL, ACRT_EXIT_CRASH, ACRT_EXIT_CRASH_STACK, ACRT_EXIT_KILLED
+if (msg.class == ACRT_MSG_EXIT) {
+    // Direct cast - no decode needed
+    acrt_exit_msg *exit_info = (acrt_exit_msg *)msg.data;
+    printf("Actor %u died: %s\n", exit_info->actor, acrt_exit_reason_str(exit_info->reason));
+    // exit_info->reason: ACRT_EXIT_NORMAL, ACRT_EXIT_CRASH, ACRT_EXIT_CRASH_STACK, ACRT_EXIT_KILLED
 }
 ```
 
@@ -293,7 +294,7 @@ if (acrt_is_exit_msg(&msg)) {
 - `acrt_monitor(target, out)` - Create unidirectional monitor
 - `acrt_monitor_cancel(id)` - Cancel monitor
 - `acrt_is_exit_msg(msg)` - Check if message is exit notification
-- `acrt_decode_exit(msg, out)` - Extract exit information
+- `acrt_exit_reason_str(reason)` - Convert exit reason to string ("NORMAL", "CRASH", etc.)
 
 ### Timers
 

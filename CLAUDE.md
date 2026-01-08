@@ -83,10 +83,27 @@ The runtime consists of:
 ### Error Handling
 All runtime functions return `acrt_status` with a code and optional string literal message. The message field is never heap-allocated.
 
+Convenience macros:
+- `ACRT_SUCCESS` - Success status
+- `ACRT_FAILED(s)` - Check if status indicates failure
+- `ACRT_ERROR(code, msg)` - Create error status
+- `ACRT_ERR_STR(s)` - Get error message string (handles NULL msg)
+
 ### Actor Lifecycle
 - Spawn actors with `acrt_spawn()` or `acrt_spawn_ex()`
 - Actors can link (bidirectional) or monitor (unidirectional) other actors for death notifications
 - When an actor dies: mailbox cleared, links/monitors notified, bus subscriptions removed, timers cancelled, resources freed
+
+### Exit Message Handling
+Exit messages are received when linked/monitored actors die:
+```c
+if (msg.class == ACRT_MSG_EXIT) {
+    acrt_exit_msg *exit_info = (acrt_exit_msg *)msg.data;  // Direct cast
+    printf("Actor %u died: %s\n", exit_info->actor, acrt_exit_reason_str(exit_info->reason));
+}
+```
+- `acrt_exit_reason_str(reason)` returns "NORMAL", "CRASH", "STACK_OVERFLOW", or "KILLED"
+- Exit reasons: `ACRT_EXIT_NORMAL`, `ACRT_EXIT_CRASH`, `ACRT_EXIT_CRASH_STACK`, `ACRT_EXIT_KILLED`
 
 ### IPC Message Format
 All messages have a 4-byte header prepended to payload:
