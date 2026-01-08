@@ -9,7 +9,7 @@ A complete actor-based runtime designed for **embedded and safety-critical syste
 
 **Safety-critical caveat:** File I/O stalls the entire scheduler. Restrict file I/O to initialization, shutdown, or non–time-critical phases.
 
-The runtime uses **statically bounded memory** for deterministic behavior with zero heap fragmentation (heap allocation optional only for actor stacks). It features **priority-based scheduling** (4 levels: CRITICAL, HIGH, NORMAL, LOW) with fast context switching. Provides message passing (IPC with ASYNC/SYNC modes), linking, monitoring, timers, pub-sub messaging (bus), network I/O, and file I/O.
+The runtime uses **statically bounded memory** for deterministic behavior with zero heap fragmentation (heap allocation optional only for actor stacks). It features **priority-based scheduling** (4 levels: CRITICAL, HIGH, NORMAL, LOW) with fast context switching. Provides Erlang-style message passing (IPC with selective receive and RPC), linking, monitoring, timers, pub-sub messaging (bus), network I/O, and file I/O.
 
 ## Quick Links
 
@@ -24,8 +24,8 @@ The runtime uses **statically bounded memory** for deterministic behavior with z
 - Priority-based round-robin scheduler (4 priority levels)
 - Stack overflow detection with guard patterns (16-byte overhead per actor)
 - Actor lifecycle management (spawn, exit)
-- IPC with ASYNC and SYNC modes
-- Blocking and non-blocking message receive
+- Erlang-style IPC with selective receive and RPC (request/reply)
+- Message classes: CAST (fire-and-forget), CALL/REPLY (RPC), TIMER, SYSTEM
 - Actor linking and monitoring (bidirectional links, unidirectional monitors)
 - Exit notifications with exit reasons (normal, crash, stack overflow, killed)
 - Timers (one-shot and periodic with timerfd/epoll)
@@ -40,7 +40,7 @@ Benchmarks measured on a vanilla Dell XPS 13 (Intel Core i7, x86-64 Linux):
 | Operation | Latency | Throughput | Notes |
 |-----------|---------|------------|-------|
 | **Context switch** | ~1.1 µs/switch | 0.90 M switches/sec | Manual assembly, cooperative |
-| **IPC (ASYNC mode)** | ~2.1-2.3 µs/msg | 0.44-0.47 M msgs/sec | 8-256 byte messages |
+| **IPC send/recv** | ~2.1-2.3 µs/msg | 0.44-0.47 M msgs/sec | 8-252 byte messages |
 | **Pool allocation** | ~9 ns/op | 110 M ops/sec | 1.2x faster than malloc |
 | **Actor spawn** | ~290 ns/actor | 3.4 M actors/sec | Includes stack allocation (arena) |
 | **Bus pub/sub** | ~278 ns/msg | 3.59 M msgs/sec | With cooperative yields |
@@ -62,8 +62,8 @@ All resource limits are defined at compile time. Edit and recompile to change:
 #define RT_MAX_ACTORS 64                // Maximum concurrent actors
 #define RT_STACK_ARENA_SIZE (1*1024*1024) // Stack arena size (1 MB default)
 #define RT_MAILBOX_ENTRY_POOL_SIZE 256  // Mailbox pool size
-#define RT_MESSAGE_DATA_POOL_SIZE 256   // Message pool size (IPC_ASYNC)
-#define RT_SYNC_BUFFER_POOL_SIZE 64   // Sync buffer pool (IPC_SYNC)
+#define RT_MESSAGE_DATA_POOL_SIZE 256   // Message pool size
+#define RT_MAX_MESSAGE_SIZE 256         // Max message size (4-byte header + 252 payload)
 #define RT_MAX_BUSES 32                 // Maximum concurrent buses
 // ... see rt_static_config.h for full list
 ```
@@ -94,7 +94,7 @@ All structures are statically allocated. Actor stacks use a static arena allocat
 # Bus pub-sub example
 ./build/bus
 
-# IPC_SYNC example (backpressure, flow control)
+# RPC example (request/reply pattern with rt_ipc_call)
 ./build/sync_ipc
 
 # Priority scheduling example (4 levels, starvation demo)
@@ -137,12 +137,11 @@ cfg.stack_size = 128 * 1024;
 cfg.malloc_stack = false;     // false=arena (default), true=malloc
 actor_id worker = rt_spawn_ex(worker_actor, &args, &cfg);
 
-// Send messages
+// Send fire-and-forget message (RT_MSG_CAST)
 int data = 42;
-rt_status status = rt_ipc_send(target, &data, sizeof(data), IPC_ASYNC);
+rt_status status = rt_ipc_send(target, &data, sizeof(data));
 if (RT_FAILED(status)) {
-    // Pool exhausted: RT_MAILBOX_ENTRY_POOL_SIZE or RT_MESSAGE_DATA_POOL_SIZE (ASYNC)
-    // For IPC_SYNC: RT_MAILBOX_ENTRY_POOL_SIZE or RT_SYNC_BUFFER_POOL_SIZE
+    // Pool exhausted: RT_MAILBOX_ENTRY_POOL_SIZE or RT_MESSAGE_DATA_POOL_SIZE
     // Send does NOT block or drop - caller must handle RT_ERR_NOMEM
 
     // Backoff and retry pattern:
@@ -151,10 +150,15 @@ if (RT_FAILED(status)) {
     // Retry send...
 }
 
-// IPC_SYNC: Payload copied to sync buffer pool, sender blocks until receiver releases
-// WARNING: Use with care - sender blocks, risk of deadlock
-// See SPEC.md for safety considerations and deadlock scenarios
-rt_ipc_send(target, &data, sizeof(data), IPC_SYNC);
+// RPC pattern: Send request and wait for reply
+rt_message reply;
+status = rt_ipc_call(target, &data, sizeof(data), &reply, 5000);  // 5s timeout
+if (RT_FAILED(status)) {
+    // RT_ERR_TIMEOUT if no reply, RT_ERR_NOMEM if pool exhausted
+}
+
+// Reply to a CALL message (in receiver actor)
+rt_ipc_reply(&msg, &response, sizeof(response));
 
 // Receive messages
 rt_message msg;
@@ -162,11 +166,12 @@ rt_ipc_recv(&msg, -1);   // -1=block forever
 rt_ipc_recv(&msg, 0);    // 0=non-blocking (returns RT_ERR_WOULDBLOCK if empty)
 rt_ipc_recv(&msg, 100);  // 100=timeout after 100ms (returns RT_ERR_TIMEOUT if no message)
 
-// Process message data
-process(&msg);
-
-// Release message (required for SYNC, no-op for ASYNC)
-rt_ipc_release(&msg);
+// Decode message header
+rt_msg_class class;
+uint32_t tag;
+const void *payload;
+size_t payload_len;
+rt_msg_decode(&msg, &class, &tag, &payload, &payload_len);
 ```
 
 ### Timers
@@ -178,8 +183,11 @@ rt_timer_every(200000, &periodic); // Periodic, 200ms
 
 rt_message msg;
 rt_ipc_recv(&msg, -1);
-if (rt_timer_is_tick(&msg)) {
-    // Handle timer tick
+if (rt_msg_is_timer(&msg)) {
+    // Handle timer tick - tag contains timer_id
+    uint32_t tag;
+    rt_msg_decode(&msg, NULL, &tag, NULL, NULL);
+    printf("Timer %u fired\n", tag);
 }
 rt_timer_cancel(periodic);
 ```
@@ -266,9 +274,13 @@ if (rt_is_exit_msg(&msg)) {
 
 ### IPC
 
-- `rt_ipc_send(to, data, len, mode)` - Send message
-- `rt_ipc_recv(msg, timeout)` - Receive message
-- `rt_ipc_release(msg)` - Release synced message
+- `rt_ipc_send(to, data, len)` - Send fire-and-forget message (RT_MSG_CAST)
+- `rt_ipc_recv(msg, timeout)` - Receive any message
+- `rt_ipc_recv_match(from, class, tag, msg, timeout)` - Selective receive with filtering
+- `rt_ipc_call(to, req, len, reply, timeout)` - Blocking RPC (send CALL, wait for REPLY)
+- `rt_ipc_reply(request, data, len)` - Reply to a CALL message
+- `rt_msg_decode(msg, class, tag, payload, len)` - Decode message header
+- `rt_msg_is_timer(msg)` - Check if message is a timer tick
 - `rt_ipc_pending()` - Check if messages are available
 - `rt_ipc_count()` - Get number of pending messages
 
@@ -286,7 +298,7 @@ if (rt_is_exit_msg(&msg)) {
 - `rt_timer_after(delay_us, out)` - Create one-shot timer
 - `rt_timer_every(interval_us, out)` - Create periodic timer
 - `rt_timer_cancel(id)` - Cancel a timer
-- `rt_timer_is_tick(msg)` - Check if message is a timer tick
+- `rt_msg_is_timer(msg)` - Check if message is a timer tick (also in IPC)
 
 ### File I/O
 
