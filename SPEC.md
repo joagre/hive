@@ -437,7 +437,7 @@ The runtime uses static allocation for deterministic behavior and suitability fo
 
 **Memory Footprint (estimated, 64-bit Linux build, default configuration):**
 
-*Note: Exact sizes are toolchain-dependent. Run `size build/libacrt.a` for precise numbers. Estimates below are for GCC on x86-64 Linux.*
+*Note: Exact sizes are toolchain-dependent. Run `size build/libhive.a` for precise numbers. Estimates below are for GCC on x86-64 Linux.*
 
 - Static data (BSS): ~1.2 MB total (includes 1 MB stack arena)
   - Stack arena: 1 MB (configurable via `HIVE_STACK_ARENA_SIZE`)
@@ -1536,6 +1536,10 @@ hive_status hive_timer_every(uint32_t interval_us, timer_id *out);
 
 // Cancel timer
 hive_status hive_timer_cancel(timer_id id);
+
+// Sleep for specified duration (microseconds)
+// Uses selective receive - other messages remain in mailbox
+hive_status hive_sleep(uint32_t delay_us);
 
 // Check if message is a timer tick (convenience wrapper for hive_msg_decode)
 bool hive_msg_is_timer(const hive_message *msg);

@@ -190,7 +190,7 @@ cleanup:
 **Purpose:** Distribute IMU sensor data from Webots to actors.
 
 **Configuration:**
-- max_readers: 0 (persist until overwritten)
+- consume_after_reads: 0 (persist until overwritten)
 - max_age_ms: 0 (no expiry)
 - max_entries: 1 (only latest value matters)
 
@@ -214,7 +214,7 @@ imu_data:
 **Purpose:** Distribute attitude setpoints to controllers.
 
 **Configuration:**
-- max_readers: 0
+- consume_after_reads: 0
 - max_age_ms: 0
 - max_entries: 1
 
@@ -238,7 +238,7 @@ setpoint_data:
 **Purpose:** Distribute motor commands from controller to actuators.
 
 **Configuration:**
-- max_readers: 0
+- consume_after_reads: 0
 - max_age_ms: 0
 - max_entries: 1
 

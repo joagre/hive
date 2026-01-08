@@ -320,7 +320,7 @@ if (HIVE_FAILED(s)) {
 gcc -DHIVE_MAX_ACTORS=128 \\
     -DHIVE_MAX_MESSAGE_SIZE=512 \\
     -DHIVE_STACK_ARENA_SIZE=2097152 \\
-    -o myapp myapp.c -lacrt
+    -o myapp myapp.c -lhive
 .fi
 .SH SEE ALSO
 .BR hive_init (3),

@@ -256,7 +256,7 @@ Tests pub-sub messaging (rt_bus).
 **Tests (12 tests):**
 - Basic publish/subscribe
 - Multiple subscribers
-- max_readers retention policy
+- consume_after_reads retention policy
 - Ring buffer wrap (oldest evicted)
 - Non-blocking read returns WOULDBLOCK
 - Blocking read with timeout
