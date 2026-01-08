@@ -25,13 +25,15 @@ HIVE_LIB = $(HIVE_ROOT)/build
 CC = gcc
 CFLAGS = -std=c11 -Wall -Wextra -O2 -g
 CFLAGS += -I$(WEBOTS_INCLUDE) -I$(HIVE_INCLUDE) -I.
+CFLAGS += -MMD -MP
 LDFLAGS = -L$(WEBOTS_LIB) -L$(HIVE_LIB)
 LDLIBS = -lController -lhive -lm
 
 # Target
 TARGET = pilot
-SRCS = pilot.c
+SRCS = pilot.c pid.c altitude_actor.c attitude_actor.c motor_actor.c
 OBJS = $(SRCS:.c=.o)
+DEPS = $(SRCS:.c=.d)
 
 # Webots controller directory (for install)
 CONTROLLER_DIR = controllers/pilot
@@ -47,7 +49,7 @@ $(TARGET): $(OBJS)
 	$(CC) $(CFLAGS) -c -o $@ $<
 
 clean:
-	rm -f $(TARGET) $(OBJS)
+	rm -f $(TARGET) $(OBJS) $(DEPS)
 
 install: $(TARGET)
 	@mkdir -p $(CONTROLLER_DIR)
@@ -67,5 +69,5 @@ check-hive:
 		exit 1; \
 	fi
 
-# Dependencies
-pilot.o: pilot.c
+# Auto-generated dependencies
+-include $(DEPS)

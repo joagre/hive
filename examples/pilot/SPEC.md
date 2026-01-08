@@ -4,7 +4,10 @@ A quadcopter autopilot example using the actor runtime with Webots simulator.
 
 ## Status
 
-**Implemented:** Altitude-hold hover with attitude stabilization.
+**Implemented:**
+- Altitude-hold hover with attitude stabilization
+- Step 1: Motor actor (safety, watchdog)
+- Step 2: Separate altitude actor (outer/inner loop split)
 
 ## Goals
 
@@ -26,57 +29,48 @@ A quadcopter autopilot example using the actor runtime with Webots simulator.
 
 ## Architecture Overview
 
-The implementation uses a single attitude actor with platform abstraction:
+Three actors connected via buses:
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                        WEBOTS SIMULATION                         │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────────────┐ │
-│  │   IMU    │  │   GPS    │  │  Gyro    │  │  Motors (x4)     │ │
-│  └────┬─────┘  └────┬─────┘  └────┬─────┘  └────────▲─────────┘ │
-│       │             │             │                  │           │
-└───────┼─────────────┼─────────────┼──────────────────┼───────────┘
+┌─────────────────────────────────────────────────────────────────────┐
+│                         WEBOTS SIMULATION                           │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌───────────────────┐   │
+│  │   IMU    │  │   GPS    │  │  Gyro    │  │   Motors (x4)     │   │
+│  └────┬─────┘  └────┬─────┘  └────┬─────┘  └─────────▲─────────┘   │
+└───────┼─────────────┼─────────────┼──────────────────┼──────────────┘
         │             │             │                  │
         ▼             ▼             ▼                  │
-┌───────────────────────────────────────────────────────────────────┐
-│                    WEBOTS PLATFORM LAYER                          │
-│                                                                   │
-│   platform_init()      - Initialize devices                       │
-│   platform_read_imu()  - Read gyro, IMU, GPS → imu_data_t         │
-│   platform_write_motors() - Write motor_cmd_t → Webots motors     │
-│                                                                   │
-└───────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────┐
+│                     PLATFORM LAYER (pilot.c)                        │
+│   platform_read_imu() ──► imu_data_t                                │
+│   platform_write_motors() ◄── motor_cmd_t                           │
+└─────────────────────────────────────────────────────────────────────┘
         │                                              ▲
         ▼                                              │
-┌───────────────────────────────────────────────────────────────────┐
-│                      MAIN INTEGRATION LOOP                        │
-│                                                                   │
-│   while (wb_robot_step(TIME_STEP) != -1) {                        │
-│       platform_read_imu(&imu);                                    │
-│       hive_bus_publish(g_imu_bus, &imu, sizeof(imu));             │
-│       hive_step();                                                │
-│       platform_write_motors();                                    │
-│   }                                                               │
-│                                                                   │
-└───────────────────────────────────────────────────────────────────┘
-        │                                              ▲
-        ▼                                              │
-┌───────────────────────────────────────────────────────────────────┐
-│                        ACTOR RUNTIME                              │
-│                                                                   │
-│  ┌─────────────┐                           ┌────────────────────┐ │
-│  │   IMU Bus   │ ─────────────────────────►│  ATTITUDE ACTOR    │ │
-│  │  (sensor    │                           │                    │ │
-│  │   data)     │                           │  PID Controllers:  │ │
-│  └─────────────┘                           │  - Roll rate       │ │
-│                                            │  - Pitch rate      │ │
-│                                            │  - Yaw rate        │ │
-│  ┌─────────────┐                           │  - Altitude        │ │
-│  │ Motor Output│◄──────────────────────────│                    │ │
-│  │  (global)   │                           │  Mixer → motors    │ │
-│  └─────────────┘                           └────────────────────┘ │
-│                                                                   │
-└───────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────┐
+│                          ACTOR RUNTIME                              │
+│                                                                     │
+│  ┌───────────┐     ┌─────────────────┐     ┌───────────────────┐   │
+│  │  IMU Bus  │────►│ ALTITUDE ACTOR  │────►│   Thrust Bus      │   │
+│  │           │     │ (altitude PID)  │     │                   │   │
+│  │           │     └─────────────────┘     └─────────┬─────────┘   │
+│  │           │                                       │             │
+│  │           │     ┌─────────────────┐               │             │
+│  │           │────►│ ATTITUDE ACTOR  │◄──────────────┘             │
+│  │           │     │ (rate PIDs)     │                             │
+│  └───────────┘     │ (mixer)         │                             │
+│                    └────────┬────────┘                             │
+│                             │                                      │
+│                             ▼                                      │
+│                    ┌─────────────────┐     ┌───────────────────┐   │
+│                    │   Motor Bus     │────►│   MOTOR ACTOR     │   │
+│                    │                 │     │ (safety/watchdog) │   │
+│                    └─────────────────┘     └─────────┬─────────┘   │
+│                                                      │             │
+└──────────────────────────────────────────────────────┼─────────────┘
+                                                       │
+                                                       ▼
+                                              platform_write_motors()
 ```
 
 ---
@@ -255,14 +249,20 @@ The following code is hardware-independent:
 
 ```
 examples/pilot/
+    pilot.c              # Main loop, platform layer, bus setup
+    altitude_actor.c/h   # Outer loop: altitude PID → thrust
+    attitude_actor.c/h   # Inner loop: rate PIDs → motor commands
+    motor_actor.c/h      # Safety: watchdog, limits → hardware
+    pid.c/h              # Reusable PID controller
+    types.h              # Portable data types
+    config.h             # Shared constants
+    Makefile             # Build with auto-deps
     SPEC.md              # This specification
     README.md            # Usage instructions
-    pilot.c              # Complete hover controller
-    Makefile             # Build rules
     worlds/
         hover_test.wbt   # Webots world file
     controllers/
-        pilot/           # Webots controller directory (installed here)
+        pilot/           # Webots controller (installed here)
 ```
 
 ---
@@ -292,6 +292,133 @@ alt=1.01 thrust=0.55 | roll=  0.0 pitch=  0.0
 
 ---
 
+## Architecture Evolution Roadmap
+
+The example will evolve incrementally toward a clean multi-actor design.
+Each step maintains a working system while improving separation of concerns.
+
+### Target Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                         ACTOR ARCHITECTURE                          │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│  ┌──────────┐      ┌──────────┐      ┌──────────┐                  │
+│  │  Sensor  │─────►│ Estimator│─────►│  State   │                  │
+│  │  Actor   │      │  Actor   │      │   Bus    │                  │
+│  └──────────┘      └──────────┘      └────┬─────┘                  │
+│   Read HW           Fuse data             │                        │
+│   Publish raw       Publish estimate      │                        │
+│                                           ▼                        │
+│  ┌──────────┐      ┌──────────┐      ┌──────────┐                  │
+│  │ Setpoint │─────►│ Altitude │─────►│ Attitude │                  │
+│  │  Actor   │      │  Actor   │      │  Actor   │                  │
+│  └──────────┘      └──────────┘      └────┬─────┘                  │
+│   RC input          Outer loop            │ Inner loop             │
+│   Waypoints         Z control             │ Rate control           │
+│   Commands                                ▼                        │
+│                                      ┌──────────┐                  │
+│                                      │  Motor   │                  │
+│                                      │  Actor   │                  │
+│                                      └──────────┘                  │
+│                                       Safety                       │
+│                                       Write HW                     │
+│                                                                     │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+### Actor Responsibilities (Target)
+
+| Actor | Input | Output | Priority | Responsibility |
+|-------|-------|--------|----------|----------------|
+| **Sensor** | Hardware | Raw Bus | CRITICAL | Read IMU/GPS, timestamp, publish |
+| **Estimator** | Raw Bus | State Bus | CRITICAL | Sensor fusion, state estimate |
+| **Setpoint** | RC/Mission | Setpoint Bus | NORMAL | Generate target state |
+| **Altitude** | State + Setpoint | Thrust Setpoint | HIGH | Outer loop (~50Hz) |
+| **Attitude** | State + Thrust | Motor Bus | CRITICAL | Inner loop (250Hz) |
+| **Motor** | Motor Bus | Hardware | CRITICAL | Safety, limits, write PWM |
+
+### Step 1: Motor Actor ✓
+
+Separate motor output into dedicated actor with safety features.
+
+```
+Attitude Actor ──► Motor Bus ──► Motor Actor ──► Hardware
+```
+
+**Features:** Subscribe to motor bus, enforce limits, watchdog, platform write.
+
+### Step 2: Separate Altitude Actor ✓
+
+Split outer loop (altitude) from inner loop (attitude).
+
+```
+IMU Bus ──► Altitude Actor ──► Thrust Bus ──► Attitude Actor ──► Motor Bus
+            (altitude PID)                    (rate PIDs only)
+```
+
+**Benefits:** Clear separation, different rates possible, easier tuning.
+
+### Step 3: Sensor Actor
+
+Move sensor reading from main loop into actor.
+
+**Before:**
+```
+Main Loop: read sensors ──► IMU Bus
+```
+
+**After:**
+```
+Main Loop: hive_step() only
+Sensor Actor: read sensors ──► IMU Bus
+```
+
+**Note:** Requires careful handling of Webots timing integration.
+
+### Step 4: Estimator Actor
+
+Add sensor fusion between raw sensors and controllers.
+
+**Before:**
+```
+Sensor Actor ──► IMU Bus (raw) ──► Controllers
+```
+
+**After:**
+```
+Sensor Actor ──► Raw Bus ──► Estimator Actor ──► State Bus ──► Controllers
+                             (complementary filter)
+```
+
+**Benefits:**
+- Cleaner sensor data
+- Filtered attitude estimate
+- Altitude rate estimation
+
+### Step 5: Setpoint Actor
+
+Add command generation actor.
+
+**Before:**
+```
+Altitude Actor has hardcoded target_altitude = 1.0m
+```
+
+**After:**
+```
+Setpoint Actor ──► Setpoint Bus ──► Altitude Actor
+(generates commands)                (tracks setpoint)
+```
+
+**Future extensions:**
+- RC input handling
+- Waypoint mission execution
+- Mode switching (hover, land, etc.)
+
+---
+
 ## Future Extensions
 
 1. **Position hold** - Add XY GPS feedback, position PID
@@ -300,4 +427,3 @@ alt=1.01 thrust=0.55 | roll=  0.0 pitch=  0.0
 4. **Failsafe** - Motor failure detection, emergency landing
 5. **Telemetry** - Logging, MAVLink output
 6. **RC input** - Manual control override
-7. **Multiple actors** - Separate altitude and attitude actors
