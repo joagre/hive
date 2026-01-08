@@ -121,9 +121,9 @@ void attitude_actor(void *arg) {
     yaw_pid.output_max = 0.15f;
 
     // Altitude controller - adjusts thrust to hold target altitude
-    pid_init(&alt_pid, 0.5f, 0.1f, 0.3f);
-    alt_pid.output_max = 0.2f;  // Max thrust adjustment ±20%
-    alt_pid.integral_max = 0.3f;
+    pid_init(&alt_pid, 0.3f, 0.05f, 0.15f);  // Reduced for smoother response
+    alt_pid.output_max = 0.15f;  // Max thrust adjustment ±15%
+    alt_pid.integral_max = 0.2f;
 
     const float dt = 0.004f;  // 4ms
     const float base_thrust = 0.553f;  // Approximate hover thrust
