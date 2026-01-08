@@ -267,7 +267,7 @@ acrt_status acrt_net_listen(uint16_t port, int *fd_out) {
         return status;
     }
 
-    if (listen(fd, 5) < 0) {
+    if (listen(fd, ACRT_NET_LISTEN_BACKLOG) < 0) {
         acrt_status status = ACRT_ERROR(ACRT_ERR_IO, strerror(errno));
         close(fd);
         return status;

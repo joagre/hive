@@ -11,6 +11,10 @@
 #include <time.h>
 #include <sys/time.h>
 
+// Compile-time check: readers_mask is uint32_t, so max 32 subscribers
+_Static_assert(ACRT_MAX_BUS_SUBSCRIBERS <= 32,
+               "ACRT_MAX_BUS_SUBSCRIBERS exceeds readers_mask capacity (32 bits)");
+
 // External IPC pools (defined in acrt_ipc.c)
 extern acrt_pool g_message_pool_mgr;
 
@@ -95,6 +99,17 @@ static int find_subscriber(bus_t *bus, actor_id id) {
     return -1;
 }
 
+// Free all valid entry data in a bus (used during cleanup/destroy)
+static void free_bus_entries(bus_t *bus) {
+    for (size_t i = 0; i < bus->config.max_entries; i++) {
+        if (bus->entries[i].valid) {
+            acrt_msg_pool_free(bus->entries[i].data);
+            bus->entries[i].valid = false;
+        }
+    }
+    bus->count = 0;
+}
+
 // Expire old entries based on max_age_ms
 static void expire_old_entries(bus_t *bus) {
     if (bus->config.max_age_ms == 0) {
@@ -145,12 +160,7 @@ void acrt_bus_cleanup(void) {
     for (size_t i = 0; i < g_bus_table.max_buses; i++) {
         bus_t *bus = &g_bus_table.buses[i];
         if (bus->active) {
-            // Free all entry data from pool
-            for (size_t j = 0; j < bus->config.max_entries; j++) {
-                if (bus->entries[j].valid) {
-                    acrt_msg_pool_free(bus->entries[j].data);
-                }
-            }
+            free_bus_entries(bus);
             // Note: bus->entries and bus->subscribers point to static arrays, no free needed
             bus->active = false;
         }
@@ -257,13 +267,7 @@ acrt_status acrt_bus_destroy(bus_id id) {
         return ACRT_ERROR(ACRT_ERR_INVALID, "Cannot destroy bus with active subscribers");
     }
 
-    // Free all entry data from pool
-    for (size_t i = 0; i < bus->config.max_entries; i++) {
-        if (bus->entries[i].valid) {
-            acrt_msg_pool_free(bus->entries[i].data);
-        }
-    }
-
+    free_bus_entries(bus);
     // Note: bus->entries and bus->subscribers point to static arrays, no free needed
     bus->active = false;
 

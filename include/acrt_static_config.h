@@ -111,4 +111,27 @@
 // Microseconds per second (constant for time conversions)
 #define ACRT_USEC_PER_SEC 1000000
 
+// -----------------------------------------------------------------------------
+// Scheduler Configuration
+// -----------------------------------------------------------------------------
+
+// Maximum epoll events to process per scheduler iteration
+#ifndef ACRT_EPOLL_MAX_EVENTS
+#define ACRT_EPOLL_MAX_EVENTS 64
+#endif
+
+// Epoll poll timeout in milliseconds (defensive wakeup interval)
+#ifndef ACRT_EPOLL_POLL_TIMEOUT_MS
+#define ACRT_EPOLL_POLL_TIMEOUT_MS 10
+#endif
+
+// -----------------------------------------------------------------------------
+// Network Configuration
+// -----------------------------------------------------------------------------
+
+// TCP listen backlog (queued connections)
+#ifndef ACRT_NET_LISTEN_BACKLOG
+#define ACRT_NET_LISTEN_BACKLOG 5
+#endif
+
 #endif // ACRT_STATIC_CONFIG_H

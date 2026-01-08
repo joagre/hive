@@ -139,11 +139,11 @@ void acrt_scheduler_run(void) {
 
         } else {
             // No runnable actors - wait for I/O events
-            struct epoll_event events[64];
+            struct epoll_event events[ACRT_EPOLL_MAX_EVENTS];
             // Short timeout to allow checking for actors made ready by IPC/bus/link
             // (those don't use epoll, they directly set actor state to READY)
-            int timeout_ms = 10;
-            int n = epoll_wait(g_scheduler.epoll_fd, events, 64, timeout_ms);
+            int n = epoll_wait(g_scheduler.epoll_fd, events,
+                               ACRT_EPOLL_MAX_EVENTS, ACRT_EPOLL_POLL_TIMEOUT_MS);
 
             // Dispatch epoll events
             for (int i = 0; i < n; i++) {
