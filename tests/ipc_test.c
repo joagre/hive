@@ -1,8 +1,8 @@
-#include "acrt_runtime.h"
-#include "acrt_ipc.h"
-#include "acrt_timer.h"
-#include "acrt_link.h"
-#include "acrt_static_config.h"
+#include "hive_runtime.h"
+#include "hive_ipc.h"
+#include "hive_timer.h"
+#include "hive_link.h"
+#include "hive_static_config.h"
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
@@ -30,24 +30,24 @@ static void test1_async_basic(void *arg) {
     (void)arg;
     printf("\nTest 1: ASYNC send/recv basic\n");
 
-    actor_id self = acrt_self();
+    actor_id self = hive_self();
     const char *msg_data = "Hello ASYNC";
 
-    acrt_status status = acrt_ipc_notify(self, msg_data, strlen(msg_data) + 1);
-    if (ACRT_FAILED(status)) {
-        TEST_FAIL("acrt_ipc_notify ASYNC failed");
-        acrt_exit();
+    hive_status status = hive_ipc_notify(self, msg_data, strlen(msg_data) + 1);
+    if (HIVE_FAILED(status)) {
+        TEST_FAIL("hive_ipc_notify ASYNC failed");
+        hive_exit();
     }
 
-    acrt_message msg;
-    status = acrt_ipc_recv(&msg, 100);
-    if (ACRT_FAILED(status)) {
-        TEST_FAIL("acrt_ipc_recv failed");
-        acrt_exit();
+    hive_message msg;
+    status = hive_ipc_recv(&msg, 100);
+    if (HIVE_FAILED(status)) {
+        TEST_FAIL("hive_ipc_recv failed");
+        hive_exit();
     }
 
     const void *payload;
-    acrt_msg_decode(&msg, NULL, NULL, &payload, NULL);
+    hive_msg_decode(&msg, NULL, NULL, &payload, NULL);
     if (strcmp((const char *)payload, "Hello ASYNC") == 0) {
         TEST_PASS("ASYNC send/recv works");
     } else {
@@ -61,7 +61,7 @@ static void test1_async_basic(void *arg) {
         TEST_FAIL("wrong sender ID");
     }
 
-    acrt_exit();
+    hive_exit();
 }
 
 // ============================================================================
@@ -74,21 +74,21 @@ static void test2_async_invalid_receiver(void *arg) {
 
     int data = 42;
 
-    acrt_status status = acrt_ipc_notify(ACTOR_ID_INVALID, &data, sizeof(data));
-    if (ACRT_FAILED(status)) {
+    hive_status status = hive_ipc_notify(ACTOR_ID_INVALID, &data, sizeof(data));
+    if (HIVE_FAILED(status)) {
         TEST_PASS("send to ACTOR_ID_INVALID fails");
     } else {
         TEST_FAIL("send to ACTOR_ID_INVALID should fail");
     }
 
-    status = acrt_ipc_notify(9999, &data, sizeof(data));
-    if (ACRT_FAILED(status)) {
+    status = hive_ipc_notify(9999, &data, sizeof(data));
+    if (HIVE_FAILED(status)) {
         TEST_PASS("send to non-existent actor fails");
     } else {
         TEST_FAIL("send to non-existent actor should fail");
     }
 
-    acrt_exit();
+    hive_exit();
 }
 
 // ============================================================================
@@ -99,24 +99,24 @@ static void test3_message_ordering(void *arg) {
     (void)arg;
     printf("\nTest 3: Message ordering (FIFO)\n");
 
-    actor_id self = acrt_self();
+    actor_id self = hive_self();
 
     // Send 5 messages
     for (int i = 1; i <= 5; i++) {
-        acrt_ipc_notify(self, &i, sizeof(i));
+        hive_ipc_notify(self, &i, sizeof(i));
     }
 
     // Receive and verify order
     bool order_correct = true;
     for (int i = 1; i <= 5; i++) {
-        acrt_message msg;
-        acrt_status status = acrt_ipc_recv(&msg, 100);
-        if (ACRT_FAILED(status)) {
+        hive_message msg;
+        hive_status status = hive_ipc_recv(&msg, 100);
+        if (HIVE_FAILED(status)) {
             order_correct = false;
             break;
         }
         const void *payload;
-        acrt_msg_decode(&msg, NULL, NULL, &payload, NULL);
+        hive_msg_decode(&msg, NULL, NULL, &payload, NULL);
         int received = *(int *)payload;
         if (received != i) {
             printf("    Expected %d, got %d\n", i, received);
@@ -130,7 +130,7 @@ static void test3_message_ordering(void *arg) {
         TEST_FAIL("message ordering violated");
     }
 
-    acrt_exit();
+    hive_exit();
 }
 
 // ============================================================================
@@ -142,38 +142,38 @@ static int g_messages_received = 0;
 
 static void sender_actor(void *arg) {
     int id = *(int *)arg;
-    acrt_ipc_notify(g_receiver_id, &id, sizeof(id));
-    acrt_exit();
+    hive_ipc_notify(g_receiver_id, &id, sizeof(id));
+    hive_exit();
 }
 
 static void test4_multiple_senders(void *arg) {
     (void)arg;
     printf("\nTest 4: Multiple senders to one receiver\n");
 
-    g_receiver_id = acrt_self();
+    g_receiver_id = hive_self();
     g_messages_received = 0;
 
     // Spawn 5 senders
     static int sender_ids[5] = {1, 2, 3, 4, 5};
     for (int i = 0; i < 5; i++) {
         actor_id sender;
-        acrt_spawn(sender_actor, &sender_ids[i], &sender);
+        hive_spawn(sender_actor, &sender_ids[i], &sender);
     }
 
     // Give senders time to run
     timer_id timer;
-    acrt_timer_after(100000, &timer);
+    hive_timer_after(100000, &timer);
 
     // Receive all messages
     int received_sum = 0;
     for (int i = 0; i < 6; i++) {  // 5 messages + 1 timer
-        acrt_message msg;
-        acrt_status status = acrt_ipc_recv(&msg, 500);
-        if (ACRT_FAILED(status)) break;
+        hive_message msg;
+        hive_status status = hive_ipc_recv(&msg, 500);
+        if (HIVE_FAILED(status)) break;
 
-        if (!acrt_msg_is_timer(&msg)) {
+        if (!hive_msg_is_timer(&msg)) {
             const void *payload;
-            acrt_msg_decode(&msg, NULL, NULL, &payload, NULL);
+            hive_msg_decode(&msg, NULL, NULL, &payload, NULL);
             received_sum += *(int *)payload;
             g_messages_received++;
         }
@@ -187,7 +187,7 @@ static void test4_multiple_senders(void *arg) {
         TEST_FAIL("did not receive all messages");
     }
 
-    acrt_exit();
+    hive_exit();
 }
 
 // ============================================================================
@@ -198,17 +198,17 @@ static void test5_send_to_self(void *arg) {
     (void)arg;
     printf("\nTest 5: Send to self (allowed)\n");
 
-    actor_id self = acrt_self();
+    actor_id self = hive_self();
     int data = 42;
 
-    acrt_status status = acrt_ipc_notify(self, &data, sizeof(data));
-    if (!ACRT_FAILED(status)) {
+    hive_status status = hive_ipc_notify(self, &data, sizeof(data));
+    if (!HIVE_FAILED(status)) {
         // Receive the message we sent to ourselves
-        acrt_message msg;
-        status = acrt_ipc_recv(&msg, 100);
-        if (!ACRT_FAILED(status)) {
+        hive_message msg;
+        status = hive_ipc_recv(&msg, 100);
+        if (!HIVE_FAILED(status)) {
             const void *payload;
-            acrt_msg_decode(&msg, NULL, NULL, &payload, NULL);
+            hive_msg_decode(&msg, NULL, NULL, &payload, NULL);
             if (*(int *)payload == 42) {
                 TEST_PASS("send to self works");
             } else {
@@ -221,7 +221,7 @@ static void test5_send_to_self(void *arg) {
         TEST_FAIL("send to self should succeed");
     }
 
-    acrt_exit();
+    hive_exit();
 }
 
 // ============================================================================
@@ -232,24 +232,24 @@ static void request_reply_server_actor(void *arg) {
     (void)arg;
 
     // Wait for request
-    acrt_message msg;
-    acrt_status status = acrt_ipc_recv(&msg, 1000);
-    if (ACRT_FAILED(status)) {
-        acrt_exit();
+    hive_message msg;
+    hive_status status = hive_ipc_recv(&msg, 1000);
+    if (HIVE_FAILED(status)) {
+        hive_exit();
     }
 
     // Decode and verify it's a REQUEST message
-    acrt_msg_class class;
+    hive_msg_class class;
     const void *payload;
-    acrt_msg_decode(&msg, &class, NULL, &payload, NULL);
+    hive_msg_decode(&msg, &class, NULL, &payload, NULL);
 
-    if (class == ACRT_MSG_REQUEST) {
+    if (class == HIVE_MSG_REQUEST) {
         // Send reply
         int result = *(int *)payload * 2;  // Double the input
-        acrt_ipc_reply(&msg, &result, sizeof(result));
+        hive_ipc_reply(&msg, &result, sizeof(result));
     }
 
-    acrt_exit();
+    hive_exit();
 }
 
 static void test6_request_reply(void *arg) {
@@ -257,95 +257,95 @@ static void test6_request_reply(void *arg) {
     printf("\nTest 6: Request/reply pattern\n");
 
     actor_id server;
-    acrt_spawn(request_reply_server_actor, NULL, &server);
+    hive_spawn(request_reply_server_actor, NULL, &server);
 
     // Give server time to start
-    acrt_yield();
+    hive_yield();
 
     // Make request
     int request = 21;
-    acrt_message reply;
+    hive_message reply;
     uint64_t start = time_ms();
-    acrt_status status = acrt_ipc_request(server, &request, sizeof(request), &reply, 1000);
+    hive_status status = hive_ipc_request(server, &request, sizeof(request), &reply, 1000);
     uint64_t elapsed = time_ms() - start;
 
-    if (ACRT_FAILED(status)) {
-        printf("    acrt_ipc_request failed: %s\n", status.msg ? status.msg : "unknown");
-        TEST_FAIL("acrt_ipc_request failed");
-        acrt_exit();
+    if (HIVE_FAILED(status)) {
+        printf("    hive_ipc_request failed: %s\n", status.msg ? status.msg : "unknown");
+        TEST_FAIL("hive_ipc_request failed");
+        hive_exit();
     }
 
     // Verify reply
     const void *payload;
-    acrt_msg_decode(&reply, NULL, NULL, &payload, NULL);
+    hive_msg_decode(&reply, NULL, NULL, &payload, NULL);
     int result = *(int *)payload;
 
     if (result == 42) {
         printf("    Request/reply completed in %lu ms\n", (unsigned long)elapsed);
-        TEST_PASS("acrt_ipc_request/reply works correctly");
+        TEST_PASS("hive_ipc_request/reply works correctly");
     } else {
         printf("    Expected 42, got %d\n", result);
         TEST_FAIL("wrong request/reply result");
     }
 
-    acrt_exit();
+    hive_exit();
 }
 
 // ============================================================================
-// Test 7: acrt_ipc_pending and acrt_ipc_count
+// Test 7: hive_ipc_pending and hive_ipc_count
 // ============================================================================
 
 static void test7_pending_count(void *arg) {
     (void)arg;
-    printf("\nTest 7: acrt_ipc_pending and acrt_ipc_count\n");
+    printf("\nTest 7: hive_ipc_pending and hive_ipc_count\n");
 
-    actor_id self = acrt_self();
+    actor_id self = hive_self();
 
     // Initially empty
-    if (!acrt_ipc_pending()) {
-        TEST_PASS("acrt_ipc_pending returns false for empty mailbox");
+    if (!hive_ipc_pending()) {
+        TEST_PASS("hive_ipc_pending returns false for empty mailbox");
     } else {
-        TEST_FAIL("acrt_ipc_pending should return false for empty mailbox");
+        TEST_FAIL("hive_ipc_pending should return false for empty mailbox");
     }
 
-    if (acrt_ipc_count() == 0) {
-        TEST_PASS("acrt_ipc_count returns 0 for empty mailbox");
+    if (hive_ipc_count() == 0) {
+        TEST_PASS("hive_ipc_count returns 0 for empty mailbox");
     } else {
-        TEST_FAIL("acrt_ipc_count should return 0 for empty mailbox");
+        TEST_FAIL("hive_ipc_count should return 0 for empty mailbox");
     }
 
     // Send 3 messages
     int data = 42;
-    acrt_ipc_notify(self, &data, sizeof(data));
-    acrt_ipc_notify(self, &data, sizeof(data));
-    acrt_ipc_notify(self, &data, sizeof(data));
+    hive_ipc_notify(self, &data, sizeof(data));
+    hive_ipc_notify(self, &data, sizeof(data));
+    hive_ipc_notify(self, &data, sizeof(data));
 
-    if (acrt_ipc_pending()) {
-        TEST_PASS("acrt_ipc_pending returns true with messages");
+    if (hive_ipc_pending()) {
+        TEST_PASS("hive_ipc_pending returns true with messages");
     } else {
-        TEST_FAIL("acrt_ipc_pending should return true with messages");
+        TEST_FAIL("hive_ipc_pending should return true with messages");
     }
 
-    if (acrt_ipc_count() == 3) {
-        TEST_PASS("acrt_ipc_count returns correct count");
+    if (hive_ipc_count() == 3) {
+        TEST_PASS("hive_ipc_count returns correct count");
     } else {
-        printf("    Count: %zu (expected 3)\n", acrt_ipc_count());
-        TEST_FAIL("acrt_ipc_count returned wrong count");
+        printf("    Count: %zu (expected 3)\n", hive_ipc_count());
+        TEST_FAIL("hive_ipc_count returned wrong count");
     }
 
     // Drain messages
-    acrt_message msg;
-    acrt_ipc_recv(&msg, 0);
-    acrt_ipc_recv(&msg, 0);
-    acrt_ipc_recv(&msg, 0);
+    hive_message msg;
+    hive_ipc_recv(&msg, 0);
+    hive_ipc_recv(&msg, 0);
+    hive_ipc_recv(&msg, 0);
 
-    if (acrt_ipc_count() == 0) {
-        TEST_PASS("acrt_ipc_count returns 0 after draining");
+    if (hive_ipc_count() == 0) {
+        TEST_PASS("hive_ipc_count returns 0 after draining");
     } else {
-        TEST_FAIL("acrt_ipc_count should return 0 after draining");
+        TEST_FAIL("hive_ipc_count should return 0 after draining");
     }
 
-    acrt_exit();
+    hive_exit();
 }
 
 // ============================================================================
@@ -356,16 +356,16 @@ static void test8_nonblocking_recv(void *arg) {
     (void)arg;
     printf("\nTest 8: recv with timeout=0 (non-blocking)\n");
 
-    acrt_message msg;
+    hive_message msg;
     uint64_t start = time_ms();
-    acrt_status status = acrt_ipc_recv(&msg, 0);
+    hive_status status = hive_ipc_recv(&msg, 0);
     uint64_t elapsed = time_ms() - start;
 
-    if (status.code == ACRT_ERR_WOULDBLOCK) {
-        TEST_PASS("empty mailbox returns ACRT_ERR_WOULDBLOCK");
+    if (status.code == HIVE_ERR_WOULDBLOCK) {
+        TEST_PASS("empty mailbox returns HIVE_ERR_WOULDBLOCK");
     } else {
         printf("    Got status: %d\n", status.code);
-        TEST_FAIL("expected ACRT_ERR_WOULDBLOCK for empty mailbox");
+        TEST_FAIL("expected HIVE_ERR_WOULDBLOCK for empty mailbox");
     }
 
     if (elapsed < 10) {
@@ -376,18 +376,18 @@ static void test8_nonblocking_recv(void *arg) {
     }
 
     // With a message in queue
-    actor_id self = acrt_self();
+    actor_id self = hive_self();
     int data = 42;
-    acrt_ipc_notify(self, &data, sizeof(data));
+    hive_ipc_notify(self, &data, sizeof(data));
 
-    status = acrt_ipc_recv(&msg, 0);
-    if (!ACRT_FAILED(status)) {
+    status = hive_ipc_recv(&msg, 0);
+    if (!HIVE_FAILED(status)) {
         TEST_PASS("non-blocking recv succeeds with message present");
     } else {
         TEST_FAIL("non-blocking recv should succeed with message present");
     }
 
-    acrt_exit();
+    hive_exit();
 }
 
 // ============================================================================
@@ -398,16 +398,16 @@ static void test9_timed_recv(void *arg) {
     (void)arg;
     printf("\nTest 9: recv with timeout > 0\n");
 
-    acrt_message msg;
+    hive_message msg;
     uint64_t start = time_ms();
-    acrt_status status = acrt_ipc_recv(&msg, 100);  // 100ms timeout
+    hive_status status = hive_ipc_recv(&msg, 100);  // 100ms timeout
     uint64_t elapsed = time_ms() - start;
 
-    if (status.code == ACRT_ERR_TIMEOUT) {
-        TEST_PASS("empty mailbox returns ACRT_ERR_TIMEOUT");
+    if (status.code == HIVE_ERR_TIMEOUT) {
+        TEST_PASS("empty mailbox returns HIVE_ERR_TIMEOUT");
     } else {
         printf("    Got status: %d\n", status.code);
-        TEST_FAIL("expected ACRT_ERR_TIMEOUT");
+        TEST_FAIL("expected HIVE_ERR_TIMEOUT");
     }
 
     // Should take approximately 100ms
@@ -419,7 +419,7 @@ static void test9_timed_recv(void *arg) {
         TEST_FAIL("timed recv did not wait for correct duration");
     }
 
-    acrt_exit();
+    hive_exit();
 }
 
 // ============================================================================
@@ -431,30 +431,30 @@ static void delayed_sender_actor(void *arg) {
 
     // Wait 50ms then send
     timer_id timer;
-    acrt_timer_after(50000, &timer);
-    acrt_message msg;
-    acrt_ipc_recv(&msg, -1);
+    hive_timer_after(50000, &timer);
+    hive_message msg;
+    hive_ipc_recv(&msg, -1);
 
     int data = 123;
-    acrt_ipc_notify(target, &data, sizeof(data));
+    hive_ipc_notify(target, &data, sizeof(data));
 
-    acrt_exit();
+    hive_exit();
 }
 
 static void test10_block_forever_recv(void *arg) {
     (void)arg;
     printf("\nTest 10: recv with timeout < 0 (block forever)\n");
 
-    actor_id self = acrt_self();
+    actor_id self = hive_self();
     actor_id sender;
-    acrt_spawn(delayed_sender_actor, &self, &sender);
+    hive_spawn(delayed_sender_actor, &self, &sender);
 
     uint64_t start = time_ms();
-    acrt_message msg;
-    acrt_status status = acrt_ipc_recv(&msg, -1);  // Block forever
+    hive_message msg;
+    hive_status status = hive_ipc_recv(&msg, -1);  // Block forever
     uint64_t elapsed = time_ms() - start;
 
-    if (!ACRT_FAILED(status)) {
+    if (!HIVE_FAILED(status)) {
         TEST_PASS("block forever recv succeeds when message arrives");
     } else {
         TEST_FAIL("block forever recv should not fail");
@@ -469,7 +469,7 @@ static void test10_block_forever_recv(void *arg) {
         TEST_FAIL("timing seems off");
     }
 
-    acrt_exit();
+    hive_exit();
 }
 
 // ============================================================================
@@ -480,17 +480,17 @@ static void test11_message_size_limits(void *arg) {
     (void)arg;
     printf("\nTest 11: Message size limits\n");
 
-    actor_id self = acrt_self();
+    actor_id self = hive_self();
 
-    // Max payload size is ACRT_MAX_MESSAGE_SIZE - ACRT_MSG_HEADER_SIZE (4 bytes for header)
-    size_t max_payload_size = ACRT_MAX_MESSAGE_SIZE - ACRT_MSG_HEADER_SIZE;
+    // Max payload size is HIVE_MAX_MESSAGE_SIZE - HIVE_MSG_HEADER_SIZE (4 bytes for header)
+    size_t max_payload_size = HIVE_MAX_MESSAGE_SIZE - HIVE_MSG_HEADER_SIZE;
 
     // Send message at max payload size
-    char max_msg[ACRT_MAX_MESSAGE_SIZE];  // Oversize buffer for safety
+    char max_msg[HIVE_MAX_MESSAGE_SIZE];  // Oversize buffer for safety
     memset(max_msg, 'A', sizeof(max_msg));
 
-    acrt_status status = acrt_ipc_notify(self, max_msg, max_payload_size);
-    if (!ACRT_FAILED(status)) {
+    hive_status status = hive_ipc_notify(self, max_msg, max_payload_size);
+    if (!HIVE_FAILED(status)) {
         TEST_PASS("can send message at max payload size");
     } else {
         printf("    Error: %s\n", status.msg ? status.msg : "unknown");
@@ -498,10 +498,10 @@ static void test11_message_size_limits(void *arg) {
     }
 
     // Receive it
-    acrt_message msg;
-    status = acrt_ipc_recv(&msg, 100);
+    hive_message msg;
+    status = hive_ipc_recv(&msg, 100);
     // msg.len is payload length (excludes 4-byte header)
-    if (!ACRT_FAILED(status) && msg.len == max_payload_size) {
+    if (!HIVE_FAILED(status) && msg.len == max_payload_size) {
         TEST_PASS("received max size message");
     } else {
         printf("    msg.len = %zu, expected %zu\n", msg.len, max_payload_size);
@@ -509,20 +509,20 @@ static void test11_message_size_limits(void *arg) {
     }
 
     // Send message exceeding max size (payload larger than max_payload_size)
-    status = acrt_ipc_notify(self, max_msg, max_payload_size + 1);
-    if (ACRT_FAILED(status)) {
+    status = hive_ipc_notify(self, max_msg, max_payload_size + 1);
+    if (HIVE_FAILED(status)) {
         TEST_PASS("oversized message is rejected");
     } else {
         TEST_FAIL("oversized message should be rejected");
         // Clean up if it somehow succeeded
-        acrt_ipc_recv(&msg, 0);
+        hive_ipc_recv(&msg, 0);
     }
 
-    acrt_exit();
+    hive_exit();
 }
 
 // ============================================================================
-// Test 12: Selective receive (acrt_ipc_recv_match)
+// Test 12: Selective receive (hive_ipc_recv_match)
 // ============================================================================
 
 static void selective_sender_actor(void *arg) {
@@ -530,51 +530,51 @@ static void selective_sender_actor(void *arg) {
 
     // Send three messages with different data
     int a = 1, b = 2, c = 3;
-    acrt_ipc_notify(target, &a, sizeof(a));
-    acrt_ipc_notify(target, &b, sizeof(b));
-    acrt_ipc_notify(target, &c, sizeof(c));
+    hive_ipc_notify(target, &a, sizeof(a));
+    hive_ipc_notify(target, &b, sizeof(b));
+    hive_ipc_notify(target, &c, sizeof(c));
 
-    acrt_exit();
+    hive_exit();
 }
 
 static void test12_selective_receive(void *arg) {
     (void)arg;
-    printf("\nTest 12: Selective receive (acrt_ipc_recv_match)\n");
+    printf("\nTest 12: Selective receive (hive_ipc_recv_match)\n");
     fflush(stdout);
 
-    actor_id self = acrt_self();
+    actor_id self = hive_self();
     actor_id sender;
-    acrt_spawn(selective_sender_actor, &self, &sender);
+    hive_spawn(selective_sender_actor, &self, &sender);
 
     // Wait for sender to send all messages
     timer_id timer;
-    acrt_timer_after(50000, &timer);
-    acrt_message timer_msg;
-    acrt_ipc_recv(&timer_msg, -1);
+    hive_timer_after(50000, &timer);
+    hive_message timer_msg;
+    hive_ipc_recv(&timer_msg, -1);
 
     // Use selective receive to filter by sender
-    acrt_message msg;
-    acrt_status status = acrt_ipc_recv_match(&sender, NULL, NULL, &msg, 100);
+    hive_message msg;
+    hive_status status = hive_ipc_recv_match(&sender, NULL, NULL, &msg, 100);
 
-    if (!ACRT_FAILED(status)) {
+    if (!HIVE_FAILED(status)) {
         if (msg.sender == sender) {
             const void *payload;
-            acrt_msg_decode(&msg, NULL, NULL, &payload, NULL);
+            hive_msg_decode(&msg, NULL, NULL, &payload, NULL);
             int val = *(int *)payload;
             printf("    Received value %d from sender %u\n", val, sender);
-            TEST_PASS("acrt_ipc_recv_match filters by sender");
+            TEST_PASS("hive_ipc_recv_match filters by sender");
         } else {
             TEST_FAIL("wrong sender in filtered message");
         }
     } else {
         printf("    recv_match failed: %s\n", status.msg ? status.msg : "unknown");
-        TEST_FAIL("acrt_ipc_recv_match failed");
+        TEST_FAIL("hive_ipc_recv_match failed");
     }
 
     // Drain remaining messages
-    while (!ACRT_FAILED(acrt_ipc_recv(&msg, 0))) {}
+    while (!HIVE_FAILED(hive_ipc_recv(&msg, 0))) {}
 
-    acrt_exit();
+    hive_exit();
 }
 
 // ============================================================================
@@ -585,18 +585,18 @@ static void test13_zero_length_message(void *arg) {
     (void)arg;
     printf("\nTest 13: Send with zero length payload\n");
 
-    actor_id self = acrt_self();
+    actor_id self = hive_self();
 
-    acrt_status status = acrt_ipc_notify(self, NULL, 0);
-    if (!ACRT_FAILED(status)) {
+    hive_status status = hive_ipc_notify(self, NULL, 0);
+    if (!HIVE_FAILED(status)) {
         TEST_PASS("can send zero-length payload");
 
-        acrt_message msg;
-        status = acrt_ipc_recv(&msg, 100);
+        hive_message msg;
+        status = hive_ipc_recv(&msg, 100);
         // msg.len includes 4-byte header, so zero-payload message has len=4
         size_t payload_len;
-        acrt_msg_decode(&msg, NULL, NULL, NULL, &payload_len);
-        if (!ACRT_FAILED(status) && payload_len == 0) {
+        hive_msg_decode(&msg, NULL, NULL, NULL, &payload_len);
+        if (!HIVE_FAILED(status) && payload_len == 0) {
             TEST_PASS("received zero-length payload message");
         } else {
             printf("    payload_len = %zu (expected 0)\n", payload_len);
@@ -606,7 +606,7 @@ static void test13_zero_length_message(void *arg) {
         TEST_FAIL("failed to send zero-length message");
     }
 
-    acrt_exit();
+    hive_exit();
 }
 
 // ============================================================================
@@ -615,7 +615,7 @@ static void test13_zero_length_message(void *arg) {
 
 static void quickly_dying_actor(void *arg) {
     (void)arg;
-    acrt_exit();
+    hive_exit();
 }
 
 static void test14_send_to_dead_actor(void *arg) {
@@ -623,45 +623,45 @@ static void test14_send_to_dead_actor(void *arg) {
     printf("\nTest 14: Send to dead actor\n");
 
     actor_id target;
-    acrt_spawn(quickly_dying_actor, NULL, &target);
-    acrt_link(target);
+    hive_spawn(quickly_dying_actor, NULL, &target);
+    hive_link(target);
 
     // Wait for it to die
-    acrt_message msg;
-    acrt_ipc_recv(&msg, 1000);
+    hive_message msg;
+    hive_ipc_recv(&msg, 1000);
 
     // Now try to send to dead actor
     int data = 42;
-    acrt_status status = acrt_ipc_notify(target, &data, sizeof(data));
+    hive_status status = hive_ipc_notify(target, &data, sizeof(data));
 
-    if (ACRT_FAILED(status)) {
+    if (HIVE_FAILED(status)) {
         TEST_PASS("send to dead actor fails");
     } else {
         TEST_FAIL("send to dead actor should fail");
     }
 
-    acrt_exit();
+    hive_exit();
 }
 
 // ============================================================================
 // Test 15: Message pool exhaustion
-// Pool size: ACRT_MESSAGE_DATA_POOL_SIZE
+// Pool size: HIVE_MESSAGE_DATA_POOL_SIZE
 // ============================================================================
 
 static void test15_message_pool_info(void *arg) {
     (void)arg;
-    printf("\nTest 15: Message pool info (ACRT_MESSAGE_DATA_POOL_SIZE=%d)\n",
-           ACRT_MESSAGE_DATA_POOL_SIZE);
+    printf("\nTest 15: Message pool info (HIVE_MESSAGE_DATA_POOL_SIZE=%d)\n",
+           HIVE_MESSAGE_DATA_POOL_SIZE);
     fflush(stdout);
 
     // Simple test: just verify we can send many messages
-    actor_id self = acrt_self();
+    actor_id self = hive_self();
     int sent = 0;
 
     for (int i = 0; i < 100; i++) {
         int data = i;
-        acrt_status status = acrt_ipc_notify(self, &data, sizeof(data));
-        if (ACRT_FAILED(status)) {
+        hive_status status = hive_ipc_notify(self, &data, sizeof(data));
+        if (HIVE_FAILED(status)) {
             printf("    Send failed at %d: %s\n", i, status.msg ? status.msg : "unknown");
             break;
         }
@@ -671,9 +671,9 @@ static void test15_message_pool_info(void *arg) {
     printf("    Sent %d messages to self\n", sent);
 
     // Drain all messages
-    acrt_message msg;
+    hive_message msg;
     int received = 0;
-    while (!ACRT_FAILED(acrt_ipc_recv(&msg, 0))) {
+    while (!HIVE_FAILED(hive_ipc_recv(&msg, 0))) {
         received++;
     }
 
@@ -685,11 +685,11 @@ static void test15_message_pool_info(void *arg) {
         TEST_FAIL("message count mismatch");
     }
 
-    acrt_exit();
+    hive_exit();
 }
 
 // ============================================================================
-// Test 16: NULL pointer handling - acrt_ipc_notify with NULL data (non-zero len)
+// Test 16: NULL pointer handling - hive_ipc_notify with NULL data (non-zero len)
 // ============================================================================
 
 static void test16_null_data_send(void *arg) {
@@ -697,20 +697,20 @@ static void test16_null_data_send(void *arg) {
     printf("\nTest 16: NULL data pointer with non-zero length\n");
     fflush(stdout);
 
-    actor_id self = acrt_self();
+    actor_id self = hive_self();
 
     // Sending NULL data with len > 0 should fail or be handled safely
-    acrt_status status = acrt_ipc_notify(self, NULL, 10);
-    if (ACRT_FAILED(status)) {
-        TEST_PASS("acrt_ipc_notify rejects NULL data with non-zero length");
+    hive_status status = hive_ipc_notify(self, NULL, 10);
+    if (HIVE_FAILED(status)) {
+        TEST_PASS("hive_ipc_notify rejects NULL data with non-zero length");
     } else {
         // If it succeeded, the implementation might handle it - drain the message
-        acrt_message msg;
-        acrt_ipc_recv(&msg, 0);
-        TEST_PASS("acrt_ipc_notify handles NULL data gracefully");
+        hive_message msg;
+        hive_ipc_recv(&msg, 0);
+        TEST_PASS("hive_ipc_notify handles NULL data gracefully");
     }
 
-    acrt_exit();
+    hive_exit();
 }
 
 // ============================================================================
@@ -721,8 +721,8 @@ static void short_lived_actor(void *arg) {
     actor_id parent = *(actor_id *)arg;
     // Send a message then die
     int data = 42;
-    acrt_ipc_notify(parent, &data, sizeof(data));
-    acrt_exit();
+    hive_ipc_notify(parent, &data, sizeof(data));
+    hive_exit();
 }
 
 static void test17_spawn_death_cycle_leak(void *arg) {
@@ -730,30 +730,30 @@ static void test17_spawn_death_cycle_leak(void *arg) {
     printf("\nTest 17: Mailbox integrity after spawn/death cycles\n");
     fflush(stdout);
 
-    actor_id self = acrt_self();
+    actor_id self = hive_self();
     int cycles = 50;  // 50 spawn/death cycles
     int messages_received = 0;
 
     for (int i = 0; i < cycles; i++) {
-        actor_config cfg = ACRT_ACTOR_CONFIG_DEFAULT;
+        actor_config cfg = HIVE_ACTOR_CONFIG_DEFAULT;
         cfg.malloc_stack = true;
         cfg.stack_size = 8 * 1024;
 
         actor_id child;
-        if (ACRT_FAILED(acrt_spawn_ex(short_lived_actor, &self, &cfg, &child))) {
+        if (HIVE_FAILED(hive_spawn_ex(short_lived_actor, &self, &cfg, &child))) {
             printf("    Spawn failed at cycle %d\n", i);
             break;
         }
 
         // Wait for message from child
-        acrt_message msg;
-        acrt_status status = acrt_ipc_recv(&msg, 500);
-        if (!ACRT_FAILED(status)) {
+        hive_message msg;
+        hive_status status = hive_ipc_recv(&msg, 500);
+        if (!HIVE_FAILED(status)) {
             messages_received++;
         }
 
         // Yield to let child fully exit
-        acrt_yield();
+        hive_yield();
     }
 
     if (messages_received == cycles) {
@@ -763,7 +763,7 @@ static void test17_spawn_death_cycle_leak(void *arg) {
         TEST_FAIL("possible mailbox leak or message loss");
     }
 
-    acrt_exit();
+    hive_exit();
 }
 
 // ============================================================================
@@ -796,46 +796,46 @@ static void run_all_tests(void *arg) {
     (void)arg;
 
     for (size_t i = 0; i < NUM_TESTS; i++) {
-        actor_config cfg = ACRT_ACTOR_CONFIG_DEFAULT;
+        actor_config cfg = HIVE_ACTOR_CONFIG_DEFAULT;
         cfg.stack_size = 64 * 1024;
 
         actor_id test;
-        if (ACRT_FAILED(acrt_spawn_ex(test_funcs[i], NULL, &cfg, &test))) {
+        if (HIVE_FAILED(hive_spawn_ex(test_funcs[i], NULL, &cfg, &test))) {
             printf("Failed to spawn test %zu\n", i);
             continue;
         }
 
-        acrt_link(test);
+        hive_link(test);
 
-        acrt_message msg;
-        acrt_ipc_recv(&msg, 10000);
+        hive_message msg;
+        hive_ipc_recv(&msg, 10000);
     }
 
-    acrt_exit();
+    hive_exit();
 }
 
 int main(void) {
-    printf("=== IPC (acrt_ipc) Test Suite ===\n");
+    printf("=== IPC (hive_ipc) Test Suite ===\n");
 
-    acrt_status status = acrt_init();
-    if (ACRT_FAILED(status)) {
+    hive_status status = hive_init();
+    if (HIVE_FAILED(status)) {
         fprintf(stderr, "Failed to initialize runtime: %s\n",
                 status.msg ? status.msg : "unknown error");
         return 1;
     }
 
-    actor_config cfg = ACRT_ACTOR_CONFIG_DEFAULT;
+    actor_config cfg = HIVE_ACTOR_CONFIG_DEFAULT;
     cfg.stack_size = 128 * 1024;
 
     actor_id runner;
-    if (ACRT_FAILED(acrt_spawn_ex(run_all_tests, NULL, &cfg, &runner))) {
+    if (HIVE_FAILED(hive_spawn_ex(run_all_tests, NULL, &cfg, &runner))) {
         fprintf(stderr, "Failed to spawn test runner\n");
-        acrt_cleanup();
+        hive_cleanup();
         return 1;
     }
 
-    acrt_run();
-    acrt_cleanup();
+    hive_run();
+    hive_cleanup();
 
     printf("\n=== Results ===\n");
     printf("Passed: %d\n", tests_passed);

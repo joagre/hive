@@ -1,0 +1,289 @@
+\" Man page for bus pub/sub functions
+.TH HIVE_BUS 3 "January 2025" "ACRT 1.0" "Actor Runtime Manual"
+.SH NAME
+hive_bus_create, hive_bus_destroy, hive_bus_publish, hive_bus_subscribe, hive_bus_unsubscribe, hive_bus_read, hive_bus_read_wait, hive_bus_entry_count \- publish-subscribe bus
+.SH SYNOPSIS
+.nf
+.B #include <hive_bus.h>
+.PP
+.BI "hive_status hive_bus_create(const hive_bus_config *" cfg ", bus_id *" out ");"
+.BI "hive_status hive_bus_destroy(bus_id " bus ");"
+.BI "hive_status hive_bus_publish(bus_id " bus ", const void *" data ", size_t " len ");"
+.BI "hive_status hive_bus_subscribe(bus_id " bus ");"
+.BI "hive_status hive_bus_unsubscribe(bus_id " bus ");"
+.BI "hive_status hive_bus_read(bus_id " bus ", void *" buf ", size_t " max_len ", size_t *" bytes_read ");"
+.BI "hive_status hive_bus_read_wait(bus_id " bus ", void *" buf ", size_t " max_len ","
+.BI "                               size_t *" bytes_read ", int32_t " timeout_ms ");"
+.BI "size_t hive_bus_entry_count(bus_id " bus ");"
+.fi
+.SH DESCRIPTION
+These functions implement a publish-subscribe message bus for broadcasting data to
+multiple subscribers. Unlike point-to-point IPC, bus entries can be read by multiple
+actors independently.
+.SS Bus Configuration
+Buses are created with a configuration structure:
+.PP
+.nf
+typedef struct {
+    uint8_t  max_subscribers;     /* 1..32 concurrent subscribers */
+    uint8_t  consume_after_reads; /* remove after N reads, 0 = keep */
+    uint32_t max_age_ms;          /* expire after ms, 0 = no expiry */
+    size_t   max_entries;         /* ring buffer capacity */
+    size_t   max_entry_size;      /* max payload bytes per entry */
+} hive_bus_config;
+
+#define HIVE_BUS_CONFIG_DEFAULT { \\
+    .max_subscribers = 32, \\
+    .consume_after_reads = 0, \\
+    .max_age_ms = 0, \\
+    .max_entries = 16, \\
+    .max_entry_size = 256 \\
+}
+.fi
+.SS Creating and Destroying Buses
+.BR hive_bus_create ()
+creates a new bus with the specified configuration. The bus ID is stored in
+.IR out .
+.PP
+.BR hive_bus_destroy ()
+destroys a bus. This fails if any subscribers remain; all actors must unsubscribe
+first.
+.SS Publishing Data
+.BR hive_bus_publish ()
+publishes
+.I len
+bytes from
+.I data
+to the bus. The data is copied to the bus ring buffer. All current subscribers can
+read this entry independently.
+.PP
+When the ring buffer is full, the oldest entry is
+.B automatically evicted
+to make room. This differs from IPC, which returns
+.B HIVE_ERR_NOMEM
+instead.
+.SS Subscribing and Unsubscribing
+.BR hive_bus_subscribe ()
+subscribes the calling actor to the bus. New subscribers start reading from the
+current head position (they do not see entries published before subscribing).
+.PP
+.BR hive_bus_unsubscribe ()
+removes the calling actor's subscription.
+.SS Reading Data
+.BR hive_bus_read ()
+reads the next unread entry into
+.IR buf .
+At most
+.I max_len
+bytes are copied. The actual number of bytes read is stored in
+.IR bytes_read .
+Each subscriber maintains independent read position; reading does not affect
+other subscribers.
+.PP
+.BR hive_bus_read_wait ()
+is the blocking variant. The
+.I timeout_ms
+parameter controls blocking:
+.TP
+.B 0
+Return immediately with
+.B HIVE_ERR_WOULDBLOCK
+if no data.
+.TP
+.B positive value
+Block up to the specified milliseconds.
+.TP
+.B -1
+Block forever until data is available.
+.SS Retention Policies
+.TP
+.B consume_after_reads
+When non-zero, entries are automatically removed after being read by this many
+subscribers. Use for work-queue patterns where each entry should be processed
+once by any subscriber.
+.TP
+.B max_age_ms
+When non-zero, entries older than this are automatically expired. Use for
+time-sensitive data like sensor readings.
+.SS Querying Bus State
+.BR hive_bus_entry_count ()
+returns the number of valid entries currently in the bus ring buffer.
+.SH RETURN VALUE
+Functions returning
+.I hive_status
+indicate success when
+.I status.code
+is
+.BR HIVE_OK .
+.PP
+.BR hive_bus_entry_count ()
+returns the entry count, or 0 if the bus is invalid.
+.SH ERRORS
+.TP
+.B HIVE_ERR_INVALID
+Invalid bus ID, NULL arguments, not called from actor context, not subscribed
+(for read/unsubscribe), already subscribed (for subscribe), or bus has active
+subscribers (for destroy).
+.TP
+.B HIVE_ERR_NOMEM
+Message data pool exhausted (for publish) or subscriber table full (for subscribe).
+.TP
+.B HIVE_ERR_WOULDBLOCK
+No data available and timeout was 0 (for
+.BR hive_bus_read ()).
+.TP
+.B HIVE_ERR_TIMEOUT
+No data received within timeout period (for
+.BR hive_bus_read_wait ()).
+.SH NOTES
+.SS Bus vs IPC
+Use bus for:
+.IP \(bu 2
+One-to-many communication (broadcast)
+.IP \(bu 2
+Sensor data streams (multiple consumers)
+.IP \(bu 2
+Event notification (multiple listeners)
+.IP \(bu 2
+Work queues (with consume_after_reads=1)
+.PP
+Use IPC for:
+.IP \(bu 2
+Point-to-point communication
+.IP \(bu 2
+Request/reply patterns
+.IP \(bu 2
+Guaranteed delivery (IPC never drops)
+.SS Ring Buffer Eviction
+When the ring buffer is full,
+.BR hive_bus_publish ()
+automatically evicts the oldest entry. This is
+.B different from IPC
+which returns
+.B HIVE_ERR_NOMEM
+and never drops messages. Design subscribers to keep up with publishers; slow
+readers will miss messages.
+.SS Subscriber Limit
+Maximum 32 subscribers per bus (limited by uint32_t bitmask used internally for
+tracking reads). The actual limit is min(32, HIVE_MAX_BUS_SUBSCRIBERS).
+.SS New Subscriber Read Position
+When an actor subscribes, its read position starts at the current head. It will
+not see entries published before subscribing. To capture all entries, subscribe
+before any publishing begins.
+.SS Automatic Cleanup
+When an actor dies, all its bus subscriptions are automatically removed. When a
+bus is destroyed, all its entries are freed.
+.SS Pool Exhaustion
+Bus shares the message data pool with IPC (HIVE_MESSAGE_DATA_POOL_SIZE). Heavy
+bus usage can starve IPC and vice versa. Size pools appropriately for your
+application's communication patterns.
+.SS Embedded Considerations
+.IP \(bu 2
+Zero heap allocation (static ring buffers and subscriber arrays)
+.IP \(bu 2
+O(1) publish, O(n) read scan (n = entry count)
+.IP \(bu 2
+Deterministic memory: ring buffer size × entry size per bus
+.IP \(bu 2
+Wake-on-publish: blocked readers resume immediately when data arrives
+.IP \(bu 2
+Microsecond timestamps for max_age_ms (gettimeofday on Linux, hardware timer on STM32)
+.SH EXAMPLE
+.SS Sensor Broadcast
+.nf
+#include <hive_runtime.h>
+#include <hive_bus.h>
+#include <stdio.h>
+
+typedef struct {
+    float temperature;
+    float humidity;
+} sensor_data;
+
+bus_id sensor_bus;
+
+void sensor_publisher(void *arg) {
+    (void)arg;
+    sensor_data data = {25.0f, 60.0f};
+
+    for (int i = 0; i < 5; i++) {
+        data.temperature += 0.5f;
+        hive_bus_publish(sensor_bus, &data, sizeof(data));
+        printf("Published: temp=%.1f, humidity=%.1f\\n",
+               data.temperature, data.humidity);
+    }
+
+    hive_exit();
+}
+
+void display_actor(void *arg) {
+    (void)arg;
+    hive_bus_subscribe(sensor_bus);
+
+    for (int i = 0; i < 5; i++) {
+        sensor_data data;
+        size_t len;
+        hive_status s = hive_bus_read_wait(sensor_bus, &data, sizeof(data),
+                                           &len, 5000);
+        if (HIVE_FAILED(s)) {
+            printf("Read failed: %s\\n", HIVE_ERR_STR(s));
+            break;
+        }
+        printf("Display: temp=%.1f\\n", data.temperature);
+    }
+
+    hive_bus_unsubscribe(sensor_bus);
+    hive_exit();
+}
+
+void logger_actor(void *arg) {
+    (void)arg;
+    hive_bus_subscribe(sensor_bus);
+
+    for (int i = 0; i < 5; i++) {
+        sensor_data data;
+        size_t len;
+        hive_status s = hive_bus_read_wait(sensor_bus, &data, sizeof(data),
+                                           &len, 5000);
+        if (HIVE_FAILED(s)) break;
+        printf("Logger: recorded temp=%.1f at tick %d\\n",
+               data.temperature, i);
+    }
+
+    hive_bus_unsubscribe(sensor_bus);
+    hive_exit();
+}
+
+int main(void) {
+    hive_init();
+
+    /* Create bus with 100ms expiry */
+    hive_bus_config cfg = HIVE_BUS_CONFIG_DEFAULT;
+    cfg.max_age_ms = 100;
+    hive_bus_create(&cfg, &sensor_bus);
+
+    actor_id pub, disp, log;
+    hive_spawn(display_actor, NULL, &disp);
+    hive_spawn(logger_actor, NULL, &log);
+    hive_spawn(sensor_publisher, NULL, &pub);
+
+    hive_run();
+    hive_bus_destroy(sensor_bus);
+    hive_cleanup();
+    return 0;
+}
+.fi
+.SS Work Queue Pattern
+.nf
+/* Use consume_after_reads=1 for work queue semantics */
+hive_bus_config cfg = HIVE_BUS_CONFIG_DEFAULT;
+cfg.consume_after_reads = 1;  /* Entry removed after first read */
+cfg.max_entries = 64;         /* Queue depth */
+hive_bus_create(&cfg, &work_queue);
+
+/* Multiple workers subscribe; each job processed exactly once */
+.fi
+.SH SEE ALSO
+.BR hive_ipc (3),
+.BR hive_spawn (3),
+.BR hive_types (3)

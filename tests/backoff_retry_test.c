@@ -1,13 +1,13 @@
-#include "acrt_runtime.h"
-#include "acrt_ipc.h"
-#include "acrt_timer.h"
-#include "acrt_static_config.h"
+#include "hive_runtime.h"
+#include "hive_ipc.h"
+#include "hive_timer.h"
+#include "hive_static_config.h"
 #include <stdio.h>
 #include <stdbool.h>
 #include <string.h>
 
 // Leave room for control messages and timers
-#define MESSAGES_TO_FILL_POOL (ACRT_MAILBOX_ENTRY_POOL_SIZE / 2)
+#define MESSAGES_TO_FILL_POOL (HIVE_MAILBOX_ENTRY_POOL_SIZE / 2)
 
 typedef struct {
     actor_id receiver;
@@ -23,7 +23,7 @@ typedef struct {
 void receiver_actor(void *arg) {
     (void)arg;
 
-    printf("Receiver: Started (ID: %u), mailbox count: %zu\n", acrt_self(), acrt_ipc_count());
+    printf("Receiver: Started (ID: %u), mailbox count: %zu\n", hive_self(), hive_ipc_count());
     fflush(stdout);
 
     // Debug: Scan messages and show their tags
@@ -33,16 +33,16 @@ void receiver_actor(void *arg) {
     int scanned = 0;
     int found_start = 0;
     int found_done = 0;
-    acrt_message msg;
+    hive_message msg;
 
     while (scanned < 300) {
-        acrt_status status = acrt_ipc_recv(&msg, 0);  // Non-blocking
-        if (status.code == ACRT_ERR_WOULDBLOCK) {
+        hive_status status = hive_ipc_recv(&msg, 0);  // Non-blocking
+        if (status.code == HIVE_ERR_WOULDBLOCK) {
             break;
         }
-        if (!ACRT_FAILED(status)) {
+        if (!HIVE_FAILED(status)) {
             uint32_t tag;
-            acrt_msg_decode(&msg, NULL, &tag, NULL, NULL);
+            hive_msg_decode(&msg, NULL, &tag, NULL, NULL);
             if (scanned < 5 || tag == TAG_START || tag == TAG_DONE) {
                 printf("  Message %d: tag=%u\n", scanned, tag);
             }
@@ -58,7 +58,7 @@ void receiver_actor(void *arg) {
             if (scanned % 50 == 0) {
                 printf("Receiver: Processed %d messages, yielding...\n", scanned);
                 fflush(stdout);
-                acrt_yield();
+                hive_yield();
             }
         }
     }
@@ -74,9 +74,9 @@ void receiver_actor(void *arg) {
         fflush(stdout);
 
         uint32_t done_tag = TAG_DONE;
-        acrt_status status = acrt_ipc_recv_match(NULL, NULL, &done_tag, &msg, 5000);
+        hive_status status = hive_ipc_recv_match(NULL, NULL, &done_tag, &msg, 5000);
 
-        if (!ACRT_FAILED(status)) {
+        if (!HIVE_FAILED(status)) {
             printf("Receiver: Got DONE signal\n");
         } else {
             printf("Receiver: Timeout waiting for DONE (%s)\n",
@@ -86,17 +86,17 @@ void receiver_actor(void *arg) {
 
     printf("Receiver: Exiting\n");
 
-    acrt_exit();
+    hive_exit();
 }
 
 // Internal send with custom tag
-extern acrt_status acrt_ipc_notify_ex(actor_id to, actor_id sender, acrt_msg_class class,
+extern hive_status hive_ipc_notify_ex(actor_id to, actor_id sender, hive_msg_class class,
                                  uint32_t tag, const void *data, size_t len);
 
 void sender_actor(void *arg) {
     test_args *args = (test_args *)arg;
     actor_id receiver = args->receiver;
-    actor_id self = acrt_self();
+    actor_id self = hive_self();
 
     printf("Sender: Started (ID: %u), receiver ID: %u\n", self, receiver);
     fflush(stdout);
@@ -110,9 +110,9 @@ void sender_actor(void *arg) {
 
     for (int i = 0; i < MESSAGES_TO_FILL_POOL; i++) {
         data++;
-        acrt_status status = acrt_ipc_notify_ex(receiver, self, ACRT_MSG_NOTIFY, TAG_DATA, &data, sizeof(data));
-        if (ACRT_FAILED(status)) {
-            if (status.code == ACRT_ERR_NOMEM) {
+        hive_status status = hive_ipc_notify_ex(receiver, self, HIVE_MSG_NOTIFY, TAG_DATA, &data, sizeof(data));
+        if (HIVE_FAILED(status)) {
+            if (status.code == HIVE_ERR_NOMEM) {
                 printf("Sender: Pool exhausted after %d messages\n", sent_count);
                 break;
             }
@@ -129,16 +129,16 @@ void sender_actor(void *arg) {
     int failed_count = 0;
     for (int i = 0; i < 50; i++) {
         data++;
-        acrt_status status = acrt_ipc_notify_ex(receiver, self, ACRT_MSG_NOTIFY, TAG_DATA, &data, sizeof(data));
-        if (status.code == ACRT_ERR_NOMEM) {
+        hive_status status = hive_ipc_notify_ex(receiver, self, HIVE_MSG_NOTIFY, TAG_DATA, &data, sizeof(data));
+        if (status.code == HIVE_ERR_NOMEM) {
             failed_count++;
-        } else if (!ACRT_FAILED(status)) {
+        } else if (!HIVE_FAILED(status)) {
             extra_sent++;
         }
     }
 
     if (failed_count > 0) {
-        printf("Sender: ✓ ACRT_ERR_NOMEM on %d attempts (sent %d more)\n", failed_count, extra_sent);
+        printf("Sender: ✓ HIVE_ERR_NOMEM on %d attempts (sent %d more)\n", failed_count, extra_sent);
     } else {
         printf("Sender: All 50 extra sends succeeded\n");
     }
@@ -146,8 +146,8 @@ void sender_actor(void *arg) {
     // Send START signal
     printf("\nSender: Sending START signal (tag=%d)...\n", TAG_START);
     fflush(stdout);
-    acrt_status status = acrt_ipc_notify_ex(receiver, self, ACRT_MSG_NOTIFY, TAG_START, NULL, 0);
-    if (ACRT_FAILED(status)) {
+    hive_status status = hive_ipc_notify_ex(receiver, self, HIVE_MSG_NOTIFY, TAG_START, NULL, 0);
+    if (HIVE_FAILED(status)) {
         printf("Sender: Failed to send START: %s\n", status.msg ? status.msg : "unknown");
     } else {
         printf("Sender: START signal sent successfully\n");
@@ -156,7 +156,7 @@ void sender_actor(void *arg) {
     // Yield to let receiver process
     printf("\nSender: Yielding to receiver...\n");
     fflush(stdout);
-    acrt_yield();
+    hive_yield();
 
     // Retry loop
     printf("Sender: Starting retry loop...\n");
@@ -166,21 +166,21 @@ void sender_actor(void *arg) {
     int retry_count = 0;
 
     for (int attempt = 0; attempt < 30; attempt++) {
-        acrt_yield();
+        hive_yield();
 
         data++;
-        status = acrt_ipc_notify_ex(receiver, self, ACRT_MSG_NOTIFY, TAG_DATA, &data, sizeof(data));
+        status = hive_ipc_notify_ex(receiver, self, HIVE_MSG_NOTIFY, TAG_DATA, &data, sizeof(data));
 
-        if (!ACRT_FAILED(status)) {
+        if (!HIVE_FAILED(status)) {
             printf("Sender: ✓ Send succeeded on attempt %d!\n", attempt + 1);
             send_succeeded = true;
             break;
         }
 
-        if (status.code == ACRT_ERR_NOMEM) {
+        if (status.code == HIVE_ERR_NOMEM) {
             retry_count++;
-            acrt_message msg;
-            acrt_ipc_recv(&msg, 5);  // Backoff 5ms
+            hive_message msg;
+            hive_ipc_recv(&msg, 5);  // Backoff 5ms
             if (attempt % 10 == 0) {
                 printf("Sender: Attempt %d - pool exhausted\n", attempt + 1);
             }
@@ -192,7 +192,7 @@ void sender_actor(void *arg) {
 
     // Send DONE signal
     printf("\nSender: Sending DONE signal...\n");
-    acrt_ipc_notify_ex(receiver, self, ACRT_MSG_NOTIFY, TAG_DONE, NULL, 0);
+    hive_ipc_notify_ex(receiver, self, HIVE_MSG_NOTIFY, TAG_DONE, NULL, 0);
 
     if (send_succeeded) {
         printf("\nSender: ✓ Backoff-retry SUCCESS!\n");
@@ -202,28 +202,28 @@ void sender_actor(void *arg) {
         printf("\nSender: ✗ Still failing after %d retries\n", retry_count);
     }
 
-    acrt_exit();
+    hive_exit();
 }
 
 int main(void) {
     printf("=== Backoff-Retry Test ===\n\n");
-    printf("Pool size: ACRT_MAILBOX_ENTRY_POOL_SIZE = %d\n", ACRT_MAILBOX_ENTRY_POOL_SIZE);
+    printf("Pool size: HIVE_MAILBOX_ENTRY_POOL_SIZE = %d\n", HIVE_MAILBOX_ENTRY_POOL_SIZE);
     printf("Messages to send: %d\n\n", MESSAGES_TO_FILL_POOL);
     fflush(stdout);
 
-    acrt_init();
+    hive_init();
 
     test_args args = {0};
 
-    acrt_spawn(receiver_actor, &args, &args.receiver);
+    hive_spawn(receiver_actor, &args, &args.receiver);
     printf("Main: Spawned receiver (ID: %u)\n", args.receiver);
 
-    acrt_spawn(sender_actor, &args, &args.sender);
+    hive_spawn(sender_actor, &args, &args.sender);
     printf("Main: Spawned sender (ID: %u)\n", args.sender);
     fflush(stdout);
 
-    acrt_run();
-    acrt_cleanup();
+    hive_run();
+    hive_cleanup();
 
     printf("\n=== Test Complete ===\n");
     return 0;

@@ -1,6 +1,6 @@
-#include "acrt_runtime.h"
-#include "acrt_ipc.h"
-#include "acrt_timer.h"
+#include "hive_runtime.h"
+#include "hive_ipc.h"
+#include "hive_timer.h"
 #include <stdio.h>
 #include <stdbool.h>
 
@@ -18,21 +18,21 @@ void worker_actor(void *arg) {
     int processed = 0;
 
     while (true) {
-        acrt_message msg;
-        acrt_status status = acrt_ipc_recv(&msg, 500);  // 500ms timeout
+        hive_message msg;
+        hive_status status = hive_ipc_recv(&msg, 500);  // 500ms timeout
 
-        if (status.code == ACRT_ERR_TIMEOUT) {
+        if (status.code == HIVE_ERR_TIMEOUT) {
             // No more work
             break;
         }
 
-        if (!ACRT_FAILED(status)) {
+        if (!HIVE_FAILED(status)) {
             processed++;
         }
     }
 
     printf("Worker %d: Processed %d messages\n", id, processed);
-    acrt_exit();
+    hive_exit();
 }
 
 // Coordinator that distributes work with backoff-retry
@@ -51,9 +51,9 @@ void coordinator_actor(void *arg) {
         for (int w = 0; w < args->worker_count; w++) {
             int data = burst * NUM_WORKERS + w;
 
-            acrt_status status = acrt_ipc_notify(args->workers[w], &data, sizeof(data));
+            hive_status status = hive_ipc_notify(args->workers[w], &data, sizeof(data));
 
-            if (status.code == ACRT_ERR_NOMEM) {
+            if (status.code == HIVE_ERR_NOMEM) {
                 retry_needed++;
 
                 if (retry_needed == 1) {
@@ -61,31 +61,31 @@ void coordinator_actor(void *arg) {
                 }
 
                 // Backoff-retry pattern
-                acrt_message msg;
-                acrt_ipc_recv(&msg, 5);  // Backoff 5ms
+                hive_message msg;
+                hive_ipc_recv(&msg, 5);  // Backoff 5ms
 
                 // Retry
-                status = acrt_ipc_notify(args->workers[w], &data, sizeof(data));
-                if (!ACRT_FAILED(status)) {
+                status = hive_ipc_notify(args->workers[w], &data, sizeof(data));
+                if (!HIVE_FAILED(status)) {
                     retry_success++;
                     total_sent++;
                 } else {
                     // Even retry failed - aggressive backoff
-                    acrt_ipc_recv(&msg, 20);
-                    status = acrt_ipc_notify(args->workers[w], &data, sizeof(data));
-                    if (!ACRT_FAILED(status)) {
+                    hive_ipc_recv(&msg, 20);
+                    status = hive_ipc_notify(args->workers[w], &data, sizeof(data));
+                    if (!HIVE_FAILED(status)) {
                         retry_success++;
                         total_sent++;
                     }
                 }
-            } else if (!ACRT_FAILED(status)) {
+            } else if (!HIVE_FAILED(status)) {
                 total_sent++;
             }
         }
 
         // Yield periodically to let workers process
         if (burst % 20 == 0) {
-            acrt_yield();
+            hive_yield();
         }
     }
 
@@ -99,7 +99,7 @@ void coordinator_actor(void *arg) {
         printf("  Without retry, %d messages would have been lost\n", retry_needed);
     }
 
-    acrt_exit();
+    hive_exit();
 }
 
 int main(void) {
@@ -107,7 +107,7 @@ int main(void) {
     printf("\nScenario: Coordinator sends bursts to multiple workers\n");
     printf("Expected: Temporary pool exhaustion handled by backoff-retry\n");
 
-    acrt_init();
+    hive_init();
 
     coordinator_args args;
     args.worker_count = NUM_WORKERS;
@@ -116,17 +116,17 @@ int main(void) {
     static int worker_ids[NUM_WORKERS];
     for (int i = 0; i < NUM_WORKERS; i++) {
         worker_ids[i] = i + 1;
-        acrt_spawn(worker_actor, &worker_ids[i], &args.workers[i]);
+        hive_spawn(worker_actor, &worker_ids[i], &args.workers[i]);
     }
     printf("Main: Spawned %d workers\n", NUM_WORKERS);
 
     // Spawn coordinator
     actor_id coordinator;
-    acrt_spawn(coordinator_actor, &args, &coordinator);
+    hive_spawn(coordinator_actor, &args, &coordinator);
     printf("Main: Spawned coordinator\n");
 
-    acrt_run();
-    acrt_cleanup();
+    hive_run();
+    hive_cleanup();
 
     printf("\n=== Demo Complete ===\n");
     return 0;

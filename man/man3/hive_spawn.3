@@ -1,0 +1,197 @@
+.\" Man page for hive_spawn, hive_spawn_ex, hive_exit, hive_self, hive_yield, hive_actor_alive
+.TH HIVE_SPAWN 3 "January 2025" "ACRT 1.0" "Actor Runtime Manual"
+.SH NAME
+hive_spawn, hive_spawn_ex, hive_exit, hive_self, hive_yield, hive_actor_alive \- actor lifecycle management
+.SH SYNOPSIS
+.nf
+.B #include <hive_runtime.h>
+.PP
+.BI "hive_status hive_spawn(actor_fn " fn ", void *" arg ", actor_id *" out ");"
+.BI "hive_status hive_spawn_ex(actor_fn " fn ", void *" arg ", const actor_config *" cfg ", actor_id *" out ");"
+.BI "_Noreturn void hive_exit(void);"
+.BI "actor_id hive_self(void);"
+.BI "void hive_yield(void);"
+.BI "bool hive_actor_alive(actor_id " id ");"
+.fi
+.SH DESCRIPTION
+These functions manage the lifecycle of actors in the runtime.
+.SS Spawning Actors
+.BR hive_spawn ()
+creates a new actor with default configuration. The actor function
+.I fn
+will be called with argument
+.I arg
+when the actor is scheduled. The new actor's ID is stored in
+.IR out .
+.PP
+.BR hive_spawn_ex ()
+creates a new actor with explicit configuration via the
+.I cfg
+parameter:
+.PP
+.nf
+typedef struct {
+    size_t      stack_size;    /* bytes, 0 = default (64KB) */
+    hive_priority_level priority;  /* 0-3, lower = higher */
+    const char *name;          /* for debugging, may be NULL */
+    bool        malloc_stack;  /* false = arena, true = malloc */
+} actor_config;
+
+#define HIVE_ACTOR_CONFIG_DEFAULT { \\
+    .stack_size = 0, \\
+    .priority = HIVE_PRIORITY_NORMAL, \\
+    .name = NULL, \\
+    .malloc_stack = false \\
+}
+.fi
+.SS Priority Levels
+.TP
+.B HIVE_PRIORITY_CRITICAL (0)
+Safety-critical tasks: flight control, emergency stop
+.TP
+.B HIVE_PRIORITY_HIGH (1)
+Time-sensitive tasks: sensor fusion, control loops
+.TP
+.B HIVE_PRIORITY_NORMAL (2)
+Standard tasks: telemetry, logging (default)
+.TP
+.B HIVE_PRIORITY_LOW (3)
+Background tasks: diagnostics, housekeeping
+.PP
+Higher priority actors (lower numeric value) always run before lower priority
+actors. Within the same priority level, actors are scheduled round-robin.
+.SS Terminating Actors
+.BR hive_exit ()
+terminates the calling actor. This function does not return. When an actor
+exits:
+.IP \(bu 2
+Its mailbox is cleared
+.IP \(bu 2
+Linked actors receive EXIT notifications
+.IP \(bu 2
+Monitors receive EXIT notifications
+.IP \(bu 2
+Bus subscriptions are removed
+.IP \(bu 2
+Timers owned by the actor are cancelled
+.IP \(bu 2
+Stack memory is returned to the arena
+.PP
+.B Important:
+If an actor function returns without calling
+.BR hive_exit (),
+this is detected as a crash and linked/monitoring actors receive
+.B HIVE_EXIT_CRASH
+instead of
+.BR HIVE_EXIT_NORMAL .
+.SS Querying Actor State
+.BR hive_self ()
+returns the actor ID of the calling actor. Returns
+.B ACTOR_ID_INVALID
+if called outside actor context.
+.PP
+.BR hive_yield ()
+voluntarily yields control to the scheduler, allowing other actors of equal
+or higher priority to run. The calling actor remains runnable and will be
+rescheduled.
+.PP
+.BR hive_actor_alive ()
+returns true if the specified actor exists and has not exited, false otherwise.
+Returns false for
+.BR ACTOR_ID_INVALID .
+.SH RETURN VALUE
+.BR hive_spawn ()
+and
+.BR hive_spawn_ex ()
+return an
+.I hive_status
+structure. On success,
+.I status.code
+is
+.B HIVE_OK
+and
+.I *out
+contains the new actor's ID.
+.PP
+.BR hive_self ()
+returns the current actor's ID, or
+.B ACTOR_ID_INVALID
+outside actor context.
+.PP
+.BR hive_actor_alive ()
+returns true if the actor is alive, false otherwise.
+.SH ERRORS
+.TP
+.B HIVE_ERR_INVALID
+.I fn
+is NULL, or invalid configuration parameters.
+.TP
+.B HIVE_ERR_NOMEM
+Actor table full (HIVE_MAX_ACTORS reached) or stack arena exhausted.
+.SH NOTES
+.SS Stack Allocation
+By default, actor stacks are allocated from a static arena
+(HIVE_STACK_ARENA_SIZE, default 1 MB). The arena uses first-fit allocation
+with coalescing on actor exit. Set
+.I malloc_stack = true
+to use heap allocation instead (not recommended for embedded systems).
+.SS Stack Sizing
+Default stack size is 64 KB (HIVE_DEFAULT_STACK_SIZE). Embedded applications
+should carefully size stacks based on worst-case call depth. Stack overflow
+is detected via guard patterns and results in
+.B HIVE_EXIT_CRASH_STACK
+notification to linked/monitoring actors.
+.SS Spawn from Main vs Actor
+Actors can be spawned from main() before
+.BR hive_run ()
+or from within running actors. Actors spawned from main() begin running when
+.BR hive_run ()
+is called.
+.SS Memory Determinism
+Spawn/exit are "cold path" operations with O(n) arena allocation. Hot paths
+(IPC, scheduling) use O(1) pool allocation. For deterministic timing, spawn
+actors at startup and reuse them.
+.SH EXAMPLE
+.nf
+#include <hive_runtime.h>
+#include <stdio.h>
+
+void worker(void *arg) {
+    int id = *(int *)arg;
+    printf("Worker %d (actor %u) starting\\n", id, hive_self());
+
+    /* Do work... */
+
+    printf("Worker %d exiting\\n", id);
+    hive_exit();
+}
+
+int main(void) {
+    hive_init();
+
+    /* Spawn with custom config */
+    actor_config cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+    cfg.priority = HIVE_PRIORITY_HIGH;
+    cfg.stack_size = 32 * 1024;  /* 32 KB stack */
+    cfg.name = "sensor";
+
+    int worker_ids[3] = {1, 2, 3};
+    actor_id actors[3];
+
+    for (int i = 0; i < 3; i++) {
+        hive_status s = hive_spawn_ex(worker, &worker_ids[i], &cfg, &actors[i]);
+        if (HIVE_FAILED(s)) {
+            fprintf(stderr, "Spawn failed: %s\\n", HIVE_ERR_STR(s));
+        }
+    }
+
+    hive_run();
+    hive_cleanup();
+    return 0;
+}
+.fi
+.SH SEE ALSO
+.BR hive_init (3),
+.BR hive_link (3),
+.BR hive_ipc (3),
+.BR hive_types (3)

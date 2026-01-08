@@ -20,25 +20,25 @@ A minimalistic actor-based runtime designed for **embedded and safety-critical s
 ### Heap Usage Policy
 
 **Allowed heap use** (malloc/free):
-- `acrt_init()`: None (uses only static/BSS)
-- `acrt_spawn()` / `acrt_spawn_ex()`: Actor stack allocation **only if** `actor_config.malloc_stack = true`
+- `hive_init()`: None (uses only static/BSS)
+- `hive_spawn()` / `hive_spawn_ex()`: Actor stack allocation **only if** `actor_config.malloc_stack = true`
   - Default: Arena allocator (static memory, no malloc)
   - Optional: Explicit malloc via config flag
 - Actor exit/cleanup: Corresponding free for malloc'd stacks
 
 **Forbidden heap use** (exhaustive):
-- Scheduler loop (`acrt_run()`, `acrt_yield()`, context switching)
-- IPC (`acrt_ipc_notify()`, `acrt_ipc_recv()`, `acrt_ipc_recv_match()`, `acrt_ipc_request()`, `acrt_ipc_reply()`)
-- Timers (`acrt_timer_after()`, `acrt_timer_every()`, timer delivery)
-- Bus (`acrt_bus_publish()`, `acrt_bus_read()`, `acrt_bus_read_wait()`)
-- Network I/O (`acrt_net_*()` functions, event loop dispatch)
-- File I/O (`acrt_file_*()` functions, synchronous execution)
-- Linking/monitoring (`acrt_link()`, `acrt_monitor()`, death notifications)
+- Scheduler loop (`hive_run()`, `hive_yield()`, context switching)
+- IPC (`hive_ipc_notify()`, `hive_ipc_recv()`, `hive_ipc_recv_match()`, `hive_ipc_request()`, `hive_ipc_reply()`)
+- Timers (`hive_timer_after()`, `hive_timer_every()`, timer delivery)
+- Bus (`hive_bus_publish()`, `hive_bus_read()`, `hive_bus_read_wait()`)
+- Network I/O (`hive_net_*()` functions, event loop dispatch)
+- File I/O (`hive_file_*()` functions, synchronous execution)
+- Linking/monitoring (`hive_link()`, `hive_monitor()`, death notifications)
 - All I/O event processing (epoll event dispatch)
 
-**Consequence**: All "hot path" operations (scheduling, IPC, I/O) use **static pools** with **O(1) allocation** and return `ACRT_ERR_NOMEM` on pool exhaustion. Stack allocation (spawn/exit, cold path) uses arena allocator with O(n) first-fit search bounded by number of free blocks. No malloc in hot paths, no heap fragmentation, predictable allocation latency.
+**Consequence**: All "hot path" operations (scheduling, IPC, I/O) use **static pools** with **O(1) allocation** and return `HIVE_ERR_NOMEM` on pool exhaustion. Stack allocation (spawn/exit, cold path) uses arena allocator with O(n) first-fit search bounded by number of free blocks. No malloc in hot paths, no heap fragmentation, predictable allocation latency.
 
-**Linux verification**: Run with `LD_PRELOAD` malloc wrapper to assert no malloc calls after `acrt_init()` (except explicit `malloc_stack = true` spawns).
+**Linux verification**: Run with `LD_PRELOAD` malloc wrapper to assert no malloc calls after `hive_init()` (except explicit `malloc_stack = true` spawns).
 
 ## Target Platforms
 
@@ -96,8 +96,8 @@ On both platforms, the actor runtime is **single-threaded** with an event loop a
 Actors run until they explicitly yield control. The scheduler reschedules an actor only when:
 
 - The actor calls a blocking I/O primitive (net, file, IPC receive)
-- The actor explicitly yields via `acrt_yield()`
-- The actor exits via `acrt_exit()`
+- The actor explicitly yields via `hive_yield()`
+- The actor exits via `hive_exit()`
 
 There is no preemptive scheduling or time slicing within the actor runtime.
 
@@ -117,13 +117,13 @@ When an actor calls a blocking API, the following contract applies:
 - Scheduler saves actor context and switches to next runnable actor
 
 **Operations that block (actor yields, other actors run):**
-- `acrt_ipc_recv()` with timeout > 0 or timeout < 0 (block until message or timeout)
-- `acrt_ipc_recv_match()` (block until matching message or timeout)
-- `acrt_ipc_request()` (block until reply or timeout)
-- `acrt_net_send()`, `acrt_net_recv()` (block until at least 1 byte transferred or timeout)
-- `acrt_bus_read_wait()` (block until data available or timeout)
+- `hive_ipc_recv()` with timeout > 0 or timeout < 0 (block until message or timeout)
+- `hive_ipc_recv_match()` (block until matching message or timeout)
+- `hive_ipc_request()` (block until reply or timeout)
+- `hive_net_send()`, `hive_net_recv()` (block until at least 1 byte transferred or timeout)
+- `hive_bus_read_wait()` (block until data available or timeout)
 
-**Note:** File I/O (`acrt_file_*`) is NOT in this list. See "Scheduler-Stalling Calls" below.
+**Note:** File I/O (`hive_file_*`) is NOT in this list. See "Scheduler-Stalling Calls" below.
 
 **Mailbox availability while blocked:**
 - Blocked actors **can** receive mailbox messages
@@ -133,8 +133,8 @@ When an actor calls a blocking API, the following contract applies:
 **Unblock conditions:**
 - I/O readiness signaled (network socket becomes readable/writable)
 - Timer expires (for APIs with timeout)
-- Message arrives in mailbox (for `acrt_ipc_recv()`, `acrt_ipc_recv_match()`, `acrt_ipc_request()`)
-- Bus data published (for `acrt_bus_read_wait()`)
+- Message arrives in mailbox (for `hive_ipc_recv()`, `hive_ipc_recv_match()`, `hive_ipc_request()`)
+- Bus data published (for `hive_bus_read_wait()`)
 - **Important**: Mailbox arrival only unblocks actors blocked in IPC receive operations, not actors blocked on network I/O or bus read
 
 **Scheduling phase definition:**
@@ -170,7 +170,7 @@ Each blocking network request has an implicit state: `PENDING` → `COMPLETED` o
 
 **Tie-break rule (deadline check at wake time):**
 - When actor wakes, check: `now >= deadline`?
-- If yes: state = `TIMED_OUT`, return `ACRT_ERR_TIMEOUT`, **do not perform I/O even if socket is ready**
+- If yes: state = `TIMED_OUT`, return `HIVE_ERR_TIMEOUT`, **do not perform I/O even if socket is ready**
 - If no: state = `COMPLETED`, perform I/O operation, return result
 
 **Rationale:** This avoids the "read data then discard" oddity. The deadline check is deterministic and independent of epoll event ordering.
@@ -181,7 +181,7 @@ Each blocking network request has an implicit state: `PENDING` → `COMPLETED` o
 - If both fire in **same** `epoll_wait()`: Actor wakes, deadline check determines outcome (I/O not performed if timed out)
 
 **Request serialization (network I/O only):**
-- Applies to: `acrt_net_accept()`, `acrt_net_connect()`, `acrt_net_recv()`, `acrt_net_send()` with timeouts
+- Applies to: `hive_net_accept()`, `hive_net_connect()`, `hive_net_recv()`, `hive_net_send()` with timeouts
 - Constraint: **One outstanding network request per actor** (enforced by actor blocking)
 - When timeout occurs: epoll registration cleaned up, any late readiness signal is ignored
 - New request from same actor gets fresh epoll state
@@ -210,7 +210,7 @@ The runtime provides **conditional determinism**, not absolute determinism:
 
 ### Scheduler-Stalling Calls
 
-File I/O operations (`acrt_file_read()`, `acrt_file_write()`, `acrt_file_sync()`) are **synchronous** and stall the entire runtime:
+File I/O operations (`hive_file_read()`, `hive_file_write()`, `hive_file_sync()`) are **synchronous** and stall the entire runtime:
 
 **Behavior:**
 - Calling actor does NOT transition to `ACTOR_STATE_WAITING`
@@ -243,10 +243,10 @@ Four priority levels, lower value means higher priority:
 
 | Level | Name | Typical Use |
 |-------|------|-------------|
-| 0 | `ACRT_PRIORITY_CRITICAL` | Flight control loop |
-| 1 | `ACRT_PRIORITY_HIGH` | Sensor fusion |
-| 2 | `ACRT_PRIORITY_NORMAL` | Telemetry |
-| 3 | `ACRT_PRIORITY_LOW` | Logging |
+| 0 | `HIVE_PRIORITY_CRITICAL` | Flight control loop |
+| 1 | `HIVE_PRIORITY_HIGH` | Sensor fusion |
+| 2 | `HIVE_PRIORITY_NORMAL` | Telemetry |
+| 3 | `HIVE_PRIORITY_LOW` | Logging |
 
 The scheduler always picks the highest-priority runnable actor. Within the same priority level, actors are scheduled round-robin.
 
@@ -271,7 +271,7 @@ No use of setjmp/longjmp or ucontext for performance reasons.
 
 The runtime is **completely single-threaded**. All runtime operations execute in a single scheduler thread with an event loop architecture. There are **no I/O worker threads** - all I/O operations are integrated into the scheduler's event loop using platform-specific non-blocking mechanisms.
 
-**Key architectural invariant:** Only one actor executes at any given time. Actors run cooperatively until they explicitly yield (via `acrt_yield()`, blocking I/O, or `acrt_exit()`). The scheduler then switches to the next runnable actor or waits for I/O events.
+**Key architectural invariant:** Only one actor executes at any given time. Actors run cooperatively until they explicitly yield (via `hive_yield()`, blocking I/O, or `hive_exit()`). The scheduler then switches to the next runnable actor or waits for I/O events.
 
 ### Runtime API Thread Safety Contract
 
@@ -279,12 +279,12 @@ The runtime is **completely single-threaded**. All runtime operations execute in
 
 | API Category | Thread Safety | Enforcement |
 |-------------|---------------|-------------|
-| **Actor APIs** (`acrt_spawn`, `acrt_exit`, etc.) | Single-threaded only | Must call from actor context |
-| **IPC APIs** (`acrt_ipc_notify`, `acrt_ipc_recv`) | Single-threaded only | Must call from actor context |
-| **Bus APIs** (`acrt_bus_publish`, `acrt_bus_read`) | Single-threaded only | Must call from actor context |
-| **Timer APIs** (`acrt_timer_after`, `acrt_timer_every`) | Single-threaded only | Must call from actor context |
-| **File APIs** (`acrt_file_read`, `acrt_file_write`) | Single-threaded only | Must call from actor context; stalls scheduler |
-| **Network APIs** (`acrt_net_recv`, `acrt_net_send`) | Single-threaded only | Must call from actor context |
+| **Actor APIs** (`hive_spawn`, `hive_exit`, etc.) | Single-threaded only | Must call from actor context |
+| **IPC APIs** (`hive_ipc_notify`, `hive_ipc_recv`) | Single-threaded only | Must call from actor context |
+| **Bus APIs** (`hive_bus_publish`, `hive_bus_read`) | Single-threaded only | Must call from actor context |
+| **Timer APIs** (`hive_timer_after`, `hive_timer_every`) | Single-threaded only | Must call from actor context |
+| **File APIs** (`hive_file_read`, `hive_file_write`) | Single-threaded only | Must call from actor context; stalls scheduler |
+| **Network APIs** (`hive_net_recv`, `hive_net_send`) | Single-threaded only | Must call from actor context |
 
 **Forbidden from:**
 - Signal handlers (not reentrant)
@@ -309,16 +309,16 @@ void socket_reader_actor(void *arg) {
     int sock = listen_and_accept();
     while (1) {
         size_t received;
-        acrt_net_recv(sock, buf, len, &received, -1);  // Blocks in event loop
-        acrt_ipc_notify(worker, buf, received);  // Forward to actors
+        hive_net_recv(sock, buf, len, &received, -1);  // Blocks in event loop
+        hive_ipc_notify(worker, buf, received);  // Forward to actors
     }
 }
 ```
 
 This pattern is safe because:
 - External thread only touches OS-level socket (thread-safe by OS)
-- `acrt_net_recv()` executes in scheduler thread (actor context)
-- `acrt_ipc_notify()` executes in scheduler thread (actor context)
+- `hive_net_recv()` executes in scheduler thread (actor context)
+- `hive_ipc_notify()` executes in scheduler thread (actor context)
 - No direct runtime state access from external thread
 
 ### Synchronization Primitives
@@ -403,7 +403,7 @@ if (net_event_pending) {
 
 ### Actor Stacks
 
-Each actor has a fixed-size stack allocated at spawn time. Stack size is configurable per actor via `actor_config.stack_size`, with a system-wide default (`ACRT_DEFAULT_STACK_SIZE`). Different actors can use different stack sizes to optimize memory usage.
+Each actor has a fixed-size stack allocated at spawn time. Stack size is configurable per actor via `actor_config.stack_size`, with a system-wide default (`HIVE_DEFAULT_STACK_SIZE`). Different actors can use different stack sizes to optimize memory usage.
 
 Stack growth/reallocation is not supported. Stack overflow is detected via guard patterns (see "Stack Overflow Detection" section below) with defined, safe behavior.
 
@@ -415,23 +415,23 @@ The runtime uses static allocation for deterministic behavior and suitability fo
 
 **Allocation Strategy:**
 
-- **Actor table:** Static array of `ACRT_MAX_ACTORS` (64), configured at compile time
+- **Actor table:** Static array of `HIVE_MAX_ACTORS` (64), configured at compile time
 - **Actor stacks:** Hybrid allocation (configurable per actor)
-  - Default: Static arena allocator with `ACRT_STACK_ARENA_SIZE` (1 MB)
+  - Default: Static arena allocator with `HIVE_STACK_ARENA_SIZE` (1 MB)
     - First-fit allocation with block splitting for variable stack sizes
     - Automatic memory reclamation and reuse when actors exit (coalescing)
     - Supports different stack sizes for different actors
   - Optional: malloc via `actor_config.malloc_stack = true`
 - **IPC pools:** Static pools with O(1) allocation (hot path)
-  - Mailbox entry pool: `ACRT_MAILBOX_ENTRY_POOL_SIZE` (256)
-  - Message data pool: `ACRT_MESSAGE_DATA_POOL_SIZE` (256), fixed-size entries of `ACRT_MAX_MESSAGE_SIZE` bytes
+  - Mailbox entry pool: `HIVE_MAILBOX_ENTRY_POOL_SIZE` (256)
+  - Message data pool: `HIVE_MESSAGE_DATA_POOL_SIZE` (256), fixed-size entries of `HIVE_MAX_MESSAGE_SIZE` bytes
 - **Link/Monitor pools:** Static pools for actor relationships
-  - Link entry pool: `ACRT_LINK_ENTRY_POOL_SIZE` (128)
-  - Monitor entry pool: `ACRT_MONITOR_ENTRY_POOL_SIZE` (128)
-- **Timer pool:** Static pool of `ACRT_TIMER_ENTRY_POOL_SIZE` (64)
+  - Link entry pool: `HIVE_LINK_ENTRY_POOL_SIZE` (128)
+  - Monitor entry pool: `HIVE_MONITOR_ENTRY_POOL_SIZE` (128)
+- **Timer pool:** Static pool of `HIVE_TIMER_ENTRY_POOL_SIZE` (64)
 - **Bus storage:** Static arrays per bus
-  - Bus entries: Pre-allocated array of `ACRT_MAX_BUS_ENTRIES` (64) per bus
-  - Bus subscribers: Pre-allocated array of `ACRT_MAX_BUS_SUBSCRIBERS` (32) per bus
+  - Bus entries: Pre-allocated array of `HIVE_MAX_BUS_ENTRIES` (64) per bus
+  - Bus subscribers: Pre-allocated array of `HIVE_MAX_BUS_SUBSCRIBERS` (32) per bus
   - Entry data: Uses shared message pool
 - **I/O sources:** Pool of `io_source` structures for tracking pending I/O operations in the event loop
 
@@ -440,7 +440,7 @@ The runtime uses static allocation for deterministic behavior and suitability fo
 *Note: Exact sizes are toolchain-dependent. Run `size build/libacrt.a` for precise numbers. Estimates below are for GCC on x86-64 Linux.*
 
 - Static data (BSS): ~1.2 MB total (includes 1 MB stack arena)
-  - Stack arena: 1 MB (configurable via `ACRT_STACK_ARENA_SIZE`)
+  - Stack arena: 1 MB (configurable via `HIVE_STACK_ARENA_SIZE`)
   - Actor table: ~10–15 KB
   - Mailbox pool: ~10–15 KB
   - Message pool: 64 KB (256 × 256 bytes, configurable)
@@ -456,29 +456,29 @@ The runtime uses static allocation for deterministic behavior and suitability fo
 
 - Deterministic memory: Footprint calculable at link time
 - Zero heap fragmentation: No malloc after initialization (except explicit `malloc_stack` flag)
-- Predictable allocation: Pool exhaustion returns clear errors (`ACRT_ERR_NOMEM`)
+- Predictable allocation: Pool exhaustion returns clear errors (`HIVE_ERR_NOMEM`)
 - Suitable for safety-critical certification
 - Predictable timing: O(1) pool allocation for hot paths, bounded arena allocation for cold paths (spawn/exit)
 
 ## Error Handling
 
-All runtime functions return `acrt_status`:
+All runtime functions return `hive_status`:
 
 ```c
 typedef enum {
-    ACRT_OK = 0,
-    ACRT_ERR_NOMEM,
-    ACRT_ERR_INVALID,
-    ACRT_ERR_TIMEOUT,
-    ACRT_ERR_CLOSED,
-    ACRT_ERR_WOULDBLOCK,
-    ACRT_ERR_IO,
-} acrt_error_code;
+    HIVE_OK = 0,
+    HIVE_ERR_NOMEM,
+    HIVE_ERR_INVALID,
+    HIVE_ERR_TIMEOUT,
+    HIVE_ERR_CLOSED,
+    HIVE_ERR_WOULDBLOCK,
+    HIVE_ERR_IO,
+} hive_error_code;
 
 typedef struct {
-    acrt_error_code code;
+    hive_error_code code;
     const char    *msg;   // string literal or NULL, never heap-allocated
-} acrt_status;
+} hive_status;
 ```
 
 The `msg` field always points to a string literal or is NULL. It is never dynamically allocated, ensuring safe use across concurrent actors.
@@ -486,16 +486,16 @@ The `msg` field always points to a string literal or is NULL. It is never dynami
 Convenience macros:
 
 ```c
-#define ACRT_SUCCESS ((acrt_status){ACRT_OK, NULL})
-#define ACRT_FAILED(s) ((s).code != ACRT_OK)
-#define ACRT_ERROR(code, msg) ((acrt_status){(code), (msg)})
-#define ACRT_ERR_STR(s) ((s).msg ? (s).msg : "unknown error")
+#define HIVE_SUCCESS ((hive_status){HIVE_OK, NULL})
+#define HIVE_FAILED(s) ((s).code != HIVE_OK)
+#define HIVE_ERROR(code, msg) ((hive_status){(code), (msg)})
+#define HIVE_ERR_STR(s) ((s).msg ? (s).msg : "unknown error")
 ```
 
 Usage example:
 ```c
-if (len > ACRT_MAX_MESSAGE_SIZE) {
-    return ACRT_ERROR(ACRT_ERR_INVALID, "Message too large");
+if (len > HIVE_MAX_MESSAGE_SIZE) {
+    return HIVE_ERROR(HIVE_ERR_INVALID, "Message too large");
 }
 ```
 
@@ -507,7 +507,7 @@ This runtime makes deliberate design choices that favor **determinism, performan
 
 ### 1. Message Lifetime Rule is Sharp and Error-Prone
 
-**Trade-off:** Message payload pointer valid only until next `acrt_ipc_recv()` call.
+**Trade-off:** Message payload pointer valid only until next `hive_ipc_recv()` call.
 
 **Why this design:**
 - Pool reuse: Deterministic O(1) allocation, no fragmentation
@@ -533,7 +533,7 @@ This runtime makes deliberate design choices that favor **determinism, performan
 - Flexibility: Bursty actors can use available pool space
 - Performance: No quota checks on send path
 
-**Consequence:** A single bad actor can cause global `ACRT_ERR_NOMEM` failures for all IPC sends.
+**Consequence:** A single bad actor can cause global `HIVE_ERR_NOMEM` failures for all IPC sends.
 
 **Supervisors are not optional.** You must design actor hierarchies with supervision and monitoring.
 
@@ -556,7 +556,7 @@ This runtime makes deliberate design choices that favor **determinism, performan
 
 **Keep mailboxes shallow.** The request/reply pattern naturally does this (block waiting for reply).
 
-**Mitigation:** Process messages promptly. Don't let mailbox grow deep. Use `acrt_ipc_request()` which blocks until reply.
+**Mitigation:** Process messages promptly. Don't let mailbox grow deep. Use `hive_ipc_request()` which blocks until reply.
 
 **Acceptable if:** Typical mailbox depth is small (< 20 messages) and request/reply pattern is followed.
 
@@ -571,7 +571,7 @@ This runtime makes deliberate design choices that favor **determinism, performan
 - Flexibility: Pool space shared dynamically based on actual usage
 - Memory efficiency: No wasted dedicated pools
 
-**Consequence:** Misconfigured bus can cause all IPC sends to fail with `ACRT_ERR_NOMEM`.
+**Consequence:** Misconfigured bus can cause all IPC sends to fail with `HIVE_ERR_NOMEM`.
 
 **Mitigation:** WARNING box in Bus section, size pool for combined load, monitor exhaustion.
 
@@ -605,7 +605,7 @@ typedef uint32_t timer_id;
 #define TIMER_ID_INVALID  ((timer_id)0)
 
 // Wildcard for selective receive filtering
-#define ACRT_SENDER_ANY     ((actor_id)0xFFFFFFFF)
+#define HIVE_SENDER_ANY     ((actor_id)0xFFFFFFFF)
 
 // Actor entry point
 typedef void (*actor_fn)(void *arg);
@@ -613,7 +613,7 @@ typedef void (*actor_fn)(void *arg);
 // Actor configuration
 typedef struct {
     size_t      stack_size;   // bytes, 0 = default
-    acrt_priority_level priority;
+    hive_priority_level priority;
     const char *name;         // for debugging, may be NULL
     bool        malloc_stack; // false = use static arena (default), true = malloc
 } actor_config;
@@ -625,35 +625,35 @@ typedef struct {
 
 ```c
 // Spawn a new actor with default configuration
-acrt_status acrt_spawn(actor_fn fn, void *arg, actor_id *out);
+hive_status hive_spawn(actor_fn fn, void *arg, actor_id *out);
 
 // Spawn with explicit configuration
-acrt_status acrt_spawn_ex(actor_fn fn, void *arg, const actor_config *cfg, actor_id *out);
+hive_status hive_spawn_ex(actor_fn fn, void *arg, const actor_config *cfg, actor_id *out);
 
 // Terminate current actor
-_Noreturn void acrt_exit(void);
+_Noreturn void hive_exit(void);
 ```
 
 **Actor function return behavior:**
 
-Actors **must** call `acrt_exit()` to terminate cleanly. If an actor function returns without calling `acrt_exit()`, the runtime detects this as a crash:
+Actors **must** call `hive_exit()` to terminate cleanly. If an actor function returns without calling `hive_exit()`, the runtime detects this as a crash:
 
-1. Exit reason is set to `ACRT_EXIT_CRASH`
-2. Linked/monitoring actors receive exit notification with `ACRT_EXIT_CRASH` reason
+1. Exit reason is set to `HIVE_EXIT_CRASH`
+2. Linked/monitoring actors receive exit notification with `HIVE_EXIT_CRASH` reason
 3. Normal cleanup proceeds (mailbox cleared, resources freed)
-4. An ERROR log is emitted: "Actor N returned without calling acrt_exit()"
+4. An ERROR log is emitted: "Actor N returned without calling hive_exit()"
 
 This crash detection prevents infinite loops and ensures linked actors are notified of the improper termination.
 
 ```c
 // Get current actor's ID
-actor_id acrt_self(void);
+actor_id hive_self(void);
 
 // Yield to scheduler
-void acrt_yield(void);
+void hive_yield(void);
 
 // Check if actor is alive
-bool acrt_actor_alive(actor_id id);
+bool hive_actor_alive(actor_id id);
 ```
 
 ### Linking and Monitoring
@@ -662,34 +662,34 @@ Actors can link to other actors to receive notification when they die:
 
 ```c
 // Bidirectional link: if either dies, the other receives exit message
-acrt_status acrt_link(actor_id target);
-acrt_status acrt_link_remove(actor_id target);
+hive_status hive_link(actor_id target);
+hive_status hive_link_remove(actor_id target);
 
 // Unidirectional monitor: receive notification when target dies
-acrt_status acrt_monitor(actor_id target, uint32_t *out);
-acrt_status acrt_monitor_cancel(uint32_t id);
+hive_status hive_monitor(actor_id target, uint32_t *out);
+hive_status hive_monitor_cancel(uint32_t id);
 ```
 
 Exit message structure:
 
 ```c
 typedef enum {
-    ACRT_EXIT_NORMAL,       // Actor called acrt_exit()
-    ACRT_EXIT_CRASH,        // Actor function returned without calling acrt_exit()
-    ACRT_EXIT_CRASH_STACK,  // Stack overflow detected
-    ACRT_EXIT_KILLED,       // Actor was killed externally
-} acrt_exit_reason;
+    HIVE_EXIT_NORMAL,       // Actor called hive_exit()
+    HIVE_EXIT_CRASH,        // Actor function returned without calling hive_exit()
+    HIVE_EXIT_CRASH_STACK,  // Stack overflow detected
+    HIVE_EXIT_KILLED,       // Actor was killed externally
+} hive_exit_reason;
 
 typedef struct {
     actor_id       actor;   // who died
-    acrt_exit_reason reason;
-} acrt_exit_msg;
+    hive_exit_reason reason;
+} hive_exit_msg;
 
 // Check if message is exit notification
-bool acrt_is_exit_msg(const acrt_message *msg);
+bool hive_is_exit_msg(const hive_message *msg);
 
 // Convert exit reason to string (for logging/debugging)
-const char *acrt_exit_reason_str(acrt_exit_reason reason);
+const char *hive_exit_reason_str(hive_exit_reason reason);
 ```
 
 **Handling exit messages:**
@@ -697,12 +697,12 @@ const char *acrt_exit_reason_str(acrt_exit_reason reason);
 Exit messages can be accessed directly via cast (preferred) or decoded:
 
 ```c
-acrt_message msg;
-acrt_ipc_recv(&msg, -1);
+hive_message msg;
+hive_ipc_recv(&msg, -1);
 
-if (msg.class == ACRT_MSG_EXIT) {
-    acrt_exit_msg *exit_info = (acrt_exit_msg *)msg.data;
-    printf("Actor %u died: %s\n", exit_info->actor, acrt_exit_reason_str(exit_info->reason));
+if (msg.class == HIVE_MSG_EXIT) {
+    hive_exit_msg *exit_info = (hive_exit_msg *)msg.data;
+    printf("Actor %u died: %s\n", exit_info->actor, hive_exit_reason_str(exit_info->reason));
 }
 ```
 
@@ -723,7 +723,7 @@ All messages have a 4-byte header prepended to the payload:
 - **class**: Message type (4 bits, 16 possible values)
 - **gen**: Generated flag (1 = runtime-generated tag, 0 = user-provided tag)
 - **tag**: Correlation identifier (27 bits, 134M unique values)
-- **payload**: Application data (up to `ACRT_MAX_MESSAGE_SIZE - 4` = 252 bytes)
+- **payload**: Application data (up to `HIVE_MAX_MESSAGE_SIZE - 4` = 252 bytes)
 
 **Header overhead:** 4 bytes per message.
 
@@ -731,32 +731,32 @@ All messages have a 4-byte header prepended to the payload:
 
 ```c
 typedef enum {
-    ACRT_MSG_NOTIFY = 0,   // Fire-and-forget message
-    ACRT_MSG_REQUEST,       // Request expecting a reply
-    ACRT_MSG_REPLY,      // Response to a REQUEST
-    ACRT_MSG_TIMER,      // Timer tick
-    ACRT_MSG_EXIT,     // System notifications (actor death)
+    HIVE_MSG_NOTIFY = 0,   // Fire-and-forget message
+    HIVE_MSG_REQUEST,       // Request expecting a reply
+    HIVE_MSG_REPLY,      // Response to a REQUEST
+    HIVE_MSG_TIMER,      // Timer tick
+    HIVE_MSG_EXIT,     // System notifications (actor death)
     // 5-14 reserved for future use
-    ACRT_MSG_ANY = 15,   // Wildcard for selective receive filtering
-} acrt_msg_class;
+    HIVE_MSG_ANY = 15,   // Wildcard for selective receive filtering
+} hive_msg_class;
 ```
 
 ### Tag System
 
 ```c
-#define ACRT_TAG_NONE        0            // No tag (for simple ASYNC messages)
-#define ACRT_TAG_ANY         0x0FFFFFFF   // Wildcard for selective receive filtering
+#define HIVE_TAG_NONE        0            // No tag (for simple ASYNC messages)
+#define HIVE_TAG_ANY         0x0FFFFFFF   // Wildcard for selective receive filtering
 
-// Note: ACRT_TAG_GEN_BIT and ACRT_TAG_VALUE_MASK are internal implementation
+// Note: HIVE_TAG_GEN_BIT and HIVE_TAG_VALUE_MASK are internal implementation
 // details and not part of the public API
 ```
 
 **Tag semantics:**
-- **ACRT_TAG_NONE**: Used for simple NOTIFY messages where no correlation is needed
-- **ACRT_TAG_ANY**: Used in `acrt_ipc_recv_match()` to match any tag
-- **Generated tags**: Created automatically by `acrt_ipc_request()` for request/reply correlation
+- **HIVE_TAG_NONE**: Used for simple NOTIFY messages where no correlation is needed
+- **HIVE_TAG_ANY**: Used in `hive_ipc_recv_match()` to match any tag
+- **Generated tags**: Created automatically by `hive_ipc_request()` for request/reply correlation
 
-**Tag generation:** Internal to `acrt_ipc_request()`. Global counter increments on each call. Generated tags have `ACRT_TAG_GEN_BIT` set. Wraps at 2^27 (134M values).
+**Tag generation:** Internal to `hive_ipc_request()`. Global counter increments on each call. Generated tags have `HIVE_TAG_GEN_BIT` set. Wraps at 2^27 (134M values).
 
 **Namespace separation:** Generated tags (gen=1) and user tags (gen=0) can never collide.
 
@@ -765,27 +765,27 @@ typedef enum {
 ```c
 typedef struct {
     actor_id       sender;       // Sender actor ID
-    acrt_msg_class class;        // Message class (pre-decoded)
+    hive_msg_class class;        // Message class (pre-decoded)
     uint32_t       tag;          // Message tag (pre-decoded)
     size_t         len;          // Payload length (excludes 4-byte header)
     const void    *data;         // Payload pointer (past header)
-} acrt_message;
+} hive_message;
 ```
 
-The message struct provides **direct access to all fields** - no `acrt_msg_decode()` call required:
+The message struct provides **direct access to all fields** - no `hive_msg_decode()` call required:
 
 ```c
-acrt_message msg;
-acrt_ipc_recv(&msg, -1);
+hive_message msg;
+hive_ipc_recv(&msg, -1);
 
 // Direct access - no boilerplate
 my_data *payload = (my_data *)msg.data;
-if (msg.class == ACRT_MSG_REQUEST) {
-    acrt_ipc_reply(&msg, &response, sizeof(response));
+if (msg.class == HIVE_MSG_REQUEST) {
+    hive_ipc_reply(&msg, &response, sizeof(response));
 }
 ```
 
-**Lifetime rule:** Data is valid until the next successful `acrt_ipc_recv()` or `acrt_ipc_recv_match()` call. Copy immediately if needed beyond current iteration.
+**Lifetime rule:** Data is valid until the next successful `hive_ipc_recv()` or `hive_ipc_recv_match()` call. Copy immediately if needed beyond current iteration.
 
 ### Functions
 
@@ -793,13 +793,13 @@ if (msg.class == ACRT_MSG_REQUEST) {
 
 ```c
 // Fire-and-forget message (class=NOTIFY, tag=0)
-acrt_status acrt_ipc_notify(actor_id to, const void *data, size_t len);
+hive_status hive_ipc_notify(actor_id to, const void *data, size_t len);
 
 // Receive any message (no filtering)
-// timeout_ms == 0:  non-blocking, returns ACRT_ERR_WOULDBLOCK if empty
+// timeout_ms == 0:  non-blocking, returns HIVE_ERR_WOULDBLOCK if empty
 // timeout_ms < 0:   block forever
-// timeout_ms > 0:   block up to timeout, returns ACRT_ERR_TIMEOUT if exceeded
-acrt_status acrt_ipc_recv(acrt_message *msg, int32_t timeout_ms);
+// timeout_ms > 0:   block up to timeout, returns HIVE_ERR_TIMEOUT if exceeded
+hive_status hive_ipc_recv(hive_message *msg, int32_t timeout_ms);
 ```
 
 #### Selective Receive
@@ -808,74 +808,74 @@ acrt_status acrt_ipc_recv(acrt_message *msg, int32_t timeout_ms);
 // Receive with filtering on sender, class, and/or tag
 // Blocks until message matches ALL non-wildcard criteria, or timeout
 // Pass NULL for any filter parameter to accept any value
-acrt_status acrt_ipc_recv_match(const actor_id *from, const acrt_msg_class *class,
-                            const uint32_t *tag, acrt_message *msg, int32_t timeout_ms);
+hive_status hive_ipc_recv_match(const actor_id *from, const hive_msg_class *class,
+                            const uint32_t *tag, hive_message *msg, int32_t timeout_ms);
 ```
 
 **Filter semantics:**
-- `from == NULL` or `*from == ACRT_SENDER_ANY` → match any sender
-- `class == NULL` or `*class == ACRT_MSG_ANY` → match any class
-- `tag == NULL` or `*tag == ACRT_TAG_ANY` → match any tag
+- `from == NULL` or `*from == HIVE_SENDER_ANY` → match any sender
+- `class == NULL` or `*class == HIVE_MSG_ANY` → match any class
+- `tag == NULL` or `*tag == HIVE_TAG_ANY` → match any tag
 - Non-wildcard values must match exactly
 
 **Usage examples:**
 ```c
-// Match any message (equivalent to acrt_ipc_recv)
-acrt_ipc_recv_match(NULL, NULL, NULL, &msg, -1);
+// Match any message (equivalent to hive_ipc_recv)
+hive_ipc_recv_match(NULL, NULL, NULL, &msg, -1);
 
 // Match only from specific sender
 actor_id sender = some_actor;
-acrt_ipc_recv_match(&sender, NULL, NULL, &msg, -1);
+hive_ipc_recv_match(&sender, NULL, NULL, &msg, -1);
 
 // Match REQUEST messages from any sender
-acrt_msg_class cls = ACRT_MSG_REQUEST;
-acrt_ipc_recv_match(NULL, &cls, NULL, &msg, -1);
+hive_msg_class cls = HIVE_MSG_REQUEST;
+hive_ipc_recv_match(NULL, &cls, NULL, &msg, -1);
 
-// Match REPLY with specific tag (used internally by acrt_ipc_request)
-acrt_msg_class reply_cls = ACRT_MSG_REPLY;
+// Match REPLY with specific tag (used internally by hive_ipc_request)
+hive_msg_class reply_cls = HIVE_MSG_REPLY;
 uint32_t expected_tag = my_tag;
-acrt_ipc_recv_match(NULL, &reply_cls, &expected_tag, &msg, 5000);
+hive_ipc_recv_match(NULL, &reply_cls, &expected_tag, &msg, 5000);
 ```
 
 #### Request/Reply
 
 ```c
 // Send REQUEST, block until REPLY with matching tag, or timeout
-acrt_status acrt_ipc_request(actor_id to, const void *request, size_t req_len,
-                      acrt_message *reply, int32_t timeout_ms);
+hive_status hive_ipc_request(actor_id to, const void *request, size_t req_len,
+                      hive_message *reply, int32_t timeout_ms);
 
 // Reply to a received REQUEST (extracts sender and tag from request automatically)
-acrt_status acrt_ipc_reply(const acrt_message *request, const void *data, size_t len);
+hive_status hive_ipc_reply(const hive_message *request, const void *data, size_t len);
 ```
 
 **Request/reply implementation:**
 ```c
-// acrt_ipc_request internally does:
+// hive_ipc_request internally does:
 // 1. Generate unique tag
 // 2. Send message with class=REQUEST
-// 3. Block on acrt_ipc_recv_match() for REPLY with matching tag
+// 3. Block on hive_ipc_recv_match() for REPLY with matching tag
 // 4. Return reply or timeout error
 
-// acrt_ipc_reply internally does:
+// hive_ipc_reply internally does:
 // 1. Decode sender and tag from request
 // 2. Send message with class=REPLY and same tag
 ```
 
-**Error conditions for `acrt_ipc_request()`:**
-- `ACRT_ERR_TIMEOUT`: No reply received within timeout (including when target died)
-- `ACRT_ERR_NOMEM`: Pool exhausted when sending request
-- `ACRT_ERR_INVALID`: Invalid target actor ID or NULL request with non-zero length
+**Error conditions for `hive_ipc_request()`:**
+- `HIVE_ERR_TIMEOUT`: No reply received within timeout (including when target died)
+- `HIVE_ERR_NOMEM`: Pool exhausted when sending request
+- `HIVE_ERR_INVALID`: Invalid target actor ID or NULL request with non-zero length
 
-**Target death handling:** If the caller has linked to or is monitoring the target actor, and the target dies before replying, an EXIT message arrives in the caller's mailbox. Since `acrt_ipc_request()` internally uses `acrt_ipc_recv_match()` waiting for a REPLY, the EXIT message does not match and remains queued. The function returns `ACRT_ERR_TIMEOUT` when the timeout expires. The caller should check for pending EXIT messages to determine if the timeout was due to target death:
+**Target death handling:** If the caller has linked to or is monitoring the target actor, and the target dies before replying, an EXIT message arrives in the caller's mailbox. Since `hive_ipc_request()` internally uses `hive_ipc_recv_match()` waiting for a REPLY, the EXIT message does not match and remains queued. The function returns `HIVE_ERR_TIMEOUT` when the timeout expires. The caller should check for pending EXIT messages to determine if the timeout was due to target death:
 
 ```c
-acrt_message reply;
-acrt_status status = acrt_ipc_request(target, &req, sizeof(req), &reply, 5000);
-if (status.code == ACRT_ERR_TIMEOUT) {
+hive_message reply;
+hive_status status = hive_ipc_request(target, &req, sizeof(req), &reply, 5000);
+if (status.code == HIVE_ERR_TIMEOUT) {
     // Check if target died
-    acrt_message msg;
-    if (acrt_ipc_recv(&msg, 0).code == ACRT_OK && msg.class == ACRT_MSG_EXIT) {
-        acrt_exit_msg *exit_info = (acrt_exit_msg *)msg.data;
+    hive_message msg;
+    if (hive_ipc_recv(&msg, 0).code == HIVE_OK && msg.class == HIVE_MSG_EXIT) {
+        hive_exit_msg *exit_info = (hive_exit_msg *)msg.data;
         if (exit_info->actor == target) {
             // Target died - handle accordingly
         }
@@ -885,13 +885,13 @@ if (status.code == ACRT_ERR_TIMEOUT) {
 
 #### Message Decoding (Optional)
 
-Since `acrt_message` now provides pre-decoded `class`, `tag`, and direct `data` pointer, `acrt_msg_decode()` is **rarely needed**. It remains available for backwards compatibility:
+Since `hive_message` now provides pre-decoded `class`, `tag`, and direct `data` pointer, `hive_msg_decode()` is **rarely needed**. It remains available for backwards compatibility:
 
 ```c
-// Returns pre-decoded values from acrt_message struct
+// Returns pre-decoded values from hive_message struct
 // All output parameters are optional (may be NULL)
-acrt_status acrt_msg_decode(const acrt_message *msg,
-                        acrt_msg_class *class,    // out: msg->class
+hive_status hive_msg_decode(const hive_message *msg,
+                        hive_msg_class *class,    // out: msg->class
                         uint32_t *tag,            // out: msg->tag
                         const void **payload,     // out: msg->data
                         size_t *payload_len);     // out: msg->len
@@ -899,52 +899,52 @@ acrt_status acrt_msg_decode(const acrt_message *msg,
 
 **Preferred pattern (direct access):**
 ```c
-acrt_message msg;
-acrt_ipc_recv(&msg, -1);
+hive_message msg;
+hive_ipc_recv(&msg, -1);
 my_data *data = (my_data *)msg.data;  // Direct payload access
-if (msg.class == ACRT_MSG_REQUEST) { ... }
+if (msg.class == HIVE_MSG_REQUEST) { ... }
 ```
 
-### API Contract: acrt_ipc_notify()
+### API Contract: hive_ipc_notify()
 
 **Parameter validation:**
-- If `data == NULL && len > 0`: Returns `ACRT_ERR_INVALID`
-- If `len > ACRT_MAX_MESSAGE_SIZE - 4` (252 bytes payload): Returns `ACRT_ERR_INVALID`
+- If `data == NULL && len > 0`: Returns `HIVE_ERR_INVALID`
+- If `len > HIVE_MAX_MESSAGE_SIZE - 4` (252 bytes payload): Returns `HIVE_ERR_INVALID`
 - Oversized messages are rejected immediately, not truncated
 
 **Behavior when pools are exhausted:**
 
-`acrt_ipc_notify()` uses two global pools:
-1. **Mailbox entry pool** (`ACRT_MAILBOX_ENTRY_POOL_SIZE` = 256)
-2. **Message data pool** (`ACRT_MESSAGE_DATA_POOL_SIZE` = 256)
+`hive_ipc_notify()` uses two global pools:
+1. **Mailbox entry pool** (`HIVE_MAILBOX_ENTRY_POOL_SIZE` = 256)
+2. **Message data pool** (`HIVE_MESSAGE_DATA_POOL_SIZE` = 256)
 
 **Fail-fast semantics:**
 
-- **Returns `ACRT_ERR_NOMEM` immediately** if either pool is exhausted
+- **Returns `HIVE_ERR_NOMEM` immediately** if either pool is exhausted
 - **Does NOT block** waiting for pool space
 - **Does NOT drop** messages silently
 - **Atomic operation:** Either succeeds completely or fails
 
 **Caller responsibilities:**
-- **MUST** check return value and handle `ACRT_ERR_NOMEM`
+- **MUST** check return value and handle `HIVE_ERR_NOMEM`
 - **MUST** implement backpressure/retry logic if needed
-- **MUST NOT** assume message was delivered if `ACRT_FAILED(status)`
+- **MUST NOT** assume message was delivered if `HIVE_FAILED(status)`
 
 **Example: Handling pool exhaustion**
 
 ```c
 // Bad: Ignoring return value
-acrt_ipc_notify(target, &data, sizeof(data));  // WRONG - message may be lost
+hive_ipc_notify(target, &data, sizeof(data));  // WRONG - message may be lost
 
 // Good: Check and handle with backoff-retry
-acrt_status status = acrt_ipc_notify(target, &data, sizeof(data));
-if (status.code == ACRT_ERR_NOMEM) {
+hive_status status = hive_ipc_notify(target, &data, sizeof(data));
+if (status.code == HIVE_ERR_NOMEM) {
     // Pool exhausted - backoff and retry
-    acrt_message msg;
-    acrt_ipc_recv(&msg, 10);  // Wait 10ms, process any incoming messages
+    hive_message msg;
+    hive_ipc_recv(&msg, 10);  // Wait 10ms, process any incoming messages
     // Retry the send
-    status = acrt_ipc_notify(target, &data, sizeof(data));
-    if (ACRT_FAILED(status)) {
+    status = hive_ipc_notify(target, &data, sizeof(data));
+    if (HIVE_FAILED(status)) {
         // Still failing - drop message or take other action
     }
 }
@@ -953,19 +953,19 @@ if (status.code == ACRT_ERR_NOMEM) {
 ### Message Data Lifetime
 
 **CRITICAL LIFETIME RULE:**
-- **Data is ONLY valid until the next successful `acrt_ipc_recv()` or `acrt_ipc_recv_match()` call**
+- **Data is ONLY valid until the next successful `hive_ipc_recv()` or `hive_ipc_recv_match()` call**
 - **Per actor: only ONE message payload pointer is valid at a time**
 - **Storing `msg.data` across receive iterations causes use-after-free**
 - **If you need the data later, COPY IT IMMEDIATELY**
 
 **Failed recv does NOT invalidate:**
-- If recv returns `ACRT_ERR_TIMEOUT` or `ACRT_ERR_WOULDBLOCK`, previous buffer remains valid
+- If recv returns `HIVE_ERR_TIMEOUT` or `HIVE_ERR_WOULDBLOCK`, previous buffer remains valid
 - Only a successful recv invalidates the previous pointer
 
 **Correct pattern:**
 ```c
-acrt_message msg;
-acrt_ipc_recv(&msg, -1);
+hive_message msg;
+hive_ipc_recv(&msg, -1);
 
 // SAFE: Direct access and copy immediately
 char local_copy[256];
@@ -975,7 +975,7 @@ memcpy(local_copy, msg.data, msg.len);
 
 // UNSAFE: Storing pointer across recv calls
 const char *ptr = msg.data;   // DANGER
-acrt_ipc_recv(&msg, -1);       // ptr now INVALID
+hive_ipc_recv(&msg, -1);       // ptr now INVALID
 ```
 
 ### Mailbox Semantics
@@ -985,8 +985,8 @@ acrt_ipc_recv(&msg, -1);       // ptr now INVALID
 Per-actor mailbox limits: **No per-actor quota** - capacity is constrained by global pools
 
 Global pool limits: **Yes** - all actors share:
-- `ACRT_MAILBOX_ENTRY_POOL_SIZE` (256 default) - mailbox entries
-- `ACRT_MESSAGE_DATA_POOL_SIZE` (256 default) - message data
+- `HIVE_MAILBOX_ENTRY_POOL_SIZE` (256 default) - mailbox entries
+- `HIVE_MESSAGE_DATA_POOL_SIZE` (256 default) - message data
 
 **Important:** One slow receiver can consume all mailbox entries, starving other actors.
 
@@ -994,7 +994,7 @@ Global pool limits: **Yes** - all actors share:
 
 ### Selective Receive Semantics
 
-`acrt_ipc_recv_match()` implements selective receive. This is the key mechanism for building complex protocols like request/reply.
+`hive_ipc_recv_match()` implements selective receive. This is the key mechanism for building complex protocols like request/reply.
 
 **Blocking behavior:**
 
@@ -1010,21 +1010,21 @@ Global pool limits: **Yes** - all actors share:
 
 - **Non-matching messages are NOT dropped** — they stay in mailbox
 - **Order preserved** — messages remain in FIFO order
-- **Later retrieval** — non-matching messages retrieved by subsequent `acrt_ipc_recv()` calls
+- **Later retrieval** — non-matching messages retrieved by subsequent `hive_ipc_recv()` calls
 - **Scan complexity** — O(n) where n = mailbox depth
 
 **Example: Waiting for specific reply**
 
 ```c
-// Using acrt_ipc_request() for request/reply (recommended - handles tag generation internally)
-acrt_message reply;
-acrt_ipc_request(server, &request, sizeof(request), &reply, 5000);
+// Using hive_ipc_request() for request/reply (recommended - handles tag generation internally)
+hive_message reply;
+hive_ipc_request(server, &request, sizeof(request), &reply, 5000);
 
 // Or manually using selective receive:
 actor_id from = server;
-acrt_msg_class class = ACRT_MSG_REPLY;
+hive_msg_class class = HIVE_MSG_REPLY;
 uint32_t expected_tag = 42;  // Known tag from earlier call
-acrt_ipc_recv_match(&from, &class, &expected_tag, &reply, 5000);
+hive_ipc_recv_match(&from, &class, &expected_tag, &reply, 5000);
 
 // During the wait:
 // - NOTIFY messages from other actors: skipped, stay in mailbox
@@ -1033,7 +1033,7 @@ acrt_ipc_recv_match(&from, &class, &expected_tag, &reply, 5000);
 // - REPLY from server with matching tag: returned!
 
 // After returning, skipped messages can be retrieved:
-acrt_ipc_recv(&msg, 0);  // Gets first skipped message
+hive_ipc_recv(&msg, 0);  // Gets first skipped message
 ```
 
 **When selective receive is efficient:**
@@ -1074,17 +1074,17 @@ acrt_ipc_recv(&msg, 0);  // Gets first skipped message
 ```c
 // Single sender - FIFO guaranteed
 void sender_actor(void *arg) {
-    acrt_ipc_notify(receiver, &msg1, sizeof(msg1));  // Sent first
-    acrt_ipc_notify(receiver, &msg2, sizeof(msg2));  // Sent second
+    hive_ipc_notify(receiver, &msg1, sizeof(msg1));  // Sent first
+    hive_ipc_notify(receiver, &msg2, sizeof(msg2));  // Sent second
     // Receiver will see: msg1, then msg2 (guaranteed)
 }
 
 // Multiple senders - order depends on scheduling
 void sender_A(void *arg) {
-    acrt_ipc_notify(receiver, &msgA, sizeof(msgA));
+    hive_ipc_notify(receiver, &msgA, sizeof(msgA));
 }
 void sender_B(void *arg) {
-    acrt_ipc_notify(receiver, &msgB, sizeof(msgB));
+    hive_ipc_notify(receiver, &msgB, sizeof(msgB));
 }
 // Receiver may see: msgA then msgB, OR msgB then msgA
 
@@ -1092,16 +1092,16 @@ void sender_B(void *arg) {
 void request_reply_actor(void *arg) {
     // Start timer
     timer_id t;
-    acrt_timer_after(1000000, &t);
+    hive_timer_after(1000000, &t);
 
     // Do request/reply
-    acrt_message reply;
-    acrt_ipc_request(server, &req, sizeof(req), &reply, 5000);
+    hive_message reply;
+    hive_ipc_request(server, &req, sizeof(req), &reply, 5000);
     // Timer tick arrived during request/reply wait - it's in mailbox
 
     // Now process timer
-    acrt_message timer_msg;
-    acrt_ipc_recv(&timer_msg, 0);  // Gets the timer tick
+    hive_message timer_msg;
+    hive_ipc_recv(&timer_msg, 0);  // Gets the timer tick
 }
 ```
 
@@ -1110,34 +1110,34 @@ void request_reply_actor(void *arg) {
 Timer and system messages use the same mailbox and message format as IPC.
 
 **Timer messages:**
-- Class: `ACRT_MSG_TIMER`
+- Class: `HIVE_MSG_TIMER`
 - Sender: Actor that owns the timer
 - Tag: `timer_id`
 - Payload: Empty (len = 0 after decoding header)
 
 **System messages (exit notifications):**
-- Class: `ACRT_MSG_EXIT`
+- Class: `HIVE_MSG_EXIT`
 - Sender: Actor that died
-- Tag: `ACRT_TAG_NONE`
-- Payload: `acrt_exit_msg` struct
+- Tag: `HIVE_TAG_NONE`
+- Payload: `hive_exit_msg` struct
 
 **Checking message type:**
 
 ```c
-acrt_message msg;
-acrt_ipc_recv(&msg, -1);
+hive_message msg;
+hive_ipc_recv(&msg, -1);
 
 switch (msg.class) {
-    case ACRT_MSG_NOTIFY:
+    case HIVE_MSG_NOTIFY:
         handle_cast(msg.sender, msg.data, msg.len);
         break;
-    case ACRT_MSG_REQUEST:
+    case HIVE_MSG_REQUEST:
         handle_call_and_reply(&msg, msg.data, msg.len);
         break;
-    case ACRT_MSG_TIMER:
+    case HIVE_MSG_TIMER:
         handle_timer_tick(msg.tag);  // tag is timer_id
         break;
-    case ACRT_MSG_EXIT:
+    case HIVE_MSG_EXIT:
         handle_exit_notification(msg.sender, msg.data);
         break;
     default:
@@ -1149,17 +1149,17 @@ switch (msg.class) {
 
 ```c
 // Returns true if message is a timer tick
-bool acrt_msg_is_timer(const acrt_message *msg);
+bool hive_msg_is_timer(const hive_message *msg);
 ```
 
 ### Query Functions
 
 ```c
 // Check if any message is pending in current actor's mailbox
-bool acrt_ipc_pending(void);
+bool hive_ipc_pending(void);
 
 // Count messages in current actor's mailbox
-size_t acrt_ipc_count(void);
+size_t hive_ipc_count(void);
 ```
 
 **Semantics:**
@@ -1170,11 +1170,11 @@ size_t acrt_ipc_count(void);
 ### Pool Exhaustion Behavior
 
 IPC uses two global pools shared by all actors:
-- **Mailbox entry pool**: `ACRT_MAILBOX_ENTRY_POOL_SIZE` (256 default)
-- **Message data pool**: `ACRT_MESSAGE_DATA_POOL_SIZE` (256 default)
+- **Mailbox entry pool**: `HIVE_MAILBOX_ENTRY_POOL_SIZE` (256 default)
+- **Message data pool**: `HIVE_MESSAGE_DATA_POOL_SIZE` (256 default)
 
 **When pools are exhausted:**
-- `acrt_ipc_notify()` returns `ACRT_ERR_NOMEM` immediately
+- `hive_ipc_notify()` returns `HIVE_ERR_NOMEM` immediately
 - Send operation **does NOT block** waiting for space
 - Send operation **does NOT drop** messages automatically
 - Caller **must check** return value and handle failure
@@ -1184,18 +1184,18 @@ IPC uses two global pools shared by all actors:
 **Mitigation strategies:**
 - Size pools appropriately: `1.5× peak concurrent messages`
 - Check return values and implement retry logic or backpressure
-- Use `acrt_ipc_request()` for natural backpressure (sender waits for reply)
+- Use `hive_ipc_request()` for natural backpressure (sender waits for reply)
 - Ensure receivers process messages promptly
 
 **Backoff-retry example:**
 ```c
-acrt_status status = acrt_ipc_notify(target, data, len);
-if (status.code == ACRT_ERR_NOMEM) {
+hive_status status = hive_ipc_notify(target, data, len);
+if (status.code == HIVE_ERR_NOMEM) {
     // Pool exhausted - backoff before retry
-    acrt_message msg;
-    status = acrt_ipc_recv(&msg, 10);  // Backoff 10ms
+    hive_message msg;
+    status = hive_ipc_recv(&msg, 10);  // Backoff 10ms
 
-    if (!ACRT_FAILED(status)) {
+    if (!HIVE_FAILED(status)) {
         // Got message during backoff, handle it first
         handle_message(&msg);
     }
@@ -1211,19 +1211,19 @@ Publish-subscribe communication with configurable retention policy.
 
 ```c
 typedef struct {
-    uint8_t  max_subscribers; // max concurrent subscribers (1..ACRT_MAX_BUS_SUBSCRIBERS)
+    uint8_t  max_subscribers; // max concurrent subscribers (1..HIVE_MAX_BUS_SUBSCRIBERS)
     uint8_t  consume_after_reads;     // consume after N reads, 0 = unlimited (0..max_subscribers)
     uint32_t max_age_ms;      // expire entries after ms, 0 = no expiry
     size_t   max_entries;     // ring buffer capacity
     size_t   max_entry_size;  // max payload bytes per entry
-} acrt_bus_config;
+} hive_bus_config;
 ```
 
 **Configuration constraints (normative):**
 - `max_subscribers`: **Architectural limit of 32 subscribers** (enforced by 32-bit `readers_mask`)
   - Valid range: 1..32
-  - `ACRT_MAX_BUS_SUBSCRIBERS = 32` is a hard architectural invariant, not a tunable parameter
-  - Attempts to configure `max_subscribers > 32` return `ACRT_ERR_INVALID`
+  - `HIVE_MAX_BUS_SUBSCRIBERS = 32` is a hard architectural invariant, not a tunable parameter
+  - Attempts to configure `max_subscribers > 32` return `HIVE_ERR_INVALID`
 - `consume_after_reads`: Valid range: 0..max_subscribers
 - Subscriber index assignment is stable for the lifetime of a subscription (affects `readers_mask` bit position)
 
@@ -1231,43 +1231,43 @@ typedef struct {
 
 ```c
 // Create bus
-acrt_status acrt_bus_create(const acrt_bus_config *cfg, bus_id *out);
+hive_status hive_bus_create(const hive_bus_config *cfg, bus_id *out);
 
 // Destroy bus (fails if subscribers exist)
-acrt_status acrt_bus_destroy(bus_id bus);
+hive_status hive_bus_destroy(bus_id bus);
 
 // Publish data
-acrt_status acrt_bus_publish(bus_id bus, const void *data, size_t len);
+hive_status hive_bus_publish(bus_id bus, const void *data, size_t len);
 
 // Subscribe/unsubscribe current actor
-acrt_status acrt_bus_subscribe(bus_id bus);
-acrt_status acrt_bus_unsubscribe(bus_id bus);
+hive_status hive_bus_subscribe(bus_id bus);
+hive_status hive_bus_unsubscribe(bus_id bus);
 
 // Read entry (non-blocking)
-// Returns ACRT_ERR_WOULDBLOCK if no data available
-acrt_status acrt_bus_read(bus_id bus, void *buf, size_t max_len, size_t *bytes_read);
+// Returns HIVE_ERR_WOULDBLOCK if no data available
+hive_status hive_bus_read(bus_id bus, void *buf, size_t max_len, size_t *bytes_read);
 
 // Read with blocking
-acrt_status acrt_bus_read_wait(bus_id bus, void *buf, size_t max_len,
+hive_status hive_bus_read_wait(bus_id bus, void *buf, size_t max_len,
                                size_t *bytes_read, int32_t timeout_ms);
 
 // Query bus state
-size_t acrt_bus_entry_count(bus_id bus);
+size_t hive_bus_entry_count(bus_id bus);
 ```
 
 **Message size validation:**
 
-`acrt_bus_create()`:
-- If `cfg->max_entry_size > ACRT_MAX_MESSAGE_SIZE` (256 bytes): Returns `ACRT_ERR_INVALID`
-- Bus entries share the message data pool, which uses fixed-size `ACRT_MAX_MESSAGE_SIZE` entries
+`hive_bus_create()`:
+- If `cfg->max_entry_size > HIVE_MAX_MESSAGE_SIZE` (256 bytes): Returns `HIVE_ERR_INVALID`
+- Bus entries share the message data pool, which uses fixed-size `HIVE_MAX_MESSAGE_SIZE` entries
 - This constraint ensures bus entries fit in pool slots
 
-`acrt_bus_publish()`:
-- If `len > cfg.max_entry_size`: Returns `ACRT_ERR_INVALID`
+`hive_bus_publish()`:
+- If `len > cfg.max_entry_size`: Returns `HIVE_ERR_INVALID`
 - Oversized messages are rejected immediately, not truncated
 - The `max_entry_size` was validated at bus creation time
 
-`acrt_bus_read()` / `acrt_bus_read_wait()`:
+`hive_bus_read()` / `hive_bus_read_wait()`:
 - If message size > `max_len`: Data is **truncated** to fit in buffer
 - `*bytes_read` returns the **actual bytes copied** (truncated length), NOT the original message size
 - This is safe buffer overflow protection - caller gets as much data as fits
@@ -1281,12 +1281,12 @@ The bus implements **per-subscriber read cursors** with the following **three co
 
 #### **RULE 1: Subscription Start Position**
 
-**Contract:** `acrt_bus_subscribe()` initializes the subscriber's read cursor to **"next publish"** (current `bus->head` write position).
+**Contract:** `hive_bus_subscribe()` initializes the subscriber's read cursor to **"next publish"** (current `bus->head` write position).
 
 **Guaranteed semantics:**
 - Subscriber **CANNOT** read retained entries published before subscription
-- Subscriber **ONLY** sees entries published **after** `acrt_bus_subscribe()` returns
-- First `acrt_bus_read()` call returns `ACRT_ERR_WOULDBLOCK` if no new entries published since subscription
+- Subscriber **ONLY** sees entries published **after** `hive_bus_subscribe()` returns
+- First `hive_bus_read()` call returns `HIVE_ERR_WOULDBLOCK` if no new entries published since subscription
 - Implementation: `subscriber.next_read_idx = bus->head`
 
 **Implications:**
@@ -1297,15 +1297,15 @@ The bus implements **per-subscriber read cursors** with the following **three co
 **Example:**
 ```c
 // Bus has retained entries [E1, E2, E3] with head=3
-acrt_bus_subscribe(bus);
+hive_bus_subscribe(bus);
 //   -> subscriber.next_read_idx = 3 (next write position)
 
-acrt_bus_read(bus, buf, len, &bytes_read);
-//   -> Returns ACRT_ERR_WOULDBLOCK (no new data)
+hive_bus_read(bus, buf, len, &bytes_read);
+//   -> Returns HIVE_ERR_WOULDBLOCK (no new data)
 //   -> E1, E2, E3 are invisible (behind cursor)
 
 // Publisher publishes E4 (head advances to 4)
-acrt_bus_read(bus, buf, len, &bytes_read);
+hive_bus_read(bus, buf, len, &bytes_read);
 //   -> Returns E4 (first entry after subscription)
 ```
 
@@ -1327,12 +1327,12 @@ acrt_bus_read(bus, buf, len, &bytes_read);
    - Storage cost: **O(1)** per entry (4 bytes bitmask + 1 byte read_count)
 
 3. **Eviction behavior (buffer full):**
-   - When `acrt_bus_publish()` finds buffer full (`count >= max_entries`):
+   - When `hive_bus_publish()` finds buffer full (`count >= max_entries`):
      - Oldest entry at `bus->tail` is **evicted immediately** (freed from message pool)
      - Tail advances: `bus->tail = (bus->tail + 1) % max_entries`
      - **No check if subscribers have read the evicted entry**
    - If slow subscriber's cursor pointed to evicted entry:
-     - On next `acrt_bus_read()`, search starts from **current `bus->tail`** (oldest surviving entry)
+     - On next `hive_bus_read()`, search starts from **current `bus->tail`** (oldest surviving entry)
      - Subscriber **silently skips** to next available unread entry
      - **No error** returned (appears as normal read)
      - **No signal** of data loss (by design)
@@ -1340,7 +1340,7 @@ acrt_bus_read(bus, buf, len, &bytes_read);
 **Implications:**
 - Slow subscribers lose data without notification
 - Fast subscribers never lose data (assuming buffer sized for publish rate)
-- No backpressure mechanism (unlike `acrt_ipc_request()` request/reply pattern)
+- No backpressure mechanism (unlike `hive_ipc_request()` request/reply pattern)
 - Real-time principle: Prefer fresh data over old data
 
 **Example (data loss):**
@@ -1349,19 +1349,19 @@ acrt_bus_read(bus, buf, len, &bytes_read);
 // Fast subscriber: next_read_idx=0 (read all, awaiting E4)
 // Slow subscriber: next_read_idx=0 (still at E1, hasn't read any)
 
-acrt_bus_publish(bus, &E4, sizeof(E4));
+hive_bus_publish(bus, &E4, sizeof(E4));
 //   -> Buffer full: Evict E1 at tail=0, free from pool
 //   -> Write E4 at index 0: entries=[E4, E2, E3]
 //   -> tail=1 (E2 is now oldest), head=1 (next write)
 
-// Slow subscriber calls acrt_bus_read():
+// Slow subscriber calls hive_bus_read():
 //   -> Search from tail=1: E2 (unread), E3 (unread), E4 (unread)
 //   -> Returns E2 (first unread)
 //   -> E1 is LOST (no error, silent skip)
 ```
 
 **Eviction does NOT notify slow subscribers:**
-- No `ACRT_ERR_OVERFLOW` or similar
+- No `HIVE_ERR_OVERFLOW` or similar
 - No special message indicating data loss
 - Application must detect via message sequence numbers if needed
 
@@ -1407,20 +1407,20 @@ if (config.consume_after_reads > 0 && entry->read_count >= config.consume_after_
 // Bus with consume_after_reads=2
 // Subscribers: A, B, C
 
-acrt_bus_publish(bus, &E1, sizeof(E1));
+hive_bus_publish(bus, &E1, sizeof(E1));
 //   -> E1: readers_mask=0b000, read_count=0
 
 // Subscriber A reads E1
-acrt_bus_read(bus, ...);
+hive_bus_read(bus, ...);
 //   -> E1: readers_mask=0b001, read_count=1 (A's bit set)
 
 // Subscriber A reads again (tries to read E1)
-acrt_bus_read(bus, ...);
-//   -> E1 skipped (bit already set), returns ACRT_ERR_WOULDBLOCK
+hive_bus_read(bus, ...);
+//   -> E1 skipped (bit already set), returns HIVE_ERR_WOULDBLOCK
 //   -> E1: readers_mask=0b001, read_count=1 (unchanged)
 
 // Subscriber B reads E1
-acrt_bus_read(bus, ...);
+hive_bus_read(bus, ...);
 //   -> E1: readers_mask=0b011, read_count=2 (B's bit set)
 //   -> read_count >= consume_after_reads (2) -> E1 REMOVED, freed from pool
 ```
@@ -1449,7 +1449,7 @@ Entries can be removed by **three mechanisms** (whichever occurs first):
 2. **max_age_ms (time-based expiry):**
    - Entry removed when `(current_time_ms - entry.timestamp_ms) >= max_age_ms`
    - Value `0` = disabled (no time-based expiry)
-   - Checked on every `acrt_bus_read()` and `acrt_bus_publish()` call
+   - Checked on every `hive_bus_read()` and `hive_bus_publish()` call
 
 3. **Buffer full (forced eviction):**
    - Oldest entry at `bus->tail` evicted when `count >= max_entries` on publish
@@ -1476,16 +1476,16 @@ Entries can be removed by **three mechanisms** (whichever occurs first):
 
 **WARNING: Resource Contention Between IPC and Bus**
 
-Bus publishing consumes the same message data pool as IPC (`ACRT_MESSAGE_DATA_POOL_SIZE`). A misconfigured or high-rate bus can exhaust the message pool and cause **all** IPC sends to fail with `ACRT_ERR_NOMEM`, potentially starving critical actor communication.
+Bus publishing consumes the same message data pool as IPC (`HIVE_MESSAGE_DATA_POOL_SIZE`). A misconfigured or high-rate bus can exhaust the message pool and cause **all** IPC sends to fail with `HIVE_ERR_NOMEM`, potentially starving critical actor communication.
 
 **Architectural consequences:**
 - Bus auto-evicts oldest entries when its ring buffer fills (graceful degradation)
-- IPC never auto-drops (fails immediately with `ACRT_ERR_NOMEM`)
+- IPC never auto-drops (fails immediately with `HIVE_ERR_NOMEM`)
 - A single high-rate bus publisher can starve IPC globally
 - No per-subsystem quotas or fairness guarantees
 
 **Design implications:**
-- Size `ACRT_MESSAGE_DATA_POOL_SIZE` for combined IPC + bus peak load
+- Size `HIVE_MESSAGE_DATA_POOL_SIZE` for combined IPC + bus peak load
 - Use bus retention policies to limit memory consumption
 - Monitor pool exhaustion in critical systems
 - Consider separate message pools if isolation is required (requires code modification)
@@ -1495,33 +1495,33 @@ Bus publishing consumes the same message data pool as IPC (`ACRT_MESSAGE_DATA_PO
 The bus can encounter two types of resource limits:
 
 **1. Message Pool Exhaustion** (shared with IPC):
-- Bus uses the global `ACRT_MESSAGE_DATA_POOL_SIZE` pool (same as IPC)
-- When pool is exhausted, `acrt_bus_publish()` returns `ACRT_ERR_NOMEM` immediately
+- Bus uses the global `HIVE_MESSAGE_DATA_POOL_SIZE` pool (same as IPC)
+- When pool is exhausted, `hive_bus_publish()` returns `HIVE_ERR_NOMEM` immediately
 - Does NOT block waiting for space
 - Does NOT drop messages automatically in this case
 - Caller must check return value and handle failure
 
 **2. Bus Ring Buffer Full** (per-bus limit):
 - Each bus has its own ring buffer sized via `max_entries` config
-- When ring buffer is full, `acrt_bus_publish()` **automatically evicts oldest entry**
+- When ring buffer is full, `hive_bus_publish()` **automatically evicts oldest entry**
 - This is different from IPC - bus has automatic message dropping
 - Publish succeeds (unless message pool also exhausted)
 - Slow readers may miss messages if buffer wraps
 
 **3. Subscriber Table Full**:
-- Each bus has subscriber limit via `max_subscribers` config (up to `ACRT_MAX_BUS_SUBSCRIBERS`)
-- When full, `acrt_bus_subscribe()` returns `ACRT_ERR_NOMEM`
+- Each bus has subscriber limit via `max_subscribers` config (up to `HIVE_MAX_BUS_SUBSCRIBERS`)
+- When full, `hive_bus_subscribe()` returns `HIVE_ERR_NOMEM`
 
 **Key Differences from IPC:**
 - IPC never drops messages automatically (returns error instead)
 - Bus automatically drops oldest entry when ring buffer is full
-- Both share the same message data pool (`ACRT_MESSAGE_DATA_POOL_SIZE`)
+- Both share the same message data pool (`HIVE_MESSAGE_DATA_POOL_SIZE`)
 
 **Mitigation strategies:**
 - Size message pool appropriately for combined IPC + bus load
 - Configure per-bus `max_entries` based on publish rate vs read rate
 - Use retention policies (`consume_after_reads`, `max_age_ms`) to prevent accumulation
-- Monitor `acrt_bus_entry_count()` to detect slow readers
+- Monitor `hive_bus_entry_count()` to detect slow readers
 
 ## Timer API
 
@@ -1529,19 +1529,19 @@ Timers for periodic and one-shot wake-ups.
 
 ```c
 // One-shot: wake current actor after delay
-acrt_status acrt_timer_after(uint32_t delay_us, timer_id *out);
+hive_status hive_timer_after(uint32_t delay_us, timer_id *out);
 
 // Periodic: wake current actor every interval
-acrt_status acrt_timer_every(uint32_t interval_us, timer_id *out);
+hive_status hive_timer_every(uint32_t interval_us, timer_id *out);
 
 // Cancel timer
-acrt_status acrt_timer_cancel(timer_id id);
+hive_status hive_timer_cancel(timer_id id);
 
-// Check if message is a timer tick (convenience wrapper for acrt_msg_decode)
-bool acrt_msg_is_timer(const acrt_message *msg);
+// Check if message is a timer tick (convenience wrapper for hive_msg_decode)
+bool hive_msg_is_timer(const hive_message *msg);
 ```
 
-Timer wake-ups are delivered as messages with `class == ACRT_MSG_TIMER`. The tag contains the `timer_id`. The actor receives these in its normal `acrt_ipc_recv()` loop and can use `acrt_msg_is_timer()` or `acrt_msg_decode()` to identify timer messages.
+Timer wake-ups are delivered as messages with `class == HIVE_MSG_TIMER`. The tag contains the `timer_id`. The actor receives these in its normal `hive_ipc_recv()` loop and can use `hive_msg_is_timer()` or `hive_msg_decode()` to identify timer messages.
 
 ### Timer Tick Coalescing (Periodic Timers)
 
@@ -1560,11 +1560,11 @@ Timer wake-ups are delivered as messages with `class == ACRT_MSG_TIMER`. The tag
 **Example:**
 ```c
 // 10ms periodic timer, but actor takes 35ms to process
-acrt_timer_every(10000, &timer);  // 10ms = 10000us
+hive_timer_every(10000, &timer);  // 10ms = 10000us
 
 while (1) {
-    acrt_ipc_recv(&msg, -1);
-    if (acrt_msg_is_timer(&msg)) {
+    hive_ipc_recv(&msg, -1);
+    if (hive_msg_is_timer(&msg)) {
         // Even if 35ms passed (3-4 intervals), actor receives ONE tick
         // timerfd read returned expirations=3 or 4, but only one message sent
         do_work();  // Takes 35ms
@@ -1622,7 +1622,7 @@ Platform | Clock Source | API Precision | Actual Precision | Notes
 2. **Timer ID wraparound** (`timer_id` = `uint32_t`):
    - Global counter `g_timer.next_id` increments on each timer creation
    - Wraps at 4,294,967,295 timers
-   - Potential collision: If timer ID wraps and old timer still active, `acrt_timer_cancel()` may cancel wrong timer
+   - Potential collision: If timer ID wraps and old timer still active, `hive_timer_cancel()` may cancel wrong timer
    - **Likelihood**: Extremely rare (requires 4 billion timer creations without runtime restart)
    - **Mitigation**: None needed in practice; runtime typically restarts long before wraparound
 
@@ -1631,7 +1631,7 @@ Platform | Clock Source | API Precision | Actual Precision | Notes
 ```c
 // Maximum safe one-shot timer: ~71 minutes
 uint32_t max_interval = UINT32_MAX;  // 4,294,967,295 us
-acrt_timer_after(max_interval, &timer);  // OK, fires after ~71.6 minutes
+hive_timer_after(max_interval, &timer);  // OK, fires after ~71.6 minutes
 
 // For longer intervals, use periodic timer with counter
 uint32_t seventy_two_min_us = 72 * 60 * 1000000;  // 4.32 billion us
@@ -1639,7 +1639,7 @@ uint32_t seventy_two_min_us = 72 * 60 * 1000000;  // 4.32 billion us
 
 // Correct approach for long intervals:
 uint32_t tick_interval = 60 * 1000000;  // 1 minute
-acrt_timer_every(tick_interval, &timer);
+hive_timer_every(tick_interval, &timer);
 // Count ticks in actor to reach 60 minutes
 ```
 
@@ -1664,34 +1664,34 @@ Non-blocking network I/O with blocking wrappers.
 
 ```c
 // Socket management
-acrt_status acrt_net_listen(uint16_t port, int *fd_out);
-acrt_status acrt_net_accept(int listen_fd, int *conn_fd_out, int32_t timeout_ms);
-acrt_status acrt_net_connect(const char *ip, uint16_t port, int *fd_out, int32_t timeout_ms);
-acrt_status acrt_net_close(int fd);
+hive_status hive_net_listen(uint16_t port, int *fd_out);
+hive_status hive_net_accept(int listen_fd, int *conn_fd_out, int32_t timeout_ms);
+hive_status hive_net_connect(const char *ip, uint16_t port, int *fd_out, int32_t timeout_ms);
+hive_status hive_net_close(int fd);
 
 // Data transfer
-acrt_status acrt_net_recv(int fd, void *buf, size_t len, size_t *received, int32_t timeout_ms);
-acrt_status acrt_net_send(int fd, const void *buf, size_t len, size_t *sent, int32_t timeout_ms);
+hive_status hive_net_recv(int fd, void *buf, size_t len, size_t *received, int32_t timeout_ms);
+hive_status hive_net_send(int fd, const void *buf, size_t len, size_t *sent, int32_t timeout_ms);
 ```
 
 **DNS resolution is out of scope.** The `ip` parameter must be a numeric IPv4 address (e.g., "192.168.1.1"). Hostnames are not supported. Rationale:
 - DNS resolution (`getaddrinfo`, `gethostbyname`) is blocking and would stall the scheduler
 - On STM32 bare metal, DNS typically unavailable or requires complex async plumbing
-- Callers needing DNS should resolve externally before calling `acrt_net_connect()`
+- Callers needing DNS should resolve externally before calling `hive_net_connect()`
 
 All functions with `timeout_ms` parameter support **timeout enforcement**:
 
-- `timeout_ms == 0`: Non-blocking, returns `ACRT_ERR_WOULDBLOCK` if would block
+- `timeout_ms == 0`: Non-blocking, returns `HIVE_ERR_WOULDBLOCK` if would block
 - `timeout_ms < 0`: Block forever until I/O completes
-- `timeout_ms > 0`: Block up to timeout, returns `ACRT_ERR_TIMEOUT` if exceeded
+- `timeout_ms > 0`: Block up to timeout, returns `HIVE_ERR_TIMEOUT` if exceeded
 
-**Timeout implementation:** Uses timer-based enforcement (consistent with `acrt_ipc_recv`). When timeout expires, a timer message wakes the actor and `ACRT_ERR_TIMEOUT` is returned. This is essential for handling unreachable hosts, slow connections, and implementing application-level keepalives.
+**Timeout implementation:** Uses timer-based enforcement (consistent with `hive_ipc_recv`). When timeout expires, a timer message wakes the actor and `HIVE_ERR_TIMEOUT` is returned. This is essential for handling unreachable hosts, slow connections, and implementing application-level keepalives.
 
 On blocking calls, the actor yields to the scheduler. The scheduler's event loop registers the I/O operation with the platform's event notification mechanism (epoll on Linux, interrupt flags on STM32) and dispatches the operation when the socket becomes ready.
 
 ### Completion Semantics
 
-**`acrt_net_recv()` - Partial completion:**
+**`hive_net_recv()` - Partial completion:**
 - Returns successfully when **at least 1 byte** is read (or 0 for EOF/peer closed)
 - Does NOT loop until `len` bytes are received
 - `*received` contains actual bytes read (may be less than `len`)
@@ -1700,14 +1700,14 @@ On blocking calls, the actor yields to the scheduler. The scheduler's event loop
 size_t total = 0;
 while (total < expected_len) {
     size_t n;
-    acrt_status s = acrt_net_recv(fd, buf + total, expected_len - total, &n, timeout);
-    if (ACRT_FAILED(s)) return s;
-    if (n == 0) return ACRT_ERROR(ACRT_ERR_IO, "Connection closed");
+    hive_status s = hive_net_recv(fd, buf + total, expected_len - total, &n, timeout);
+    if (HIVE_FAILED(s)) return s;
+    if (n == 0) return HIVE_ERROR(HIVE_ERR_IO, "Connection closed");
     total += n;
 }
 ```
 
-**`acrt_net_send()` - Partial completion:**
+**`hive_net_send()` - Partial completion:**
 - Returns successfully when **at least 1 byte** is written
 - Does NOT loop until `len` bytes are sent
 - `*sent` contains actual bytes written (may be less than `len`)
@@ -1716,23 +1716,23 @@ while (total < expected_len) {
 size_t total = 0;
 while (total < len) {
     size_t n;
-    acrt_status s = acrt_net_send(fd, buf + total, len - total, &n, timeout);
-    if (ACRT_FAILED(s)) return s;
+    hive_status s = hive_net_send(fd, buf + total, len - total, &n, timeout);
+    if (HIVE_FAILED(s)) return s;
     total += n;
 }
 ```
 
-**`acrt_net_connect()` - Async connect completion:**
+**`hive_net_connect()` - Async connect completion:**
 - If `connect()` returns `EINPROGRESS`: registers for `EPOLLOUT`, actor yields
 - When socket becomes writable: checks `getsockopt(fd, SOL_SOCKET, SO_ERROR, ...)`
-- If `SO_ERROR == 0`: success, returns `ACRT_SUCCESS` with connected socket in `*fd_out`
-- If `SO_ERROR != 0`: returns `ACRT_ERR_IO` with error message, socket is closed
-- If timeout expires before writable: returns `ACRT_ERR_TIMEOUT`, socket is closed
+- If `SO_ERROR == 0`: success, returns `HIVE_SUCCESS` with connected socket in `*fd_out`
+- If `SO_ERROR != 0`: returns `HIVE_ERR_IO` with error message, socket is closed
+- If timeout expires before writable: returns `HIVE_ERR_TIMEOUT`, socket is closed
 
-**`acrt_net_accept()` - Connection ready:**
+**`hive_net_accept()` - Connection ready:**
 - Waits for `EPOLLIN` on listen socket (incoming connection ready)
 - Calls `accept()` to obtain connected socket
-- Returns `ACRT_SUCCESS` with new socket in `*conn_fd_out`
+- Returns `HIVE_SUCCESS` with new socket in `*conn_fd_out`
 
 **Rationale for partial completion:**
 - Matches POSIX socket semantics (recv/send may return partial)
@@ -1745,19 +1745,19 @@ while (total < len) {
 File I/O operations.
 
 ```c
-acrt_status acrt_file_open(const char *path, int flags, int mode, int *fd_out);
-acrt_status acrt_file_close(int fd);
+hive_status hive_file_open(const char *path, int flags, int mode, int *fd_out);
+hive_status hive_file_close(int fd);
 
-acrt_status acrt_file_read(int fd, void *buf, size_t len, size_t *bytes_read);
-acrt_status acrt_file_pread(int fd, void *buf, size_t len, size_t offset, size_t *bytes_read);
+hive_status hive_file_read(int fd, void *buf, size_t len, size_t *bytes_read);
+hive_status hive_file_pread(int fd, void *buf, size_t len, size_t offset, size_t *bytes_read);
 
-acrt_status acrt_file_write(int fd, const void *buf, size_t len, size_t *bytes_written);
-acrt_status acrt_file_pwrite(int fd, const void *buf, size_t len, size_t offset, size_t *bytes_written);
+hive_status hive_file_write(int fd, const void *buf, size_t len, size_t *bytes_written);
+hive_status hive_file_pwrite(int fd, const void *buf, size_t len, size_t offset, size_t *bytes_written);
 
-acrt_status acrt_file_sync(int fd);
+hive_status hive_file_sync(int fd);
 ```
 
-The `mode` parameter in `acrt_file_open()` specifies file permissions (e.g., 0644) when creating files with `O_CREAT` flag, following POSIX conventions.
+The `mode` parameter in `hive_file_open()` specifies file permissions (e.g., 0644) when creating files with `O_CREAT` flag, following POSIX conventions.
 
 **File operations block the calling actor until I/O completes.** On embedded systems with local filesystems (FATFS, littlefs), file operations complete quickly (microseconds to milliseconds) and are bounded by hardware characteristics. Timeouts are not provided as hardware failures (dead SD card, flash corruption) cannot be recovered via timeout and require physical intervention.
 
@@ -1765,21 +1765,21 @@ The `mode` parameter in `acrt_file_open()` specifies file permissions (e.g., 064
 
 The runtime uses **compile-time configuration** for deterministic memory allocation.
 
-### Compile-Time Configuration (`acrt_static_config.h`)
+### Compile-Time Configuration (`hive_static_config.h`)
 
 All resource limits are defined at compile-time and require recompilation to change:
 
 ```c
-#define ACRT_MAX_ACTORS 64                    // Maximum concurrent actors
-#define ACRT_STACK_ARENA_SIZE (1*1024*1024)   // Stack arena size (1 MB)
-#define ACRT_MAX_BUSES 32                     // Maximum concurrent buses
-#define ACRT_MAILBOX_ENTRY_POOL_SIZE 256      // Mailbox entry pool
-#define ACRT_MESSAGE_DATA_POOL_SIZE 256       // Message data pool
-#define ACRT_MAX_MESSAGE_SIZE 256             // Maximum message size
-#define ACRT_LINK_ENTRY_POOL_SIZE 128         // Link entry pool
-#define ACRT_MONITOR_ENTRY_POOL_SIZE 128      // Monitor entry pool
-#define ACRT_TIMER_ENTRY_POOL_SIZE 64         // Timer entry pool
-#define ACRT_DEFAULT_STACK_SIZE 65536         // Default actor stack size
+#define HIVE_MAX_ACTORS 64                    // Maximum concurrent actors
+#define HIVE_STACK_ARENA_SIZE (1*1024*1024)   // Stack arena size (1 MB)
+#define HIVE_MAX_BUSES 32                     // Maximum concurrent buses
+#define HIVE_MAILBOX_ENTRY_POOL_SIZE 256      // Mailbox entry pool
+#define HIVE_MESSAGE_DATA_POOL_SIZE 256       // Message data pool
+#define HIVE_MAX_MESSAGE_SIZE 256             // Maximum message size
+#define HIVE_LINK_ENTRY_POOL_SIZE 128         // Link entry pool
+#define HIVE_MONITOR_ENTRY_POOL_SIZE 128      // Monitor entry pool
+#define HIVE_TIMER_ENTRY_POOL_SIZE 64         // Timer entry pool
+#define HIVE_DEFAULT_STACK_SIZE 65536         // Default actor stack size
 ```
 
 All runtime structures are **statically allocated** based on these limits. Actor stacks use a static arena allocator by default (configurable via `actor_config.malloc_stack` for malloc). This ensures:
@@ -1792,21 +1792,21 @@ All runtime structures are **statically allocated** based on these limits. Actor
 
 ```c
 // Initialize runtime (call once from main)
-acrt_status acrt_init(void);
+hive_status hive_init(void);
 
-// Run scheduler (blocks until all actors exit or acrt_shutdown called)
-void acrt_run(void);
+// Run scheduler (blocks until all actors exit or hive_shutdown called)
+void hive_run(void);
 
 // Request graceful shutdown
-void acrt_shutdown(void);
+void hive_shutdown(void);
 
-// Cleanup runtime resources (call after acrt_run completes)
-void acrt_cleanup(void);
+// Cleanup runtime resources (call after hive_run completes)
+void hive_cleanup(void);
 ```
 
 ## Actor Death Handling
 
-When an actor dies (via `acrt_exit()`, crash, or external kill):
+When an actor dies (via `hive_exit()`, crash, or external kill):
 
 **Exception:** The exception in this section applies **only when stack corruption prevents safe cleanup** (e.g., guard pattern so corrupted that detection itself is unsafe, or runtime metadata is damaged). When overflow **is detected** via guard checks (see Stack Overflow section), the **normal cleanup path below is used** — links/monitors are notified, mailbox cleared, timers cancelled, resources cleaned up. The guard pattern detection isolates the overflow to the stack area, leaving actor metadata intact for safe cleanup.
 
@@ -1814,9 +1814,9 @@ When an actor dies (via `acrt_exit()`, crash, or external kill):
 
 1. **Mailbox cleared:** All pending messages are discarded.
 
-2. **Links notified:** All linked actors receive an exit message (class=`ACRT_MSG_EXIT`, sender=dying actor).
+2. **Links notified:** All linked actors receive an exit message (class=`HIVE_MSG_EXIT`, sender=dying actor).
 
-3. **Monitors notified:** All monitoring actors receive an exit message (class=`ACRT_MSG_EXIT`).
+3. **Monitors notified:** All monitoring actors receive an exit message (class=`HIVE_MSG_EXIT`).
 
 4. **Bus subscriptions removed:** Actor is unsubscribed from all buses.
 
@@ -1857,20 +1857,20 @@ Exit notifications (steps 2-3 above) are enqueued in recipient mailboxes **durin
 ```c
 // Dying actor sends messages before death
 void actor_A(void *arg) {
-    acrt_ipc_notify(B, &msg1, sizeof(msg1));  // Enqueued in B's mailbox
-    acrt_ipc_notify(C, &msg2, sizeof(msg2));  // Enqueued in C's mailbox
-    acrt_exit();  // Exit notifications sent to links/monitors
+    hive_ipc_notify(B, &msg1, sizeof(msg1));  // Enqueued in B's mailbox
+    hive_ipc_notify(C, &msg2, sizeof(msg2));  // Enqueued in C's mailbox
+    hive_exit();  // Exit notifications sent to links/monitors
 }
-// Linked actor B will receive: msg1, then EXIT(A) (class=ACRT_MSG_EXIT)
+// Linked actor B will receive: msg1, then EXIT(A) (class=HIVE_MSG_EXIT)
 // Actor C will receive: msg2 (no exit notification, not linked)
 
 // Messages sent TO dying actor are lost
 void actor_B(void *arg) {
-    acrt_ipc_notify(A, &msg, sizeof(msg));  // Enqueued in A's mailbox
+    hive_ipc_notify(A, &msg, sizeof(msg));  // Enqueued in A's mailbox
 }
 void actor_A(void *arg) {
     // ... does some work ...
-    acrt_exit();  // Mailbox cleared, msg from B is discarded
+    hive_exit();  // Mailbox cleared, msg from B is discarded
 }
 ```
 
@@ -1887,7 +1887,7 @@ void actor_A(void *arg) {
 Pseudocode for the scheduler:
 
 ```
-procedure acrt_run():
+procedure hive_run():
     epoll_fd = epoll_create1(0)
 
     while not shutdown_requested and actors_alive > 0:
@@ -2056,8 +2056,8 @@ The runtime abstracts platform-specific functionality:
 #### **When Overflow IS Detected (Guard Check Succeeds)**
 
 **Guaranteed behavior:**
-1. **Actor terminates** with exit reason `ACRT_EXIT_CRASH_STACK`
-2. **Links/monitors are notified** (receive exit message with `ACRT_EXIT_CRASH_STACK`)
+1. **Actor terminates** with exit reason `HIVE_EXIT_CRASH_STACK`
+2. **Links/monitors are notified** (receive exit message with `HIVE_EXIT_CRASH_STACK`)
 3. **Runtime remains stable** (other actors continue running)
 4. **Actor resources cleaned up** (stack freed, mailbox cleared, timers cancelled)
 5. **Error logged:** "Actor N stack overflow detected"
@@ -2070,7 +2070,7 @@ The runtime abstracts platform-specific functionality:
 
 **Caveat:** Without MPU-based stack isolation (future work), there is no hardware guarantee that overflow stays confined. The layout minimizes risk but does not eliminate it.
 
-**Implementation:** Guard patterns checked on every context switch (acrt_scheduler.c)
+**Implementation:** Guard patterns checked on every context switch (hive_scheduler.c)
 
 ---
 

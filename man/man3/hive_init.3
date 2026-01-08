@@ -1,0 +1,129 @@
+.\" Man page for hive_init, hive_run, hive_shutdown, hive_cleanup
+.TH HIVE_INIT 3 "January 2025" "ACRT 1.0" "Actor Runtime Manual"
+.SH NAME
+hive_init, hive_run, hive_shutdown, hive_cleanup \- initialize and control the actor runtime
+.SH SYNOPSIS
+.nf
+.B #include <hive_runtime.h>
+.PP
+.BI "hive_status hive_init(void);"
+.BI "void hive_run(void);"
+.BI "void hive_shutdown(void);"
+.BI "void hive_cleanup(void);"
+.fi
+.SH DESCRIPTION
+These functions initialize, run, and terminate the actor runtime.
+.PP
+.BR hive_init ()
+initializes the runtime subsystems including the scheduler, IPC pools, timer
+infrastructure, and static memory pools. This function must be called exactly
+once from main() before any other runtime functions. It does not allocate heap
+memory; all structures are statically allocated based on compile-time
+configuration in
+.IR hive_static_config.h .
+.PP
+.BR hive_run ()
+starts the cooperative scheduler and blocks until all actors have exited or
+.BR hive_shutdown ()
+is called. The scheduler implements priority-based round-robin scheduling with
+four priority levels (CRITICAL=0, HIGH=1, NORMAL=2, LOW=3). When no actors are
+runnable, the scheduler efficiently waits for I/O events using
+.BR epoll_wait (2)
+on Linux or WFI (Wait For Interrupt) on STM32.
+.PP
+.BR hive_shutdown ()
+requests graceful shutdown of the runtime. All actors will be allowed to
+complete their current work before the scheduler exits. This function may be
+called from within an actor.
+.PP
+.BR hive_cleanup ()
+releases all runtime resources including actor stacks allocated from the
+arena. This function must be called after
+.BR hive_run ()
+returns. After cleanup, the runtime may be reinitialized with
+.BR hive_init ().
+.SH RETURN VALUE
+.BR hive_init ()
+returns an
+.I hive_status
+structure. On success,
+.I status.code
+is
+.BR HIVE_OK .
+On failure,
+.I status.code
+indicates the error and
+.I status.msg
+contains a descriptive string.
+.PP
+The other functions do not return values.
+.SH ERRORS
+.TP
+.B HIVE_ERR_INVALID
+Runtime already initialized (double init).
+.SH NOTES
+.SS Memory Model
+The runtime uses statically bounded memory. All pools and structures are
+allocated at compile time based on constants in
+.IR hive_static_config.h :
+.PP
+.nf
+HIVE_MAX_ACTORS           64      Maximum concurrent actors
+HIVE_STACK_ARENA_SIZE     1 MB    Stack arena for actor stacks
+HIVE_MAILBOX_ENTRY_POOL   256     IPC mailbox entries
+HIVE_MESSAGE_DATA_POOL    256     IPC message data buffers
+.fi
+.PP
+No heap allocation occurs in hot paths (scheduling, IPC, I/O). Actor stacks
+use a static arena allocator by default; malloc is only used if
+.I actor_config.malloc_stack
+is set to true.
+.SS Single-Threaded Architecture
+The runtime is completely single-threaded. All actors run cooperatively in
+one scheduler thread. There are no I/O worker threads. Runtime APIs are
+.B not thread-safe
+and must only be called from actor context (the scheduler thread).
+.SS Reentrancy
+Runtime APIs are not reentrant. Actors must not call runtime APIs from
+signal handlers or interrupt service routines. Violating this constraint
+results in undefined behavior.
+.SS Embedded Considerations
+.IP \(bu 2
+Total static memory footprint is approximately 1.2 MB (configurable)
+.IP \(bu 2
+Memory usage is deterministic and calculable at link time
+.IP \(bu 2
+No dynamic allocation in steady state enables certification
+.IP \(bu 2
+Stack overflow detection via guard patterns (16-byte overhead per actor)
+.SH EXAMPLE
+.nf
+#include <hive_runtime.h>
+#include <stdio.h>
+
+void worker_actor(void *arg) {
+    printf("Worker running\\n");
+    hive_exit();
+}
+
+int main(void) {
+    hive_status status = hive_init();
+    if (HIVE_FAILED(status)) {
+        fprintf(stderr, "Init failed: %s\\n", HIVE_ERR_STR(status));
+        return 1;
+    }
+
+    actor_id worker;
+    hive_spawn(worker_actor, NULL, &worker);
+
+    hive_run();      /* Blocks until all actors exit */
+    hive_cleanup();
+
+    return 0;
+}
+.fi
+.SH SEE ALSO
+.BR hive_spawn (3),
+.BR hive_exit (3),
+.BR hive_ipc (3),
+.BR hive_types (3)

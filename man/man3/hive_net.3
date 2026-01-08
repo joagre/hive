@@ -1,0 +1,306 @@
+\" Man page for network I/O functions
+.TH HIVE_NET 3 "January 2025" "ACRT 1.0" "Actor Runtime Manual"
+.SH NAME
+hive_net_listen, hive_net_accept, hive_net_connect, hive_net_close, hive_net_recv, hive_net_send \- non-blocking network I/O
+.SH SYNOPSIS
+.nf
+.B #include <hive_net.h>
+.PP
+.BI "hive_status hive_net_listen(uint16_t " port ", int *" fd_out ");"
+.BI "hive_status hive_net_accept(int " listen_fd ", int *" conn_fd_out ", int32_t " timeout_ms ");"
+.BI "hive_status hive_net_connect(const char *" ip ", uint16_t " port ", int *" fd_out ", int32_t " timeout_ms ");"
+.BI "hive_status hive_net_close(int " fd ");"
+.BI "hive_status hive_net_recv(int " fd ", void *" buf ", size_t " len ", size_t *" received ", int32_t " timeout_ms ");"
+.BI "hive_status hive_net_send(int " fd ", const void *" buf ", size_t " len ", size_t *" sent ", int32_t " timeout_ms ");"
+.fi
+.SH DESCRIPTION
+These functions provide non-blocking TCP network I/O for actors. All operations
+integrate with the runtime's event loop (epoll on Linux, lwIP NO_SYS on STM32),
+allowing other actors to run while waiting for network events.
+.SS Server Operations
+.BR hive_net_listen ()
+creates a listening socket bound to
+.I port
+on all interfaces (INADDR_ANY). The socket is configured non-blocking with
+SO_REUSEADDR. The socket descriptor is stored in
+.IR fd_out .
+This operation does not block.
+.PP
+.BR hive_net_accept ()
+accepts an incoming connection on
+.IR listen_fd .
+The new connection socket is stored in
+.IR conn_fd_out .
+If no connection is immediately available, the actor blocks until a connection
+arrives or timeout expires.
+.SS Client Operations
+.BR hive_net_connect ()
+establishes a TCP connection to
+.I ip
+(numeric IPv4 address) on
+.IR port .
+DNS resolution is
+.B not supported
+because it would block the scheduler. The connected socket is stored in
+.IR fd_out .
+.SS Data Transfer
+.BR hive_net_recv ()
+receives up to
+.I len
+bytes into
+.IR buf .
+The actual number of bytes received is stored in
+.IR received .
+Returns 0 bytes on connection close (EOF).
+.PP
+.BR hive_net_send ()
+sends up to
+.I len
+bytes from
+.IR buf .
+The actual number of bytes sent is stored in
+.IR sent .
+Note: May send fewer bytes than requested (partial write); caller must retry with
+remaining data.
+.SS Closing
+.BR hive_net_close ()
+closes the socket. This is synchronous and does not block.
+.SS Timeout Behavior
+The
+.I timeout_ms
+parameter controls blocking for accept, connect, recv, and send:
+.TP
+.B HIVE_TIMEOUT_NONBLOCKING (0)
+Return immediately with
+.B HIVE_ERR_WOULDBLOCK
+if operation would block.
+.TP
+.B HIVE_TIMEOUT_INFINITE (-1)
+Block forever until operation completes.
+.TP
+.B positive value
+Block up to the specified milliseconds, return
+.B HIVE_ERR_TIMEOUT
+if exceeded.
+.SH RETURN VALUE
+All functions return an
+.I hive_status
+structure. On success,
+.I status.code
+is
+.BR HIVE_OK .
+For
+.BR hive_net_recv ()
+returning 0 bytes received indicates the peer closed the connection (EOF).
+.SH ERRORS
+.TP
+.B HIVE_ERR_INVALID
+NULL argument, invalid IP address format (must be numeric IPv4), or not called
+from actor context (for blocking operations).
+.TP
+.B HIVE_ERR_IO
+Socket error (errno-based message: "Connection refused", "Address in use", etc.).
+.TP
+.B HIVE_ERR_WOULDBLOCK
+Operation would block and timeout was 0.
+.TP
+.B HIVE_ERR_TIMEOUT
+Operation did not complete within timeout period.
+.TP
+.B HIVE_ERR_NOMEM
+I/O source pool exhausted (HIVE_IO_SOURCE_POOL_SIZE).
+.SH NOTES
+.SS No DNS Resolution
+.BR hive_net_connect ()
+requires numeric IPv4 addresses (e.g., "192.168.1.1"). Hostnames are
+.B not supported
+because DNS resolution is blocking and would stall the scheduler. Resolve
+hostnames before calling, or use static IP addresses.
+.SS Non-Blocking Integration
+All blocking network operations use the scheduler's epoll event loop. While an
+actor waits for network I/O, other actors continue running. This is cooperative:
+the waiting actor yields automatically.
+.SS Partial Reads/Writes
+.BR hive_net_recv ()
+and
+.BR hive_net_send ()
+may transfer fewer bytes than requested. Always check the
+.I received
+or
+.I sent
+output parameter and loop to transfer remaining data:
+.PP
+.nf
+size_t total_sent = 0;
+while (total_sent < len) {
+    size_t n;
+    hive_status s = hive_net_send(fd, buf + total_sent,
+                                  len - total_sent, &n, 5000);
+    if (HIVE_FAILED(s)) break;
+    total_sent += n;
+}
+.fi
+.SS Connection Close Detection
+.BR hive_net_recv ()
+returns success with
+.I *received = 0
+when the peer closes the connection. This is normal EOF, not an error:
+.PP
+.nf
+size_t n;
+hive_status s = hive_net_recv(fd, buf, sizeof(buf), &n, -1);
+if (!HIVE_FAILED(s) && n == 0) {
+    /* Peer closed connection */
+}
+.fi
+.SS Socket Lifecycle
+Sockets from
+.BR hive_net_listen (),
+.BR hive_net_accept (),
+and
+.BR hive_net_connect ()
+are non-blocking file descriptors. The caller is responsible for closing them
+with
+.BR hive_net_close ()
+when done.
+.SS Pool Limits
+Network operations use the I/O source pool (HIVE_IO_SOURCE_POOL_SIZE, default 64).
+Each pending blocking operation consumes one entry. If exhausted,
+.B HIVE_ERR_NOMEM
+is returned.
+.SS Embedded Considerations
+.IP \(bu 2
+.B Linux:
+Non-blocking sockets with epoll integration
+.IP \(bu 2
+.B STM32:
+lwIP NO_SYS mode (single-threaded, polled from scheduler)
+.IP \(bu 2
+Zero heap allocation in I/O operations
+.IP \(bu 2
+O(1) epoll registration/deregistration
+.IP \(bu 2
+Suitable for telemetry, ground station links, and protocol handlers
+.SS Safety-Critical Note
+Network I/O has unbounded latency. For flight-critical systems:
+.IP \(bu 2
+Use timeouts to bound worst-case blocking
+.IP \(bu 2
+Run network actors at lower priority than control loops
+.IP \(bu 2
+Design for network failures (disconnection, latency spikes)
+.SH EXAMPLE
+.SS Echo Server
+.nf
+#include <hive_runtime.h>
+#include <hive_net.h>
+#include <stdio.h>
+#include <string.h>
+
+void client_handler(void *arg) {
+    int conn_fd = *(int *)arg;
+    char buf[256];
+
+    while (1) {
+        size_t n;
+        hive_status s = hive_net_recv(conn_fd, buf, sizeof(buf), &n, 5000);
+        if (HIVE_FAILED(s)) {
+            printf("Recv error: %s\\n", HIVE_ERR_STR(s));
+            break;
+        }
+        if (n == 0) {
+            printf("Client disconnected\\n");
+            break;
+        }
+
+        /* Echo back */
+        size_t sent = 0;
+        while (sent < n) {
+            size_t s_n;
+            hive_status ss = hive_net_send(conn_fd, buf + sent, n - sent, &s_n, 5000);
+            if (HIVE_FAILED(ss)) break;
+            sent += s_n;
+        }
+    }
+
+    hive_net_close(conn_fd);
+    hive_exit();
+}
+
+void server(void *arg) {
+    (void)arg;
+    int listen_fd;
+
+    hive_status s = hive_net_listen(8080, &listen_fd);
+    if (HIVE_FAILED(s)) {
+        printf("Listen failed: %s\\n", HIVE_ERR_STR(s));
+        hive_exit();
+    }
+
+    printf("Server listening on port 8080\\n");
+
+    while (1) {
+        int conn_fd;
+        s = hive_net_accept(listen_fd, &conn_fd, -1);
+        if (HIVE_FAILED(s)) {
+            printf("Accept failed: %s\\n", HIVE_ERR_STR(s));
+            continue;
+        }
+
+        printf("Client connected\\n");
+
+        /* Spawn handler actor for this connection */
+        actor_id handler;
+        hive_spawn(client_handler, &conn_fd, &handler);
+    }
+}
+
+int main(void) {
+    hive_init();
+    actor_id srv;
+    hive_spawn(server, NULL, &srv);
+    hive_run();
+    hive_cleanup();
+    return 0;
+}
+.fi
+.SS Client with Timeout
+.nf
+void client(void *arg) {
+    (void)arg;
+    int fd;
+
+    /* Connect with 5 second timeout */
+    hive_status s = hive_net_connect("127.0.0.1", 8080, &fd, 5000);
+    if (HIVE_FAILED(s)) {
+        printf("Connect failed: %s\\n", HIVE_ERR_STR(s));
+        hive_exit();
+    }
+
+    /* Send request */
+    const char *msg = "Hello, server!";
+    size_t sent;
+    s = hive_net_send(fd, msg, strlen(msg), &sent, 1000);
+    if (HIVE_FAILED(s)) {
+        printf("Send failed: %s\\n", HIVE_ERR_STR(s));
+    }
+
+    /* Receive response */
+    char buf[256];
+    size_t n;
+    s = hive_net_recv(fd, buf, sizeof(buf) - 1, &n, 1000);
+    if (!HIVE_FAILED(s) && n > 0) {
+        buf[n] = '\\0';
+        printf("Response: %s\\n", buf);
+    }
+
+    hive_net_close(fd);
+    hive_exit();
+}
+.fi
+.SH SEE ALSO
+.BR hive_file (3),
+.BR hive_timer (3),
+.BR hive_spawn (3),
+.BR socket (2),
+.BR epoll (7)

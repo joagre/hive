@@ -1,5 +1,5 @@
-#include "acrt_runtime.h"
-#include "acrt_ipc.h"
+#include "hive_runtime.h"
+#include "hive_ipc.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -12,17 +12,17 @@ typedef struct {
 static void pong_actor(void *arg) {
     (void)arg; // Unused
 
-    printf("Pong actor started (ID: %u)\n", acrt_self());
+    printf("Pong actor started (ID: %u)\n", hive_self());
 
     actor_id ping_id = ACTOR_ID_INVALID;
 
     for (int i = 0; i < 5; i++) {
         // Wait for ping
-        acrt_message msg;
-        acrt_status status = acrt_ipc_recv(&msg, -1); // Block until message arrives
+        hive_message msg;
+        hive_status status = hive_ipc_recv(&msg, -1); // Block until message arrives
 
-        if (ACRT_FAILED(status)) {
-            printf("Pong: Failed to receive message: %s\n", ACRT_ERR_STR(status));
+        if (HIVE_FAILED(status)) {
+            printf("Pong: Failed to receive message: %s\n", HIVE_ERR_STR(status));
             break;
         }
 
@@ -37,10 +37,10 @@ static void pong_actor(void *arg) {
 
         // Send pong back
         pm_copy.count++;
-        status = acrt_ipc_notify(ping_id, &pm_copy, sizeof(ping_msg));
+        status = hive_ipc_notify(ping_id, &pm_copy, sizeof(ping_msg));
 
-        if (ACRT_FAILED(status)) {
-            printf("Pong: Failed to send message: %s\n", ACRT_ERR_STR(status));
+        if (HIVE_FAILED(status)) {
+            printf("Pong: Failed to send message: %s\n", HIVE_ERR_STR(status));
             break;
         }
 
@@ -48,33 +48,33 @@ static void pong_actor(void *arg) {
     }
 
     printf("Pong actor exiting\n");
-    acrt_exit();
+    hive_exit();
 }
 
 // Ping actor
 static void ping_actor(void *arg) {
     actor_id pong_id = (actor_id)(uintptr_t)arg;
 
-    printf("Ping actor started (ID: %u)\n", acrt_self());
+    printf("Ping actor started (ID: %u)\n", hive_self());
 
     // Send first ping
     ping_msg pm = { .count = 0 };
-    acrt_status status = acrt_ipc_notify(pong_id, &pm, sizeof(ping_msg));
+    hive_status status = hive_ipc_notify(pong_id, &pm, sizeof(ping_msg));
 
-    if (ACRT_FAILED(status)) {
-        printf("Ping: Failed to send initial message: %s\n", ACRT_ERR_STR(status));
-        acrt_exit();
+    if (HIVE_FAILED(status)) {
+        printf("Ping: Failed to send initial message: %s\n", HIVE_ERR_STR(status));
+        hive_exit();
     }
 
     printf("Ping: Sent initial ping #%d\n", pm.count);
 
     for (int i = 0; i < 5; i++) {
         // Wait for pong
-        acrt_message msg;
-        status = acrt_ipc_recv(&msg, -1); // Block until message arrives
+        hive_message msg;
+        status = hive_ipc_recv(&msg, -1); // Block until message arrives
 
-        if (ACRT_FAILED(status)) {
-            printf("Ping: Failed to receive message: %s\n", ACRT_ERR_STR(status));
+        if (HIVE_FAILED(status)) {
+            printf("Ping: Failed to receive message: %s\n", HIVE_ERR_STR(status));
             break;
         }
 
@@ -84,10 +84,10 @@ static void ping_actor(void *arg) {
 
         // Send ping back
         recv_pm.count++;
-        status = acrt_ipc_notify(pong_id, &recv_pm, sizeof(ping_msg));
+        status = hive_ipc_notify(pong_id, &recv_pm, sizeof(ping_msg));
 
-        if (ACRT_FAILED(status)) {
-            printf("Ping: Failed to send message: %s\n", ACRT_ERR_STR(status));
+        if (HIVE_FAILED(status)) {
+            printf("Ping: Failed to send message: %s\n", HIVE_ERR_STR(status));
             break;
         }
 
@@ -95,44 +95,44 @@ static void ping_actor(void *arg) {
     }
 
     printf("Ping actor exiting\n");
-    acrt_exit();
+    hive_exit();
 }
 
 int main(void) {
     printf("=== Actor Runtime Ping-Pong Example ===\n\n");
 
     // Initialize runtime
-    acrt_status status = acrt_init();
-    if (ACRT_FAILED(status)) {
-        fprintf(stderr, "Failed to initialize runtime: %s\n", ACRT_ERR_STR(status));
+    hive_status status = hive_init();
+    if (HIVE_FAILED(status)) {
+        fprintf(stderr, "Failed to initialize runtime: %s\n", HIVE_ERR_STR(status));
         return 1;
     }
 
     printf("Runtime initialized\n");
 
     // Spawn pong actor first
-    actor_config pong_cfg = ACRT_ACTOR_CONFIG_DEFAULT;
+    actor_config pong_cfg = HIVE_ACTOR_CONFIG_DEFAULT;
     pong_cfg.name = "pong";
-    pong_cfg.priority = ACRT_PRIORITY_NORMAL;
+    pong_cfg.priority = HIVE_PRIORITY_NORMAL;
 
     actor_id pong_id;
-    if (ACRT_FAILED(acrt_spawn_ex(pong_actor, NULL, &pong_cfg, &pong_id))) {
+    if (HIVE_FAILED(hive_spawn_ex(pong_actor, NULL, &pong_cfg, &pong_id))) {
         fprintf(stderr, "Failed to spawn pong actor\n");
-        acrt_cleanup();
+        hive_cleanup();
         return 1;
     }
 
     printf("Spawned pong actor (ID: %u)\n", pong_id);
 
     // Spawn ping actor with pong's ID
-    actor_config ping_cfg = ACRT_ACTOR_CONFIG_DEFAULT;
+    actor_config ping_cfg = HIVE_ACTOR_CONFIG_DEFAULT;
     ping_cfg.name = "ping";
-    ping_cfg.priority = ACRT_PRIORITY_NORMAL;
+    ping_cfg.priority = HIVE_PRIORITY_NORMAL;
 
     actor_id ping_id;
-    if (ACRT_FAILED(acrt_spawn_ex(ping_actor, (void *)(uintptr_t)pong_id, &ping_cfg, &ping_id))) {
+    if (HIVE_FAILED(hive_spawn_ex(ping_actor, (void *)(uintptr_t)pong_id, &ping_cfg, &ping_id))) {
         fprintf(stderr, "Failed to spawn ping actor\n");
-        acrt_cleanup();
+        hive_cleanup();
         return 1;
     }
 
@@ -141,12 +141,12 @@ int main(void) {
     printf("\nStarting scheduler...\n\n");
 
     // Run scheduler
-    acrt_run();
+    hive_run();
 
     printf("\nScheduler finished\n");
 
     // Cleanup
-    acrt_cleanup();
+    hive_cleanup();
 
     printf("\n=== Example completed ===\n");
 

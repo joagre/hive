@@ -1,7 +1,7 @@
-#include "acrt_runtime.h"
-#include "acrt_link.h"
-#include "acrt_ipc.h"
-#include "acrt_timer.h"
+#include "hive_runtime.h"
+#include "hive_link.h"
+#include "hive_ipc.h"
+#include "hive_timer.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
@@ -10,27 +10,27 @@
 static void worker_actor(void *arg) {
     int worker_id = *(int *)arg;
 
-    printf("Worker %d started (Actor ID: %u)\n", worker_id, acrt_self());
+    printf("Worker %d started (Actor ID: %u)\n", worker_id, hive_self());
 
     // Simulate some work with random duration
     srand(time(NULL) + worker_id);
     uint64_t work_time = 200000 + (rand() % 400000);  // 200-600ms
 
     timer_id work_timer;
-    acrt_timer_after(work_time, &work_timer);
+    hive_timer_after(work_time, &work_timer);
 
-    acrt_message msg;
-    acrt_ipc_recv(&msg, -1);
+    hive_message msg;
+    hive_ipc_recv(&msg, -1);
 
     printf("Worker %d: Completed work, exiting normally\n", worker_id);
-    acrt_exit();
+    hive_exit();
 }
 
 // Supervisor actor - monitors workers and reports when they exit
 static void supervisor_actor(void *arg) {
     (void)arg;
 
-    printf("Supervisor started (Actor ID: %u)\n", acrt_self());
+    printf("Supervisor started (Actor ID: %u)\n", hive_self());
 
     // Spawn 3 workers
     #define NUM_WORKERS 3
@@ -40,19 +40,19 @@ static void supervisor_actor(void *arg) {
     printf("Supervisor: Spawning %d workers...\n", NUM_WORKERS);
 
     for (int i = 0; i < NUM_WORKERS; i++) {
-        actor_config worker_cfg = ACRT_ACTOR_CONFIG_DEFAULT;
+        actor_config worker_cfg = HIVE_ACTOR_CONFIG_DEFAULT;
         worker_cfg.name = "worker";
 
         actor_id worker;
-        if (ACRT_FAILED(acrt_spawn_ex(worker_actor, &worker_ids[i], &worker_cfg, &worker))) {
+        if (HIVE_FAILED(hive_spawn_ex(worker_actor, &worker_ids[i], &worker_cfg, &worker))) {
             printf("Supervisor: Failed to spawn worker %d\n", i + 1);
             continue;
         }
 
         // Monitor the worker
-        acrt_status status = acrt_monitor(worker, &monitor_refs[i]);
-        if (ACRT_FAILED(status)) {
-            printf("Supervisor: Failed to monitor worker %d: %s\n", i + 1, ACRT_ERR_STR(status));
+        hive_status status = hive_monitor(worker, &monitor_refs[i]);
+        if (HIVE_FAILED(status)) {
+            printf("Supervisor: Failed to monitor worker %d: %s\n", i + 1, HIVE_ERR_STR(status));
         } else {
             printf("Supervisor: Monitoring worker %d (Actor ID: %u, ref: %u)\n",
                    i + 1, worker, monitor_refs[i]);
@@ -64,19 +64,19 @@ static void supervisor_actor(void *arg) {
     printf("\nSupervisor: Waiting for workers to complete...\n");
 
     while (workers_completed < NUM_WORKERS) {
-        acrt_message msg;
-        acrt_status status = acrt_ipc_recv(&msg, -1);
+        hive_message msg;
+        hive_status status = hive_ipc_recv(&msg, -1);
 
-        if (ACRT_FAILED(status)) {
+        if (HIVE_FAILED(status)) {
             printf("Supervisor: Failed to receive message\n");
             break;
         }
 
-        if (msg.class == ACRT_MSG_EXIT) {
-            acrt_exit_msg *exit_info = (acrt_exit_msg *)msg.data;
+        if (msg.class == HIVE_MSG_EXIT) {
+            hive_exit_msg *exit_info = (hive_exit_msg *)msg.data;
 
             printf("Supervisor: Worker died (Actor ID: %u, reason: %s)\n",
-                   exit_info->actor, acrt_exit_reason_str(exit_info->reason));
+                   exit_info->actor, hive_exit_reason_str(exit_info->reason));
 
             workers_completed++;
         } else {
@@ -85,40 +85,40 @@ static void supervisor_actor(void *arg) {
     }
 
     printf("\nSupervisor: All workers completed, exiting\n");
-    acrt_exit();
+    hive_exit();
 }
 
 int main(void) {
     printf("=== Actor Runtime Supervisor Demo ===\n\n");
 
     // Initialize runtime
-    acrt_status status = acrt_init();
-    if (ACRT_FAILED(status)) {
-        fprintf(stderr, "Failed to initialize runtime: %s\n", ACRT_ERR_STR(status));
+    hive_status status = hive_init();
+    if (HIVE_FAILED(status)) {
+        fprintf(stderr, "Failed to initialize runtime: %s\n", HIVE_ERR_STR(status));
         return 1;
     }
 
     // Spawn supervisor with larger stack (needs space for arrays and nested spawns)
-    actor_config sup_cfg = ACRT_ACTOR_CONFIG_DEFAULT;
+    actor_config sup_cfg = HIVE_ACTOR_CONFIG_DEFAULT;
     sup_cfg.name = "supervisor";
     sup_cfg.stack_size = 128 * 1024;  // 128KB stack
 
     actor_id supervisor;
-    if (ACRT_FAILED(acrt_spawn_ex(supervisor_actor, NULL, &sup_cfg, &supervisor))) {
+    if (HIVE_FAILED(hive_spawn_ex(supervisor_actor, NULL, &sup_cfg, &supervisor))) {
         fprintf(stderr, "Failed to spawn supervisor\n");
-        acrt_cleanup();
+        hive_cleanup();
         return 1;
     }
 
     printf("Spawned supervisor (Actor ID: %u)\n\n", supervisor);
 
     // Run scheduler
-    acrt_run();
+    hive_run();
 
     printf("\nScheduler finished\n");
 
     // Cleanup
-    acrt_cleanup();
+    hive_cleanup();
 
     printf("\n=== Demo completed ===\n");
 

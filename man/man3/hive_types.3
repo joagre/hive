@@ -1,0 +1,331 @@
+\" Man page for types and compile-time configuration
+.TH HIVE_TYPES 3 "January 2025" "ACRT 1.0" "Actor Runtime Manual"
+.SH NAME
+hive_types, hive_status, hive_message, actor_config \- runtime types and constants
+.SH SYNOPSIS
+.nf
+.B #include <hive_types.h>
+.B #include <hive_static_config.h>
+.fi
+.SH DESCRIPTION
+This manual describes the fundamental types, constants, and compile-time
+configuration for the actor runtime.
+.SS Handles
+.TP
+.B actor_id
+Opaque 32-bit handle identifying an actor.
+.TP
+.B ACTOR_ID_INVALID
+Sentinel value (0) indicating an invalid or uninitialized actor ID.
+.TP
+.B bus_id
+Opaque 32-bit handle identifying a bus.
+.TP
+.B BUS_ID_INVALID
+Sentinel value (0) indicating an invalid bus ID.
+.TP
+.B timer_id
+Opaque 32-bit handle identifying a timer.
+.TP
+.B TIMER_ID_INVALID
+Sentinel value (0) indicating an invalid timer ID.
+.SS Status Type
+.PP
+.nf
+typedef struct {
+    hive_error_code code;  /* Error code */
+    const char    *msg;    /* String literal or NULL, never heap-allocated */
+} hive_status;
+.fi
+.PP
+All runtime functions return
+.I hive_status
+to indicate success or failure. The
+.I msg
+field provides a human-readable error description when non-NULL.
+.SS Status Macros
+.TP
+.B HIVE_SUCCESS
+Status value for successful operations.
+.TP
+.BI HIVE_FAILED( s )
+True if status
+.I s
+indicates failure.
+.TP
+.BI HIVE_ERROR( code ", " msg )
+Create a status with error code and message.
+.TP
+.BI HIVE_ERR_STR( s )
+Extract error message from status, returning "unknown error" if NULL.
+.SS Error Codes
+.TP
+.B HIVE_OK
+Operation succeeded.
+.TP
+.B HIVE_ERR_NOMEM
+Resource pool exhausted (actor table, mailbox pool, message pool, etc.).
+.TP
+.B HIVE_ERR_INVALID
+Invalid argument, invalid handle, or operation not permitted in current context.
+.TP
+.B HIVE_ERR_TIMEOUT
+Operation timed out.
+.TP
+.B HIVE_ERR_CLOSED
+Target actor or resource is closed/dead.
+.TP
+.B HIVE_ERR_WOULDBLOCK
+Non-blocking operation would block.
+.TP
+.B HIVE_ERR_IO
+I/O error (network or file).
+.SS Message Structure
+.PP
+.nf
+typedef struct {
+    actor_id       sender;  /* Sender actor ID */
+    hive_msg_class class;   /* Message class (pre-decoded) */
+    uint32_t       tag;     /* Message tag (pre-decoded) */
+    size_t         len;     /* Payload length in bytes */
+    const void    *data;    /* Payload pointer */
+} hive_message;
+.fi
+.PP
+Messages are pre-decoded by the runtime. The
+.I data
+pointer is valid until the next successful
+.BR hive_ipc_recv ().
+.SS Message Classes
+.TP
+.B HIVE_MSG_NOTIFY
+Fire-and-forget notification (0).
+.TP
+.B HIVE_MSG_REQUEST
+Request expecting reply (1).
+.TP
+.B HIVE_MSG_REPLY
+Reply to a request (2).
+.TP
+.B HIVE_MSG_TIMER
+Timer tick from runtime (3).
+.TP
+.B HIVE_MSG_EXIT
+Actor death notification (4).
+.TP
+.B HIVE_MSG_ANY
+Wildcard for filtering (15).
+.SS Message Tag Constants
+.TP
+.B HIVE_TAG_NONE
+No tag (0).
+.TP
+.B HIVE_TAG_ANY
+Wildcard for filtering in
+.BR hive_ipc_recv_match ().
+.SS Special Sender IDs
+.TP
+.B HIVE_SENDER_ANY
+Wildcard for filtering (0xFFFFFFFF).
+.TP
+.B HIVE_SENDER_TIMER
+Timer tick messages (0xFFFFFFFF).
+.TP
+.B HIVE_SENDER_SYSTEM
+System messages like exit notifications (0xFFFFFFFE).
+.SS Timeout Constants
+.TP
+.B HIVE_TIMEOUT_INFINITE (-1)
+Block forever until operation completes.
+.TP
+.B HIVE_TIMEOUT_NONBLOCKING (0)
+Return immediately if operation would block.
+.SS Priority Levels
+.TP
+.B HIVE_PRIORITY_CRITICAL (0)
+Highest priority. Safety-critical tasks: flight control, emergency stop.
+.TP
+.B HIVE_PRIORITY_HIGH (1)
+Time-sensitive tasks: sensor fusion, control loops.
+.TP
+.B HIVE_PRIORITY_NORMAL (2)
+Standard tasks: telemetry, logging. Default priority.
+.TP
+.B HIVE_PRIORITY_LOW (3)
+Background tasks: diagnostics, housekeeping.
+.PP
+Lower numeric value means higher priority. Higher priority actors always run
+before lower priority actors.
+.SS Actor Configuration
+.PP
+.nf
+typedef struct {
+    size_t      stack_size;   /* bytes, 0 = default (64KB) */
+    hive_priority_level priority;
+    const char *name;         /* for debugging, may be NULL */
+    bool        malloc_stack; /* false = arena (default), true = malloc */
+} actor_config;
+
+#define HIVE_ACTOR_CONFIG_DEFAULT { \\
+    .stack_size = 0, \\
+    .priority = HIVE_PRIORITY_NORMAL, \\
+    .name = NULL, \\
+    .malloc_stack = false \\
+}
+.fi
+.SS Exit Reasons
+.TP
+.B HIVE_EXIT_NORMAL
+Actor called
+.BR hive_exit ().
+.TP
+.B HIVE_EXIT_CRASH
+Actor function returned without calling
+.BR hive_exit ().
+.TP
+.B HIVE_EXIT_CRASH_STACK
+Stack overflow detected (guard pattern corrupted).
+.TP
+.B HIVE_EXIT_KILLED
+Actor was killed externally (reserved for future use).
+.SS Exit Message Payload
+.PP
+.nf
+typedef struct {
+    actor_id       actor;   /* ID of the actor that died */
+    hive_exit_reason reason;  /* Why the actor exited */
+} hive_exit_msg;
+.fi
+.PP
+Access via cast:
+.I hive_exit_msg *info = (hive_exit_msg *)msg.data;
+.SH COMPILE-TIME CONFIGURATION
+All resource limits are defined in
+.I hive_static_config.h
+and can be overridden with
+.B -D
+compiler flags. Changing these values requires recompilation.
+.SS Actor Configuration
+.TP
+.B HIVE_MAX_ACTORS (64)
+Maximum concurrent actors.
+.TP
+.B HIVE_DEFAULT_STACK_SIZE (65536)
+Default stack size per actor in bytes (64 KB).
+.TP
+.B HIVE_STACK_ARENA_SIZE (1048576)
+Total stack arena size in bytes (1 MB). Actors with
+.I malloc_stack = false
+allocate from this arena.
+.SS IPC Configuration
+.TP
+.B HIVE_MAILBOX_ENTRY_POOL_SIZE (256)
+Global pool of mailbox entries. Each pending message consumes one entry.
+.TP
+.B HIVE_MESSAGE_DATA_POOL_SIZE (256)
+Global pool of message data buffers.
+.TP
+.B HIVE_MAX_MESSAGE_SIZE (256)
+Maximum message size in bytes (includes 4-byte header, so 252 bytes payload).
+.SS Link/Monitor Configuration
+.TP
+.B HIVE_LINK_ENTRY_POOL_SIZE (128)
+Pool for bidirectional links. Each
+.BR hive_link ()
+consumes two entries.
+.TP
+.B HIVE_MONITOR_ENTRY_POOL_SIZE (128)
+Pool for unidirectional monitors. Each
+.BR hive_monitor ()
+consumes one entry.
+.SS Timer Configuration
+.TP
+.B HIVE_TIMER_ENTRY_POOL_SIZE (64)
+Pool for timers. Each active timer consumes one entry.
+.SS Bus Configuration
+.TP
+.B HIVE_MAX_BUSES (32)
+Maximum concurrent buses.
+.TP
+.B HIVE_MAX_BUS_ENTRIES (64)
+Maximum entries per bus ring buffer.
+.TP
+.B HIVE_MAX_BUS_SUBSCRIBERS (32)
+Maximum subscribers per bus.
+.SS Scheduler Configuration
+.TP
+.B HIVE_EPOLL_MAX_EVENTS (64)
+Maximum epoll events processed per scheduler iteration.
+.TP
+.B HIVE_EPOLL_POLL_TIMEOUT_MS (10)
+Epoll poll timeout in milliseconds (defensive wakeup interval).
+.SS Network Configuration
+.TP
+.B HIVE_NET_LISTEN_BACKLOG (5)
+TCP listen backlog (queued connections).
+.SH MEMORY FOOTPRINT
+With default configuration, static memory footprint is approximately:
+.PP
+.nf
+Stack arena:          1,048,576 bytes (1 MB)
+Actor table:             ~8,000 bytes
+Mailbox pool:           ~16,000 bytes
+Message pool:           ~65,000 bytes
+Link/Monitor pools:      ~4,000 bytes
+Timer pool:              ~2,000 bytes
+Bus structures:         ~40,000 bytes
+-----------------------------------
+Total:               ~1.2 MB static
+.fi
+.PP
+Additional memory if
+.I malloc_stack = true
+is used for some actors.
+.SH NOTES
+.SS Deterministic Memory
+All runtime structures are statically allocated at compile time. No heap
+allocation occurs in hot paths (IPC, scheduling, I/O). This enables:
+.IP \(bu 2
+Calculable memory footprint at link time
+.IP \(bu 2
+Zero heap fragmentation
+.IP \(bu 2
+Certification for safety-critical systems
+.SS Error Message Lifetime
+The
+.I msg
+field in
+.I hive_status
+is always a string literal, never heap-allocated. It remains valid indefinitely.
+.SS Message Data Lifetime
+The
+.I data
+field in
+.I hive_message
+points to a shared buffer that is overwritten on the next successful
+.BR hive_ipc_recv ().
+Copy data immediately if needed later.
+.SH EXAMPLE
+.SS Error Handling Pattern
+.nf
+hive_status s = hive_spawn(my_fn, NULL, &id);
+if (HIVE_FAILED(s)) {
+    printf("Spawn failed: %s\\n", HIVE_ERR_STR(s));
+    return -1;
+}
+.fi
+.SS Custom Configuration
+.nf
+/* Build with custom limits */
+gcc -DHIVE_MAX_ACTORS=128 \\
+    -DHIVE_MAX_MESSAGE_SIZE=512 \\
+    -DHIVE_STACK_ARENA_SIZE=2097152 \\
+    -o myapp myapp.c -lacrt
+.fi
+.SH SEE ALSO
+.BR hive_init (3),
+.BR hive_spawn (3),
+.BR hive_ipc (3),
+.BR hive_link (3),
+.BR hive_timer (3),
+.BR hive_bus (3)

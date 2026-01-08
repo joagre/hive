@@ -1,0 +1,316 @@
+.\" Man page for IPC functions
+.TH HIVE_IPC 3 "January 2025" "ACRT 1.0" "Actor Runtime Manual"
+.SH NAME
+hive_ipc_notify, hive_ipc_recv, hive_ipc_recv_match, hive_ipc_request, hive_ipc_reply, hive_msg_is_timer, hive_ipc_pending, hive_ipc_count \- inter-process communication
+.SH SYNOPSIS
+.nf
+.B #include <hive_ipc.h>
+.PP
+.BI "hive_status hive_ipc_notify(actor_id " to ", const void *" data ", size_t " len ");"
+.BI "hive_status hive_ipc_recv(hive_message *" msg ", int32_t " timeout_ms ");"
+.BI "hive_status hive_ipc_recv_match(const actor_id *" from ", const hive_msg_class *" class ","
+.BI "                            const uint32_t *" tag ", hive_message *" msg ", int32_t " timeout_ms ");"
+.BI "hive_status hive_ipc_request(actor_id " to ", const void *" request ", size_t " req_len ","
+.BI "                         hive_message *" reply ", int32_t " timeout_ms ");"
+.BI "hive_status hive_ipc_reply(const hive_message *" request ", const void *" data ", size_t " len ");"
+.BI "bool hive_msg_is_timer(const hive_message *" msg ");"
+.BI "bool hive_ipc_pending(void);"
+.BI "size_t hive_ipc_count(void);"
+.fi
+.SH DESCRIPTION
+These functions implement message passing between actors. Each actor has one
+mailbox. Messages are asynchronous by default (fire-and-forget).
+.SS Message Structure
+Messages received via
+.BR hive_ipc_recv ()
+are pre-decoded into the
+.I hive_message
+structure:
+.PP
+.nf
+typedef struct {
+    actor_id       sender;  /* Sender actor ID */
+    hive_msg_class class;   /* Message class (pre-decoded) */
+    uint32_t       tag;     /* Message tag (pre-decoded) */
+    size_t         len;     /* Payload length in bytes */
+    const void    *data;    /* Payload pointer */
+} hive_message;
+.fi
+.PP
+Access payload directly via cast:
+.I my_type *p = (my_type *)msg.data;
+.SS Message Classes
+.TP
+.B HIVE_MSG_NOTIFY
+Fire-and-forget notification (sent via
+.BR hive_ipc_notify ())
+.TP
+.B HIVE_MSG_REQUEST
+Request expecting reply (sent via
+.BR hive_ipc_request ())
+.TP
+.B HIVE_MSG_REPLY
+Reply to request (sent via
+.BR hive_ipc_reply ())
+.TP
+.B HIVE_MSG_TIMER
+Timer tick (sent by runtime, see
+.BR hive_timer (3))
+.TP
+.B HIVE_MSG_EXIT
+Actor death notification (see
+.BR hive_link (3))
+.SS Sending Messages
+.BR hive_ipc_notify ()
+sends an asynchronous message to actor
+.IR to .
+The payload
+.I data
+of length
+.I len
+is copied to the receiver's mailbox. The sender continues immediately without
+waiting. Maximum payload size is
+.B HIVE_MAX_MESSAGE_SIZE - 4
+(252 bytes by default).
+.SS Receiving Messages
+.BR hive_ipc_recv ()
+receives the next message from the mailbox in FIFO order. The
+.I timeout_ms
+parameter controls blocking behavior:
+.TP
+.B HIVE_TIMEOUT_NONBLOCKING (0)
+Return immediately with
+.B HIVE_ERR_WOULDBLOCK
+if mailbox is empty.
+.TP
+.B HIVE_TIMEOUT_INFINITE (-1)
+Block forever until a message arrives.
+.TP
+.B positive value
+Block up to the specified milliseconds, return
+.B HIVE_ERR_TIMEOUT
+if exceeded.
+.PP
+.BR hive_ipc_recv_match ()
+performs selective receive, scanning the mailbox for a message matching all
+specified filter criteria. Pass NULL or the appropriate wildcard constant to
+match any value:
+.IP \(bu 2
+.B HIVE_SENDER_ANY
+\- match any sender
+.IP \(bu 2
+.B HIVE_MSG_ANY
+\- match any message class
+.IP \(bu 2
+.B HIVE_TAG_ANY
+\- match any tag
+.PP
+Non-matching messages are skipped but remain in the mailbox. This operation is
+.BR O(n) where n is the mailbox depth.
+.SS Request/Reply Pattern
+.BR hive_ipc_request ()
+sends a request and blocks until a reply is received or timeout expires. It:
+.IP 1. 3
+Generates a unique tag
+.IP 2. 3
+Sends message with class
+.B HIVE_MSG_REQUEST
+.IP 3. 3
+Blocks via
+.BR hive_ipc_recv_match ()
+waiting for
+.B HIVE_MSG_REPLY
+with matching tag
+.IP 4. 3
+Returns the reply message or error
+.PP
+.BR hive_ipc_reply ()
+sends a reply to a received request. It extracts the sender and tag from
+.I request
+automatically. The
+.I request
+parameter must be the message received via
+.BR hive_ipc_recv ().
+.SS Message Inspection
+.BR hive_msg_is_timer ()
+returns true if
+.I msg
+is a timer tick message (class =
+.BR HIVE_MSG_TIMER ).
+.PP
+.BR hive_ipc_pending ()
+returns true if the mailbox contains at least one message.
+.PP
+.BR hive_ipc_count ()
+returns the number of messages in the mailbox.
+.SH RETURN VALUE
+Functions returning
+.I hive_status
+indicate success when
+.I status.code
+is
+.BR HIVE_OK .
+.PP
+.BR hive_msg_is_timer ()
+returns true for timer messages, false otherwise.
+.PP
+.BR hive_ipc_pending ()
+returns true if messages are available.
+.PP
+.BR hive_ipc_count ()
+returns the message count.
+.SH ERRORS
+.TP
+.B HIVE_ERR_NOMEM
+IPC pool exhausted (mailbox entry pool or message data pool). Send does
+.B not
+block or drop messages; caller must handle this error.
+.TP
+.B HIVE_ERR_INVALID
+Invalid actor ID, NULL data with non-zero length, or not called from actor
+context.
+.TP
+.B HIVE_ERR_TIMEOUT
+No message received within timeout period. For
+.BR hive_ipc_request (),
+this includes the case where the target actor died.
+.TP
+.B HIVE_ERR_WOULDBLOCK
+Mailbox empty and timeout was
+.BR HIVE_TIMEOUT_NONBLOCKING .
+.SH NOTES
+.SS Message Lifetime (Critical)
+.B "Payload data is only valid until the next successful hive_ipc_recv() call."
+Each actor has exactly one "current message" buffer. A new successful receive
+overwrites the previous message data. Copy data immediately if needed later:
+.PP
+.nf
+/* CORRECT */
+hive_message msg;
+hive_ipc_recv(&msg, -1);
+my_data copy = *(my_data *)msg.data;  /* Copy immediately */
+hive_ipc_recv(&msg, -1);              /* Previous data now invalid */
+use_data(&copy);                       /* Use the copy */
+
+/* WRONG - use-after-free */
+hive_message msg;
+hive_ipc_recv(&msg, -1);
+my_data *ptr = (my_data *)msg.data;   /* Pointer to buffer */
+hive_ipc_recv(&msg, -1);              /* Buffer overwritten! */
+use_data(ptr);                         /* CRASH or corruption */
+.fi
+.SS Pool Exhaustion
+IPC uses global pools shared by all actors:
+.IP \(bu 2
+.B HIVE_MAILBOX_ENTRY_POOL_SIZE
+(256 default) \- mailbox entry headers
+.IP \(bu 2
+.B HIVE_MESSAGE_DATA_POOL_SIZE
+(256 default) \- message payload buffers
+.PP
+When pools are exhausted,
+.BR hive_ipc_notify ()
+returns
+.B HIVE_ERR_NOMEM
+immediately. It does
+.B not
+block or drop messages. Implement backoff-retry:
+.PP
+.nf
+hive_status s = hive_ipc_notify(target, data, len);
+if (s.code == HIVE_ERR_NOMEM) {
+    hive_message msg;
+    hive_ipc_recv(&msg, 10);  /* Backoff 10ms */
+    /* Retry or handle failure */
+}
+.fi
+.SS Target Death During Request
+If the target actor dies while
+.BR hive_ipc_request ()
+is waiting for a reply, and you have linked to or are monitoring the target,
+an EXIT message arrives in your mailbox. Since it doesn't match the expected
+REPLY, the function returns
+.B HIVE_ERR_TIMEOUT
+when the timeout expires. Check for EXIT messages to distinguish death from
+timeout:
+.PP
+.nf
+hive_status s = hive_ipc_request(target, &req, sizeof(req), &reply, 5000);
+if (s.code == HIVE_ERR_TIMEOUT) {
+    hive_message msg;
+    if (hive_ipc_recv(&msg, 0).code == HIVE_OK &&
+        msg.class == HIVE_MSG_EXIT) {
+        hive_exit_msg *exit = (hive_exit_msg *)msg.data;
+        if (exit->actor == target) {
+            /* Target died */
+        }
+    }
+}
+.fi
+.SS Selective Receive Performance
+.BR hive_ipc_recv_match ()
+scans the mailbox linearly. With deep mailboxes (100+ messages), this becomes
+expensive. Keep mailboxes shallow by:
+.IP \(bu 2
+Processing messages promptly
+.IP \(bu 2
+Using
+.BR hive_ipc_request ()
+which provides natural backpressure
+.IP \(bu 2
+Avoiding patterns that queue many messages
+.SS Embedded Considerations
+.IP \(bu 2
+Maximum message payload: 252 bytes (configurable via HIVE_MAX_MESSAGE_SIZE)
+.IP \(bu 2
+Zero heap allocation in IPC operations
+.IP \(bu 2
+O(1) allocation from static pools
+.IP \(bu 2
+Deterministic memory usage suitable for certification
+.SH EXAMPLE
+.nf
+#include <hive_runtime.h>
+#include <hive_ipc.h>
+#include <stdio.h>
+
+typedef struct { int x, y; } point_t;
+
+void server(void *arg) {
+    (void)arg;
+    while (1) {
+        hive_message msg;
+        hive_ipc_recv(&msg, -1);
+
+        if (msg.class == HIVE_MSG_REQUEST) {
+            point_t *p = (point_t *)msg.data;
+            int result = p->x + p->y;
+            hive_ipc_reply(&msg, &result, sizeof(result));
+        }
+    }
+}
+
+void client(void *arg) {
+    actor_id server_id = *(actor_id *)arg;
+
+    point_t req = {10, 20};
+    hive_message reply;
+
+    hive_status s = hive_ipc_request(server_id, &req, sizeof(req),
+                                     &reply, 5000);
+    if (HIVE_FAILED(s)) {
+        printf("Request failed: %s\\n", HIVE_ERR_STR(s));
+    } else {
+        int *result = (int *)reply.data;
+        printf("Result: %d\\n", *result);
+    }
+
+    hive_exit();
+}
+.fi
+.SH SEE ALSO
+.BR hive_init (3),
+.BR hive_spawn (3),
+.BR hive_link (3),
+.BR hive_timer (3),
+.BR hive_types (3)

@@ -1,8 +1,8 @@
-#include "acrt_runtime.h"
-#include "acrt_link.h"
-#include "acrt_ipc.h"
-#include "acrt_timer.h"
-#include "acrt_static_config.h"
+#include "hive_runtime.h"
+#include "hive_link.h"
+#include "hive_ipc.h"
+#include "hive_timer.h"
+#include "hive_static_config.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -24,35 +24,35 @@ static void actor_a_links_to_b(void *arg) {
     actor_id actor_b = *(actor_id *)arg;
 
     // Link to actor B
-    acrt_status status = acrt_link(actor_b);
-    if (ACRT_FAILED(status)) {
-        acrt_exit();
+    hive_status status = hive_link(actor_b);
+    if (HIVE_FAILED(status)) {
+        hive_exit();
     }
 
     // Wait for exit notification
-    acrt_message msg;
-    status = acrt_ipc_recv(&msg, 1000);
+    hive_message msg;
+    status = hive_ipc_recv(&msg, 1000);
 
-    if (!ACRT_FAILED(status) && acrt_is_exit_msg(&msg)) {
-        acrt_exit_msg exit_info;
-        acrt_decode_exit(&msg, &exit_info);
+    if (!HIVE_FAILED(status) && hive_is_exit_msg(&msg)) {
+        hive_exit_msg exit_info;
+        hive_decode_exit(&msg, &exit_info);
         if (exit_info.actor == actor_b) {
             g_actor_a_notified = true;
         }
     }
 
-    acrt_exit();
+    hive_exit();
 }
 
 static void actor_b_exits_immediately(void *arg) {
     (void)arg;
     // Give actor A time to link
     timer_id timer;
-    acrt_timer_after(50000, &timer);  // 50ms
-    acrt_message msg;
-    acrt_ipc_recv(&msg, -1);
+    hive_timer_after(50000, &timer);  // 50ms
+    hive_message msg;
+    hive_ipc_recv(&msg, -1);
 
-    acrt_exit();
+    hive_exit();
 }
 
 static void test1_basic_link(void *arg) {
@@ -64,23 +64,23 @@ static void test1_basic_link(void *arg) {
 
     // Spawn actor B first
     actor_id actor_b;
-    if (ACRT_FAILED(acrt_spawn(actor_b_exits_immediately, NULL, &actor_b))) {
+    if (HIVE_FAILED(hive_spawn(actor_b_exits_immediately, NULL, &actor_b))) {
         TEST_FAIL("spawn actor B");
-        acrt_exit();
+        hive_exit();
     }
 
     // Spawn actor A and pass actor B's ID
     actor_id actor_a;
-    if (ACRT_FAILED(acrt_spawn(actor_a_links_to_b, &actor_b, &actor_a))) {
+    if (HIVE_FAILED(hive_spawn(actor_a_links_to_b, &actor_b, &actor_a))) {
         TEST_FAIL("spawn actor A");
-        acrt_exit();
+        hive_exit();
     }
 
     // Wait for both to complete
     timer_id timer;
-    acrt_timer_after(200000, &timer);
-    acrt_message msg;
-    acrt_ipc_recv(&msg, -1);
+    hive_timer_after(200000, &timer);
+    hive_message msg;
+    hive_ipc_recv(&msg, -1);
 
     if (g_actor_a_notified) {
         TEST_PASS("linked actor receives exit notification");
@@ -88,7 +88,7 @@ static void test1_basic_link(void *arg) {
         TEST_FAIL("linked actor did not receive notification");
     }
 
-    acrt_exit();
+    hive_exit();
 }
 
 // ============================================================================
@@ -102,28 +102,28 @@ static void target_waits_for_linker(void *arg) {
     (void)arg;
 
     // Wait for exit notification from linker
-    acrt_message msg;
-    acrt_status status = acrt_ipc_recv(&msg, 500);
+    hive_message msg;
+    hive_status status = hive_ipc_recv(&msg, 500);
 
-    if (!ACRT_FAILED(status) && acrt_is_exit_msg(&msg)) {
-        acrt_exit_msg exit_info;
-        acrt_decode_exit(&msg, &exit_info);
+    if (!HIVE_FAILED(status) && hive_is_exit_msg(&msg)) {
+        hive_exit_msg exit_info;
+        hive_decode_exit(&msg, &exit_info);
         if (exit_info.actor == g_linker_id) {
             g_target_notified = true;
         }
     }
 
-    acrt_exit();
+    hive_exit();
 }
 
 static void linker_dies_first(void *arg) {
     actor_id target = *(actor_id *)arg;
 
     // Link to target
-    acrt_link(target);
+    hive_link(target);
 
     // Die immediately
-    acrt_exit();
+    hive_exit();
 }
 
 static void test2_bidirectional(void *arg) {
@@ -134,22 +134,22 @@ static void test2_bidirectional(void *arg) {
 
     // Spawn target first
     actor_id target;
-    if (ACRT_FAILED(acrt_spawn(target_waits_for_linker, NULL, &target))) {
+    if (HIVE_FAILED(hive_spawn(target_waits_for_linker, NULL, &target))) {
         TEST_FAIL("spawn target");
-        acrt_exit();
+        hive_exit();
     }
 
     // Spawn linker
-    if (ACRT_FAILED(acrt_spawn(linker_dies_first, &target, &g_linker_id))) {
+    if (HIVE_FAILED(hive_spawn(linker_dies_first, &target, &g_linker_id))) {
         TEST_FAIL("spawn linker");
-        acrt_exit();
+        hive_exit();
     }
 
     // Wait for completion
     timer_id timer;
-    acrt_timer_after(300000, &timer);
-    acrt_message msg;
-    acrt_ipc_recv(&msg, -1);
+    hive_timer_after(300000, &timer);
+    hive_message msg;
+    hive_ipc_recv(&msg, -1);
 
     if (g_target_notified) {
         TEST_PASS("target notified when linker dies (bidirectional)");
@@ -157,7 +157,7 @@ static void test2_bidirectional(void *arg) {
         TEST_FAIL("target not notified (link should be bidirectional)");
     }
 
-    acrt_exit();
+    hive_exit();
 }
 
 // ============================================================================
@@ -169,18 +169,18 @@ static bool g_unlinked_received_notification = false;
 static void actor_unlinks_before_death(void *arg) {
     actor_id target = *(actor_id *)arg;
 
-    acrt_link(target);
-    acrt_link_remove(target);
+    hive_link(target);
+    hive_link_remove(target);
 
     // Wait for any exit notification
-    acrt_message msg;
-    acrt_status status = acrt_ipc_recv(&msg, 300);
+    hive_message msg;
+    hive_status status = hive_ipc_recv(&msg, 300);
 
-    if (!ACRT_FAILED(status) && acrt_is_exit_msg(&msg)) {
+    if (!HIVE_FAILED(status) && hive_is_exit_msg(&msg)) {
         g_unlinked_received_notification = true;
     }
 
-    acrt_exit();
+    hive_exit();
 }
 
 static void actor_dies_after_unlink(void *arg) {
@@ -188,11 +188,11 @@ static void actor_dies_after_unlink(void *arg) {
 
     // Give time for link/unlink
     timer_id timer;
-    acrt_timer_after(100000, &timer);
-    acrt_message msg;
-    acrt_ipc_recv(&msg, -1);
+    hive_timer_after(100000, &timer);
+    hive_message msg;
+    hive_ipc_recv(&msg, -1);
 
-    acrt_exit();
+    hive_exit();
 }
 
 static void test3_unlink(void *arg) {
@@ -202,18 +202,18 @@ static void test3_unlink(void *arg) {
     g_unlinked_received_notification = false;
 
     actor_id target;
-    if (ACRT_FAILED(acrt_spawn(actor_dies_after_unlink, NULL, &target))) {
+    if (HIVE_FAILED(hive_spawn(actor_dies_after_unlink, NULL, &target))) {
         TEST_FAIL("spawn target");
-        acrt_exit();
+        hive_exit();
     }
 
     actor_id unlinker;
-    acrt_spawn(actor_unlinks_before_death, &target, &unlinker);
+    hive_spawn(actor_unlinks_before_death, &target, &unlinker);
 
     timer_id timer;
-    acrt_timer_after(500000, &timer);
-    acrt_message msg;
-    acrt_ipc_recv(&msg, -1);
+    hive_timer_after(500000, &timer);
+    hive_message msg;
+    hive_ipc_recv(&msg, -1);
 
     if (!g_unlinked_received_notification) {
         TEST_PASS("unlink prevents exit notification");
@@ -221,7 +221,7 @@ static void test3_unlink(void *arg) {
         TEST_FAIL("received notification after unlink");
     }
 
-    acrt_exit();
+    hive_exit();
 }
 
 // ============================================================================
@@ -232,21 +232,21 @@ static void test4_link_invalid(void *arg) {
     (void)arg;
     printf("\nTest 4: Link to invalid actor fails\n");
 
-    acrt_status status = acrt_link(ACTOR_ID_INVALID);
-    if (ACRT_FAILED(status)) {
-        TEST_PASS("acrt_link rejects ACTOR_ID_INVALID");
+    hive_status status = hive_link(ACTOR_ID_INVALID);
+    if (HIVE_FAILED(status)) {
+        TEST_PASS("hive_link rejects ACTOR_ID_INVALID");
     } else {
-        TEST_FAIL("acrt_link should reject ACTOR_ID_INVALID");
+        TEST_FAIL("hive_link should reject ACTOR_ID_INVALID");
     }
 
-    status = acrt_link(9999);  // Non-existent actor
-    if (ACRT_FAILED(status)) {
-        TEST_PASS("acrt_link rejects non-existent actor");
+    status = hive_link(9999);  // Non-existent actor
+    if (HIVE_FAILED(status)) {
+        TEST_PASS("hive_link rejects non-existent actor");
     } else {
-        TEST_FAIL("acrt_link should reject non-existent actor");
+        TEST_FAIL("hive_link should reject non-existent actor");
     }
 
-    acrt_exit();
+    hive_exit();
 }
 
 // ============================================================================
@@ -259,11 +259,11 @@ static void multi_link_target(void *arg) {
     int delay_ms = *(int *)arg;
 
     timer_id timer;
-    acrt_timer_after(delay_ms * 1000, &timer);
-    acrt_message msg;
-    acrt_ipc_recv(&msg, -1);
+    hive_timer_after(delay_ms * 1000, &timer);
+    hive_message msg;
+    hive_ipc_recv(&msg, -1);
 
-    acrt_exit();
+    hive_exit();
 }
 
 static void multi_linker(void *arg) {
@@ -271,19 +271,19 @@ static void multi_linker(void *arg) {
 
     // Link to all 3 targets
     for (int i = 0; i < 3; i++) {
-        acrt_link(targets[i]);
+        hive_link(targets[i]);
     }
 
     // Receive exit notifications
     for (int i = 0; i < 3; i++) {
-        acrt_message msg;
-        acrt_status status = acrt_ipc_recv(&msg, 500);
-        if (!ACRT_FAILED(status) && acrt_is_exit_msg(&msg)) {
+        hive_message msg;
+        hive_status status = hive_ipc_recv(&msg, 500);
+        if (!HIVE_FAILED(status) && hive_is_exit_msg(&msg)) {
             g_multi_link_count++;
         }
     }
 
-    acrt_exit();
+    hive_exit();
 }
 
 static void test5_multiple_links(void *arg) {
@@ -297,21 +297,21 @@ static void test5_multiple_links(void *arg) {
     static actor_id targets[3];
 
     for (int i = 0; i < 3; i++) {
-        if (ACRT_FAILED(acrt_spawn(multi_link_target, &delays[i], &targets[i]))) {
+        if (HIVE_FAILED(hive_spawn(multi_link_target, &delays[i], &targets[i]))) {
             TEST_FAIL("spawn target");
-            acrt_exit();
+            hive_exit();
         }
     }
 
     // Spawn linker
     actor_id linker;
-    acrt_spawn(multi_linker, targets, &linker);
+    hive_spawn(multi_linker, targets, &linker);
 
     // Wait for all to complete
     timer_id timer;
-    acrt_timer_after(500000, &timer);
-    acrt_message msg;
-    acrt_ipc_recv(&msg, -1);
+    hive_timer_after(500000, &timer);
+    hive_message msg;
+    hive_ipc_recv(&msg, -1);
 
     if (g_multi_link_count == 3) {
         TEST_PASS("received all 3 exit notifications from linked actors");
@@ -320,7 +320,7 @@ static void test5_multiple_links(void *arg) {
         TEST_FAIL("did not receive all notifications");
     }
 
-    acrt_exit();
+    hive_exit();
 }
 
 // ============================================================================
@@ -332,35 +332,35 @@ static bool g_monitor_target_got_notification = false;
 
 static void link_target_waits(void *arg) {
     (void)arg;
-    acrt_message msg;
-    acrt_status status = acrt_ipc_recv(&msg, 300);
-    if (!ACRT_FAILED(status) && acrt_is_exit_msg(&msg)) {
+    hive_message msg;
+    hive_status status = hive_ipc_recv(&msg, 300);
+    if (!HIVE_FAILED(status) && hive_is_exit_msg(&msg)) {
         g_link_target_got_notification = true;
     }
-    acrt_exit();
+    hive_exit();
 }
 
 static void monitor_target_waits(void *arg) {
     (void)arg;
-    acrt_message msg;
-    acrt_status status = acrt_ipc_recv(&msg, 300);
-    if (!ACRT_FAILED(status) && acrt_is_exit_msg(&msg)) {
+    hive_message msg;
+    hive_status status = hive_ipc_recv(&msg, 300);
+    if (!HIVE_FAILED(status) && hive_is_exit_msg(&msg)) {
         g_monitor_target_got_notification = true;
     }
-    acrt_exit();
+    hive_exit();
 }
 
 static void linker_actor(void *arg) {
     actor_id target = *(actor_id *)arg;
-    acrt_link(target);
-    acrt_exit();  // Die immediately
+    hive_link(target);
+    hive_exit();  // Die immediately
 }
 
 static void monitor_actor(void *arg) {
     actor_id target = *(actor_id *)arg;
     uint32_t ref;
-    acrt_monitor(target, &ref);
-    acrt_exit();  // Die immediately
+    hive_monitor(target, &ref);
+    hive_exit();  // Die immediately
 }
 
 static void test6_link_vs_monitor(void *arg) {
@@ -372,23 +372,23 @@ static void test6_link_vs_monitor(void *arg) {
 
     // Test link: target should be notified when linker dies
     actor_id link_target;
-    acrt_spawn(link_target_waits, NULL, &link_target);
+    hive_spawn(link_target_waits, NULL, &link_target);
     actor_id linker;
-    acrt_spawn(linker_actor, &link_target, &linker);
+    hive_spawn(linker_actor, &link_target, &linker);
     (void)linker;
 
     // Test monitor: target should NOT be notified when monitor dies
     actor_id monitor_target;
-    acrt_spawn(monitor_target_waits, NULL, &monitor_target);
+    hive_spawn(monitor_target_waits, NULL, &monitor_target);
     actor_id monitor;
-    acrt_spawn(monitor_actor, &monitor_target, &monitor);
+    hive_spawn(monitor_actor, &monitor_target, &monitor);
     (void)monitor;
 
     // Wait for completion
     timer_id timer;
-    acrt_timer_after(500000, &timer);
-    acrt_message msg;
-    acrt_ipc_recv(&msg, -1);
+    hive_timer_after(500000, &timer);
+    hive_message msg;
+    hive_ipc_recv(&msg, -1);
 
     if (g_link_target_got_notification) {
         TEST_PASS("link target notified when linker dies (bidirectional)");
@@ -402,64 +402,64 @@ static void test6_link_vs_monitor(void *arg) {
         TEST_FAIL("monitor target should NOT be notified");
     }
 
-    acrt_exit();
+    hive_exit();
 }
 
 // ============================================================================
 // Test 7: Exit reason in link notification
 // ============================================================================
 
-static acrt_exit_reason g_received_reason = ACRT_EXIT_NORMAL;
+static hive_exit_reason g_received_reason = HIVE_EXIT_NORMAL;
 
 static void link_receiver_checks_reason(void *arg) {
     actor_id target = *(actor_id *)arg;
 
-    acrt_link(target);
+    hive_link(target);
 
-    acrt_message msg;
-    acrt_status status = acrt_ipc_recv(&msg, 500);
-    if (!ACRT_FAILED(status) && acrt_is_exit_msg(&msg)) {
-        acrt_exit_msg exit_info;
-        acrt_decode_exit(&msg, &exit_info);
+    hive_message msg;
+    hive_status status = hive_ipc_recv(&msg, 500);
+    if (!HIVE_FAILED(status) && hive_is_exit_msg(&msg)) {
+        hive_exit_msg exit_info;
+        hive_decode_exit(&msg, &exit_info);
         g_received_reason = exit_info.reason;
     }
 
-    acrt_exit();
+    hive_exit();
 }
 
 static void normal_exit_actor(void *arg) {
     (void)arg;
     timer_id timer;
-    acrt_timer_after(50000, &timer);
-    acrt_message msg;
-    acrt_ipc_recv(&msg, -1);
-    acrt_exit();  // Normal exit
+    hive_timer_after(50000, &timer);
+    hive_message msg;
+    hive_ipc_recv(&msg, -1);
+    hive_exit();  // Normal exit
 }
 
 static void test7_exit_reason(void *arg) {
     (void)arg;
     printf("\nTest 7: Exit reason in link notification\n");
 
-    g_received_reason = (acrt_exit_reason)99;  // Invalid value
+    g_received_reason = (hive_exit_reason)99;  // Invalid value
 
     actor_id target;
-    acrt_spawn(normal_exit_actor, NULL, &target);
+    hive_spawn(normal_exit_actor, NULL, &target);
     actor_id receiver;
-    acrt_spawn(link_receiver_checks_reason, &target, &receiver);
+    hive_spawn(link_receiver_checks_reason, &target, &receiver);
 
     timer_id timer;
-    acrt_timer_after(300000, &timer);
-    acrt_message msg;
-    acrt_ipc_recv(&msg, -1);
+    hive_timer_after(300000, &timer);
+    hive_message msg;
+    hive_ipc_recv(&msg, -1);
 
-    if (g_received_reason == ACRT_EXIT_NORMAL) {
-        TEST_PASS("exit reason is ACRT_EXIT_NORMAL for normal exit");
+    if (g_received_reason == HIVE_EXIT_NORMAL) {
+        TEST_PASS("exit reason is HIVE_EXIT_NORMAL for normal exit");
     } else {
-        printf("    Got reason: %d, expected: %d\n", g_received_reason, ACRT_EXIT_NORMAL);
+        printf("    Got reason: %d, expected: %d\n", g_received_reason, HIVE_EXIT_NORMAL);
         TEST_FAIL("wrong exit reason");
     }
 
-    acrt_exit();
+    hive_exit();
 }
 
 // ============================================================================
@@ -468,7 +468,7 @@ static void test7_exit_reason(void *arg) {
 
 static void quickly_exiting_actor(void *arg) {
     (void)arg;
-    acrt_exit();
+    hive_exit();
 }
 
 static void test8_link_to_dead_actor(void *arg) {
@@ -478,31 +478,31 @@ static void test8_link_to_dead_actor(void *arg) {
 
     // Spawn an actor that exits immediately
     actor_id target;
-    if (ACRT_FAILED(acrt_spawn(quickly_exiting_actor, NULL, &target))) {
+    if (HIVE_FAILED(hive_spawn(quickly_exiting_actor, NULL, &target))) {
         TEST_FAIL("failed to spawn target actor");
-        acrt_exit();
+        hive_exit();
     }
 
     // Yield to let it run and exit
     for (int i = 0; i < 5; i++) {
-        acrt_yield();
+        hive_yield();
     }
 
     // Verify the actor is dead
-    if (acrt_actor_alive(target)) {
+    if (hive_actor_alive(target)) {
         TEST_FAIL("target actor should be dead by now");
-        acrt_exit();
+        hive_exit();
     }
 
     // Try to link to the dead actor
-    acrt_status status = acrt_link(target);
-    if (ACRT_FAILED(status)) {
-        TEST_PASS("acrt_link rejects dead actor");
+    hive_status status = hive_link(target);
+    if (HIVE_FAILED(status)) {
+        TEST_PASS("hive_link rejects dead actor");
     } else {
-        TEST_FAIL("acrt_link should reject dead actor");
+        TEST_FAIL("hive_link should reject dead actor");
     }
 
-    acrt_exit();
+    hive_exit();
 }
 
 // ============================================================================
@@ -514,17 +514,17 @@ static void test9_link_to_self(void *arg) {
     printf("\nTest 9: Link to self\n");
     fflush(stdout);
 
-    actor_id self = acrt_self();
+    actor_id self = hive_self();
 
-    acrt_status status = acrt_link(self);
-    if (ACRT_FAILED(status)) {
-        TEST_PASS("acrt_link to self is rejected");
+    hive_status status = hive_link(self);
+    if (HIVE_FAILED(status)) {
+        TEST_PASS("hive_link to self is rejected");
     } else {
         // If it succeeds, it should be a no-op (shouldn't get exit notification)
-        TEST_PASS("acrt_link to self accepted (no-op expected)");
+        TEST_PASS("hive_link to self accepted (no-op expected)");
     }
 
-    acrt_exit();
+    hive_exit();
 }
 
 // ============================================================================
@@ -535,10 +535,10 @@ static void unlink_target_actor(void *arg) {
     (void)arg;
     // Wait a bit then exit
     timer_id timer;
-    acrt_timer_after(200000, &timer);
-    acrt_message msg;
-    acrt_ipc_recv(&msg, -1);
-    acrt_exit();
+    hive_timer_after(200000, &timer);
+    hive_message msg;
+    hive_ipc_recv(&msg, -1);
+    hive_exit();
 }
 
 static void test10_unlink_non_linked(void *arg) {
@@ -548,28 +548,28 @@ static void test10_unlink_non_linked(void *arg) {
 
     // Spawn an actor but don't link to it
     actor_id target;
-    if (ACRT_FAILED(acrt_spawn(unlink_target_actor, NULL, &target))) {
+    if (HIVE_FAILED(hive_spawn(unlink_target_actor, NULL, &target))) {
         TEST_FAIL("spawn target");
-        acrt_exit();
+        hive_exit();
     }
 
     // Try to unlink from an actor we're not linked to
-    acrt_status status = acrt_link_remove(target);
+    hive_status status = hive_link_remove(target);
 
     // Should either fail or be a no-op
-    if (ACRT_FAILED(status)) {
-        TEST_PASS("acrt_link_remove non-linked actor fails gracefully");
+    if (HIVE_FAILED(status)) {
+        TEST_PASS("hive_link_remove non-linked actor fails gracefully");
     } else {
-        TEST_PASS("acrt_link_remove non-linked actor is no-op");
+        TEST_PASS("hive_link_remove non-linked actor is no-op");
     }
 
     // Wait for target to exit
     timer_id timer;
-    acrt_timer_after(300000, &timer);
-    acrt_message msg;
-    acrt_ipc_recv(&msg, -1);
+    hive_timer_after(300000, &timer);
+    hive_message msg;
+    hive_ipc_recv(&msg, -1);
 
-    acrt_exit();
+    hive_exit();
 }
 
 // ============================================================================
@@ -581,62 +581,62 @@ static void test11_unlink_invalid(void *arg) {
     printf("\nTest 11: Unlink invalid actor\n");
     fflush(stdout);
 
-    acrt_status status = acrt_link_remove(ACTOR_ID_INVALID);
-    if (ACRT_FAILED(status)) {
-        TEST_PASS("acrt_link_remove rejects ACTOR_ID_INVALID");
+    hive_status status = hive_link_remove(ACTOR_ID_INVALID);
+    if (HIVE_FAILED(status)) {
+        TEST_PASS("hive_link_remove rejects ACTOR_ID_INVALID");
     } else {
-        TEST_FAIL("acrt_link_remove should reject ACTOR_ID_INVALID");
+        TEST_FAIL("hive_link_remove should reject ACTOR_ID_INVALID");
     }
 
-    status = acrt_link_remove(9999);
-    if (ACRT_FAILED(status)) {
-        TEST_PASS("acrt_link_remove rejects non-existent actor");
+    status = hive_link_remove(9999);
+    if (HIVE_FAILED(status)) {
+        TEST_PASS("hive_link_remove rejects non-existent actor");
     } else {
-        TEST_FAIL("acrt_link_remove should reject non-existent actor");
+        TEST_FAIL("hive_link_remove should reject non-existent actor");
     }
 
-    acrt_exit();
+    hive_exit();
 }
 
 // ============================================================================
-// Test 12: Link pool exhaustion (ACRT_LINK_ENTRY_POOL_SIZE=128)
+// Test 12: Link pool exhaustion (HIVE_LINK_ENTRY_POOL_SIZE=128)
 // Each link uses 2 entries (bidirectional), so max ~64 links
 // ============================================================================
 
 static void link_pool_target_actor(void *arg) {
     (void)arg;
     // Wait for signal to exit
-    acrt_message msg;
-    acrt_ipc_recv(&msg, 5000);
-    acrt_exit();
+    hive_message msg;
+    hive_ipc_recv(&msg, 5000);
+    hive_exit();
 }
 
 static void test12_link_pool_exhaustion(void *arg) {
     (void)arg;
-    printf("\nTest 12: Link pool exhaustion (ACRT_LINK_ENTRY_POOL_SIZE=%d)\n",
-           ACRT_LINK_ENTRY_POOL_SIZE);
+    printf("\nTest 12: Link pool exhaustion (HIVE_LINK_ENTRY_POOL_SIZE=%d)\n",
+           HIVE_LINK_ENTRY_POOL_SIZE);
     fflush(stdout);
 
     // Each link uses 2 entries (bidirectional)
-    int max_links = ACRT_LINK_ENTRY_POOL_SIZE / 2;
-    actor_id targets[ACRT_LINK_ENTRY_POOL_SIZE];
+    int max_links = HIVE_LINK_ENTRY_POOL_SIZE / 2;
+    actor_id targets[HIVE_LINK_ENTRY_POOL_SIZE];
     int spawned = 0;
     int linked = 0;
 
     // Spawn actors and link to them until pool exhaustion
     for (int i = 0; i < max_links + 10; i++) {
-        actor_config cfg = ACRT_ACTOR_CONFIG_DEFAULT;
+        actor_config cfg = HIVE_ACTOR_CONFIG_DEFAULT;
         cfg.malloc_stack = true;
         cfg.stack_size = 8 * 1024;
 
         actor_id target;
-        if (ACRT_FAILED(acrt_spawn_ex(link_pool_target_actor, NULL, &cfg, &target))) {
+        if (HIVE_FAILED(hive_spawn_ex(link_pool_target_actor, NULL, &cfg, &target))) {
             break;
         }
         targets[spawned++] = target;
 
-        acrt_status status = acrt_link(target);
-        if (ACRT_FAILED(status)) {
+        hive_status status = hive_link(target);
+        if (HIVE_FAILED(status)) {
             printf("    Link failed after %d links (pool exhausted)\n", linked);
             break;
         }
@@ -653,21 +653,21 @@ static void test12_link_pool_exhaustion(void *arg) {
     // Signal all actors to exit
     for (int i = 0; i < spawned; i++) {
         int done = 1;
-        acrt_ipc_notify(targets[i], &done, sizeof(done));
+        hive_ipc_notify(targets[i], &done, sizeof(done));
     }
 
     // Wait for cleanup
     timer_id timer;
-    acrt_timer_after(200000, &timer);
-    acrt_message msg;
-    acrt_ipc_recv(&msg, -1);
+    hive_timer_after(200000, &timer);
+    hive_message msg;
+    hive_ipc_recv(&msg, -1);
 
     // Drain exit notifications
-    while (acrt_ipc_pending()) {
-        acrt_ipc_recv(&msg, 0);
+    while (hive_ipc_pending()) {
+        hive_ipc_recv(&msg, 0);
     }
 
-    acrt_exit();
+    hive_exit();
 }
 
 // ============================================================================
@@ -695,46 +695,46 @@ static void run_all_tests(void *arg) {
     (void)arg;
 
     for (size_t i = 0; i < NUM_TESTS; i++) {
-        actor_config cfg = ACRT_ACTOR_CONFIG_DEFAULT;
+        actor_config cfg = HIVE_ACTOR_CONFIG_DEFAULT;
         cfg.stack_size = 64 * 1024;
 
         actor_id test;
-        if (ACRT_FAILED(acrt_spawn_ex(test_funcs[i], NULL, &cfg, &test))) {
+        if (HIVE_FAILED(hive_spawn_ex(test_funcs[i], NULL, &cfg, &test))) {
             printf("Failed to spawn test %zu\n", i);
             continue;
         }
 
-        acrt_link(test);
+        hive_link(test);
 
-        acrt_message msg;
-        acrt_ipc_recv(&msg, 5000);
+        hive_message msg;
+        hive_ipc_recv(&msg, 5000);
     }
 
-    acrt_exit();
+    hive_exit();
 }
 
 int main(void) {
-    printf("=== Link (acrt_link) Test Suite ===\n");
+    printf("=== Link (hive_link) Test Suite ===\n");
 
-    acrt_status status = acrt_init();
-    if (ACRT_FAILED(status)) {
+    hive_status status = hive_init();
+    if (HIVE_FAILED(status)) {
         fprintf(stderr, "Failed to initialize runtime: %s\n",
                 status.msg ? status.msg : "unknown error");
         return 1;
     }
 
-    actor_config cfg = ACRT_ACTOR_CONFIG_DEFAULT;
+    actor_config cfg = HIVE_ACTOR_CONFIG_DEFAULT;
     cfg.stack_size = 128 * 1024;
 
     actor_id runner;
-    if (ACRT_FAILED(acrt_spawn_ex(run_all_tests, NULL, &cfg, &runner))) {
+    if (HIVE_FAILED(hive_spawn_ex(run_all_tests, NULL, &cfg, &runner))) {
         fprintf(stderr, "Failed to spawn test runner\n");
-        acrt_cleanup();
+        hive_cleanup();
         return 1;
     }
 
-    acrt_run();
-    acrt_cleanup();
+    hive_run();
+    hive_cleanup();
 
     printf("\n=== Results ===\n");
     printf("Passed: %d\n", tests_passed);

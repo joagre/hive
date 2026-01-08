@@ -1,0 +1,285 @@
+\" Man page for file I/O functions
+.TH HIVE_FILE 3 "January 2025" "ACRT 1.0" "Actor Runtime Manual"
+.SH NAME
+hive_file_open, hive_file_close, hive_file_read, hive_file_pread, hive_file_write, hive_file_pwrite, hive_file_sync \- synchronous file I/O
+.SH SYNOPSIS
+.nf
+.B #include <hive_file.h>
+.PP
+.BI "hive_status hive_file_open(const char *" path ", int " flags ", int " mode ", int *" fd_out ");"
+.BI "hive_status hive_file_close(int " fd ");"
+.BI "hive_status hive_file_read(int " fd ", void *" buf ", size_t " len ", size_t *" bytes_read ");"
+.BI "hive_status hive_file_pread(int " fd ", void *" buf ", size_t " len ", size_t " offset ", size_t *" bytes_read ");"
+.BI "hive_status hive_file_write(int " fd ", const void *" buf ", size_t " len ", size_t *" bytes_written ");"
+.BI "hive_status hive_file_pwrite(int " fd ", const void *" buf ", size_t " len ", size_t " offset ", size_t *" bytes_written ");"
+.BI "hive_status hive_file_sync(int " fd ");"
+.fi
+.SH DESCRIPTION
+These functions provide synchronous file I/O for actors.
+.B WARNING:
+File I/O is blocking and stalls the entire scheduler. On embedded systems with
+fast filesystems (FATFS, littlefs), operations complete quickly (<1ms typically).
+On Linux, regular files cannot use epoll, so blocking is unavoidable.
+.SS Opening and Closing Files
+.BR hive_file_open ()
+opens the file at
+.I path
+with the specified
+.I flags
+and
+.IR mode .
+The file descriptor is stored in
+.IR fd_out .
+.PP
+The
+.I flags
+parameter uses standard POSIX flags:
+.TP
+.B O_RDONLY
+Open for reading only.
+.TP
+.B O_WRONLY
+Open for writing only.
+.TP
+.B O_RDWR
+Open for reading and writing.
+.TP
+.B O_CREAT
+Create file if it does not exist (requires
+.IR mode ).
+.TP
+.B O_TRUNC
+Truncate file to zero length if it exists.
+.TP
+.B O_APPEND
+Writes append to end of file.
+.PP
+The
+.I mode
+parameter specifies permissions for created files (e.g., 0644).
+.PP
+.BR hive_file_close ()
+closes the file descriptor.
+.SS Reading Files
+.BR hive_file_read ()
+reads up to
+.I len
+bytes from the current file position into
+.IR buf .
+The actual number of bytes read is stored in
+.IR bytes_read .
+A return of 0 bytes indicates end-of-file.
+.PP
+.BR hive_file_pread ()
+reads at a specific
+.I offset
+without changing the file position (positional read). Useful for random access
+and concurrent reads from the same file descriptor.
+.SS Writing Files
+.BR hive_file_write ()
+writes up to
+.I len
+bytes from
+.I buf
+to the file. The actual number of bytes written is stored in
+.IR bytes_written .
+.PP
+.BR hive_file_pwrite ()
+writes at a specific
+.I offset
+without changing the file position (positional write).
+.SS Syncing Files
+.BR hive_file_sync ()
+flushes the file's data and metadata to disk. This ensures durability after a
+crash but is slow (may take tens of milliseconds on flash media).
+.SH RETURN VALUE
+All functions return an
+.I hive_status
+structure. On success,
+.I status.code
+is
+.BR HIVE_OK .
+For read operations, 0 bytes read indicates end-of-file (not an error).
+.SH ERRORS
+.TP
+.B HIVE_ERR_INVALID
+NULL argument or file I/O subsystem not initialized.
+.TP
+.B HIVE_ERR_IO
+POSIX I/O error (errno-based message: "No such file", "Permission denied", etc.).
+.SH NOTES
+.SS Blocking Behavior (Critical)
+File I/O is
+.B completely synchronous
+and blocks the scheduler. Unlike network I/O which integrates with epoll, file
+operations cannot be made non-blocking on Linux (regular files ignore O_NONBLOCK).
+.PP
+While a file operation is in progress:
+.IP \(bu 2
+.B All other actors are blocked
+.IP \(bu 2
+Timers may fire late
+.IP \(bu 2
+Network I/O is delayed
+.SS Safety-Critical Usage
+For autopilot and other safety-critical applications, restrict file I/O to:
+.IP \(bu 2
+.B Initialization:
+Load configuration files at startup before flight
+.IP \(bu 2
+.B Shutdown:
+Save state or logs after flight
+.IP \(bu 2
+.B Non-critical phases:
+Ground operations, pre-flight checks
+.PP
+.B Never use file I/O in flight-critical code paths.
+.SS Embedded Filesystems
+On STM32 with FATFS or littlefs:
+.IP \(bu 2
+Operations typically complete in <1ms
+.IP \(bu 2
+Flash writes may spike to 10-100ms
+.IP \(bu 2
+.BR hive_file_sync ()
+may take tens of milliseconds
+.IP \(bu 2
+Design for worst-case blocking time
+.SS Partial Reads/Writes
+Read and write operations may transfer fewer bytes than requested. Always check
+the
+.I bytes_read
+or
+.I bytes_written
+output and loop if needed:
+.PP
+.nf
+size_t total = 0;
+while (total < len) {
+    size_t n;
+    hive_status s = hive_file_write(fd, buf + total, len - total, &n);
+    if (HIVE_FAILED(s)) break;
+    if (n == 0) break;  /* Disk full */
+    total += n;
+}
+.fi
+.SS File Descriptor Lifecycle
+File descriptors from
+.BR hive_file_open ()
+must be closed with
+.BR hive_file_close ()
+when done. Unlike sockets, there is no automatic cleanup when an actor dies.
+.SS No Heap Allocation
+All file operations use POSIX syscalls directly with no heap allocation.
+.SH EXAMPLE
+.SS Configuration File
+.nf
+#include <hive_runtime.h>
+#include <hive_file.h>
+#include <stdio.h>
+#include <string.h>
+#include <fcntl.h>
+
+typedef struct {
+    float pid_p, pid_i, pid_d;
+    uint16_t refresh_rate_hz;
+} config_t;
+
+/* Load config at startup (before hive_run) */
+hive_status load_config(config_t *cfg) {
+    int fd;
+    hive_status s = hive_file_open("/config/flight.bin",
+                                   O_RDONLY, 0, &fd);
+    if (HIVE_FAILED(s)) {
+        printf("Config not found, using defaults\\n");
+        cfg->pid_p = 1.0f;
+        cfg->pid_i = 0.1f;
+        cfg->pid_d = 0.01f;
+        cfg->refresh_rate_hz = 400;
+        return HIVE_SUCCESS;
+    }
+
+    size_t n;
+    s = hive_file_read(fd, cfg, sizeof(*cfg), &n);
+    hive_file_close(fd);
+
+    if (HIVE_FAILED(s) || n != sizeof(*cfg)) {
+        return HIVE_ERROR(HIVE_ERR_IO, "Config read failed");
+    }
+
+    return HIVE_SUCCESS;
+}
+.fi
+.SS Flight Data Recording
+.nf
+#include <hive_runtime.h>
+#include <hive_file.h>
+#include <fcntl.h>
+
+void flight_recorder(void *arg) {
+    int fd = *(int *)arg;
+
+    /* Record data only during non-critical phases */
+    while (recording_enabled) {
+        flight_data data;
+        get_current_flight_data(&data);
+
+        size_t n;
+        hive_status s = hive_file_write(fd, &data, sizeof(data), &n);
+        if (HIVE_FAILED(s)) {
+            printf("Record failed: %s\\n", HIVE_ERR_STR(s));
+            break;
+        }
+
+        /* Yield to let other actors run between writes */
+        hive_yield();
+    }
+
+    hive_file_sync(fd);  /* Ensure data is on disk */
+    hive_file_close(fd);
+    hive_exit();
+}
+
+int main(void) {
+    hive_init();
+
+    int log_fd;
+    hive_file_open("/logs/flight.dat", O_WRONLY | O_CREAT | O_TRUNC,
+                   0644, &log_fd);
+
+    actor_id recorder;
+    hive_spawn(flight_recorder, &log_fd, &recorder);
+
+    hive_run();
+    hive_cleanup();
+    return 0;
+}
+.fi
+.SS Positional I/O
+.nf
+/* Random access to indexed data file */
+typedef struct {
+    uint32_t timestamp;
+    float value;
+} record_t;
+
+hive_status read_record(int fd, size_t index, record_t *rec) {
+    size_t offset = index * sizeof(record_t);
+    size_t n;
+    hive_status s = hive_file_pread(fd, rec, sizeof(*rec), offset, &n);
+    if (HIVE_FAILED(s)) return s;
+    if (n != sizeof(*rec)) {
+        return HIVE_ERROR(HIVE_ERR_IO, "Short read");
+    }
+    return HIVE_SUCCESS;
+}
+.fi
+.SH SEE ALSO
+.BR hive_net (3),
+.BR hive_spawn (3),
+.BR open (2),
+.BR read (2),
+.BR write (2),
+.BR pread (2),
+.BR pwrite (2),
+.BR fsync (2)

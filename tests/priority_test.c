@@ -1,7 +1,7 @@
-#include "acrt_runtime.h"
-#include "acrt_link.h"
-#include "acrt_ipc.h"
-#include "acrt_timer.h"
+#include "hive_runtime.h"
+#include "hive_link.h"
+#include "hive_ipc.h"
+#include "hive_timer.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -29,7 +29,7 @@ static void priority_actor(void *arg) {
         g_exec_order[g_exec_count++] = id;
     }
 
-    acrt_exit();
+    hive_exit();
 }
 
 static void test1_coordinator(void *arg) {
@@ -42,32 +42,32 @@ static void test1_coordinator(void *arg) {
     static int ids[4] = {3, 2, 1, 0};  // Spawn in reverse order (LOW first)
 
     // Spawn LOW priority first
-    actor_config cfg = ACRT_ACTOR_CONFIG_DEFAULT;
-    cfg.priority = ACRT_PRIORITY_LOW;
+    actor_config cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+    cfg.priority = HIVE_PRIORITY_LOW;
     actor_id id;
-    acrt_spawn_ex(priority_actor, &ids[0], &cfg, &id);
+    hive_spawn_ex(priority_actor, &ids[0], &cfg, &id);
 
     // Spawn NORMAL priority
-    cfg.priority = ACRT_PRIORITY_NORMAL;
-    acrt_spawn_ex(priority_actor, &ids[1], &cfg, &id);
+    cfg.priority = HIVE_PRIORITY_NORMAL;
+    hive_spawn_ex(priority_actor, &ids[1], &cfg, &id);
 
     // Spawn HIGH priority
-    cfg.priority = ACRT_PRIORITY_HIGH;
-    acrt_spawn_ex(priority_actor, &ids[2], &cfg, &id);
+    cfg.priority = HIVE_PRIORITY_HIGH;
+    hive_spawn_ex(priority_actor, &ids[2], &cfg, &id);
 
     // Spawn CRITICAL priority
-    cfg.priority = ACRT_PRIORITY_CRITICAL;
-    acrt_spawn_ex(priority_actor, &ids[3], &cfg, &id);
+    cfg.priority = HIVE_PRIORITY_CRITICAL;
+    hive_spawn_ex(priority_actor, &ids[3], &cfg, &id);
 
     // Yield to let them all run
     // Since we're NORMAL priority, CRITICAL and HIGH should run before us
-    acrt_yield();
+    hive_yield();
 
     // Give time for all to complete
     timer_id timer;
-    acrt_timer_after(50000, &timer);  // 50ms
-    acrt_message msg;
-    acrt_ipc_recv(&msg, -1);
+    hive_timer_after(50000, &timer);  // 50ms
+    hive_message msg;
+    hive_ipc_recv(&msg, -1);
 
     // Check execution order: should be CRITICAL(0), HIGH(1), NORMAL(2), LOW(3)
     // But coordinator is also NORMAL, so order depends on round-robin
@@ -106,7 +106,7 @@ static void test1_coordinator(void *arg) {
                critical_pos, high_pos, normal_pos, low_pos);
     }
 
-    acrt_exit();
+    hive_exit();
 }
 
 // ============================================================================
@@ -125,13 +125,13 @@ static void rr_actor(void *arg) {
     }
 
     // Yield and run again to test round-robin
-    acrt_yield();
+    hive_yield();
 
     if (g_rr_count < 8) {
         g_rr_order[g_rr_count++] = id;
     }
 
-    acrt_exit();
+    hive_exit();
 }
 
 static void test2_coordinator(void *arg) {
@@ -142,19 +142,19 @@ static void test2_coordinator(void *arg) {
 
     // Spawn 3 actors at NORMAL priority
     static int ids[3] = {1, 2, 3};
-    actor_config cfg = ACRT_ACTOR_CONFIG_DEFAULT;
-    cfg.priority = ACRT_PRIORITY_NORMAL;
+    actor_config cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+    cfg.priority = HIVE_PRIORITY_NORMAL;
 
     for (int i = 0; i < 3; i++) {
         actor_id id;
-        acrt_spawn_ex(rr_actor, &ids[i], &cfg, &id);
+        hive_spawn_ex(rr_actor, &ids[i], &cfg, &id);
     }
 
     // Wait for them to complete
     timer_id timer;
-    acrt_timer_after(100000, &timer);  // 100ms
-    acrt_message msg;
-    acrt_ipc_recv(&msg, -1);
+    hive_timer_after(100000, &timer);  // 100ms
+    hive_message msg;
+    hive_ipc_recv(&msg, -1);
 
     printf("  Execution sequence: ");
     for (int i = 0; i < g_rr_count; i++) {
@@ -183,7 +183,7 @@ static void test2_coordinator(void *arg) {
         TEST_FAIL("not enough executions recorded");
     }
 
-    acrt_exit();
+    hive_exit();
 }
 
 // ============================================================================
@@ -200,23 +200,23 @@ static void high_prio_late_spawn(void *arg) {
     if (!g_low_finished) {
         g_high_ran_first = true;
     }
-    acrt_exit();
+    hive_exit();
 }
 
 static void low_prio_spawner(void *arg) {
     (void)arg;
 
     // Spawn a high-priority actor
-    actor_config cfg = ACRT_ACTOR_CONFIG_DEFAULT;
-    cfg.priority = ACRT_PRIORITY_HIGH;
+    actor_config cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+    cfg.priority = HIVE_PRIORITY_HIGH;
     actor_id id;
-    acrt_spawn_ex(high_prio_late_spawn, NULL, &cfg, &id);
+    hive_spawn_ex(high_prio_late_spawn, NULL, &cfg, &id);
 
     // Yield - high priority should run now
-    acrt_yield();
+    hive_yield();
 
     g_low_finished = true;
-    acrt_exit();
+    hive_exit();
 }
 
 static void test3_coordinator(void *arg) {
@@ -227,16 +227,16 @@ static void test3_coordinator(void *arg) {
     g_low_finished = false;
 
     // Spawn a LOW priority actor that will spawn a HIGH priority actor
-    actor_config cfg = ACRT_ACTOR_CONFIG_DEFAULT;
-    cfg.priority = ACRT_PRIORITY_LOW;
+    actor_config cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+    cfg.priority = HIVE_PRIORITY_LOW;
     actor_id id;
-    acrt_spawn_ex(low_prio_spawner, NULL, &cfg, &id);
+    hive_spawn_ex(low_prio_spawner, NULL, &cfg, &id);
 
     // Wait for completion
     timer_id timer;
-    acrt_timer_after(100000, &timer);
-    acrt_message msg;
-    acrt_ipc_recv(&msg, -1);
+    hive_timer_after(100000, &timer);
+    hive_message msg;
+    hive_ipc_recv(&msg, -1);
 
     if (g_high_ran_first) {
         TEST_PASS("high priority actor runs before low priority continues");
@@ -244,7 +244,7 @@ static void test3_coordinator(void *arg) {
         TEST_FAIL("high priority actor did not preempt");
     }
 
-    acrt_exit();
+    hive_exit();
 }
 
 // ============================================================================
@@ -256,7 +256,7 @@ static bool g_prio_ran[4] = {false, false, false, false};
 static void starvation_actor(void *arg) {
     int prio = *(int *)arg;
     g_prio_ran[prio] = true;
-    acrt_exit();
+    hive_exit();
 }
 
 static void test4_coordinator(void *arg) {
@@ -269,17 +269,17 @@ static void test4_coordinator(void *arg) {
     static int prios[4] = {0, 1, 2, 3};
 
     for (int i = 0; i < 4; i++) {
-        actor_config cfg = ACRT_ACTOR_CONFIG_DEFAULT;
-        cfg.priority = (acrt_priority_level)i;
+        actor_config cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+        cfg.priority = (hive_priority_level)i;
         actor_id id;
-        acrt_spawn_ex(starvation_actor, &prios[i], &cfg, &id);
+        hive_spawn_ex(starvation_actor, &prios[i], &cfg, &id);
     }
 
     // Wait for all to complete
     timer_id timer;
-    acrt_timer_after(100000, &timer);
-    acrt_message msg;
-    acrt_ipc_recv(&msg, -1);
+    hive_timer_after(100000, &timer);
+    hive_message msg;
+    hive_ipc_recv(&msg, -1);
 
     bool all_ran = g_prio_ran[0] && g_prio_ran[1] && g_prio_ran[2] && g_prio_ran[3];
 
@@ -294,48 +294,48 @@ static void test4_coordinator(void *arg) {
         TEST_FAIL("some priority levels starved");
     }
 
-    acrt_exit();
+    hive_exit();
 }
 
 // ============================================================================
 // Test 5: Default priority is NORMAL
 // ============================================================================
 
-static acrt_priority_level g_default_prio = ACRT_PRIORITY_COUNT;
+static hive_priority_level g_default_prio = HIVE_PRIORITY_COUNT;
 
 static void check_default_prio(void *arg) {
     (void)arg;
     // We need to check the actor's priority - but we don't have direct access
-    // We'll verify by checking ACRT_ACTOR_CONFIG_DEFAULT
-    actor_config cfg = ACRT_ACTOR_CONFIG_DEFAULT;
+    // We'll verify by checking HIVE_ACTOR_CONFIG_DEFAULT
+    actor_config cfg = HIVE_ACTOR_CONFIG_DEFAULT;
     g_default_prio = cfg.priority;
-    acrt_exit();
+    hive_exit();
 }
 
 static void test5_coordinator(void *arg) {
     (void)arg;
     printf("\nTest 5: Default priority is NORMAL\n");
 
-    // Check ACRT_ACTOR_CONFIG_DEFAULT directly
-    actor_config cfg = ACRT_ACTOR_CONFIG_DEFAULT;
+    // Check HIVE_ACTOR_CONFIG_DEFAULT directly
+    actor_config cfg = HIVE_ACTOR_CONFIG_DEFAULT;
 
-    if (cfg.priority == ACRT_PRIORITY_NORMAL) {
-        TEST_PASS("ACRT_ACTOR_CONFIG_DEFAULT has NORMAL priority");
+    if (cfg.priority == HIVE_PRIORITY_NORMAL) {
+        TEST_PASS("HIVE_ACTOR_CONFIG_DEFAULT has NORMAL priority");
     } else {
         TEST_FAIL("default priority is not NORMAL");
-        printf("    default priority = %d (expected %d)\n", cfg.priority, ACRT_PRIORITY_NORMAL);
+        printf("    default priority = %d (expected %d)\n", cfg.priority, HIVE_PRIORITY_NORMAL);
     }
 
     // Also spawn an actor with default config to verify
     actor_id checker;
-    acrt_spawn(check_default_prio, NULL, &checker);
+    hive_spawn(check_default_prio, NULL, &checker);
 
     timer_id timer;
-    acrt_timer_after(50000, &timer);
-    acrt_message msg;
-    acrt_ipc_recv(&msg, -1);
+    hive_timer_after(50000, &timer);
+    hive_message msg;
+    hive_ipc_recv(&msg, -1);
 
-    acrt_exit();
+    hive_exit();
 }
 
 // ============================================================================
@@ -356,48 +356,48 @@ static void run_all_tests(void *arg) {
     (void)arg;
 
     for (size_t i = 0; i < NUM_TESTS; i++) {
-        actor_config cfg = ACRT_ACTOR_CONFIG_DEFAULT;
+        actor_config cfg = HIVE_ACTOR_CONFIG_DEFAULT;
         cfg.stack_size = 64 * 1024;
 
         actor_id test;
-        if (ACRT_FAILED(acrt_spawn_ex(test_funcs[i], NULL, &cfg, &test))) {
+        if (HIVE_FAILED(hive_spawn_ex(test_funcs[i], NULL, &cfg, &test))) {
             printf("Failed to spawn test %zu\n", i);
             continue;
         }
 
         // Link to test actor so we know when it finishes
-        acrt_link(test);
+        hive_link(test);
 
         // Wait for test to finish
-        acrt_message msg;
-        acrt_ipc_recv(&msg, 5000);
+        hive_message msg;
+        hive_ipc_recv(&msg, 5000);
     }
 
-    acrt_exit();
+    hive_exit();
 }
 
 int main(void) {
     printf("=== Priority Scheduling Test Suite ===\n");
 
-    acrt_status status = acrt_init();
-    if (ACRT_FAILED(status)) {
+    hive_status status = hive_init();
+    if (HIVE_FAILED(status)) {
         fprintf(stderr, "Failed to initialize runtime: %s\n",
                 status.msg ? status.msg : "unknown error");
         return 1;
     }
 
-    actor_config cfg = ACRT_ACTOR_CONFIG_DEFAULT;
+    actor_config cfg = HIVE_ACTOR_CONFIG_DEFAULT;
     cfg.stack_size = 128 * 1024;
 
     actor_id runner;
-    if (ACRT_FAILED(acrt_spawn_ex(run_all_tests, NULL, &cfg, &runner))) {
+    if (HIVE_FAILED(hive_spawn_ex(run_all_tests, NULL, &cfg, &runner))) {
         fprintf(stderr, "Failed to spawn test runner\n");
-        acrt_cleanup();
+        hive_cleanup();
         return 1;
     }
 
-    acrt_run();
-    acrt_cleanup();
+    hive_run();
+    hive_cleanup();
 
     printf("\n=== Results ===\n");
     printf("Passed: %d\n", tests_passed);

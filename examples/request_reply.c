@@ -1,7 +1,7 @@
 /*
  * Request/Reply Example - Request/Response Pattern with Blocking Calls
  *
- * This example demonstrates the request/reply pattern using acrt_ipc_request/acrt_ipc_reply,
+ * This example demonstrates the request/reply pattern using hive_ipc_request/hive_ipc_reply,
  * which provides natural backpressure by blocking the caller until a reply.
  *
  * KEY CONCEPTS:
@@ -15,8 +15,8 @@
  * - When sender needs confirmation before proceeding
  */
 
-#include "acrt_runtime.h"
-#include "acrt_ipc.h"
+#include "hive_runtime.h"
+#include "hive_ipc.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -36,25 +36,25 @@ typedef struct {
 static void consumer_actor(void *arg) {
     (void)arg;
 
-    printf("Consumer: Started (ID: %u)\n", acrt_self());
+    printf("Consumer: Started (ID: %u)\n", hive_self());
     printf("Consumer: I process slowly to demonstrate backpressure\n\n");
 
     for (int jobs_processed = 0; jobs_processed < 5; jobs_processed++) {
-        // Wait for work request (ACRT_MSG_REQUEST)
-        acrt_message msg;
-        acrt_status status = acrt_ipc_recv(&msg, 5000);  // 5 second timeout
+        // Wait for work request (HIVE_MSG_REQUEST)
+        hive_message msg;
+        hive_status status = hive_ipc_recv(&msg, 5000);  // 5 second timeout
 
-        if (status.code == ACRT_ERR_TIMEOUT) {
+        if (status.code == HIVE_ERR_TIMEOUT) {
             printf("Consumer: Timeout waiting for work, exiting\n");
             break;
         }
 
-        if (ACRT_FAILED(status)) {
+        if (HIVE_FAILED(status)) {
             printf("Consumer: Receive failed: %s\n", status.msg);
             break;
         }
 
-        if (msg.class != ACRT_MSG_REQUEST) {
+        if (msg.class != HIVE_MSG_REQUEST) {
             printf("Consumer: Unexpected message class %d, skipping\n", msg.class);
             continue;
         }
@@ -82,8 +82,8 @@ static void consumer_actor(void *arg) {
                req->job_id, result.result);
 
         // Send reply to unblock the caller
-        status = acrt_ipc_reply(&msg, &result, sizeof(result));
-        if (ACRT_FAILED(status)) {
+        status = hive_ipc_reply(&msg, &result, sizeof(result));
+        if (HIVE_FAILED(status)) {
             printf("Consumer: Failed to send reply: %s\n", status.msg);
         }
 
@@ -91,15 +91,15 @@ static void consumer_actor(void *arg) {
     }
 
     printf("Consumer: Done processing, exiting\n");
-    acrt_exit();
+    hive_exit();
 }
 
 // Fast producer that sends work requests
 static void producer_actor(void *arg) {
     actor_id consumer_id = (actor_id)(uintptr_t)arg;
 
-    printf("Producer: Started (ID: %u)\n", acrt_self());
-    printf("Producer: Sending 5 jobs with acrt_ipc_request (blocks until reply)\n\n");
+    printf("Producer: Started (ID: %u)\n", hive_self());
+    printf("Producer: Sending 5 jobs with hive_ipc_request (blocks until reply)\n\n");
 
     for (int i = 1; i <= 5; i++) {
         work_request req = {
@@ -109,12 +109,12 @@ static void producer_actor(void *arg) {
 
         printf("Producer: Calling consumer with job #%d (will block until reply)...\n", i);
 
-        // Call consumer - this BLOCKS until consumer sends acrt_ipc_reply()
-        acrt_message reply;
-        acrt_status status = acrt_ipc_request(consumer_id, &req, sizeof(req), &reply, 10000);
+        // Call consumer - this BLOCKS until consumer sends hive_ipc_reply()
+        hive_message reply;
+        hive_status status = hive_ipc_request(consumer_id, &req, sizeof(req), &reply, 10000);
 
-        if (ACRT_FAILED(status)) {
-            if (status.code == ACRT_ERR_TIMEOUT) {
+        if (HIVE_FAILED(status)) {
+            if (status.code == HIVE_ERR_TIMEOUT) {
                 printf("Producer: Timeout waiting for reply on job #%d\n", i);
             } else {
                 printf("Producer: Call failed: %s\n", status.msg);
@@ -128,7 +128,7 @@ static void producer_actor(void *arg) {
     }
 
     printf("Producer: All jobs sent and completed, exiting\n");
-    acrt_exit();
+    hive_exit();
 }
 
 // Demo simple message passing (async notify vs request/reply)
@@ -138,69 +138,69 @@ static void demo_actor(void *arg) {
 
     printf("\n--- Message Passing Patterns Demo ---\n");
 
-    // Pattern 1: Fire-and-forget with acrt_ipc_notify()
-    printf("Demo: Fire-and-forget (acrt_ipc_notify) - sender continues immediately\n");
+    // Pattern 1: Fire-and-forget with hive_ipc_notify()
+    printf("Demo: Fire-and-forget (hive_ipc_notify) - sender continues immediately\n");
     int data = 42;
-    acrt_status status = acrt_ipc_notify(acrt_self(), &data, sizeof(data));
-    if (!ACRT_FAILED(status)) {
-        acrt_message msg;
-        acrt_ipc_recv(&msg, 0);
+    hive_status status = hive_ipc_notify(hive_self(), &data, sizeof(data));
+    if (!HIVE_FAILED(status)) {
+        hive_message msg;
+        hive_ipc_recv(&msg, 0);
         printf("Demo: Received self-sent message: %d\n", *(int *)msg.data);
     }
 
     printf("--- End Demo ---\n\n");
-    acrt_exit();
+    hive_exit();
 }
 
 int main(void) {
     printf("=== Request/Reply Example - Request/Response Pattern ===\n\n");
 
     printf("This example shows:\n");
-    printf("1. Producer sends jobs with acrt_ipc_request() (blocks until reply)\n");
-    printf("2. Consumer processes and replies with acrt_ipc_reply()\n");
+    printf("1. Producer sends jobs with hive_ipc_request() (blocks until reply)\n");
+    printf("2. Consumer processes and replies with hive_ipc_reply()\n");
     printf("3. Producer only proceeds after receiving reply\n\n");
 
-    acrt_status status = acrt_init();
-    if (ACRT_FAILED(status)) {
-        fprintf(stderr, "Failed to initialize runtime: %s\n", ACRT_ERR_STR(status));
+    hive_status status = hive_init();
+    if (HIVE_FAILED(status)) {
+        fprintf(stderr, "Failed to initialize runtime: %s\n", HIVE_ERR_STR(status));
         return 1;
     }
 
     // First, run the demo actor
     actor_id demo;
-    if (ACRT_FAILED(acrt_spawn(demo_actor, NULL, &demo))) {
+    if (HIVE_FAILED(hive_spawn(demo_actor, NULL, &demo))) {
         fprintf(stderr, "Failed to spawn demo actor\n");
-        acrt_cleanup();
+        hive_cleanup();
         return 1;
     }
 
     // Spawn consumer first (it will wait for messages)
     actor_id consumer;
-    if (ACRT_FAILED(acrt_spawn(consumer_actor, NULL, &consumer))) {
+    if (HIVE_FAILED(hive_spawn(consumer_actor, NULL, &consumer))) {
         fprintf(stderr, "Failed to spawn consumer\n");
-        acrt_cleanup();
+        hive_cleanup();
         return 1;
     }
 
     // Spawn producer with consumer's ID
     actor_id producer;
-    if (ACRT_FAILED(acrt_spawn(producer_actor, (void *)(uintptr_t)consumer, &producer))) {
+    if (HIVE_FAILED(hive_spawn(producer_actor, (void *)(uintptr_t)consumer, &producer))) {
         fprintf(stderr, "Failed to spawn producer\n");
-        acrt_cleanup();
+        hive_cleanup();
         return 1;
     }
 
     printf("Spawned actors: demo=%u, consumer=%u, producer=%u\n\n", demo, consumer, producer);
 
     // Run scheduler
-    acrt_run();
+    hive_run();
 
     printf("\nScheduler finished\n");
-    acrt_cleanup();
+    hive_cleanup();
 
     printf("\n=== Example completed ===\n");
     printf("\nKey takeaways:\n");
-    printf("- acrt_ipc_request() blocks until acrt_ipc_reply() is received\n");
+    printf("- hive_ipc_request() blocks until hive_ipc_reply() is received\n");
     printf("- Tag-based correlation matches replies to requests\n");
     printf("- Natural backpressure without explicit release calls\n");
     printf("- Simpler than old IPC_SYNC mode\n");

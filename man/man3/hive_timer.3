@@ -1,0 +1,200 @@
+.\" Man page for timer functions
+.TH HIVE_TIMER 3 "January 2025" "ACRT 1.0" "Actor Runtime Manual"
+.SH NAME
+hive_timer_after, hive_timer_every, hive_timer_cancel, hive_sleep \- actor timers
+.SH SYNOPSIS
+.nf
+.B #include <hive_timer.h>
+.PP
+.BI "hive_status hive_timer_after(uint32_t " delay_us ", timer_id *" out ");"
+.BI "hive_status hive_timer_every(uint32_t " interval_us ", timer_id *" out ");"
+.BI "hive_status hive_timer_cancel(timer_id " id ");"
+.BI "hive_status hive_sleep(uint32_t " delay_us ");"
+.fi
+.SH DESCRIPTION
+These functions provide one-shot and periodic timers for actors. Timer
+expiration is delivered as a message to the owning actor's mailbox.
+.SS One-Shot Timers
+.BR hive_timer_after ()
+creates a one-shot timer that fires once after
+.I delay_us
+microseconds. The timer ID is stored in
+.IR out .
+When the timer fires, a message is delivered to the calling actor's mailbox
+with class
+.B HIVE_MSG_TIMER
+and tag set to the timer ID.
+.SS Periodic Timers
+.BR hive_timer_every ()
+creates a periodic timer that fires every
+.I interval_us
+microseconds until cancelled. Each tick delivers a message with class
+.B HIVE_MSG_TIMER
+and tag set to the timer ID.
+.SS Cancelling Timers
+.BR hive_timer_cancel ()
+cancels a timer. One-shot timers that have already fired cannot be cancelled
+(they no longer exist). Periodic timers can be cancelled at any time.
+.SS Sleeping
+.BR hive_sleep ()
+suspends the calling actor for
+.I delay_us
+microseconds. Unlike a naive implementation using
+.BR hive_ipc_recv ()
+with a timeout, this function uses selective receive to wait only for the
+internal timer message. Other messages arriving during the sleep remain in the
+mailbox and are not lost.
+.SS Timer Messages
+Timer messages have:
+.IP \(bu 2
+.B class
+= HIVE_MSG_TIMER
+.IP \(bu 2
+.B tag
+= timer_id (use to identify which timer fired)
+.IP \(bu 2
+.B len
+= 0 (no payload)
+.IP \(bu 2
+.B sender
+= HIVE_SENDER_TIMER (0xFFFFFFFF)
+.PP
+Use
+.BR hive_msg_is_timer ()
+to check if a message is a timer tick:
+.PP
+.nf
+if (hive_msg_is_timer(&msg)) {
+    timer_id which = msg.tag;
+    /* Handle timer */
+}
+.fi
+.SH RETURN VALUE
+All functions return an
+.I hive_status
+structure. On success,
+.I status.code
+is
+.BR HIVE_OK .
+For
+.BR hive_timer_after ()
+and
+.BR hive_timer_every (),
+the timer ID is stored in
+.IR *out .
+.SH ERRORS
+.TP
+.B HIVE_ERR_INVALID
+Invalid timer ID (for cancel), or not called from actor context.
+.TP
+.B HIVE_ERR_NOMEM
+Timer pool exhausted (HIVE_TIMER_ENTRY_POOL_SIZE).
+.SH NOTES
+.SS Timer Ownership
+Timers are owned by the actor that created them. When an actor dies:
+.IP \(bu 2
+All its timers are automatically cancelled
+.IP \(bu 2
+No timer messages are delivered after death
+.SS Timer Resolution
+On Linux, timers use
+.BR timerfd (2)
+with microsecond granularity. Actual resolution depends on kernel
+configuration (typically 1ms or better). On STM32, timers use hardware
+timers (SysTick or TIM peripherals) with configurable resolution.
+.SS Timer Accuracy
+Timer delivery is cooperative. If an actor is busy (not calling
+.BR hive_ipc_recv ()
+or other blocking functions), timer messages queue in the mailbox.
+There is no preemption. Design actors to yield frequently for timely
+timer processing.
+.SS Multiple Timers
+An actor can have multiple timers active simultaneously. Use the timer ID
+(returned in
+.I tag
+field) to distinguish which timer fired.
+.SS Pool Limits
+Default: HIVE_TIMER_ENTRY_POOL_SIZE = 64 timers system-wide.
+.SS Embedded Considerations
+.IP \(bu 2
+Zero heap allocation
+.IP \(bu 2
+O(1) timer creation and cancellation
+.IP \(bu 2
+timerfd on Linux, hardware timers on STM32
+.IP \(bu 2
+Microsecond granularity (actual resolution platform-dependent)
+.IP \(bu 2
+Cooperative delivery (no preemption)
+.SH EXAMPLE
+.nf
+#include <hive_runtime.h>
+#include <hive_timer.h>
+#include <hive_ipc.h>
+#include <stdio.h>
+
+void timer_demo(void *arg) {
+    (void)arg;
+
+    /* Create one-shot timer (500ms) */
+    timer_id oneshot;
+    hive_timer_after(500000, &oneshot);
+    printf("One-shot timer %u created\\n", oneshot);
+
+    /* Create periodic timer (200ms) */
+    timer_id periodic;
+    hive_timer_every(200000, &periodic);
+    printf("Periodic timer %u created\\n", periodic);
+
+    int ticks = 0;
+    while (ticks < 5) {
+        hive_message msg;
+        hive_ipc_recv(&msg, -1);
+
+        if (hive_msg_is_timer(&msg)) {
+            if (msg.tag == oneshot) {
+                printf("One-shot timer fired!\\n");
+            } else if (msg.tag == periodic) {
+                ticks++;
+                printf("Periodic tick #%d\\n", ticks);
+            }
+        }
+    }
+
+    hive_timer_cancel(periodic);
+    printf("Periodic timer cancelled\\n");
+
+    hive_exit();
+}
+
+int main(void) {
+    hive_init();
+    actor_id demo;
+    hive_spawn(timer_demo, NULL, &demo);
+    hive_run();
+    hive_cleanup();
+    return 0;
+}
+.fi
+.SS Sleep Example
+.nf
+void worker(void *arg) {
+    (void)arg;
+
+    printf("Working...\\n");
+    hive_sleep(500000);  /* Sleep 500ms - messages not lost */
+    printf("Done sleeping\\n");
+
+    /* Any messages received during sleep are still in mailbox */
+    hive_message msg;
+    while (hive_ipc_recv(&msg, 0).code == HIVE_OK) {
+        printf("Got message from %u\\n", msg.sender);
+    }
+
+    hive_exit();
+}
+.fi
+.SH SEE ALSO
+.BR hive_ipc (3),
+.BR hive_spawn (3),
+.BR timerfd_create (2)
