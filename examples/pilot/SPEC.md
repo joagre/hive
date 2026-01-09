@@ -78,19 +78,19 @@ graph TB
 
     subgraph RUNTIME["ACTOR RUNTIME"]
         Sensor[SENSOR ACTOR]
-        IMUBus[IMU Bus]
+        IMUBus([IMU Bus])
         Estimator[ESTIMATOR ACTOR]
-        StateBus[State Bus]
+        StateBus([State Bus])
 
         Altitude[ALTITUDE ACTOR<br/>altitude PID]
         Position[POSITION ACTOR<br/>position PD]
         Attitude[ATTITUDE ACTOR<br/>rate PIDs]
 
-        ThrustBus[Thrust Bus]
-        AngleSPBus[Angle Setpoint Bus]
+        ThrustBus([Thrust Bus])
+        AngleSPBus([Angle Setpoint Bus])
         Angle[ANGLE ACTOR<br/>angle PIDs]
-        RateSPBus[Rate Setpoint Bus]
-        TorqueBus[Torque Bus]
+        RateSPBus([Rate Setpoint Bus])
+        TorqueBus([Torque Bus])
         Motor[MOTOR ACTOR<br/>mixer+safety]
     end
 

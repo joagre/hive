@@ -53,12 +53,12 @@ Seven actors connected via buses:
 
 ```mermaid
 graph LR
-    Sensor[Sensor] --> IMUBus[IMU Bus] --> Estimator[Estimator] --> StateBus[State Bus]
+    Sensor[Sensor] --> IMUBus([IMU Bus]) --> Estimator[Estimator] --> StateBus([State Bus])
 
-    StateBus --> Altitude[Altitude] --> ThrustBus[Thrust Bus] --> Motor[Motor]
-    StateBus --> Position[Position] --> AngleSP[Angle SP Bus] --> Angle[Angle]
-    Angle --> RateSP[Rate SP Bus] --> Attitude[Attitude]
-    StateBus --> Attitude --> TorqueBus[Torque Bus] --> Motor
+    StateBus --> Altitude[Altitude] --> ThrustBus([Thrust Bus]) --> Motor[Motor]
+    StateBus --> Position[Position] --> AngleSP([Angle SP Bus]) --> Angle[Angle]
+    Angle --> RateSP([Rate SP Bus]) --> Attitude[Attitude]
+    StateBus --> Attitude --> TorqueBus([Torque Bus]) --> Motor
 ```
 
 Platform layer (in pilot.c) provides hardware abstraction:
