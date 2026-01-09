@@ -84,6 +84,7 @@ The Webots `inertial_unit` provides pre-fused roll/pitch/yaw. On real hardware, 
 | `lis2mdl.h/c` | LIS2MDL | I2C1 | 3-axis magnetometer for heading (yaw) |
 | `lps22hd.h/c` | LPS22HD | I2C1 | Barometer for altitude hold |
 | `motors.h/c` | - | TIM4 PWM | Motor output with arm/disarm safety |
+| `attitude.h/c` | - | - | Complementary filter for sensor fusion |
 
 All drivers are skeleton implementations with TODO placeholders for STM32 HAL integration.
 
@@ -166,6 +167,35 @@ Motor layout (X configuration):
         Rear
 ```
 
+### Attitude (Complementary Filter)
+
+Sensor fusion for attitude estimation from IMU and magnetometer.
+
+```c
+attitude_init(NULL, NULL);             // Use default config (alpha=0.98)
+
+// Main loop (e.g., 400Hz)
+lsm6dsl_read_all(&accel, &gyro);
+attitude_update(accel, gyro, dt);      // Fuse accel + gyro
+
+// Optional: Add magnetometer for yaw (e.g., 50Hz)
+lis2mdl_read(&mag);
+attitude_update_mag(mag);
+
+// Get results
+attitude_t att;
+attitude_get(&att);                    // roll, pitch, yaw in radians
+```
+
+Key features:
+- Complementary filter: `angle = alpha * gyro + (1-alpha) * accel`
+- Configurable filter coefficient (default alpha=0.98)
+- Accelerometer validity check (rejects data during high-g maneuvers)
+- Optional magnetometer fusion for yaw (tilt-compensated)
+- Angle normalization to [-PI, PI]
+
+**Note:** This is a simple complementary filter suitable for basic flight. For aggressive maneuvers or precision applications, consider an Extended Kalman Filter (EKF) or Mahony/Madgwick filter.
+
 ## Resources
 
 - [STEVAL-DRONE01 Product Page](https://www.st.com/en/evaluation-tools/steval-drone01.html)
@@ -178,7 +208,7 @@ Motor layout (X configuration):
 - [x] LIS2MDL driver skeleton (I2C)
 - [x] LPS22HD driver skeleton (I2C)
 - [x] Motor PWM driver skeleton (TIM4)
+- [x] Complementary filter for attitude estimation
 - [ ] STM32 HAL integration (implement TODO placeholders)
-- [ ] Complementary filter for attitude estimation
 - [ ] Platform init and main loop
 - [ ] hive runtime port for STM32F4
