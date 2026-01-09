@@ -106,9 +106,10 @@ graph TB
     ReadIMU --> Sensor
     Sensor --> IMUBus --> Estimator --> StateBus
 
-    StateBus --> Altitude --> ThrustBus --> Motor
-    StateBus --> Waypoint --> TargetBus --> Position --> AngleSPBus --> Angle --> RateSPBus --> Attitude
-    StateBus --> Attitude --> TorqueBus --> Motor
+    StateBus --> Altitude --> ThrustBus --> Attitude
+    StateBus --> Waypoint --> TargetBus --> Position
+    StateBus --> Position --> AngleSPBus --> Angle
+    StateBus --> Angle --> RateSPBus --> Attitude --> TorqueBus --> Motor
 
     Motor --> WriteMotors
 ```
@@ -155,19 +156,21 @@ graph TB
 
     StateBus --> Altitude[Altitude Actor<br/>altitude PID]
     StateBus --> Waypoint[Waypoint Actor<br/>navigation]
+    StateBus --> Position[Position Actor<br/>position PD]
+    StateBus --> Angle[Angle Actor<br/>angle PIDs]
     StateBus --> Attitude[Attitude Actor<br/>rate PIDs]
 
     Altitude --> ThrustBus([Thrust Bus])
+    ThrustBus --> Attitude
     Waypoint --> TargetBus([Target Bus])
-    TargetBus --> Position[Position Actor<br/>position PD]
+    TargetBus --> Position
     Position --> AngleSP([Angle Setpoint Bus])
-    AngleSP --> Angle[Angle Actor<br/>angle PIDs]
+    AngleSP --> Angle
     Angle --> RateSP([Rate Setpoint Bus])
     RateSP --> Attitude
 
-    ThrustBus --> Motor[Motor Actor<br/>mixer + safety]
     Attitude --> TorqueBus([Torque Bus])
-    TorqueBus --> Motor
+    TorqueBus --> Motor[Motor Actor<br/>mixer + safety]
 
     Motor --> WriteMotors --> Motors
 ```
@@ -291,10 +294,10 @@ Each `hive_step()` runs all ready actors once:
 
 | Device | Name | Type |
 |--------|------|------|
-| Motor 1 (front) | `m1_motor` | RotationalMotor |
-| Motor 2 (right) | `m2_motor` | RotationalMotor |
-| Motor 3 (rear) | `m3_motor` | RotationalMotor |
-| Motor 4 (left) | `m4_motor` | RotationalMotor |
+| Motor 1 (rear-left) | `m1_motor` | RotationalMotor |
+| Motor 2 (front-left) | `m2_motor` | RotationalMotor |
+| Motor 3 (front-right) | `m3_motor` | RotationalMotor |
+| Motor 4 (rear-right) | `m4_motor` | RotationalMotor |
 | Gyroscope | `gyro` | Gyro |
 | Inertial Unit | `inertial_unit` | InertialUnit |
 | GPS | `gps` | GPS |
@@ -423,7 +426,7 @@ graph LR
 | **Sensor** | Hardware | IMU Bus | CRITICAL | Read IMU/GPS, timestamp, publish |
 | **Estimator** | IMU Bus | State Bus | CRITICAL | Sensor fusion, state estimate |
 | **Altitude** | State Bus | Thrust Bus | CRITICAL | Altitude PID (250Hz) |
-| **Waypoint** | State Bus | Target Bus | CRITICAL | Waypoint navigation, arrival detection |
+| **Waypoint** | State Bus | Target Bus | CRITICAL | Waypoint navigation, arrival detection, loops forever |
 | **Position** | Target + State Bus | Angle Setpoint Bus | CRITICAL | Position PD (250Hz) |
 | **Angle** | Angle Setpoint + State | Rate Setpoint Bus | CRITICAL | Angle PIDs (250Hz) |
 | **Attitude** | State + Thrust + Rate SP | Torque Bus | CRITICAL | Rate PIDs (250Hz) |
@@ -528,8 +531,9 @@ State Bus ──► Position Actor ──► Angle Setpoint Bus ──► Angle 
 - Velocity damping: reduces overshoot
 - Max tilt limit: 0.35 rad (~20°) for safety
 - Sign conventions match Bitcraze Webots controller
-- Heading hold: publishes TARGET_YAW as yaw setpoint
+- Heading hold: publishes target yaw from waypoint actor
 - Angle wrap-around: `pid_update_angle()` handles ±π discontinuity
+- World-to-body frame transformation based on current yaw
 
 **Benefits:**
 - Drone holds XY position and heading
@@ -557,8 +561,8 @@ State Bus ──► Waypoint Actor ──► Target Bus ──► Position Actor
 - Monitors state bus for arrival detection
 - Arrival requires: position within tolerance, heading within tolerance, velocity below threshold
 - Hovers briefly at each waypoint before advancing
-- Loops back to first waypoint after completing route
-- Demo route: square pattern with 90° turns
+- Loops forever: returns to first waypoint after completing route
+- Demo route: square pattern with 90° turns at corners
 
 **Benefits:**
 - Decouples waypoint logic from position control

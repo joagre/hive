@@ -57,11 +57,11 @@ Eight actors connected via buses:
 graph TB
     Sensor[Sensor] --> IMUBus([IMU Bus]) --> Estimator[Estimator] --> StateBus([State Bus])
 
-    StateBus --> Altitude[Altitude] --> ThrustBus([Thrust Bus]) --> Motor[Motor]
+    StateBus --> Altitude[Altitude] --> ThrustBus([Thrust Bus]) --> Attitude[Attitude]
     StateBus --> Waypoint[Waypoint] --> TargetBus([Target Bus]) --> Position[Position]
-    Position --> AngleSP([Angle SP Bus]) --> Angle[Angle]
-    Angle --> RateSP([Rate SP Bus]) --> Attitude[Attitude]
-    StateBus --> Attitude --> TorqueBus([Torque Bus]) --> Motor
+    StateBus --> Position --> AngleSP([Angle SP Bus]) --> Angle[Angle]
+    StateBus --> Angle --> RateSP([Rate SP Bus]) --> Attitude
+    Attitude --> TorqueBus([Torque Bus]) --> Motor[Motor]
 ```
 
 Platform layer (in pilot.c) provides hardware abstraction:
@@ -170,10 +170,10 @@ Webots controls time via `wb_robot_step()`. Each call:
 
 | Device | Name | Type |
 |--------|------|------|
-| Motor 1 (front) | `m1_motor` | RotationalMotor |
-| Motor 2 (right) | `m2_motor` | RotationalMotor |
-| Motor 3 (rear) | `m3_motor` | RotationalMotor |
-| Motor 4 (left) | `m4_motor` | RotationalMotor |
+| Motor 1 (rear-left) | `m1_motor` | RotationalMotor |
+| Motor 2 (front-left) | `m2_motor` | RotationalMotor |
+| Motor 3 (front-right) | `m3_motor` | RotationalMotor |
+| Motor 4 (rear-right) | `m4_motor` | RotationalMotor |
 | Gyroscope | `gyro` | Gyro |
 | Inertial Unit | `inertial_unit` | InertialUnit |
 | GPS | `gps` | GPS |
