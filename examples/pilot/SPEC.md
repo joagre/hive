@@ -8,7 +8,7 @@ A quadcopter autopilot example using the actor runtime with Webots simulator.
 - Altitude-hold hover with attitude stabilization
 - Horizontal position hold (GPS-based XY control)
 - Heading hold (yaw control with angle wrap-around)
-- Waypoint navigation (square demo route with heading changes)
+- Waypoint navigation (square demo route with altitude and heading changes)
 - Step 1: Motor actor (mixer, safety, watchdog)
 - Step 2: Separate altitude actor (altitude/rate split)
 - Step 3: Sensor actor (hardware abstraction)
@@ -106,8 +106,9 @@ graph TB
     ReadIMU --> Sensor
     Sensor --> IMUBus --> Estimator --> StateBus
 
-    StateBus --> Altitude --> ThrustBus --> Attitude
-    StateBus --> Waypoint --> TargetBus --> Position
+    StateBus --> Waypoint --> TargetBus --> Altitude --> ThrustBus --> Attitude
+    TargetBus --> Position
+    StateBus --> Altitude
     StateBus --> Position --> AngleSPBus --> Angle
     StateBus --> Angle --> RateSPBus --> Attitude --> TorqueBus --> Motor
 
@@ -154,16 +155,17 @@ graph TB
     IMUBus --> Estimator[Estimator Actor]
     Estimator --> StateBus([State Bus])
 
-    StateBus --> Altitude[Altitude Actor<br/>altitude PID]
     StateBus --> Waypoint[Waypoint Actor<br/>navigation]
+    StateBus --> Altitude[Altitude Actor<br/>altitude PID]
     StateBus --> Position[Position Actor<br/>position PD]
     StateBus --> Angle[Angle Actor<br/>angle PIDs]
     StateBus --> Attitude[Attitude Actor<br/>rate PIDs]
 
+    Waypoint --> TargetBus([Target Bus])
+    TargetBus --> Altitude
+    TargetBus --> Position
     Altitude --> ThrustBus([Thrust Bus])
     ThrustBus --> Attitude
-    Waypoint --> TargetBus([Target Bus])
-    TargetBus --> Position
     Position --> AngleSP([Angle Setpoint Bus])
     AngleSP --> Angle
     Angle --> RateSP([Rate Setpoint Bus])
@@ -286,8 +288,7 @@ Each `hive_step()` runs all ready actors once:
 
 - `TIME_STEP = 4` ms (250 Hz control rate)
 - `MOTOR_MAX_VELOCITY = 100.0` rad/s
-- Target altitude: 1.0 m
-- Waypoint tolerance: 0.15 m position, 0.1 rad heading, 0.1 m/s velocity
+- Waypoint tolerance: 0.15 m XY, 0.15 m altitude, 0.1 rad heading, 0.1 m/s velocity
 - Waypoint hover time: 200 ms before advancing
 
 ### Webots Device Names
@@ -425,8 +426,8 @@ graph LR
 |-------|-------|--------|----------|----------------|
 | **Sensor** | Hardware | IMU Bus | CRITICAL | Read IMU/GPS, timestamp, publish |
 | **Estimator** | IMU Bus | State Bus | CRITICAL | Sensor fusion, state estimate |
-| **Altitude** | State Bus | Thrust Bus | CRITICAL | Altitude PID (250Hz) |
-| **Waypoint** | State Bus | Target Bus | CRITICAL | Waypoint navigation, arrival detection, loops forever |
+| **Altitude** | State + Target Bus | Thrust Bus | CRITICAL | Altitude PID (250Hz) |
+| **Waypoint** | State Bus | Target Bus | CRITICAL | 3D waypoint navigation, loops forever |
 | **Position** | Target + State Bus | Angle Setpoint Bus | CRITICAL | Position PD (250Hz) |
 | **Angle** | Angle Setpoint + State | Rate Setpoint Bus | CRITICAL | Angle PIDs (250Hz) |
 | **Attitude** | State + Thrust + Rate SP | Torque Bus | CRITICAL | Rate PIDs (250Hz) |
@@ -542,53 +543,46 @@ State Bus ──► Position Actor ──► Angle Setpoint Bus ──► Angle 
 
 ### Step 7: Waypoint Actor ✓
 
-Add waypoint navigation.
+Add 3D waypoint navigation with altitude changes.
 
 **Before:**
 ```
+Altitude Actor uses hardcoded TARGET_ALTITUDE
 Position Actor uses hardcoded TARGET_X, TARGET_Y, TARGET_YAW
 ```
 
 **After:**
 ```
-State Bus ──► Waypoint Actor ──► Target Bus ──► Position Actor
-              (navigation)       (x, y, yaw)    (position PD)
+                              ┌──► Altitude Actor (reads z)
+State Bus ──► Waypoint Actor ──► Target Bus
+              (navigation)       (x, y, z, yaw)
+                              └──► Position Actor (reads x, y, yaw)
 ```
 
 **Implementation:**
-- Manages list of waypoints (x, y, yaw)
+- Manages list of 3D waypoints (x, y, z, yaw)
 - Publishes current target to target bus
+- Altitude actor reads target altitude from target bus
+- Position actor reads target XY and yaw from target bus
 - Monitors state bus for arrival detection
-- Arrival requires: position within tolerance, heading within tolerance, velocity below threshold
+- Arrival requires: XY position, altitude, heading within tolerance, velocity below threshold
 - Hovers briefly at each waypoint before advancing
 - Loops forever: returns to first waypoint after completing route
-- Demo route: square pattern with 90° turns at corners
+- Demo route: square pattern with altitude changes (1.0m → 1.5m → 1.0m → 2.0m → 1.0m)
 
 **Benefits:**
-- Decouples waypoint logic from position control
-- Position actor reads targets from bus (no hardcoded values)
+- Decouples waypoint logic from both position and altitude control
+- Both actors read targets from bus (no hardcoded values)
 - World-to-body frame transformation handles arbitrary headings
 - Easy to extend with mission planning
 
-### Step 8 (Future): Setpoint Actor
-
-Add altitude command generation actor.
-
-**Before:**
-```
-Altitude Actor has hardcoded target_altitude = 1.0m
-```
-
-**After:**
-```
-Setpoint Actor ──► Setpoint Bus ──► Altitude Actor
-(generates commands)                (tracks setpoint)
-```
+### Step 8 (Future): RC Input / Mode Switching
 
 **Future extensions:**
-- RC input handling
+- RC input handling (manual override)
 - Takeoff/landing sequences
-- Mode switching (hover, land, etc.)
+- Mode switching (hover, land, follow-me, etc.)
+- Dynamic waypoint updates via telemetry
 
 ---
 

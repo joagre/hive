@@ -79,14 +79,15 @@ typedef struct {
 
 #define ANGLE_SETPOINT_ZERO {.roll = 0.0f, .pitch = 0.0f, .yaw = 0.0f}
 
-// Position target from waypoint actor to position actor.
-// Position actor tracks these target positions.
+// Position target from waypoint actor to position and altitude actors.
+// Position actor tracks x, y, yaw. Altitude actor tracks z.
 typedef struct {
     float x, y;   // Target position (meters, world frame)
+    float z;      // Target altitude (meters)
     float yaw;    // Target heading (radians)
 } position_target_t;
 
-#define POSITION_TARGET_ZERO {.x = 0.0f, .y = 0.0f, .yaw = 0.0f}
+#define POSITION_TARGET_ZERO {.x = 0.0f, .y = 0.0f, .z = 1.0f, .yaw = 0.0f}
 
 // Torque command from attitude actor to motor actor.
 // Motor actor applies mixer to convert to motor commands.

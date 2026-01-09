@@ -4,18 +4,18 @@ Quadcopter hover example using hive actor runtime with Webots simulator.
 
 ## What it does
 
-Demonstrates waypoint navigation with a Crazyflie quadcopter using 8 actors:
+Demonstrates 3D waypoint navigation with a Crazyflie quadcopter using 8 actors:
 
 1. **Sensor actor** reads IMU/GPS from Webots, publishes to IMU bus
 2. **Estimator actor** sensor fusion, computes velocities, publishes to state bus
-3. **Altitude actor** runs altitude PID, publishes thrust commands
-4. **Waypoint actor** manages waypoint list, publishes targets to target bus
-5. **Position actor** runs position PD, publishes angle setpoints
+3. **Altitude actor** reads target altitude from target bus, runs altitude PID
+4. **Waypoint actor** manages 3D waypoint list (x, y, z, yaw), publishes to target bus
+5. **Position actor** reads target XY/yaw from target bus, runs position PD
 6. **Angle actor** runs angle PIDs, publishes rate setpoints
 7. **Attitude actor** runs rate PIDs, publishes torque commands
 8. **Motor actor** applies X-config mixer, enforces safety limits, writes to hardware
 
-The drone rises to 1.0m altitude and flies a square pattern, rotating to face each waypoint's heading.
+The drone flies a square pattern with altitude changes at each waypoint.
 
 ## Prerequisites
 
@@ -57,8 +57,10 @@ Eight actors connected via buses:
 graph TB
     Sensor[Sensor] --> IMUBus([IMU Bus]) --> Estimator[Estimator] --> StateBus([State Bus])
 
-    StateBus --> Altitude[Altitude] --> ThrustBus([Thrust Bus]) --> Attitude[Attitude]
-    StateBus --> Waypoint[Waypoint] --> TargetBus([Target Bus]) --> Position[Position]
+    StateBus --> Waypoint[Waypoint] --> TargetBus([Target Bus])
+    TargetBus --> Altitude[Altitude] --> ThrustBus([Thrust Bus]) --> Attitude[Attitude]
+    TargetBus --> Position[Position]
+    StateBus --> Altitude
     StateBus --> Position --> AngleSP([Angle SP Bus]) --> Angle[Angle]
     StateBus --> Angle --> RateSP([Rate SP Bus]) --> Attitude
     Attitude --> TorqueBus([Torque Bus]) --> Motor[Motor]
@@ -111,19 +113,19 @@ to handle the ±π wrap-around correctly.
 
 ### Waypoint Navigation
 
-The waypoint actor manages a list of waypoints and publishes the current target
-to the target bus. The position actor reads targets from the bus instead of
-using hardcoded constants.
+The waypoint actor manages a list of 3D waypoints and publishes the current target
+to the target bus. Both altitude and position actors read from the target bus.
 
-**Demo route (square pattern):**
-1. (0, 0) heading 0° (north)
-2. (1, 0) heading 0° (north)
-3. (1, 1) heading 90° (east)
-4. (0, 1) heading 180° (south)
-5. (0, 0) heading 0° (north) - return
+**Demo route (square pattern with altitude changes):**
+1. (0, 0, 1.0m) heading 0° - start at 1m
+2. (1, 0, 1.5m) heading 0° - rise to 1.5m
+3. (1, 1, 1.0m) heading 90° - drop to 1m, face east
+4. (0, 1, 2.0m) heading 180° - rise to 2m, face south
+5. (0, 0, 1.0m) heading 0° - return to 1m
 
 **Arrival detection:** The drone must satisfy all conditions before advancing:
-- Position within 0.15m of waypoint
+- XY position within 0.15m of waypoint
+- Altitude within 0.15m of target
 - Heading within 0.1 rad (~6°) of target
 - Velocity below 0.1 m/s (nearly stopped)
 - Hover at waypoint for 200ms

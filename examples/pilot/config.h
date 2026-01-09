@@ -79,8 +79,7 @@
 // Control parameters (tuned for Webots Crazyflie)
 // ----------------------------------------------------------------------------
 
-// Altitude control
-#define TARGET_ALTITUDE  1.0f    // meters
+// Altitude control (target altitude comes from waypoint actor)
 #define BASE_THRUST      0.553f  // Hover thrust
 
 // Altitude PID gains (position error → thrust correction)
@@ -95,7 +94,8 @@
 #define VVEL_DAMPING_GAIN  0.15f
 
 // Waypoint navigation
-#define WAYPOINT_TOLERANCE_XY   0.15f  // meters - arrival radius
+#define WAYPOINT_TOLERANCE_XY   0.15f  // meters - horizontal arrival radius
+#define WAYPOINT_TOLERANCE_Z    0.15f  // meters - altitude tolerance
 #define WAYPOINT_TOLERANCE_YAW  0.1f   // radians (~6 degrees)
 #define WAYPOINT_TOLERANCE_VEL  0.1f   // m/s - must be nearly stopped
 #define WAYPOINT_HOVER_TICKS    50     // iterations to hover before advancing (~200ms)

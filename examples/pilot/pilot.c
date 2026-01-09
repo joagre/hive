@@ -159,7 +159,7 @@ int main(void) {
     // Initialize actors
     sensor_actor_init(s_imu_bus, platform_read_imu);
     estimator_actor_init(s_imu_bus, s_state_bus);
-    altitude_actor_init(s_state_bus, s_thrust_bus);
+    altitude_actor_init(s_state_bus, s_thrust_bus, s_target_bus);
     waypoint_actor_init(s_state_bus, s_target_bus);
     position_actor_init(s_state_bus, s_angle_setpoint_bus, s_target_bus);
     angle_actor_init(s_state_bus, s_angle_setpoint_bus, s_rate_setpoint_bus);
