@@ -1,0 +1,9 @@
+Go through all terminalogy one more time to ensure that it is best practice and element of least surprise. The audience is Embedded C developers.
+
+Make sure that the top-level SPEC.md is in sync with the code base. Then make sure that README.md and CLAUDE.md and man pages is in sync with SPEC.md.
+
+Do a code review and ensure that I have  used best practices and element of least surprise for embedded C developers. That everything is consistent. Put copied code into helper functions or macros. Duplicated code is hell.
+
+Make sure that SPEC.md is written so that a picky embedded C engineer would review it favourably.
+
+Can you find any other situations where the user is required to use boiler plate code?

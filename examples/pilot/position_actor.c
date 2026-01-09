@@ -51,32 +51,26 @@ void position_actor(void *arg) {
         }
 
         if (BUS_READ(s_state_bus, &state)) {
-            float pitch_cmd = 0.0f;
-            float roll_cmd = 0.0f;
+            // Simple PD controller in world frame
+            float x_error = target.x - state.x;
+            float y_error = target.y - state.y;
 
-            // Only enable position control after reaching stable hover
-            if (state.altitude > 0.8f) {
-                // Simple PD controller in world frame
-                float x_error = target.x - state.x;
-                float y_error = target.y - state.y;
+            // Desired acceleration in world frame
+            float accel_x = POS_KP * x_error - POS_KD * state.x_velocity;
+            float accel_y = POS_KP * y_error - POS_KD * state.y_velocity;
 
-                // Desired acceleration in world frame
-                float accel_x = POS_KP * x_error - POS_KD * state.x_velocity;
-                float accel_y = POS_KP * y_error - POS_KD * state.y_velocity;
+            // Rotate from world frame to body frame based on current yaw
+            // Body X (forward) = World X * cos(yaw) + World Y * sin(yaw)
+            // Body Y (right)   = -World X * sin(yaw) + World Y * cos(yaw)
+            float cos_yaw = cosf(state.yaw);
+            float sin_yaw = sinf(state.yaw);
 
-                // Rotate from world frame to body frame based on current yaw
-                // Body X (forward) = World X * cos(yaw) + World Y * sin(yaw)
-                // Body Y (right)   = -World X * sin(yaw) + World Y * cos(yaw)
-                float cos_yaw = cosf(state.yaw);
-                float sin_yaw = sinf(state.yaw);
+            float pitch_cmd = accel_x * cos_yaw + accel_y * sin_yaw;
+            float roll_cmd  = -accel_x * sin_yaw + accel_y * cos_yaw;
 
-                pitch_cmd = accel_x * cos_yaw + accel_y * sin_yaw;
-                roll_cmd  = -accel_x * sin_yaw + accel_y * cos_yaw;
-
-                // Clamp to maximum tilt angle for safety
-                pitch_cmd = CLAMPF(pitch_cmd, -MAX_TILT_ANGLE, MAX_TILT_ANGLE);
-                roll_cmd  = CLAMPF(roll_cmd,  -MAX_TILT_ANGLE, MAX_TILT_ANGLE);
-            }
+            // Clamp to maximum tilt angle for safety
+            pitch_cmd = CLAMPF(pitch_cmd, -MAX_TILT_ANGLE, MAX_TILT_ANGLE);
+            roll_cmd  = CLAMPF(roll_cmd,  -MAX_TILT_ANGLE, MAX_TILT_ANGLE);
 
             // Sign conversion for Webots Crazyflie (matching Bitcraze):
             // - Roll is negated: positive body Y error → negative roll → +Y body accel

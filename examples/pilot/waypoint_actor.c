@@ -18,12 +18,12 @@ typedef struct {
     float yaw;      // Heading (radians)
 } waypoint_t;
 
-// Demo waypoint route: square pattern with altitude changes
+// Demo waypoint route: square pattern with gentle altitude changes
 static const waypoint_t waypoints[] = {
     {0.0f, 0.0f, 1.0f, 0.0f},              // Start: origin, 1.0m
-    {1.0f, 0.0f, 1.5f, 0.0f},              // Waypoint 1: +X, rise to 1.5m
-    {1.0f, 1.0f, 1.0f, M_PI_F / 2.0f},     // Waypoint 2: corner, drop to 1.0m, face east
-    {0.0f, 1.0f, 2.0f, M_PI_F},            // Waypoint 3: -X, rise to 2.0m, face south
+    {1.0f, 0.0f, 1.2f, 0.0f},              // Waypoint 1: +X, rise to 1.2m
+    {1.0f, 1.0f, 1.4f, M_PI_F / 2.0f},     // Waypoint 2: corner, rise to 1.4m, face east
+    {0.0f, 1.0f, 1.2f, M_PI_F},            // Waypoint 3: -X, drop to 1.2m, face south
     {0.0f, 0.0f, 1.0f, 0.0f},              // Return: origin, 1.0m, face north
 };
 

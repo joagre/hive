@@ -1,0 +1,65 @@
+Today we have:
+
+- `rt_ipc_send(to, data, len, mode)` - Send message
+- `rt_ipc_recv(msg, timeout)` - Receive message
+- `rt_ipc_release(msg)` - Release synced message
+
+The mode can be ASYNC and SYNC. The SYNC mode provides back preassure but makes it easy to fuck up. Furthermore we need to use sync buffers internally to avoid UAFs. Inplementeonig a RPC mechanism on top of SYNC is sort of hard.
+
+What if we only have ASYNC messages (implicit) and these two primitives instead:
+
+Send function:
+
+rt_status rt_ipc_send(actor_id to, rt_message_class class, rt_message_tag *tag, const void *data, size_t len);
+
+A message sent to the receiver is no longer just data but 4 bytes + data
+|class (3 bits) | tag (61 bits) | data (len) |
+
+rt_message_class is an enum:
+  RT_MESSAGE_CLASS_CAST | RT_MESSAGE_CLASS_CALL = 1 | RT_MESSAGE_CLASS_REPLY  | RT_MESSAGE_CLASS_TIMER | RT_MESSAGE_CLASS_WILDCARD
+
+rt_message_tag is an uint64_t
+  If tag == RT_MESSAGE_TAG_GENERATE, the runtime generates a unique 60 bits unsigned int and sets bit 61 to 1, and returns it via the tag parameter
+  If tag == RT_MESSAGE_TAG_NONE (0xFFFFFFE1), no taq
+  If tag != 0, it is set by the developer and must be a 60 bits unsigned int and bit 61 must be 0
+
+ListenSelectove receive function:
+
+rt_status rt_ipc_sel_recv(actor_id *sender_id, rt_message *class, rt_message *tag, rt_message *msg, int32_t timeout_ms);
+
+With this design we can support selective recieve ala Erlang.
+
+If sender_id == RT_SENDER_WILDCARD (0xFFFFFFFD) -> return message from all actors
+If class == RT_MESSAGE_CLASS_WILDCARD, return message of any class
+If tag == RT_MESSAGE_TAG_WILDCARD (0xFFFFFFF1), return message with any tag
+
+Filter on sender_id, class and tag if they are set
+
+Suggestion:
+
+With the two primitives above we can implement these convenience API functions:
+
+rt_status rt_ipc_cast(actor_id to, const void *data, size_t len);
+  rt_message_tag tag = RT_MESSAGE_TAG_NONE;
+  Call rt_ipc_canonical_send(to, RT_MESSAGE_CLASS_CAST, &tag, data, len);
+  assert(tag == RT_MESSAGE_TAG_NONE);
+
+rt_status rt_ipc_recv(actor_id *sender_id, rt_message *class, rt_message *tag, rt_message *msg, int32_t timeout_ms);
+
+
+
+
+Call rt_ipc_recv(&from, &class, &tag, reply_msg, timeout_ms);
+
+
+rt_status rt_ipc_call(actor_id to, const void *data, size_t len, rt_message *reply_msg, int32_t timeout_ms);
+  actor_id from = to;
+  rt_message_tag tag = RT_MESSAGE_TAG_GENERATE;
+  Call rt_ipc_send(to, RT_MESSAGE_CLASS_CALL, &tag, data, len);
+  assert(tag != RT_MESSAGE_TAG_GENERATE);
+  rt_message_class class = RT_MESSAGE_REPLY;
+
+
+  Call rt_ipc_recv_reply(&from, &class, &tag, reply_msg, timeout_ms);
+  assert(from == to);
+  assert(class == RT_MESSAGE_REPLY);

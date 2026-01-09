@@ -1,0 +1,256 @@
+
+[4mACRT_BUS[24m(3)                                 Actor Runtime Manual                                 [4mACRT_BUS[24m(3)
+
+[1mNAME[0m
+       acrt_bus_create,   acrt_bus_destroy,   acrt_bus_publish,   acrt_bus_subscribe,  acrt_bus_unsubscribe,
+       acrt_bus_read, acrt_bus_read_wait, acrt_bus_entry_count - publish-subscribe bus
+
+[1mSYNOPSIS[0m
+       [1m#include <acrt_bus.h>[0m
+
+       [1macrt_status acrt_bus_create(const acrt_bus_config *[4m[22mcfg[24m[1m, bus_id *[4m[22mout[24m[1m);[0m
+       [1macrt_status acrt_bus_destroy(bus_id [4m[22mbus[24m[1m);[0m
+       [1macrt_status acrt_bus_publish(bus_id [4m[22mbus[24m[1m, const void *[4m[22mdata[24m[1m, size_t [4m[22mlen[24m[1m);[0m
+       [1macrt_status acrt_bus_subscribe(bus_id [4m[22mbus[24m[1m);[0m
+       [1macrt_status acrt_bus_unsubscribe(bus_id [4m[22mbus[24m[1m);[0m
+       [1macrt_status acrt_bus_read(bus_id [4m[22mbus[24m[1m, void *[4m[22mbuf[24m[1m, size_t [4m[22mmax_len[24m[1m, size_t *[4m[22mbytes_read[24m[1m);[0m
+       [1macrt_status acrt_bus_read_wait(bus_id [4m[22mbus[24m[1m, void *[4m[22mbuf[24m[1m, size_t [4m[22mmax_len[24m[1m,[0m
+                                      [1msize_t *[4m[22mbytes_read[24m[1m, int32_t [4m[22mtimeout_ms[24m[1m);[0m
+       [1msize_t acrt_bus_entry_count(bus_id [4m[22mbus[24m[1m);[0m
+
+[1mDESCRIPTION[0m
+       These functions implement a publish-subscribe message bus for  broadcasting  data  to  multiple  sub‐
+       scribers. Unlike point-to-point IPC, bus entries can be read by multiple actors independently.
+
+   [1mBus Configuration[0m
+       Buses are created with a configuration structure:
+
+       typedef struct {
+           uint8_t  max_subscribers;     /* 1..32 concurrent subscribers */
+           uint8_t  consume_after_reads; /* remove after N reads, 0 = keep */
+           uint32_t max_age_ms;          /* expire after ms, 0 = no expiry */
+           size_t   max_entries;         /* ring buffer capacity */
+           size_t   max_entry_size;      /* max payload bytes per entry */
+       } acrt_bus_config;
+
+       #define ACRT_BUS_CONFIG_DEFAULT { \
+           .max_subscribers = 32, \
+           .consume_after_reads = 0, \
+           .max_age_ms = 0, \
+           .max_entries = 16, \
+           .max_entry_size = 256 \
+       }
+
+   [1mCreating and Destroying Buses[0m
+       [1macrt_bus_create[22m() creates a new bus with the specified configuration. The bus ID is stored in [4mout[24m.
+
+       [1macrt_bus_destroy[22m()  destroys a bus. This fails if any subscribers remain; all actors must unsubscribe
+       first.
+
+   [1mPublishing Data[0m
+       [1macrt_bus_publish[22m() publishes [4mlen[24m bytes from [4mdata[24m to the bus. The data  is  copied  to  the  bus  ring
+       buffer. All current subscribers can read this entry independently.
+
+       When  the  ring  buffer is full, the oldest entry is [1mautomatically evicted [22mto make room. This differs
+       from IPC, which returns [1mACRT_ERR_NOMEM [22minstead.
+
+   [1mSubscribing and Unsubscribing[0m
+       [1macrt_bus_subscribe[22m() subscribes the calling actor to the bus. New subscribers start reading from  the
+       current head position (they do not see entries published before subscribing).
+
+       [1macrt_bus_unsubscribe[22m() removes the calling actor's subscription.
+
+   [1mReading Data[0m
+       [1macrt_bus_read[22m()  reads  the next unread entry into [4mbuf[24m.  At most [4mmax_len[24m bytes are copied. The actual
+       number of bytes read is stored in [4mbytes_read[24m.  Each subscriber maintains independent  read  position;
+       reading does not affect other subscribers.
+
+       [1macrt_bus_read_wait[22m() is the blocking variant. The [4mtimeout_ms[24m parameter controls blocking:
+
+       [1m0      [22mReturn immediately with [1mACRT_ERR_WOULDBLOCK [22mif no data.
+
+       [1mpositive value[0m
+              Block up to the specified milliseconds.
+
+       [1m-1     [22mBlock forever until data is available.
+
+   [1mRetention Policies[0m
+       [1mconsume_after_reads[0m
+              When  non-zero,  entries  are automatically removed after being read by this many subscribers.
+              Use for work-queue patterns where each entry should be processed once by any subscriber.
+
+       [1mmax_age_ms[0m
+              When non-zero, entries older than this are automatically expired. Use for time-sensitive  data
+              like sensor readings.
+
+   [1mQuerying Bus State[0m
+       [1macrt_bus_entry_count[22m() returns the number of valid entries currently in the bus ring buffer.
+
+[1mRETURN VALUE[0m
+       Functions returning [4macrt_status[24m indicate success when [4mstatus.code[24m is [1mACRT_OK[22m.
+
+       [1macrt_bus_entry_count[22m() returns the entry count, or 0 if the bus is invalid.
+
+[1mERRORS[0m
+       [1mACRT_ERR_INVALID[0m
+              Invalid bus ID, NULL arguments, not called from actor context, not subscribed (for read/unsub‐
+              scribe), already subscribed (for subscribe), or bus has active subscribers (for destroy).
+
+       [1mACRT_ERR_NOMEM[0m
+              Message data pool exhausted (for publish) or subscriber table full (for subscribe).
+
+       [1mACRT_ERR_WOULDBLOCK[0m
+              No data available and timeout was 0 (for [1macrt_bus_read[22m()).
+
+       [1mACRT_ERR_TIMEOUT[0m
+              No data received within timeout period (for [1macrt_bus_read_wait[22m()).
+
+[1mNOTES[0m
+   [1mBus vs IPC[0m
+       Use bus for:
+
+       • One-to-many communication (broadcast)
+
+       • Sensor data streams (multiple consumers)
+
+       • Event notification (multiple listeners)
+
+       • Work queues (with consume_after_reads=1)
+
+       Use IPC for:
+
+       • Point-to-point communication
+
+       • Request/reply patterns
+
+       • Guaranteed delivery (IPC never drops)
+
+   [1mRing Buffer Eviction[0m
+       When  the ring buffer is full, [1macrt_bus_publish[22m() automatically evicts the oldest entry. This is [1mdif‐[0m
+       [1mferent from IPC [22mwhich returns [1mACRT_ERR_NOMEM [22mand never drops messages. Design subscribers to keep  up
+       with publishers; slow readers will miss messages.
+
+   [1mSubscriber Limit[0m
+       Maximum  32 subscribers per bus (limited by uint32_t bitmask used internally for tracking reads). The
+       actual limit is min(32, ACRT_MAX_BUS_SUBSCRIBERS).
+
+   [1mNew Subscriber Read Position[0m
+       When an actor subscribes, its read position starts at the current head. It will not see entries  pub‐
+       lished before subscribing. To capture all entries, subscribe before any publishing begins.
+
+   [1mAutomatic Cleanup[0m
+       When an actor dies, all its bus subscriptions are automatically removed. When a bus is destroyed, all
+       its entries are freed.
+
+   [1mPool Exhaustion[0m
+       Bus  shares  the message data pool with IPC (ACRT_MESSAGE_DATA_POOL_SIZE). Heavy bus usage can starve
+       IPC and vice versa. Size pools appropriately for your application's communication patterns.
+
+   [1mEmbedded Considerations[0m
+       • Zero heap allocation (static ring buffers and subscriber arrays)
+
+       • O(1) publish, O(n) read scan (n = entry count)
+
+       • Deterministic memory: ring buffer size × entry size per bus
+
+       • Wake-on-publish: blocked readers resume immediately when data arrives
+
+       • Microsecond timestamps for max_age_ms (gettimeofday on Linux, hardware timer on STM32)
+
+[1mEXAMPLE[0m
+   [1mSensor Broadcast[0m
+       #include <acrt_runtime.h>
+       #include <acrt_bus.h>
+       #include <stdio.h>
+
+       typedef struct {
+           float temperature;
+           float humidity;
+       } sensor_data;
+
+       bus_id sensor_bus;
+
+       void sensor_publisher(void *arg) {
+           (void)arg;
+           sensor_data data = {25.0f, 60.0f};
+
+           for (int i = 0; i < 5; i++) {
+               data.temperature += 0.5f;
+               acrt_bus_publish(sensor_bus, &data, sizeof(data));
+               printf("Published: temp=%.1f, humidity=%.1f\n",
+                      data.temperature, data.humidity);
+           }
+
+           acrt_exit();
+       }
+
+       void display_actor(void *arg) {
+           (void)arg;
+           acrt_bus_subscribe(sensor_bus);
+
+           for (int i = 0; i < 5; i++) {
+               sensor_data data;
+               size_t len;
+               acrt_status s = acrt_bus_read_wait(sensor_bus, &data, sizeof(data),
+                                                  &len, 5000);
+               if (ACRT_FAILED(s)) {
+                   printf("Read failed: %s\n", ACRT_ERR_STR(s));
+                   break;
+               }
+               printf("Display: temp=%.1f\n", data.temperature);
+           }
+
+           acrt_bus_unsubscribe(sensor_bus);
+           acrt_exit();
+       }
+
+       void logger_actor(void *arg) {
+           (void)arg;
+           acrt_bus_subscribe(sensor_bus);
+
+           for (int i = 0; i < 5; i++) {
+               sensor_data data;
+               size_t len;
+               acrt_status s = acrt_bus_read_wait(sensor_bus, &data, sizeof(data),
+                                                  &len, 5000);
+               if (ACRT_FAILED(s)) break;
+               printf("Logger: recorded temp=%.1f at tick %d\n",
+                      data.temperature, i);
+           }
+
+           acrt_bus_unsubscribe(sensor_bus);
+           acrt_exit();
+       }
+
+       int main(void) {
+           acrt_init();
+
+           /* Create bus with 100ms expiry */
+           acrt_bus_config cfg = ACRT_BUS_CONFIG_DEFAULT;
+           cfg.max_age_ms = 100;
+           acrt_bus_create(&cfg, &sensor_bus);
+
+           actor_id pub, disp, log;
+           acrt_spawn(display_actor, NULL, &disp);
+           acrt_spawn(logger_actor, NULL, &log);
+           acrt_spawn(sensor_publisher, NULL, &pub);
+
+           acrt_run();
+           acrt_bus_destroy(sensor_bus);
+           acrt_cleanup();
+           return 0;
+       }
+
+   [1mWork Queue Pattern[0m
+       /* Use consume_after_reads=1 for work queue semantics */
+       acrt_bus_config cfg = ACRT_BUS_CONFIG_DEFAULT;
+       cfg.consume_after_reads = 1;  /* Entry removed after first read */
+       cfg.max_entries = 64;         /* Queue depth */
+       acrt_bus_create(&cfg, &work_queue);
+
+       /* Multiple workers subscribe; each job processed exactly once */
+
+[1mSEE ALSO[0m
+       [1macrt_ipc[22m(3), [1macrt_spawn[22m(3), [1macrt_types[22m(3)
+
+ACRT 1.0                                        January 2025                                     [4mACRT_BUS[24m(3)
