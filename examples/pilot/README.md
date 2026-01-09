@@ -4,7 +4,7 @@ Quadcopter hover example using hive actor runtime with Webots simulator.
 
 ## What it does
 
-Demonstrates altitude-hold and position-hold control with a Crazyflie quadcopter using 7 actors:
+Demonstrates altitude-hold, position-hold, and heading-hold control with a Crazyflie quadcopter using 7 actors:
 
 1. **Sensor actor** reads IMU/GPS from Webots, publishes to IMU bus
 2. **Estimator actor** sensor fusion, computes velocities, publishes to state bus
@@ -14,7 +14,7 @@ Demonstrates altitude-hold and position-hold control with a Crazyflie quadcopter
 6. **Attitude actor** runs rate PIDs, publishes torque commands
 7. **Motor actor** applies X-config mixer, enforces safety limits, writes to hardware
 
-The drone rises to 1.0m altitude and holds XY position.
+The drone rises to 1.0m altitude and holds XY position and heading.
 
 ## Prerequisites
 
@@ -91,7 +91,8 @@ order to ensure each actor sees fresh data from upstream actors in the same step
 |------------|------|------|-------|---------|
 | Altitude   | 0.3  | 0.05 | 0     | Hold 1.0m height (PI + velocity damping) |
 | Position   | 0.2  | -    | 0.1   | Hold XY position (PD, max tilt 0.35 rad) |
-| Angle      | 4.0  | 0    | 0     | Level attitude |
+| Angle      | 4.0  | 0    | 0     | Level attitude (roll/pitch) |
+| Yaw angle  | 4.0  | 0    | 0     | Heading hold (uses pid_update_angle for wrap-around) |
 | Roll rate  | 0.02 | 0    | 0.001 | Stabilize roll |
 | Pitch rate | 0.02 | 0    | 0.001 | Stabilize pitch |
 | Yaw rate   | 0.02 | 0    | 0.001 | Stabilize yaw |
@@ -100,7 +101,9 @@ Altitude control uses measured vertical velocity for damping (Kv=0.15) instead
 of differentiating position error. This provides smoother response with less noise.
 
 Position control uses simple PD with velocity damping. Sign conventions match
-the Bitcraze Webots controller.
+the Bitcraze Webots controller. Heading hold is achieved via yaw angle setpoint
+published to the angle actor, which uses `pid_update_angle()` to handle the
+±π wrap-around correctly.
 
 ### Motor Mixer (in motor_actor, X Configuration)
 
