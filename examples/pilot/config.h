@@ -11,6 +11,10 @@
 
 #define CLAMPF(x, lo, hi) ((x) < (lo) ? (lo) : ((x) > (hi) ? (hi) : (x)))
 
+// Low-pass filter: LPF(state, new_sample, alpha)
+// alpha=0: instant response, alpha=1: no response
+#define LPF(state, sample, alpha) ((alpha) * (state) + (1.0f - (alpha)) * (sample))
+
 #define RAD_TO_DEG  57.2957795f  // 180/π
 #define DEG_TO_RAD  0.0174533f   // π/180
 
@@ -70,11 +74,11 @@
 #define ANGLE_PID_OMAX 2.0f  // Max rate setpoint (rad/s)
 
 // Rate PID gains (rate error → torque)
-#define RATE_PID_KP   0.02f
-#define RATE_PID_KI   0.0f
-#define RATE_PID_KD   0.001f
-#define ROLL_PID_OMAX   0.1f
-#define PITCH_PID_OMAX  0.1f
-#define YAW_PID_OMAX    0.15f
+#define RATE_PID_KP          0.02f
+#define RATE_PID_KI          0.0f
+#define RATE_PID_KD          0.001f
+#define RATE_ROLL_PID_OMAX   0.1f
+#define RATE_PITCH_PID_OMAX  0.1f
+#define RATE_YAW_PID_OMAX    0.15f
 
 #endif // PILOT_CONFIG_H

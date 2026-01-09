@@ -11,6 +11,10 @@
 // Sets default limits: integral_max=0.5, output_max=1.0
 void pid_init(pid_state_t *pid, float kp, float ki, float kd);
 
+// Initialize a PID controller with all parameters.
+void pid_init_full(pid_state_t *pid, float kp, float ki, float kd,
+                   float integral_max, float output_max);
+
 // Reset PID state (integral and previous error).
 void pid_reset(pid_state_t *pid);
 

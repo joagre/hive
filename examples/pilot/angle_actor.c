@@ -24,13 +24,9 @@ void angle_actor(void *arg) {
 
     pid_state_t roll_pid, pitch_pid, yaw_pid;
 
-    pid_init(&roll_pid,  ANGLE_PID_KP, ANGLE_PID_KI, ANGLE_PID_KD);
-    pid_init(&pitch_pid, ANGLE_PID_KP, ANGLE_PID_KI, ANGLE_PID_KD);
-    pid_init(&yaw_pid,   ANGLE_PID_KP, ANGLE_PID_KI, ANGLE_PID_KD);
-
-    roll_pid.output_max  = ANGLE_PID_OMAX;
-    pitch_pid.output_max = ANGLE_PID_OMAX;
-    yaw_pid.output_max   = ANGLE_PID_OMAX;
+    pid_init_full(&roll_pid,  ANGLE_PID_KP, ANGLE_PID_KI, ANGLE_PID_KD, 0.5f, ANGLE_PID_OMAX);
+    pid_init_full(&pitch_pid, ANGLE_PID_KP, ANGLE_PID_KI, ANGLE_PID_KD, 0.5f, ANGLE_PID_OMAX);
+    pid_init_full(&yaw_pid,   ANGLE_PID_KP, ANGLE_PID_KI, ANGLE_PID_KD, 0.5f, ANGLE_PID_OMAX);
 
     // Target angles for hover (level flight)
     const float target_roll  = 0.0f;

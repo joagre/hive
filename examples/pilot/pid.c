@@ -4,13 +4,18 @@
 #include "config.h"
 
 void pid_init(pid_state_t *pid, float kp, float ki, float kd) {
+    pid_init_full(pid, kp, ki, kd, 0.5f, 1.0f);
+}
+
+void pid_init_full(pid_state_t *pid, float kp, float ki, float kd,
+                   float integral_max, float output_max) {
     pid->kp = kp;
     pid->ki = ki;
     pid->kd = kd;
     pid->integral = 0.0f;
     pid->prev_error = 0.0f;
-    pid->integral_max = 0.5f;
-    pid->output_max = 1.0f;
+    pid->integral_max = integral_max;
+    pid->output_max = output_max;
 }
 
 void pid_reset(pid_state_t *pid) {

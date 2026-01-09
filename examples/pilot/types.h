@@ -8,11 +8,18 @@
 // Raw sensor data from IMU and GPS.
 // On real hardware, this would be populated from SPI/I2C sensor drivers.
 // For Webots, inertial_unit provides fused attitude (not truly raw).
+// Note: gyro_x/y/z are body-frame rates, mapped to roll/pitch/yaw in estimator.
 typedef struct {
     float roll, pitch, yaw;        // Euler angles in radians
-    float gyro_x, gyro_y, gyro_z;  // Angular rates in rad/s (body frame)
+    float gyro_x, gyro_y, gyro_z;  // Angular rates in rad/s (body frame: x=roll, y=pitch, z=yaw)
     float altitude;                 // Height above ground in meters
 } imu_data_t;
+
+#define IMU_DATA_ZERO { \
+    .roll = 0.0f, .pitch = 0.0f, .yaw = 0.0f, \
+    .gyro_x = 0.0f, .gyro_y = 0.0f, .gyro_z = 0.0f, \
+    .altitude = 0.0f \
+}
 
 // State estimate from estimator actor.
 // Controllers use this instead of raw sensor data.
@@ -45,6 +52,8 @@ typedef struct {
 typedef struct {
     float thrust;  // Normalized thrust (0.0 to 1.0)
 } thrust_cmd_t;
+
+#define THRUST_CMD_ZERO {.thrust = 0.0f}
 
 // Rate setpoint from angle actor to attitude actor.
 // Attitude actor tracks these angular rates.

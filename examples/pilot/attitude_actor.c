@@ -33,13 +33,9 @@ void attitude_actor(void *arg) {
 
     pid_state_t roll_pid, pitch_pid, yaw_pid;
 
-    pid_init(&roll_pid,  RATE_PID_KP, RATE_PID_KI, RATE_PID_KD);
-    pid_init(&pitch_pid, RATE_PID_KP, RATE_PID_KI, RATE_PID_KD);
-    pid_init(&yaw_pid,   RATE_PID_KP, RATE_PID_KI, RATE_PID_KD);
-
-    roll_pid.output_max  = ROLL_PID_OMAX;
-    pitch_pid.output_max = PITCH_PID_OMAX;
-    yaw_pid.output_max   = YAW_PID_OMAX;
+    pid_init_full(&roll_pid,  RATE_PID_KP, RATE_PID_KI, RATE_PID_KD, 0.5f, RATE_ROLL_PID_OMAX);
+    pid_init_full(&pitch_pid, RATE_PID_KP, RATE_PID_KI, RATE_PID_KD, 0.5f, RATE_PITCH_PID_OMAX);
+    pid_init_full(&yaw_pid,   RATE_PID_KP, RATE_PID_KI, RATE_PID_KD, 0.5f, RATE_YAW_PID_OMAX);
 
     float thrust = 0.0f;
     rate_setpoint_t rate_sp = RATE_SETPOINT_ZERO;
@@ -60,6 +56,9 @@ void attitude_actor(void *arg) {
         }
 
         if (hive_bus_read(s_state_bus, &state, sizeof(state), &len).code == HIVE_OK) {
+            // Sign convention: Webots gyro positive = body rotating CCW when viewed from axis.
+            // Our mixer expects positive torque = body rotating CW when viewed from axis.
+            // Negate the measured rate to match sign conventions.
             torque_cmd_t cmd;
             cmd.thrust = thrust;
             cmd.roll   = pid_update(&roll_pid,  rate_sp.roll,  -state.roll_rate,  TIME_STEP_S);

@@ -44,6 +44,18 @@
 #include <stdio.h>
 
 // ============================================================================
+// HELPER MACROS
+// ============================================================================
+
+// Spawn an actor at CRITICAL priority. Assigns result to 'id'.
+#define SPAWN_CRITICAL_ACTOR(func, name_str, id) do { \
+    actor_config _cfg = HIVE_ACTOR_CONFIG_DEFAULT; \
+    _cfg.priority = HIVE_PRIORITY_CRITICAL; \
+    _cfg.name = name_str; \
+    hive_spawn_ex(func, NULL, &_cfg, &id); \
+} while (0)
+
+// ============================================================================
 // BUSES
 // ============================================================================
 
@@ -147,35 +159,12 @@ int main(void) {
     // This ensures each actor sees fresh data from upstream actors in same step.
     actor_id sensor, estimator, altitude, angle, attitude, motor;
 
-    actor_config cfg_sensor = HIVE_ACTOR_CONFIG_DEFAULT;
-    cfg_sensor.priority = HIVE_PRIORITY_CRITICAL;
-    cfg_sensor.name = "sensor";
-    hive_spawn_ex(sensor_actor, NULL, &cfg_sensor, &sensor);
-
-    actor_config cfg_estimator = HIVE_ACTOR_CONFIG_DEFAULT;
-    cfg_estimator.priority = HIVE_PRIORITY_CRITICAL;
-    cfg_estimator.name = "estimator";
-    hive_spawn_ex(estimator_actor, NULL, &cfg_estimator, &estimator);
-
-    actor_config cfg_altitude = HIVE_ACTOR_CONFIG_DEFAULT;
-    cfg_altitude.priority = HIVE_PRIORITY_CRITICAL;
-    cfg_altitude.name = "altitude";
-    hive_spawn_ex(altitude_actor, NULL, &cfg_altitude, &altitude);
-
-    actor_config cfg_angle = HIVE_ACTOR_CONFIG_DEFAULT;
-    cfg_angle.priority = HIVE_PRIORITY_CRITICAL;
-    cfg_angle.name = "angle";
-    hive_spawn_ex(angle_actor, NULL, &cfg_angle, &angle);
-
-    actor_config cfg_attitude = HIVE_ACTOR_CONFIG_DEFAULT;
-    cfg_attitude.priority = HIVE_PRIORITY_CRITICAL;
-    cfg_attitude.name = "attitude";
-    hive_spawn_ex(attitude_actor, NULL, &cfg_attitude, &attitude);
-
-    actor_config cfg_motor = HIVE_ACTOR_CONFIG_DEFAULT;
-    cfg_motor.priority = HIVE_PRIORITY_CRITICAL;
-    cfg_motor.name = "motor";
-    hive_spawn_ex(motor_actor, NULL, &cfg_motor, &motor);
+    SPAWN_CRITICAL_ACTOR(sensor_actor,    "sensor",    sensor);
+    SPAWN_CRITICAL_ACTOR(estimator_actor, "estimator", estimator);
+    SPAWN_CRITICAL_ACTOR(altitude_actor,  "altitude",  altitude);
+    SPAWN_CRITICAL_ACTOR(angle_actor,     "angle",     angle);
+    SPAWN_CRITICAL_ACTOR(attitude_actor,  "attitude",  attitude);
+    SPAWN_CRITICAL_ACTOR(motor_actor,     "motor",     motor);
 
     printf("Pilot: 6 actors (sensor, estimator, altitude, angle, attitude, motor)\n");
 
