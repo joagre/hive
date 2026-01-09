@@ -82,9 +82,9 @@ void waypoint_actor(void *arg) {
 
             if (arrived) {
                 hover_ticks++;
-                // Advance after hovering at waypoint
-                if (hover_ticks >= WAYPOINT_HOVER_TICKS && waypoint_index < (int)(NUM_WAYPOINTS - 1)) {
-                    waypoint_index++;
+                // Advance after hovering at waypoint (loop back to start)
+                if (hover_ticks >= WAYPOINT_HOVER_TICKS) {
+                    waypoint_index = (waypoint_index + 1) % NUM_WAYPOINTS;
                     hover_ticks = 0;
                     printf("[WPT] Advancing to waypoint %d: (%.1f, %.1f) yaw=%.0f°\n",
                            waypoint_index, waypoints[waypoint_index].x,
