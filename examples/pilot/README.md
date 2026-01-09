@@ -64,15 +64,19 @@ Platform layer (in pilot.c) provides hardware abstraction:
 
 To port to real hardware, replace these functions.
 
-## Actor Priorities
+## Actor Priorities and Spawn Order
 
-| Actor    | Priority | Rationale |
-|----------|----------|-----------|
-| sensor   | CRITICAL | Must read on time |
-| angle    | CRITICAL | Angle control, safety critical |
-| attitude | CRITICAL | Rate control, safety critical |
-| motor    | CRITICAL | Safety critical |
-| altitude | HIGH     | Altitude hold, can tolerate slight delay |
+All actors run at CRITICAL priority. Spawn order determines execution order
+within the same priority level (round-robin). Actors are spawned in data-flow
+order to ensure each actor sees fresh data from upstream actors in the same step:
+
+| Order | Actor    | Priority | Rationale |
+|-------|----------|----------|-----------|
+| 1     | sensor   | CRITICAL | Reads hardware first |
+| 2     | altitude | CRITICAL | Needs IMU, produces thrust |
+| 3     | angle    | CRITICAL | Needs IMU, produces rate setpoints |
+| 4     | attitude | CRITICAL | Needs IMU + thrust + rate setpoints |
+| 5     | motor    | CRITICAL | Needs torque, writes hardware last |
 
 ## Control System
 
