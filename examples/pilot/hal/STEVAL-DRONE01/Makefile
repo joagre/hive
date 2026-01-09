@@ -31,9 +31,11 @@ SRCS = \
 	lps22hd.c \
 	motors.c
 
+# Startup file
+ASM_SRCS = startup_stm32f401.s
+
 # STM32 HAL sources (add when integrating with CubeMX-generated code)
 # SRCS += \
-# 	../Core/Src/main.c \
 # 	../Core/Src/stm32f4xx_it.c \
 # 	../Core/Src/stm32f4xx_hal_msp.c \
 # 	../Core/Src/system_stm32f4xx.c \
@@ -45,9 +47,6 @@ SRCS = \
 # 	../Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_i2c.c \
 # 	../Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_tim.c \
 # 	../Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_pwr.c
-
-# Startup file (from STM32CubeMX or CMSIS)
-# ASM_SRCS = ../Core/Startup/startup_stm32f401ceux.s
 
 # ------------------------------------------------------------------------------
 # Include Paths
