@@ -7,7 +7,7 @@ A quadcopter autopilot example using the actor runtime with Webots simulator.
 **Implemented:**
 - Altitude-hold hover with attitude stabilization
 - Step 1: Motor actor (mixer, safety, watchdog)
-- Step 2: Separate altitude actor (outer/inner loop split)
+- Step 2: Separate altitude actor (altitude/rate split)
 - Step 3: Sensor actor (hardware abstraction)
 - Mixer moved to motor_actor (platform-specific code in one place)
 
@@ -118,8 +118,8 @@ Code is split into focused modules:
 |------|---------|
 | `pilot.c` | Main loop, platform layer, bus setup |
 | `sensor_actor.c/h` | Reads hardware, publishes to IMU bus |
-| `altitude_actor.c/h` | Outer loop: altitude PID → thrust |
-| `attitude_actor.c/h` | Inner loop: rate PIDs → torque commands |
+| `altitude_actor.c/h` | Altitude PID → thrust |
+| `attitude_actor.c/h` | Rate PIDs → torque commands |
 | `motor_actor.c/h` | Mixer + safety: torque → motors → hardware |
 | `pid.c/h` | Reusable PID controller |
 | `types.h` | Portable data types |
@@ -299,8 +299,8 @@ Actors receive platform functions via init:
 examples/pilot/
     pilot.c              # Main loop, platform layer, bus setup
     sensor_actor.c/h     # Hardware sensor reading → IMU bus
-    altitude_actor.c/h   # Outer loop: altitude PID → thrust
-    attitude_actor.c/h   # Inner loop: rate PIDs → torque commands
+    altitude_actor.c/h   # Altitude PID → thrust
+    attitude_actor.c/h   # Rate PIDs → torque commands
     motor_actor.c/h      # Mixer + safety: torque → motors → hardware
     pid.c/h              # Reusable PID controller
     types.h              # Portable data types
@@ -364,7 +364,7 @@ Each step maintains a working system while improving separation of concerns.
 │  │ Setpoint │─────►│ Altitude │─────►│ Attitude │                  │
 │  │  Actor   │      │  Actor   │      │  Actor   │                  │
 │  └──────────┘      └──────────┘      └────┬─────┘                  │
-│   RC input          Outer loop            │ Inner loop             │
+│   RC input          Altitude              │ Rate                   │
 │   Waypoints         Z control             │ Rate control           │
 │   Commands                                ▼                        │
 │                                      ┌──────────┐                  │
@@ -384,8 +384,8 @@ Each step maintains a working system while improving separation of concerns.
 | **Sensor** | Hardware | Raw Bus | CRITICAL | Read IMU/GPS, timestamp, publish |
 | **Estimator** | Raw Bus | State Bus | CRITICAL | Sensor fusion, state estimate |
 | **Setpoint** | RC/Mission | Setpoint Bus | NORMAL | Generate target state |
-| **Altitude** | State + Setpoint | Thrust Setpoint | HIGH | Outer loop (~50Hz) |
-| **Attitude** | State + Thrust | Torque Bus | CRITICAL | Inner loop (250Hz), rate PIDs |
+| **Altitude** | State + Setpoint | Thrust Setpoint | HIGH | Altitude PID (~50Hz) |
+| **Attitude** | State + Thrust | Torque Bus | CRITICAL | Rate PIDs (250Hz) |
 | **Motor** | Torque Bus | Hardware | CRITICAL | Mixer, safety, limits, write PWM |
 
 ### Step 1: Motor Actor ✓
@@ -401,7 +401,7 @@ Attitude Actor ──► Torque Bus ──► Motor Actor ──► Hardware
 
 ### Step 2: Separate Altitude Actor ✓
 
-Split outer loop (altitude) from inner loop (attitude).
+Split altitude control from rate control.
 
 ```
 IMU Bus ──► Altitude Actor ──► Thrust Bus ──► Attitude Actor ──► Torque Bus

@@ -1,4 +1,4 @@
-// Altitude actor - Outer loop altitude control
+// Altitude actor - Altitude hold control
 //
 // Subscribes to IMU bus, runs altitude PID, publishes thrust commands.
 

@@ -1,7 +1,7 @@
-// Attitude actor - Inner loop rate control
+// Attitude actor - Rate stabilization
 //
 // Subscribes to IMU bus and thrust bus, runs rate PID controllers
-// for roll/pitch/yaw, publishes motor commands to motor bus.
+// for roll/pitch/yaw, publishes torque commands to torque bus.
 
 #ifndef ATTITUDE_ACTOR_H
 #define ATTITUDE_ACTOR_H

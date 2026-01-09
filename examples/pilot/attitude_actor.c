@@ -1,4 +1,4 @@
-// Attitude actor - Inner loop rate control
+// Attitude actor - Rate stabilization
 //
 // Subscribes to IMU and thrust buses, runs rate PIDs, publishes torque commands.
 

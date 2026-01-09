@@ -4,8 +4,8 @@
 // using the hive actor runtime. Four actors work together:
 //
 //   sensor_actor   - Reads hardware sensors → IMU bus
-//   altitude_actor - Outer loop: altitude PID → thrust command
-//   attitude_actor - Inner loop: rate PIDs → torque commands
+//   altitude_actor - Altitude PID → thrust command
+//   attitude_actor - Rate PIDs → torque commands
 //   motor_actor    - Mixer + safety: torque → motors → hardware
 //
 // Data flows through buses:

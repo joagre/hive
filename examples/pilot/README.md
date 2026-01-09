@@ -33,8 +33,8 @@ Then open `worlds/hover_test.wbt` in Webots and start the simulation.
 ```
 pilot.c              # Main loop, platform layer, bus setup
 sensor_actor.c/h     # Hardware sensor reading → IMU bus
-altitude_actor.c/h   # Outer loop: altitude PID → thrust
-attitude_actor.c/h   # Inner loop: rate PIDs → torque commands
+altitude_actor.c/h   # Altitude PID → thrust
+attitude_actor.c/h   # Rate PIDs → torque commands
 motor_actor.c/h      # Mixer + safety: torque → motors → hardware
 pid.c/h              # Reusable PID controller
 types.h              # Portable data types
@@ -68,9 +68,9 @@ To port to real hardware, replace these functions.
 | Actor    | Priority | Rationale |
 |----------|----------|-----------|
 | sensor   | CRITICAL | Must read on time |
-| attitude | CRITICAL | Inner loop, safety critical |
+| attitude | CRITICAL | Rate control, safety critical |
 | motor    | CRITICAL | Safety critical |
-| altitude | HIGH     | Outer loop, can tolerate delay |
+| altitude | HIGH     | Altitude hold, can tolerate slight delay |
 
 ## Control System
 
