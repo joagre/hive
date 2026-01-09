@@ -2,26 +2,28 @@
 
 Platform layer for the STMicroelectronics STEVAL-DRONE01 mini drone kit.
 
+This HAL provides bare-metal drivers for STM32F401, enabling the pilot example to run on real hardware instead of the Webots simulator.
+
 ## Hardware Overview
 
 | Component | Part Number | Interface | Description |
 |-----------|-------------|-----------|-------------|
-| MCU | STM32F401 | - | ARM Cortex-M4, 84 MHz, DSP+FPU |
+| MCU | STM32F401CEU6 | - | ARM Cortex-M4, 84 MHz, DSP+FPU |
 | IMU | LSM6DSL | SPI1 | 6-axis accel + gyro |
-| Magnetometer | LIS2MDL | I2C | 3-axis compass |
-| Barometer | LPS22HD | I2C | Pressure/altitude |
+| Magnetometer | LIS2MDL | I2C1 | 3-axis compass |
+| Barometer | LPS22HD | I2C1 | Pressure/altitude |
 | Bluetooth | SPBTLE-RF | SPI2 | BLE 4.1 for RC |
 | Motors | 85x20mm | TIM4 PWM | 3.7V brushed, x4 |
 
 ## Specifications
 
 **Flight Controller (STEVAL-FCU001V1):**
-- STM32F401 @ 84 MHz (Cortex-M4F)
-- 256 KB Flash, 64 KB RAM
+- STM32F401CEU6 @ 84 MHz (Cortex-M4F)
+- 512 KB Flash, 96 KB RAM
 - Hardware FPU for fast sensor fusion
 
 **Sensors:**
-- LSM6DSL: ±2/4/8/16g accel, ±125/250/500/1000/2000 dps gyro
+- LSM6DSL: ±2/4/8/16g accel, ±250/500/1000/2000 dps gyro
 - LIS2MDL: ±50 gauss magnetometer
 - LPS22HD: 260-1260 hPa barometer
 
@@ -35,27 +37,133 @@ Platform layer for the STMicroelectronics STEVAL-DRONE01 mini drone kit.
 - LiPo 3.7V / 600mAh
 - Max discharge: 30C (18A)
 
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                         main.c                                   │
+│                    (PID Flight Controller)                       │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                       platform.h/c                               │
+│              (400Hz Control Loop, Sensor Fusion)                 │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐        │
+│  │ attitude │  │ lsm6dsl  │  │ lis2mdl  │  │ lps22hd  │        │
+│  │ (filter) │  │  (IMU)   │  │  (mag)   │  │ (baro)   │        │
+│  └──────────┘  └──────────┘  └──────────┘  └──────────┘        │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    Peripheral Drivers                            │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐        │
+│  │   spi1   │  │   i2c1   │  │  motors  │  │  usart1  │        │
+│  │          │  │  (TODO)  │  │  (TODO)  │  │  (TODO)  │        │
+│  └──────────┘  └──────────┘  └──────────┘  └──────────┘        │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    Low-Level HAL                                 │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐        │
+│  │  system  │  │   gpio   │  │  startup │  │  linker  │        │
+│  │  config  │  │  config  │  │   .s     │  │   .ld    │        │
+│  └──────────┘  └──────────┘  └──────────┘  └──────────┘        │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+## File Overview
+
+### Application Layer
+
+| File | Description |
+|------|-------------|
+| `main.c` | Example PID flight controller with altitude hold |
+| `platform.h/c` | 400Hz control loop, sensor reading, motor output |
+| `attitude.h/c` | Complementary filter for roll/pitch/yaw estimation |
+
+### Sensor Drivers
+
+| File | Sensor | Interface | Status |
+|------|--------|-----------|--------|
+| `lsm6dsl.h/c` | LSM6DSL 6-axis IMU | SPI1 | **Integrated** |
+| `lis2mdl.h/c` | LIS2MDL magnetometer | I2C1 | Skeleton (needs I2C driver) |
+| `lps22hd.h/c` | LPS22HD barometer | I2C1 | Skeleton (needs I2C driver) |
+| `motors.h/c` | Brushed DC motors | TIM4 PWM | Skeleton (needs TIM driver) |
+
+### Peripheral Drivers
+
+| File | Peripheral | Description | Status |
+|------|------------|-------------|--------|
+| `spi1.h/c` | SPI1 | Mode 3, 10.5MHz for LSM6DSL | **Complete** |
+| `i2c1.h/c` | I2C1 | For LIS2MDL, LPS22HD | TODO |
+| `tim4.h/c` | TIM4 | PWM for motors | TODO |
+| `usart1.h/c` | USART1 | Debug serial output | TODO |
+
+### System Layer
+
+| File | Description |
+|------|-------------|
+| `system_config.h/c` | Clock tree (84MHz), SysTick (1ms), DWT (µs timing) |
+| `gpio_config.h/c` | Pin configuration for all peripherals |
+| `startup_stm32f401.s` | Vector table, Reset_Handler, C runtime init |
+| `stm32f401_flash.ld` | Memory layout (512K Flash, 96K RAM) |
+| `Makefile` | ARM GCC build system |
+
 ## Pin Mapping
 
+### SPI1 (LSM6DSL IMU)
 ```
-Motors (TIM4 PWM):
-  M1 (rear-left)   - TIM4_CH1
-  M2 (front-left)  - TIM4_CH2
-  M3 (front-right) - TIM4_CH3
-  M4 (rear-right)  - TIM4_CH4
-
-Sensors:
-  LSM6DSL - SPI1 (accel/gyro)
-  LIS2MDL - I2C1 (magnetometer)
-  LPS22HD - I2C1 (barometer)
-
-Bluetooth:
-  SPBTLE-RF - SPI2
-
-Debug:
-  UART1 - Serial debug
-  JTAG  - Programming/debug
+PA4  - LSM6DSL_CS (GPIO output)
+PA5  - SPI1_SCK
+PA6  - SPI1_MISO
+PA7  - SPI1_MOSI
 ```
+
+### I2C1 (Magnetometer, Barometer)
+```
+PB6  - I2C1_SCL
+PB7  - I2C1_SDA
+```
+
+### TIM4 PWM (Motors)
+```
+PB8  - TIM4_CH3 (M3 front-right)
+PB9  - TIM4_CH4 (M4 rear-right)
+
+Note: TIM4_CH1/CH2 (PB6/PB7) conflict with I2C1.
+Alternative pins available on PD12-15.
+```
+
+### USART1 (Debug Serial)
+```
+PA9  - USART1_TX
+PA10 - USART1_RX
+```
+
+### Misc
+```
+PC13 - LED (directly controlled GPIO)
+PA0  - User button (directly controlled GPIO)
+```
+
+## Clock Configuration
+
+```
+HSE (16MHz) ──► PLL (×336/16/4) ──► SYSCLK (84MHz)
+                                         │
+                    ┌────────────────────┼────────────────────┐
+                    ▼                    ▼                    ▼
+               AHB (84MHz)         APB1 (42MHz)         APB2 (84MHz)
+               DMA, GPIO           I2C1, TIM4            SPI1, USART1
+                                   USART2, TIM2-5        TIM1
+```
+
+- Flash: 2 wait states, prefetch + caches enabled
+- SysTick: 1ms interrupt for system tick
+- DWT: Cycle counter for microsecond timing
 
 ## Differences from Webots Simulation
 
@@ -66,35 +174,6 @@ Debug:
 | Altitude | GPS Z | Barometer (relative only) |
 | Heading | Direct yaw | Magnetometer (calibration needed) |
 | Timing | Simulation step | Real-time (hardware timers) |
-
-## Sensor Fusion Requirements
-
-The Webots `inertial_unit` provides pre-fused roll/pitch/yaw. On real hardware, the estimator actor must implement:
-
-1. **Complementary filter** or **Kalman filter** for attitude
-2. **Gyro integration** for angular rates
-3. **Magnetometer fusion** for yaw (with tilt compensation)
-4. **Barometer filtering** for altitude hold
-
-## Driver Files
-
-| File | Sensor | Interface | Purpose |
-|------|--------|-----------|---------|
-| `lsm6dsl.h/c` | LSM6DSL | SPI1 | 6-axis IMU for attitude estimation (roll/pitch/rates) |
-| `lis2mdl.h/c` | LIS2MDL | I2C1 | 3-axis magnetometer for heading (yaw) |
-| `lps22hd.h/c` | LPS22HD | I2C1 | Barometer for altitude hold |
-| `motors.h/c` | - | TIM4 PWM | Motor output with arm/disarm safety |
-| `attitude.h/c` | - | - | Complementary filter for sensor fusion |
-| `platform.h/c` | - | - | Main control loop and hardware init |
-| `main.c` | - | - | Example flight controller |
-| `system_config.h/c` | - | - | Clock config (84MHz) and timing |
-| `gpio_config.h/c` | - | - | GPIO pin configuration |
-| `spi1.h/c` | - | SPI1 | SPI driver for LSM6DSL |
-| `Makefile` | - | - | ARM GCC build system |
-| `stm32f401_flash.ld` | - | - | Linker script (512K Flash, 96K RAM) |
-| `startup_stm32f401.s` | - | - | Startup code and vector table |
-
-All drivers are skeleton implementations with TODO placeholders for STM32 HAL integration.
 
 ## Building
 
@@ -114,7 +193,7 @@ sudo apt install openocd
 ### Build Commands
 
 ```bash
-make          # Build firmware
+make          # Build firmware → build/pilot.elf
 make flash    # Flash to device via ST-Link
 make debug    # Start GDB debug session
 make clean    # Remove build artifacts
@@ -122,218 +201,209 @@ make size     # Show memory usage
 make help     # Show all targets
 ```
 
-### Integration with STM32CubeMX
+### Memory Usage
 
-The Makefile is a skeleton. For a complete build:
+Typical footprint:
+- Flash: ~20KB (code + constants)
+- RAM: ~8KB (stack + heap + BSS)
 
-1. Create STM32CubeMX project for STM32F401CEU6
-2. Configure peripherals:
-   - SPI1: LSM6DSL (IMU)
-   - I2C1: LIS2MDL, LPS22HD (magnetometer, barometer)
-   - TIM4: PWM channels 1-4 (motors)
-   - TIM2: Microsecond timing
-3. Generate code
-4. Uncomment HAL sources/includes in Makefile
-5. Copy linker script from CubeMX project
-6. Implement TODO placeholders in drivers
+## API Reference
+
+### System Configuration
+
+```c
+#include "system_config.h"
+
+system_init();              // Initialize clocks + SysTick + DWT
+system_get_tick();          // Milliseconds since boot
+system_delay_ms(100);       // Sleep (uses WFI)
+system_get_us();            // Microsecond timestamp (DWT)
+system_delay_us(10);        // Busy-wait microseconds
+```
+
+### GPIO
+
+```c
+#include "gpio_config.h"
+
+gpio_init_all();            // Configure all peripheral pins
+gpio_led_on();              // Turn on status LED
+gpio_led_toggle();          // Toggle LED
+gpio_button_read();         // Read user button
+```
+
+### SPI1 (LSM6DSL)
+
+```c
+#include "spi1.h"
+
+spi1_init(SPI1_SPEED_10_5MHZ);   // Initialize for LSM6DSL
+uint8_t rx = spi1_transfer(tx);  // Full-duplex byte transfer
+spi1_transfer_buf(tx, rx, len);  // Buffered transfer
+```
 
 ### LSM6DSL (IMU)
 
-6-axis accelerometer + gyroscope via SPI.
-
 ```c
-lsm6dsl_init(NULL);                    // Use default config (±4g, ±500dps, 416Hz)
-lsm6dsl_read_all(&accel, &gyro);       // Burst read both sensors
-// accel: m/s², gyro: rad/s
+#include "lsm6dsl.h"
+
+lsm6dsl_init(NULL);                    // Default: ±4g, ±500dps, 416Hz
+lsm6dsl_read_all(&accel, &gyro);       // Burst read (m/s², rad/s)
+lsm6dsl_read_temp();                   // Temperature (°C)
 ```
 
-Key features:
-- Configurable full-scale (±2/4/8/16g accel, ±250/500/1000/2000 dps gyro)
-- Configurable ODR (12.5Hz to 1.66kHz)
-- Burst read for efficient data acquisition
-- Temperature sensor
-
-### LIS2MDL (Magnetometer)
-
-3-axis magnetometer via I2C for heading estimation.
+### LIS2MDL (Magnetometer) - Needs I2C driver
 
 ```c
-lis2mdl_init(NULL);                    // Use default config (50Hz, continuous)
+#include "lis2mdl.h"
+
+lis2mdl_init(NULL);                    // Default: 50Hz, continuous
 lis2mdl_read(&mag);                    // Read in microtesla
 float heading = lis2mdl_heading_tilt_compensated(&mag, roll, pitch);
 ```
 
-Key features:
-- Temperature compensation
-- Hard-iron calibration support (offset registers + software)
-- Tilt-compensated heading calculation
-- Low-pass filter option
-
-### LPS22HD (Barometer)
-
-Pressure sensor via I2C for altitude hold.
+### LPS22HD (Barometer) - Needs I2C driver
 
 ```c
-lps22hd_init(NULL);                    // Use default config (50Hz)
+#include "lps22hd.h"
+
+lps22hd_init(NULL);                    // Default: 50Hz
 lps22hd_set_reference(lps22hd_read_pressure());  // Set ground level
 float alt = lps22hd_read_altitude();   // Meters above ground
 ```
 
-Key features:
-- Configurable ODR (1-75Hz) + one-shot mode
-- Low-pass filter for noise reduction
-- Barometric altitude calculation
-- Reference pressure for relative altitude
-
-**Note:** Barometer provides relative altitude only. Weather changes cause drift.
-
-### Motors
-
-TIM4 PWM output for 4 brushed DC motors.
+### Motors - Needs TIM driver
 
 ```c
-motors_init(NULL);                     // Use default config (20kHz PWM)
+#include "motors.h"
+
+motors_init(NULL);                     // Default: 20kHz PWM
 motors_arm();                          // Enable PWM output
-motors_set(&cmd);                      // Set motor speeds (0.0-1.0)
+motors_set(&cmd);                      // Set speeds (0.0-1.0)
 motors_emergency_stop();               // Immediate stop + disarm
 ```
 
-Key features:
-- Arm/disarm safety (motors won't spin until armed)
-- Normalized input (0.0-1.0) with configurable PWM range
-- Emergency stop function
-- Individual motor control for testing
-
-Motor layout (X configuration):
-```
-        Front
-      M2    M3
-        \  /
-         \/
-         /\
-        /  \
-      M1    M4
-        Rear
-```
-
-### Attitude (Complementary Filter)
-
-Sensor fusion for attitude estimation from IMU and magnetometer.
+### Attitude Filter
 
 ```c
-attitude_init(NULL, NULL);             // Use default config (alpha=0.98)
+#include "attitude.h"
 
-// Main loop (e.g., 400Hz)
-lsm6dsl_read_all(&accel, &gyro);
-attitude_update(accel, gyro, dt);      // Fuse accel + gyro
-
-// Optional: Add magnetometer for yaw (e.g., 50Hz)
-lis2mdl_read(&mag);
-attitude_update_mag(mag);
-
-// Get results
-attitude_t att;
-attitude_get(&att);                    // roll, pitch, yaw in radians
+attitude_init(NULL, NULL);             // Default: alpha=0.98
+attitude_update(accel, gyro, dt);      // Fuse sensors (call at 400Hz)
+attitude_update_mag(mag);              // Optional yaw correction (50Hz)
+attitude_get(&att);                    // Get roll, pitch, yaw (radians)
 ```
 
-Key features:
-- Complementary filter: `angle = alpha * gyro + (1-alpha) * accel`
-- Configurable filter coefficient (default alpha=0.98)
-- Accelerometer validity check (rejects data during high-g maneuvers)
-- Optional magnetometer fusion for yaw (tilt-compensated)
-- Angle normalization to [-PI, PI]
-
-**Note:** This is a simple complementary filter suitable for basic flight. For aggressive maneuvers or precision applications, consider an Extended Kalman Filter (EKF) or Mahony/Madgwick filter.
-
-### Platform (Main Loop)
-
-Hardware initialization and main control loop.
+### Platform
 
 ```c
-// Define callbacks
-void on_init(void) {
-    // Initialize your actors/controllers here
-}
+#include "platform.h"
 
-void on_control(const platform_sensors_t *sensors, platform_motors_t *motors) {
-    // Your control logic here - runs at 400 Hz
-    // Read sensors->roll, sensors->pitch, sensors->altitude, etc.
-    // Write motors->m1, motors->m2, motors->m3, motors->m4
-}
-
-// Start platform
 platform_callbacks_t callbacks = {
-    .on_init = on_init,
-    .on_control = on_control,
-    .on_state_change = NULL
+    .on_init = my_init,
+    .on_control = my_control,          // Called at 400Hz
+    .on_state_change = my_state_cb
 };
 
 platform_init(&callbacks);
-platform_calibrate();      // Gyro bias + baro reference (keep drone still!)
-platform_arm();            // Enable motors
-platform_run();            // Never returns
+platform_calibrate();                  // Keep drone still!
+platform_arm();
+platform_run();                        // Never returns
 ```
 
-Loop timing:
-- IMU + attitude filter: 400 Hz (2.5 ms period)
-- Magnetometer fusion: 50 Hz
-- Barometer reading: 50 Hz
+## Motor Layout
 
-State machine:
+X-configuration quadcopter:
+
 ```
-INIT → CALIBRATING → READY → ARMED → FLYING
-                       ↑        ↓
-                       └────────┘ (disarm)
+           Front
+         M2    M3
+     (CW)  \  /  (CCW)
+            \/
+            /\
+     (CCW) /  \ (CW)
+         M1    M4
+           Rear
+
+Motor mixing:
+  M1 = throttle + roll + pitch - yaw
+  M2 = throttle + roll - pitch + yaw
+  M3 = throttle - roll - pitch - yaw
+  M4 = throttle - roll + pitch + yaw
 ```
 
-### Example main.c
+## Control Loop Timing
 
-Complete example flight controller with:
-- PID controllers for roll, pitch, yaw, and altitude
-- Motor mixing for X-configuration quadcopter
-- State machine integration
+```
+400 Hz (2.5ms) ─┬─► Read IMU (LSM6DSL)
+                ├─► Update attitude filter
+                ├─► Run PID controllers
+                └─► Output to motors
+
+ 50 Hz (20ms) ──┬─► Read magnetometer (LIS2MDL)
+                └─► Read barometer (LPS22HD)
+```
+
+## Calibration
+
+Before flight, `platform_calibrate()` performs:
+
+1. **Gyro bias** - Average 500 samples while stationary
+2. **Barometer reference** - Average 50 samples for ground level
+3. **Attitude init** - Set initial roll/pitch from accelerometer
+
+**Important:** Keep the drone still and level during calibration!
+
+## Tuning PID Gains
+
+The default PID gains in `main.c` are starting points:
 
 ```c
-int main(void) {
-    platform_callbacks_t callbacks = {
-        .on_init = on_init,
-        .on_control = on_control,
-        .on_state_change = on_state_change
-    };
-
-    platform_init(&callbacks);
-    platform_calibrate();   // Keep drone still!
-    platform_arm();
-    platform_run();         // Never returns
-}
+#define ROLL_KP     2.0f
+#define PITCH_KP    2.0f
+#define YAW_KP      1.0f
+#define ALT_KP      0.5f
+#define THROTTLE_HOVER  0.5f
 ```
 
-The `on_control` callback runs at 400Hz and implements:
-1. Altitude PID → throttle adjustment
-2. Attitude PIDs → roll/pitch/yaw commands
-3. Motor mixing → individual motor speeds
-
-**Tuning required:** The PID gains in main.c are starting points. You must tune them for your specific drone. Start with low gains and increase gradually.
+Tuning procedure:
+1. Start with very low gains (0.5)
+2. Increase P until oscillation, then reduce by 30%
+3. Add D to dampen oscillation
+4. Add I only if needed for steady-state error
+5. Tune altitude last
 
 ## Resources
 
 - [STEVAL-DRONE01 Product Page](https://www.st.com/en/evaluation-tools/steval-drone01.html)
 - [Datasheet (PDF)](https://www.mouser.com/datasheet/2/389/steval-drone01-1500114.pdf)
 - [STSW-FCU001 Firmware](https://www.st.com/en/embedded-software/stsw-fcu001.html)
+- [LSM6DSL Datasheet](https://www.st.com/resource/en/datasheet/lsm6dsl.pdf)
+- [LIS2MDL Datasheet](https://www.st.com/resource/en/datasheet/lis2mdl.pdf)
+- [LPS22HD Datasheet](https://www.st.com/resource/en/datasheet/lps22hd.pdf)
 
 ## TODO
 
-- [x] LSM6DSL driver skeleton (SPI)
+### Completed
+- [x] LSM6DSL driver (SPI) - **Fully integrated**
 - [x] LIS2MDL driver skeleton (I2C)
 - [x] LPS22HD driver skeleton (I2C)
-- [x] Motor PWM driver skeleton (TIM4)
-- [x] Complementary filter for attitude estimation
+- [x] Motor driver skeleton (TIM4)
+- [x] Complementary filter for attitude
 - [x] Platform init and main loop
 - [x] Example main.c with PID control
 - [x] Makefile for ARM GCC build
-- [x] Linker script and startup code
+- [x] Linker script (stm32f401_flash.ld)
+- [x] Startup code (startup_stm32f401.s)
 - [x] System clock configuration (84MHz)
 - [x] GPIO pin configuration
-- [ ] SPI/I2C/TIM peripheral drivers
-- [ ] Integrate with sensor drivers
+- [x] SPI1 peripheral driver
+
+### Remaining
+- [ ] I2C1 peripheral driver
+- [ ] Integrate LIS2MDL with I2C1
+- [ ] Integrate LPS22HD with I2C1
+- [ ] TIM4 PWM driver for motors
+- [ ] Integrate motors with TIM4
+- [ ] USART1 debug output (optional)
 - [ ] hive runtime port for STM32F4
