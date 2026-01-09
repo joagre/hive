@@ -86,6 +86,7 @@ The Webots `inertial_unit` provides pre-fused roll/pitch/yaw. On real hardware, 
 | `motors.h/c` | - | TIM4 PWM | Motor output with arm/disarm safety |
 | `attitude.h/c` | - | - | Complementary filter for sensor fusion |
 | `platform.h/c` | - | - | Main control loop and hardware init |
+| `main.c` | - | - | Example flight controller |
 
 All drivers are skeleton implementations with TODO placeholders for STM32 HAL integration.
 
@@ -238,6 +239,35 @@ INIT → CALIBRATING → READY → ARMED → FLYING
                        └────────┘ (disarm)
 ```
 
+### Example main.c
+
+Complete example flight controller with:
+- PID controllers for roll, pitch, yaw, and altitude
+- Motor mixing for X-configuration quadcopter
+- State machine integration
+
+```c
+int main(void) {
+    platform_callbacks_t callbacks = {
+        .on_init = on_init,
+        .on_control = on_control,
+        .on_state_change = on_state_change
+    };
+
+    platform_init(&callbacks);
+    platform_calibrate();   // Keep drone still!
+    platform_arm();
+    platform_run();         // Never returns
+}
+```
+
+The `on_control` callback runs at 400Hz and implements:
+1. Altitude PID → throttle adjustment
+2. Attitude PIDs → roll/pitch/yaw commands
+3. Motor mixing → individual motor speeds
+
+**Tuning required:** The PID gains in main.c are starting points. You must tune them for your specific drone. Start with low gains and increase gradually.
+
 ## Resources
 
 - [STEVAL-DRONE01 Product Page](https://www.st.com/en/evaluation-tools/steval-drone01.html)
@@ -252,5 +282,6 @@ INIT → CALIBRATING → READY → ARMED → FLYING
 - [x] Motor PWM driver skeleton (TIM4)
 - [x] Complementary filter for attitude estimation
 - [x] Platform init and main loop
+- [x] Example main.c with PID control
 - [ ] STM32 HAL integration (implement TODO placeholders)
 - [ ] hive runtime port for STM32F4
