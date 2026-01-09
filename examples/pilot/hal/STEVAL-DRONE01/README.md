@@ -100,7 +100,7 @@ This HAL provides bare-metal drivers for STM32F401, enabling the pilot example t
 | `spi1.h/c` | SPI1 | Mode 3, 10.5MHz for LSM6DSL | **Complete** |
 | `i2c1.h/c` | I2C1 | 400kHz Fast Mode for LIS2MDL, LPS22HD | **Complete** |
 | `tim4.h/c` | TIM4 | 20kHz PWM for motors (CH3/CH4 on PB8/PB9) | **Complete** |
-| `usart1.h/c` | USART1 | Debug serial output | TODO |
+| `usart1.h/c` | USART1 | 115200 baud debug serial (PA9/PA10) | **Complete** |
 
 ### System Layer
 
@@ -304,6 +304,18 @@ tim4_enable();                         // Enable PWM output
 tim4_disable();                        // Disable output
 ```
 
+### USART1 (Debug Serial)
+
+```c
+#include "usart1.h"
+
+usart1_init(NULL);                     // Default: 115200 baud, TX only
+usart1_printf("Roll: %.2f\r\n", roll); // Printf-style output
+usart1_puts("Hello\r\n");              // Simple string output
+usart1_print_float(altitude, 2);       // Print float with 2 decimals
+usart1_hexdump(data, len);             // Hex dump memory region
+```
+
 ### Motors
 
 ```c
@@ -433,7 +445,7 @@ Tuning procedure:
 - [x] SPI1 peripheral driver
 - [x] I2C1 peripheral driver (400kHz Fast Mode)
 - [x] TIM4 PWM driver (20kHz, 10-bit resolution)
+- [x] USART1 debug serial (115200 baud, printf support)
 
 ### Remaining
-- [ ] USART1 debug output (optional)
 - [ ] hive runtime port for STM32F4

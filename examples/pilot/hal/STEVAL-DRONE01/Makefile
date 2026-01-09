@@ -29,6 +29,7 @@ SRCS = \
 	spi1.c \
 	i2c1.c \
 	tim4.c \
+	usart1.c \
 	platform.c \
 	attitude.c \
 	lsm6dsl.c \
