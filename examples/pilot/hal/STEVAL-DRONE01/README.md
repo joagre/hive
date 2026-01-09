@@ -85,6 +85,7 @@ The Webots `inertial_unit` provides pre-fused roll/pitch/yaw. On real hardware, 
 | `lps22hd.h/c` | LPS22HD | I2C1 | Barometer for altitude hold |
 | `motors.h/c` | - | TIM4 PWM | Motor output with arm/disarm safety |
 | `attitude.h/c` | - | - | Complementary filter for sensor fusion |
+| `platform.h/c` | - | - | Main control loop and hardware init |
 
 All drivers are skeleton implementations with TODO placeholders for STM32 HAL integration.
 
@@ -196,6 +197,47 @@ Key features:
 
 **Note:** This is a simple complementary filter suitable for basic flight. For aggressive maneuvers or precision applications, consider an Extended Kalman Filter (EKF) or Mahony/Madgwick filter.
 
+### Platform (Main Loop)
+
+Hardware initialization and main control loop.
+
+```c
+// Define callbacks
+void on_init(void) {
+    // Initialize your actors/controllers here
+}
+
+void on_control(const platform_sensors_t *sensors, platform_motors_t *motors) {
+    // Your control logic here - runs at 400 Hz
+    // Read sensors->roll, sensors->pitch, sensors->altitude, etc.
+    // Write motors->m1, motors->m2, motors->m3, motors->m4
+}
+
+// Start platform
+platform_callbacks_t callbacks = {
+    .on_init = on_init,
+    .on_control = on_control,
+    .on_state_change = NULL
+};
+
+platform_init(&callbacks);
+platform_calibrate();      // Gyro bias + baro reference (keep drone still!)
+platform_arm();            // Enable motors
+platform_run();            // Never returns
+```
+
+Loop timing:
+- IMU + attitude filter: 400 Hz (2.5 ms period)
+- Magnetometer fusion: 50 Hz
+- Barometer reading: 50 Hz
+
+State machine:
+```
+INIT → CALIBRATING → READY → ARMED → FLYING
+                       ↑        ↓
+                       └────────┘ (disarm)
+```
+
 ## Resources
 
 - [STEVAL-DRONE01 Product Page](https://www.st.com/en/evaluation-tools/steval-drone01.html)
@@ -209,6 +251,6 @@ Key features:
 - [x] LPS22HD driver skeleton (I2C)
 - [x] Motor PWM driver skeleton (TIM4)
 - [x] Complementary filter for attitude estimation
+- [x] Platform init and main loop
 - [ ] STM32 HAL integration (implement TODO placeholders)
-- [ ] Platform init and main loop
 - [ ] hive runtime port for STM32F4
