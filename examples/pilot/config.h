@@ -50,7 +50,13 @@
 #define ALT_PID_IMAX 0.2f   // Integral limit
 #define ALT_PID_OMAX 0.15f  // Output limit
 
-// Rate PID gains (roll, pitch, yaw use same gains)
+// Angle PID gains (angle error → rate setpoint)
+#define ANGLE_PID_KP   4.0f
+#define ANGLE_PID_KI   0.0f
+#define ANGLE_PID_KD   0.1f
+#define ANGLE_PID_OMAX 2.0f  // Max rate setpoint (rad/s)
+
+// Rate PID gains (rate error → torque)
 #define RATE_PID_KP   0.02f
 #define RATE_PID_KI   0.0f
 #define RATE_PID_KD   0.001f

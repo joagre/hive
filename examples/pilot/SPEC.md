@@ -9,6 +9,7 @@ A quadcopter autopilot example using the actor runtime with Webots simulator.
 - Step 1: Motor actor (mixer, safety, watchdog)
 - Step 2: Separate altitude actor (altitude/rate split)
 - Step 3: Sensor actor (hardware abstraction)
+- Step 4: Angle actor (attitude angle control)
 - Mixer moved to motor_actor (platform-specific code in one place)
 
 ## Goals
@@ -57,7 +58,7 @@ cfg.max_entries = 1;  // Latest value only - correct for real-time control
 
 ## Architecture Overview
 
-Four actors connected via buses:
+Five actors connected via buses:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
@@ -90,9 +91,19 @@ Four actors connected via buses:
 │  │           │     └─────────────────┘     └─────────┬─────────┘   │
 │  │           │                                       │             │
 │  │           │     ┌─────────────────┐               │             │
-│  │           │────►│ ATTITUDE ACTOR  │◄──────────────┘             │
-│  │           │     │ (rate PIDs)     │                             │
-│  └───────────┘     └────────┬────────┘                             │
+│  │           │────►│  ANGLE ACTOR    │               │             │
+│  │           │     │ (angle PIDs)    │               │             │
+│  │           │     └────────┬────────┘               │             │
+│  │           │              │                        │             │
+│  │           │              ▼                        │             │
+│  │           │     ┌───────────────────┐             │             │
+│  │           │     │ Rate Setpoint Bus │             │             │
+│  │           │     └─────────┬─────────┘             │             │
+│  │           │               │                       │             │
+│  │           │     ┌─────────▼─────────┐             │             │
+│  │           │────►│ ATTITUDE ACTOR    │◄────────────┘             │
+│  │           │     │ (rate PIDs)       │                           │
+│  └───────────┘     └────────┬──────────┘                           │
 │                             │                                      │
 │                             ▼                                      │
 │                    ┌─────────────────┐     ┌───────────────────┐   │
@@ -119,6 +130,7 @@ Code is split into focused modules:
 | `pilot.c` | Main loop, platform layer, bus setup |
 | `sensor_actor.c/h` | Reads hardware, publishes to IMU bus |
 | `altitude_actor.c/h` | Altitude PID → thrust |
+| `angle_actor.c/h` | Angle PIDs → rate setpoints |
 | `attitude_actor.c/h` | Rate PIDs → torque commands |
 | `motor_actor.c/h` | Mixer + safety: torque → motors → hardware |
 | `pid.c/h` | Reusable PID controller |
@@ -136,13 +148,15 @@ platform_read_imu() ◄── called by sensor_actor
        ▼
    IMU Bus
        │
-       ├──────────────────────┐
-       ▼                      ▼
-Altitude Actor          Attitude Actor
-(altitude PID)            (rate PIDs)
-       │                      │
-       ▼                      │
-  Thrust Bus ─────────────────┘
+       ├──────────────────────┬────────────────────────┐
+       ▼                      ▼                        ▼
+Altitude Actor          Angle Actor           Attitude Actor
+(altitude PID)         (angle PIDs)             (rate PIDs)
+       │                      │                        ▲
+       ▼                      ▼                        │
+  Thrust Bus           Rate Setpoint Bus ──────────────┤
+       │                                               │
+       └───────────────────────────────────────────────┘
                               │
                               ▼
                         Torque Bus
@@ -187,10 +201,11 @@ float pid_update(pid_state_t *pid, float setpoint, float measurement, float dt) 
 
 | Controller | Kp   | Ki   | Kd    | Output Max | Purpose |
 |------------|------|------|-------|------------|---------|
+| Altitude   | 0.3  | 0.05 | 0.15  | 0.15       | Hold 1.0m height |
+| Angle      | 4.0  | 0    | 0.1   | 2.0        | Level attitude |
 | Roll rate  | 0.02 | 0    | 0.001 | 0.1        | Stabilize roll |
 | Pitch rate | 0.02 | 0    | 0.001 | 0.1        | Stabilize pitch |
 | Yaw rate   | 0.02 | 0    | 0.001 | 0.15       | Stabilize yaw |
-| Altitude   | 0.3  | 0.05 | 0.15  | 0.15       | Hold 1.0m height |
 
 Base thrust: 0.553 (approximate hover thrust for Webots Crazyflie model)
 
@@ -239,8 +254,9 @@ while (wb_robot_step(TIME_STEP_MS) != -1) {
 Each `hive_step()` runs all ready actors once:
 1. Sensor actor reads hardware, publishes to IMU bus
 2. Altitude actor reads IMU bus, publishes thrust
-3. Attitude actor reads IMU + thrust, publishes torque commands
-4. Motor actor applies mixer, writes to hardware
+3. Angle actor reads IMU bus, publishes rate setpoints
+4. Attitude actor reads IMU + thrust + rate setpoints, publishes torque commands
+5. Motor actor applies mixer, writes to hardware
 
 ### Key Parameters
 
@@ -287,6 +303,7 @@ Actors receive platform functions via init:
 
 - `pid.c/h` - Generic PID controller
 - `altitude_actor.c/h` - Uses only bus API
+- `angle_actor.c/h` - Uses only bus API
 - `attitude_actor.c/h` - Uses only bus API
 - `types.h` - Data structures
 - `config.h` - Tuning parameters
@@ -300,6 +317,7 @@ examples/pilot/
     pilot.c              # Main loop, platform layer, bus setup
     sensor_actor.c/h     # Hardware sensor reading → IMU bus
     altitude_actor.c/h   # Altitude PID → thrust
+    angle_actor.c/h      # Angle PIDs → rate setpoints
     attitude_actor.c/h   # Rate PIDs → torque commands
     motor_actor.c/h      # Mixer + safety: torque → motors → hardware
     pid.c/h              # Reusable PID controller
@@ -360,21 +378,21 @@ Each step maintains a working system while improving separation of concerns.
 │   Read HW           Fuse data             │                        │
 │   Publish raw       Publish estimate      │                        │
 │                                           ▼                        │
-│  ┌──────────┐      ┌──────────┐      ┌──────────┐                  │
-│  │ Setpoint │─────►│ Altitude │─────►│ Attitude │                  │
-│  │  Actor   │      │  Actor   │      │  Actor   │                  │
-│  └──────────┘      └──────────┘      └────┬─────┘                  │
-│   RC input          Altitude              │ Rate                   │
-│   Waypoints         Z control             │ Rate control           │
-│   Commands                                ▼                        │
-│                                      ┌──────────┐                  │
-│                                      │  Motor   │                  │
-│                                      │  Actor   │                  │
-│                                      └──────────┘                  │
-│                                       Safety                       │
-│                                       Write HW                     │
-│                                                                     │
-└─────────────────────────────────────────────────────────────────────┘
+│  ┌──────────┐      ┌──────────┐      ┌──────────┐      ┌────────┐ │
+│  │ Setpoint │─────►│ Altitude │─────►│  Angle   │─────►│Attitude│ │
+│  │  Actor   │      │  Actor   │      │  Actor   │      │ Actor  │ │
+│  └──────────┘      └──────────┘      └──────────┘      └───┬────┘ │
+│   RC input          Altitude          Angle control        │      │
+│   Waypoints         Z control         → rate setpoints     │      │
+│   Commands                                                 ▼      │
+│                                                       ┌──────────┐│
+│                                                       │  Motor   ││
+│                                                       │  Actor   ││
+│                                                       └──────────┘│
+│                                                        Safety     │
+│                                                        Write HW   │
+│                                                                   │
+└───────────────────────────────────────────────────────────────────┘
 ```
 
 ### Actor Responsibilities (Target)
@@ -384,8 +402,9 @@ Each step maintains a working system while improving separation of concerns.
 | **Sensor** | Hardware | Raw Bus | CRITICAL | Read IMU/GPS, timestamp, publish |
 | **Estimator** | Raw Bus | State Bus | CRITICAL | Sensor fusion, state estimate |
 | **Setpoint** | RC/Mission | Setpoint Bus | NORMAL | Generate target state |
-| **Altitude** | State + Setpoint | Thrust Setpoint | HIGH | Altitude PID (~50Hz) |
-| **Attitude** | State + Thrust | Torque Bus | CRITICAL | Rate PIDs (250Hz) |
+| **Altitude** | State + Setpoint | Thrust Bus | HIGH | Altitude PID (~50Hz) |
+| **Angle** | State Bus | Rate Setpoint Bus | CRITICAL | Angle PIDs (250Hz) |
+| **Attitude** | State + Thrust + Rate SP | Torque Bus | CRITICAL | Rate PIDs (250Hz) |
 | **Motor** | Torque Bus | Hardware | CRITICAL | Mixer, safety, limits, write PWM |
 
 ### Step 1: Motor Actor ✓
@@ -421,7 +440,28 @@ Sensor Actor: platform_read_imu() ──► IMU Bus
 
 **Benefits:** Main loop is now just `hive_step()`, all logic in actors.
 
-### Step 4: Estimator Actor
+### Step 4: Angle Actor ✓
+
+Add attitude angle control between altitude and rate control.
+
+**Before:**
+```
+IMU Bus ──► Attitude Actor (rate PIDs with hardcoded 0.0 setpoints)
+```
+
+**After:**
+```
+IMU Bus ──► Angle Actor ──► Rate Setpoint Bus ──► Attitude Actor
+            (angle PIDs)                          (rate PIDs)
+```
+
+**Benefits:**
+- Cascaded control (proper drone architecture)
+- Angle controller generates rate setpoints
+- Rate controller tracks those setpoints
+- Easier to tune each layer independently
+
+### Step 5: Estimator Actor
 
 Add sensor fusion between raw sensors and controllers.
 
@@ -441,7 +481,7 @@ Sensor Actor ──► Raw Bus ──► Estimator Actor ──► State Bus ─
 - Filtered attitude estimate
 - Altitude rate estimation
 
-### Step 5: Setpoint Actor
+### Step 6: Setpoint Actor
 
 Add command generation actor.
 
@@ -483,8 +523,8 @@ With default `hive_static_config.h`, the runtime uses ~1.2 MB RAM (mostly the 1 
 
 | Resource | Used | Default | Minimal |
 |----------|------|---------|---------|
-| Actors | 4 | 64 | 4 |
-| Buses | 3 | 32 | 4 |
+| Actors | 5 | 64 | 8 |
+| Buses | 4 | 32 | 4 |
 | Stack per actor | 1 KB | 64 KB | 1 KB |
 | Stack arena | 4 KB | 1 MB | 4 KB |
 | Mailbox entries | ~4 | 256 | 8 |

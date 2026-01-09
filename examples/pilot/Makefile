@@ -31,7 +31,7 @@ LDLIBS = -lController -lhive -lm
 
 # Target
 TARGET = pilot
-SRCS = pilot.c pid.c sensor_actor.c altitude_actor.c attitude_actor.c motor_actor.c
+SRCS = pilot.c pid.c sensor_actor.c altitude_actor.c angle_actor.c attitude_actor.c motor_actor.c
 OBJS = $(SRCS:.c=.o)
 DEPS = $(SRCS:.c=.d)
 

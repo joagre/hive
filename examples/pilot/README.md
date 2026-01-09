@@ -4,12 +4,13 @@ Quadcopter hover example using hive actor runtime with Webots simulator.
 
 ## What it does
 
-Demonstrates altitude-hold hover control with a Crazyflie quadcopter using 4 actors:
+Demonstrates altitude-hold hover control with a Crazyflie quadcopter using 5 actors:
 
 1. **Sensor actor** reads IMU/GPS from Webots, publishes to IMU bus
 2. **Altitude actor** runs altitude PID, publishes thrust commands
-3. **Attitude actor** runs rate PIDs, publishes torque commands
-4. **Motor actor** applies mixer, enforces safety limits, writes to hardware
+3. **Angle actor** runs angle PIDs, publishes rate setpoints
+4. **Attitude actor** runs rate PIDs, publishes torque commands
+5. **Motor actor** applies mixer, enforces safety limits, writes to hardware
 
 The drone rises to 1.0m altitude and holds position.
 
@@ -34,6 +35,7 @@ Then open `worlds/hover_test.wbt` in Webots and start the simulation.
 pilot.c              # Main loop, platform layer, bus setup
 sensor_actor.c/h     # Hardware sensor reading → IMU bus
 altitude_actor.c/h   # Altitude PID → thrust
+angle_actor.c/h      # Angle PIDs → rate setpoints
 attitude_actor.c/h   # Rate PIDs → torque commands
 motor_actor.c/h      # Mixer + safety: torque → motors → hardware
 pid.c/h              # Reusable PID controller
@@ -43,18 +45,17 @@ config.h             # Shared constants (PID gains, timing)
 
 ## Architecture
 
-Four actors connected via buses:
+Five actors connected via buses:
 
 ```
-Sensor Actor ──► IMU Bus ──► Altitude Actor ──► Thrust Bus ─┐
-                     │                                      │
-                     │       ┌──────────────────────────────┘
-                     │       │
-                     └──► Attitude Actor ──► Torque Bus ──► Motor Actor
-                            (rate PIDs)                   (mixer+safety)
-                                                               │
-                                                               ▼
-                                                          Hardware
+Sensor Actor ──► IMU Bus ──► Altitude Actor ──► Thrust Bus ──────────────┐
+                     │                                                    │
+                     ├──► Angle Actor ──► Rate Setpoint Bus ─┐            │
+                     │                                       │            │
+                     └──► Attitude Actor ◄───────────────────┴────────────┘
+                               │
+                               ▼
+                         Torque Bus ──► Motor Actor ──► Hardware
 ```
 
 Platform layer (in pilot.c) provides hardware abstraction:
@@ -68,6 +69,7 @@ To port to real hardware, replace these functions.
 | Actor    | Priority | Rationale |
 |----------|----------|-----------|
 | sensor   | CRITICAL | Must read on time |
+| angle    | CRITICAL | Angle control, safety critical |
 | attitude | CRITICAL | Rate control, safety critical |
 | motor    | CRITICAL | Safety critical |
 | altitude | HIGH     | Altitude hold, can tolerate slight delay |
@@ -78,10 +80,11 @@ To port to real hardware, replace these functions.
 
 | Controller | Kp   | Ki   | Kd    | Purpose |
 |------------|------|------|-------|---------|
+| Altitude   | 0.3  | 0.05 | 0.15  | Hold 1.0m height |
+| Angle      | 4.0  | 0    | 0.1   | Level attitude |
 | Roll rate  | 0.02 | 0    | 0.001 | Stabilize roll |
 | Pitch rate | 0.02 | 0    | 0.001 | Stabilize pitch |
 | Yaw rate   | 0.02 | 0    | 0.001 | Stabilize yaw |
-| Altitude   | 0.3  | 0.05 | 0.15  | Hold 1.0m height |
 
 ### Motor Mixer (in motor_actor, + Configuration)
 

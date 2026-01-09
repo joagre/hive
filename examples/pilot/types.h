@@ -27,6 +27,16 @@ typedef struct {
     float thrust;  // Normalized thrust (0.0 to 1.0)
 } thrust_cmd_t;
 
+// Rate setpoint from angle actor to attitude actor.
+// Attitude actor tracks these angular rates.
+typedef struct {
+    float roll;   // Target roll rate (rad/s)
+    float pitch;  // Target pitch rate (rad/s)
+    float yaw;    // Target yaw rate (rad/s)
+} rate_setpoint_t;
+
+#define RATE_SETPOINT_ZERO {.roll = 0.0f, .pitch = 0.0f, .yaw = 0.0f}
+
 // Torque command from attitude actor to motor actor.
 // Motor actor applies mixer to convert to motor commands.
 typedef struct {
