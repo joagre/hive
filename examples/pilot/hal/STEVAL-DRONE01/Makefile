@@ -27,6 +27,8 @@ SRCS = \
 	system_config.c \
 	gpio_config.c \
 	spi1.c \
+	i2c1.c \
+	tim4.c \
 	platform.c \
 	attitude.c \
 	lsm6dsl.c \

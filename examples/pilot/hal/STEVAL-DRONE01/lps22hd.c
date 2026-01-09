@@ -3,10 +3,9 @@
 // I2C interface to the LPS22HD pressure/temperature sensor.
 
 #include "lps22hd.h"
+#include "i2c1.h"
+#include "system_config.h"
 #include <math.h>
-
-// TODO: Include STM32 HAL headers when integrating
-// #include "stm32f4xx_hal.h"
 
 // ----------------------------------------------------------------------------
 // Register addresses
@@ -73,39 +72,23 @@
 static lps22hd_config_t s_config;
 static float s_reference_pressure = STD_SEA_LEVEL_PRESSURE;
 
-// TODO: I2C handle from STM32 HAL
-// extern I2C_HandleTypeDef hi2c1;
-
 // ----------------------------------------------------------------------------
-// I2C low-level (TODO: implement with STM32 HAL)
+// I2C low-level
 // ----------------------------------------------------------------------------
 
 static void i2c_write_reg(uint8_t reg, uint8_t value) {
-    // TODO: Implement with STM32 HAL
-    // uint8_t buf[2] = {reg, value};
-    // HAL_I2C_Master_Transmit(&hi2c1, LPS22HD_I2C_ADDR << 1, buf, 2, HAL_MAX_DELAY);
-    (void)reg;
-    (void)value;
+    i2c1_write_reg(LPS22HD_I2C_ADDR, reg, value);
 }
 
 static uint8_t i2c_read_reg(uint8_t reg) {
-    // TODO: Implement with STM32 HAL
-    // uint8_t value;
-    // HAL_I2C_Master_Transmit(&hi2c1, LPS22HD_I2C_ADDR << 1, &reg, 1, HAL_MAX_DELAY);
-    // HAL_I2C_Master_Receive(&hi2c1, LPS22HD_I2C_ADDR << 1, &value, 1, HAL_MAX_DELAY);
-    // return value;
-    (void)reg;
-    return 0;
+    uint8_t value = 0;
+    i2c1_read_reg(LPS22HD_I2C_ADDR, reg, &value);
+    return value;
 }
 
 static void i2c_read_burst(uint8_t reg, uint8_t *buf, uint8_t len) {
-    // TODO: Implement with STM32 HAL
-    // For LPS22HD, set MSB for auto-increment: reg |= 0x80
-    // HAL_I2C_Master_Transmit(&hi2c1, LPS22HD_I2C_ADDR << 1, &reg, 1, HAL_MAX_DELAY);
-    // HAL_I2C_Master_Receive(&hi2c1, LPS22HD_I2C_ADDR << 1, buf, len, HAL_MAX_DELAY);
-    (void)reg;
-    (void)buf;
-    (void)len;
+    // For LPS22HD, set MSB for auto-increment
+    i2c1_read_regs(LPS22HD_I2C_ADDR, reg | 0x80, buf, len);
 }
 
 // ----------------------------------------------------------------------------
@@ -127,14 +110,14 @@ bool lps22hd_init(const lps22hd_config_t *config) {
 
     // Software reset
     i2c_write_reg(LPS22HD_CTRL_REG2, LPS22HD_CTRL2_SWRESET);
-    // TODO: HAL_Delay(10);
+    system_delay_ms(10);
 
     // Wait for reset to complete
-    // while (i2c_read_reg(LPS22HD_CTRL_REG2) & LPS22HD_CTRL2_SWRESET);
+    while (i2c_read_reg(LPS22HD_CTRL_REG2) & LPS22HD_CTRL2_SWRESET);
 
     // Reboot memory content
     i2c_write_reg(LPS22HD_CTRL_REG2, LPS22HD_CTRL2_BOOT);
-    // TODO: HAL_Delay(10);
+    system_delay_ms(10);
 
     // Configure CTRL_REG1: ODR, LPF, BDU
     uint8_t ctrl1 = (s_config.odr << 4);
@@ -171,7 +154,7 @@ bool lps22hd_temp_ready(void) {
 void lps22hd_read_raw(lps22hd_raw_t *data) {
     uint8_t buf[5];
     // Read pressure (3 bytes) and temperature (2 bytes) in one burst
-    i2c_read_burst(LPS22HD_PRESS_OUT_XL | 0x80, buf, 5);
+    i2c_read_burst(LPS22HD_PRESS_OUT_XL, buf, 5);
 
     // Pressure: 24-bit unsigned, stored in 3 bytes (XL, L, H)
     data->pressure = (int32_t)(buf[2] << 16 | buf[1] << 8 | buf[0]);
@@ -193,7 +176,7 @@ void lps22hd_read(lps22hd_data_t *data) {
 
 float lps22hd_read_pressure(void) {
     uint8_t buf[3];
-    i2c_read_burst(LPS22HD_PRESS_OUT_XL | 0x80, buf, 3);
+    i2c_read_burst(LPS22HD_PRESS_OUT_XL, buf, 3);
 
     int32_t raw = (int32_t)(buf[2] << 16 | buf[1] << 8 | buf[0]);
     return (float)raw / LPS22HD_PRESS_SENSITIVITY;
@@ -201,7 +184,7 @@ float lps22hd_read_pressure(void) {
 
 float lps22hd_read_temp(void) {
     uint8_t buf[2];
-    i2c_read_burst(LPS22HD_TEMP_OUT_L | 0x80, buf, 2);
+    i2c_read_burst(LPS22HD_TEMP_OUT_L, buf, 2);
 
     int16_t raw = (int16_t)(buf[1] << 8 | buf[0]);
     return (float)raw / LPS22HD_TEMP_SENSITIVITY;

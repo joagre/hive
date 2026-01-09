@@ -57,9 +57,14 @@ typedef struct {
 // ----------------------------------------------------------------------------
 
 // Initialize motor PWM outputs.
-// Configures TIM4 channels 1-4 for PWM output.
+// Default configuration uses TIM4 CH3/CH4 only (PB8/PB9) to avoid I2C1 conflict.
 // Motors start in stopped state.
 bool motors_init(const motors_config_t *config);
+
+// Initialize all 4 motor channels.
+// use_port_d: true = use PD12-PD15, false = use PB6-PB9 (conflicts with I2C1!)
+// For full quad support with I2C sensors, use port D pins.
+bool motors_init_full(const motors_config_t *config, bool use_port_d);
 
 // Arm the motors (enable PWM output).
 // Must be called before motors will spin.

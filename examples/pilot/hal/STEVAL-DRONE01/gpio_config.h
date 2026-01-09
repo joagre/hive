@@ -124,6 +124,9 @@ void gpio_init_button(void);
 void gpio_lsm6dsl_cs_low(void);
 void gpio_lsm6dsl_cs_high(void);
 
+// I2C1 bus recovery (clock toggle to release stuck SDA)
+void gpio_i2c1_release_bus(void);
+
 // LED control
 void gpio_led_on(void);
 void gpio_led_off(void);

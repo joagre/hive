@@ -89,17 +89,17 @@ This HAL provides bare-metal drivers for STM32F401, enabling the pilot example t
 | File | Sensor | Interface | Status |
 |------|--------|-----------|--------|
 | `lsm6dsl.h/c` | LSM6DSL 6-axis IMU | SPI1 | **Integrated** |
-| `lis2mdl.h/c` | LIS2MDL magnetometer | I2C1 | Skeleton (needs I2C driver) |
-| `lps22hd.h/c` | LPS22HD barometer | I2C1 | Skeleton (needs I2C driver) |
-| `motors.h/c` | Brushed DC motors | TIM4 PWM | Skeleton (needs TIM driver) |
+| `lis2mdl.h/c` | LIS2MDL magnetometer | I2C1 | **Integrated** |
+| `lps22hd.h/c` | LPS22HD barometer | I2C1 | **Integrated** |
+| `motors.h/c` | Brushed DC motors | TIM4 PWM | **Integrated** |
 
 ### Peripheral Drivers
 
 | File | Peripheral | Description | Status |
 |------|------------|-------------|--------|
 | `spi1.h/c` | SPI1 | Mode 3, 10.5MHz for LSM6DSL | **Complete** |
-| `i2c1.h/c` | I2C1 | For LIS2MDL, LPS22HD | TODO |
-| `tim4.h/c` | TIM4 | PWM for motors | TODO |
+| `i2c1.h/c` | I2C1 | 400kHz Fast Mode for LIS2MDL, LPS22HD | **Complete** |
+| `tim4.h/c` | TIM4 | 20kHz PWM for motors (CH3/CH4 on PB8/PB9) | **Complete** |
 | `usart1.h/c` | USART1 | Debug serial output | TODO |
 
 ### System Layer
@@ -130,11 +130,18 @@ PB7  - I2C1_SDA
 
 ### TIM4 PWM (Motors)
 ```
-PB8  - TIM4_CH3 (M3 front-right)
-PB9  - TIM4_CH4 (M4 rear-right)
+Default configuration (2 motors, I2C1 compatible):
+  PB8  - TIM4_CH3 (M3 front-right)
+  PB9  - TIM4_CH4 (M4 rear-right)
 
-Note: TIM4_CH1/CH2 (PB6/PB7) conflict with I2C1.
-Alternative pins available on PD12-15.
+Full 4-motor configuration (requires Port D):
+  PD12 - TIM4_CH1 (M1 rear-left)
+  PD13 - TIM4_CH2 (M2 front-left)
+  PD14 - TIM4_CH3 (M3 front-right)
+  PD15 - TIM4_CH4 (M4 rear-right)
+
+Note: PB6/PB7 (TIM4_CH1/CH2) conflict with I2C1.
+Use motors_init_full(NULL, true) for 4-motor support.
 ```
 
 ### USART1 (Debug Serial)
@@ -242,6 +249,19 @@ uint8_t rx = spi1_transfer(tx);  // Full-duplex byte transfer
 spi1_transfer_buf(tx, rx, len);  // Buffered transfer
 ```
 
+### I2C1 (LIS2MDL, LPS22HD)
+
+```c
+#include "i2c1.h"
+
+i2c1_init(I2C1_SPEED_400KHZ);           // Initialize 400kHz Fast Mode
+i2c1_write_reg(addr, reg, value);       // Write single register
+i2c1_read_reg(addr, reg, &value);       // Read single register
+i2c1_read_regs(addr, reg, buf, len);    // Burst read multiple registers
+i2c1_probe(addr);                        // Check if device present
+i2c1_reset();                            // Bus recovery (stuck SDA)
+```
+
 ### LSM6DSL (IMU)
 
 ```c
@@ -252,7 +272,7 @@ lsm6dsl_read_all(&accel, &gyro);       // Burst read (m/s², rad/s)
 lsm6dsl_read_temp();                   // Temperature (°C)
 ```
 
-### LIS2MDL (Magnetometer) - Needs I2C driver
+### LIS2MDL (Magnetometer)
 
 ```c
 #include "lis2mdl.h"
@@ -262,7 +282,7 @@ lis2mdl_read(&mag);                    // Read in microtesla
 float heading = lis2mdl_heading_tilt_compensated(&mag, roll, pitch);
 ```
 
-### LPS22HD (Barometer) - Needs I2C driver
+### LPS22HD (Barometer)
 
 ```c
 #include "lps22hd.h"
@@ -272,12 +292,25 @@ lps22hd_set_reference(lps22hd_read_pressure());  // Set ground level
 float alt = lps22hd_read_altitude();   // Meters above ground
 ```
 
-### Motors - Needs TIM driver
+### TIM4 (Motor PWM)
+
+```c
+#include "tim4.h"
+
+tim4_init(NULL);                       // Default: 20kHz, CH3/CH4 only
+tim4_set_duty(TIM4_CH3, 0.5f);         // Set 50% duty cycle
+tim4_set_all(duties);                  // Set all 4 channels at once
+tim4_enable();                         // Enable PWM output
+tim4_disable();                        // Disable output
+```
+
+### Motors
 
 ```c
 #include "motors.h"
 
-motors_init(NULL);                     // Default: 20kHz PWM
+motors_init(NULL);                     // Default: 20kHz, CH3/CH4 only
+motors_init_full(NULL, true);          // All 4 motors on PD12-PD15
 motors_arm();                          // Enable PWM output
 motors_set(&cmd);                      // Set speeds (0.0-1.0)
 motors_emergency_stop();               // Immediate stop + disarm
@@ -386,9 +419,9 @@ Tuning procedure:
 
 ### Completed
 - [x] LSM6DSL driver (SPI) - **Fully integrated**
-- [x] LIS2MDL driver skeleton (I2C)
-- [x] LPS22HD driver skeleton (I2C)
-- [x] Motor driver skeleton (TIM4)
+- [x] LIS2MDL driver (I2C) - **Fully integrated**
+- [x] LPS22HD driver (I2C) - **Fully integrated**
+- [x] Motor driver (TIM4) - **Fully integrated**
 - [x] Complementary filter for attitude
 - [x] Platform init and main loop
 - [x] Example main.c with PID control
@@ -398,12 +431,9 @@ Tuning procedure:
 - [x] System clock configuration (84MHz)
 - [x] GPIO pin configuration
 - [x] SPI1 peripheral driver
+- [x] I2C1 peripheral driver (400kHz Fast Mode)
+- [x] TIM4 PWM driver (20kHz, 10-bit resolution)
 
 ### Remaining
-- [ ] I2C1 peripheral driver
-- [ ] Integrate LIS2MDL with I2C1
-- [ ] Integrate LPS22HD with I2C1
-- [ ] TIM4 PWM driver for motors
-- [ ] Integrate motors with TIM4
 - [ ] USART1 debug output (optional)
 - [ ] hive runtime port for STM32F4

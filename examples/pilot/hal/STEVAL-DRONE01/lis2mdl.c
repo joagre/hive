@@ -3,10 +3,9 @@
 // I2C interface to the LIS2MDL 3-axis magnetometer.
 
 #include "lis2mdl.h"
+#include "i2c1.h"
+#include "system_config.h"
 #include <math.h>
-
-// TODO: Include STM32 HAL headers when integrating
-// #include "stm32f4xx_hal.h"
 
 // ----------------------------------------------------------------------------
 // Register addresses
@@ -56,38 +55,22 @@
 
 static lis2mdl_config_t s_config;
 
-// TODO: I2C handle from STM32 HAL
-// extern I2C_HandleTypeDef hi2c1;
-
 // ----------------------------------------------------------------------------
-// I2C low-level (TODO: implement with STM32 HAL)
+// I2C low-level
 // ----------------------------------------------------------------------------
 
 static void i2c_write_reg(uint8_t reg, uint8_t value) {
-    // TODO: Implement with STM32 HAL
-    // uint8_t buf[2] = {reg, value};
-    // HAL_I2C_Master_Transmit(&hi2c1, LIS2MDL_I2C_ADDR << 1, buf, 2, HAL_MAX_DELAY);
-    (void)reg;
-    (void)value;
+    i2c1_write_reg(LIS2MDL_I2C_ADDR, reg, value);
 }
 
 static uint8_t i2c_read_reg(uint8_t reg) {
-    // TODO: Implement with STM32 HAL
-    // uint8_t value;
-    // HAL_I2C_Master_Transmit(&hi2c1, LIS2MDL_I2C_ADDR << 1, &reg, 1, HAL_MAX_DELAY);
-    // HAL_I2C_Master_Receive(&hi2c1, LIS2MDL_I2C_ADDR << 1, &value, 1, HAL_MAX_DELAY);
-    // return value;
-    (void)reg;
-    return 0;
+    uint8_t value = 0;
+    i2c1_read_reg(LIS2MDL_I2C_ADDR, reg, &value);
+    return value;
 }
 
 static void i2c_read_burst(uint8_t reg, uint8_t *buf, uint8_t len) {
-    // TODO: Implement with STM32 HAL
-    // HAL_I2C_Master_Transmit(&hi2c1, LIS2MDL_I2C_ADDR << 1, &reg, 1, HAL_MAX_DELAY);
-    // HAL_I2C_Master_Receive(&hi2c1, LIS2MDL_I2C_ADDR << 1, buf, len, HAL_MAX_DELAY);
-    (void)reg;
-    (void)buf;
-    (void)len;
+    i2c1_read_regs(LIS2MDL_I2C_ADDR, reg, buf, len);
 }
 
 // ----------------------------------------------------------------------------
@@ -109,11 +92,11 @@ bool lis2mdl_init(const lis2mdl_config_t *config) {
 
     // Software reset
     i2c_write_reg(LIS2MDL_CFG_REG_A, 0x20);  // SOFT_RST = 1
-    // TODO: HAL_Delay(10);
+    system_delay_ms(10);
 
     // Reboot memory content
     i2c_write_reg(LIS2MDL_CFG_REG_A, 0x40);  // REBOOT = 1
-    // TODO: HAL_Delay(20);
+    system_delay_ms(20);
 
     // Configure CFG_REG_A: ODR, mode, temp compensation
     uint8_t cfg_a = (s_config.odr << 2) | (s_config.mode);

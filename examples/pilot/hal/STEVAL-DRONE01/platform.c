@@ -3,14 +3,14 @@
 // Main control loop running at 400Hz with sensor fusion.
 
 #include "platform.h"
+#include "system_config.h"
+#include "gpio_config.h"
+#include "i2c1.h"
 #include "lsm6dsl.h"
 #include "lis2mdl.h"
 #include "lps22hd.h"
 #include "motors.h"
 #include "attitude.h"
-
-// TODO: Include STM32 HAL headers when integrating
-// #include "stm32f4xx_hal.h"
 
 // ----------------------------------------------------------------------------
 // Static state
@@ -27,32 +27,23 @@ static float s_gyro_bias[3] = {0.0f, 0.0f, 0.0f};
 static float s_baro_reference = 0.0f;
 
 // ----------------------------------------------------------------------------
-// Time functions (TODO: implement with STM32 HAL)
+// Time functions
 // ----------------------------------------------------------------------------
 
 static uint32_t get_time_us(void) {
-    // TODO: Implement with hardware timer
-    // Use TIM2 or DWT cycle counter for microsecond resolution
-    // return __HAL_TIM_GET_COUNTER(&htim2);
-    return 0;
+    return system_get_us();
 }
 
 uint32_t platform_get_time_ms(void) {
-    // TODO: Implement with HAL_GetTick() or custom timer
-    // return HAL_GetTick();
-    return s_time_ms;
+    return system_get_tick();
 }
 
 void platform_delay_ms(uint32_t ms) {
-    // TODO: Implement with HAL_Delay()
-    // HAL_Delay(ms);
-    (void)ms;
+    system_delay_ms(ms);
 }
 
 static void delay_us(uint32_t us) {
-    // TODO: Implement microsecond delay
-    // Use DWT cycle counter or busy-wait on timer
-    (void)us;
+    system_delay_us(us);
 }
 
 // ----------------------------------------------------------------------------
@@ -219,19 +210,20 @@ bool platform_init(const platform_callbacks_t *callbacks) {
     // Initialize hardware peripherals
     // -------------------------------------------------------------------------
 
-    // TODO: Initialize STM32 HAL
-    // HAL_Init();
-    // SystemClock_Config();
-    // MX_GPIO_Init();
-    // MX_SPI1_Init();   // For LSM6DSL
-    // MX_I2C1_Init();   // For LIS2MDL, LPS22HD
-    // MX_TIM4_Init();   // For motors
+    // System clocks (84MHz), SysTick (1ms), DWT (microseconds)
+    if (!system_init()) {
+        set_state(PLATFORM_STATE_ERROR);
+        return false;
+    }
+
+    // Initialize I2C1 for LIS2MDL and LPS22HD (400kHz Fast Mode)
+    i2c1_init(I2C1_SPEED_400KHZ);
 
     // -------------------------------------------------------------------------
     // Initialize sensors
     // -------------------------------------------------------------------------
 
-    // IMU (accelerometer + gyroscope)
+    // IMU (accelerometer + gyroscope) - SPI1 is initialized internally
     if (!lsm6dsl_init(NULL)) {
         set_state(PLATFORM_STATE_ERROR);
         return false;

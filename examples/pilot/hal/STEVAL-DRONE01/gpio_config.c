@@ -209,6 +209,45 @@ void gpio_init_i2c1(void) {
     gpio_set_af(I2C1_SDA_PORT, I2C1_SDA_PIN, I2C1_AF);
 }
 
+void gpio_i2c1_release_bus(void) {
+    // I2C bus recovery: Toggle SCL to release stuck SDA
+    // This handles the case where a slave holds SDA low due to incomplete transfer
+
+    // Configure SCL as GPIO output
+    gpio_set_mode(I2C1_SCL_PORT, I2C1_SCL_PIN, GPIO_MODE_OUTPUT);
+    gpio_set_otype(I2C1_SCL_PORT, I2C1_SCL_PIN, GPIO_OTYPE_OPENDRAIN);
+
+    // Configure SDA as GPIO input to monitor
+    gpio_set_mode(I2C1_SDA_PORT, I2C1_SDA_PIN, GPIO_MODE_INPUT);
+    gpio_set_pupd(I2C1_SDA_PORT, I2C1_SDA_PIN, GPIO_PUPD_PULLUP);
+
+    // Toggle SCL up to 9 times until SDA goes high
+    for (int i = 0; i < 9; i++) {
+        gpio_write(I2C1_SCL_PORT, I2C1_SCL_PIN, false);
+        system_delay_us(5);
+        gpio_write(I2C1_SCL_PORT, I2C1_SCL_PIN, true);
+        system_delay_us(5);
+
+        // Check if SDA is released
+        if (gpio_read(I2C1_SDA_PORT, I2C1_SDA_PIN)) {
+            break;
+        }
+    }
+
+    // Generate STOP condition (SDA low->high while SCL high)
+    gpio_set_mode(I2C1_SDA_PORT, I2C1_SDA_PIN, GPIO_MODE_OUTPUT);
+    gpio_set_otype(I2C1_SDA_PORT, I2C1_SDA_PIN, GPIO_OTYPE_OPENDRAIN);
+    gpio_write(I2C1_SDA_PORT, I2C1_SDA_PIN, false);
+    system_delay_us(5);
+    gpio_write(I2C1_SCL_PORT, I2C1_SCL_PIN, true);
+    system_delay_us(5);
+    gpio_write(I2C1_SDA_PORT, I2C1_SDA_PIN, true);
+    system_delay_us(5);
+
+    // Restore I2C alternate function mode
+    gpio_init_i2c1();
+}
+
 // ----------------------------------------------------------------------------
 // TIM4 GPIO Configuration (Motor PWM)
 // ----------------------------------------------------------------------------
