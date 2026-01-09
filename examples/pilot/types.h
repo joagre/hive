@@ -5,13 +5,32 @@
 #ifndef PILOT_TYPES_H
 #define PILOT_TYPES_H
 
-// Sensor data from IMU and GPS, packaged for control actors.
+// Raw sensor data from IMU and GPS.
 // On real hardware, this would be populated from SPI/I2C sensor drivers.
+// For Webots, inertial_unit provides fused attitude (not truly raw).
 typedef struct {
     float roll, pitch, yaw;        // Euler angles in radians
     float gyro_x, gyro_y, gyro_z;  // Angular rates in rad/s (body frame)
     float altitude;                 // Height above ground in meters
 } imu_data_t;
+
+// State estimate from estimator actor.
+// Controllers use this instead of raw sensor data.
+// Includes derived values like vertical velocity.
+typedef struct {
+    float roll, pitch, yaw;        // Attitude estimate (rad)
+    float roll_rate;               // Roll rate (rad/s)
+    float pitch_rate;              // Pitch rate (rad/s)
+    float yaw_rate;                // Yaw rate (rad/s)
+    float altitude;                // Altitude estimate (m)
+    float vertical_velocity;       // Vertical velocity (m/s), positive = up
+} state_estimate_t;
+
+#define STATE_ESTIMATE_ZERO { \
+    .roll = 0.0f, .pitch = 0.0f, .yaw = 0.0f, \
+    .roll_rate = 0.0f, .pitch_rate = 0.0f, .yaw_rate = 0.0f, \
+    .altitude = 0.0f, .vertical_velocity = 0.0f \
+}
 
 // Motor commands as normalized values (0.0 to 1.0).
 // The platform layer converts these to actual motor velocities.

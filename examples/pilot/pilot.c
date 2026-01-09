@@ -1,24 +1,25 @@
 // Pilot example - Quadcopter hover using actor runtime with Webots
 //
 // Demonstrates altitude-hold hover control for a Crazyflie quadcopter
-// using the hive actor runtime. Five actors work together:
+// using the hive actor runtime. Six actors work together:
 //
-//   sensor_actor   - Reads hardware sensors → IMU bus
-//   altitude_actor - Altitude PID → thrust command
-//   angle_actor    - Angle PIDs → rate setpoints
-//   attitude_actor - Rate PIDs → torque commands
-//   motor_actor    - Mixer + safety: torque → motors → hardware
+//   sensor_actor    - Reads hardware sensors → IMU bus
+//   estimator_actor - Sensor fusion → state bus
+//   altitude_actor  - Altitude PID → thrust command
+//   angle_actor     - Angle PIDs → rate setpoints
+//   attitude_actor  - Rate PIDs → torque commands
+//   motor_actor     - Mixer + safety: torque → motors → hardware
 //
 // Data flows through buses:
 //
-//   Sensor Actor ──► IMU Bus ──► Altitude Actor ──► Thrust Bus ──────────────┐
-//                        │                                                    │
-//                        ├──► Angle Actor ──► Rate Setpoint Bus ─┐            │
-//                        │                                       │            │
-//                        └──► Attitude Actor ◄───────────────────┴────────────┘
-//                                  │
-//                                  ▼
-//                            Torque Bus ──► Motor Actor ──► Hardware
+//   Sensor ──► IMU Bus ──► Estimator ──► State Bus ──► Altitude ──► Thrust Bus ─┐
+//                                             │                                  │
+//                                             ├──► Angle ──► Rate Setpoint Bus ──┤
+//                                             │                                  │
+//                                             └──► Attitude ◄────────────────────┘
+//                                                     │
+//                                                     ▼
+//                                               Torque Bus ──► Motor ──► Hardware
 //
 // To port to real hardware, replace the platform layer functions.
 
@@ -34,6 +35,7 @@
 #include "types.h"
 #include "config.h"
 #include "sensor_actor.h"
+#include "estimator_actor.h"
 #include "altitude_actor.h"
 #include "angle_actor.h"
 #include "attitude_actor.h"
@@ -46,6 +48,7 @@
 // ============================================================================
 
 static bus_id g_imu_bus;
+static bus_id g_state_bus;
 static bus_id g_thrust_bus;
 static bus_id g_rate_setpoint_bus;
 static bus_id g_torque_bus;
@@ -125,27 +128,34 @@ int main(void) {
     hive_bus_config cfg = HIVE_BUS_CONFIG_DEFAULT;
     cfg.max_entries = 1;
     hive_bus_create(&cfg, &g_imu_bus);
+    hive_bus_create(&cfg, &g_state_bus);
     hive_bus_create(&cfg, &g_thrust_bus);
     hive_bus_create(&cfg, &g_rate_setpoint_bus);
     hive_bus_create(&cfg, &g_torque_bus);
 
     // Initialize actors
     sensor_actor_init(g_imu_bus, platform_read_imu);
-    altitude_actor_init(g_imu_bus, g_thrust_bus);
-    angle_actor_init(g_imu_bus, g_rate_setpoint_bus);
-    attitude_actor_init(g_imu_bus, g_thrust_bus, g_rate_setpoint_bus, g_torque_bus);
+    estimator_actor_init(g_imu_bus, g_state_bus);
+    altitude_actor_init(g_state_bus, g_thrust_bus);
+    angle_actor_init(g_state_bus, g_rate_setpoint_bus);
+    attitude_actor_init(g_state_bus, g_thrust_bus, g_rate_setpoint_bus, g_torque_bus);
     motor_actor_init(g_torque_bus, platform_write_motors);
 
     // Spawn actors in data-flow order to minimize latency.
     // All CRITICAL priority, round-robin within priority follows spawn order.
-    // Order: sensor → altitude → angle → attitude → motor
+    // Order: sensor → estimator → altitude → angle → attitude → motor
     // This ensures each actor sees fresh data from upstream actors in same step.
-    actor_id sensor, altitude, angle, attitude, motor;
+    actor_id sensor, estimator, altitude, angle, attitude, motor;
 
     actor_config cfg_sensor = HIVE_ACTOR_CONFIG_DEFAULT;
     cfg_sensor.priority = HIVE_PRIORITY_CRITICAL;
     cfg_sensor.name = "sensor";
     hive_spawn_ex(sensor_actor, NULL, &cfg_sensor, &sensor);
+
+    actor_config cfg_estimator = HIVE_ACTOR_CONFIG_DEFAULT;
+    cfg_estimator.priority = HIVE_PRIORITY_CRITICAL;
+    cfg_estimator.name = "estimator";
+    hive_spawn_ex(estimator_actor, NULL, &cfg_estimator, &estimator);
 
     actor_config cfg_altitude = HIVE_ACTOR_CONFIG_DEFAULT;
     cfg_altitude.priority = HIVE_PRIORITY_CRITICAL;
@@ -167,7 +177,7 @@ int main(void) {
     cfg_motor.name = "motor";
     hive_spawn_ex(motor_actor, NULL, &cfg_motor, &motor);
 
-    printf("Pilot: 5 actors (sensor, altitude, angle, attitude, motor)\n");
+    printf("Pilot: 6 actors (sensor, estimator, altitude, angle, attitude, motor)\n");
 
     // Main loop: just run actors, sensor actor handles IMU reading
     while (wb_robot_step(TIME_STEP_MS) != -1) {

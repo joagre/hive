@@ -10,6 +10,7 @@ A quadcopter autopilot example using the actor runtime with Webots simulator.
 - Step 2: Separate altitude actor (altitude/rate split)
 - Step 3: Sensor actor (hardware abstraction)
 - Step 4: Angle actor (attitude angle control)
+- Step 5: Estimator actor (sensor fusion, vertical velocity)
 - Mixer moved to motor_actor (platform-specific code in one place)
 
 ## Goals
@@ -58,7 +59,7 @@ cfg.max_entries = 1;  // Latest value only - correct for real-time control
 
 ## Architecture Overview
 
-Five actors connected via buses:
+Six actors connected via buses:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
@@ -86,35 +87,44 @@ Five actors connected via buses:
 │           │                                                        │
 │           ▼                                                        │
 │  ┌───────────┐     ┌─────────────────┐     ┌───────────────────┐   │
-│  │  IMU Bus  │────►│ ALTITUDE ACTOR  │────►│   Thrust Bus      │   │
-│  │           │     │ (altitude PID)  │     │                   │   │
-│  │           │     └─────────────────┘     └─────────┬─────────┘   │
-│  │           │                                       │             │
-│  │           │     ┌─────────────────┐               │             │
-│  │           │────►│  ANGLE ACTOR    │               │             │
-│  │           │     │ (angle PIDs)    │               │             │
-│  │           │     └────────┬────────┘               │             │
-│  │           │              │                        │             │
-│  │           │              ▼                        │             │
-│  │           │     ┌───────────────────┐             │             │
-│  │           │     │ Rate Setpoint Bus │             │             │
-│  │           │     └─────────┬─────────┘             │             │
-│  │           │               │                       │             │
-│  │           │     ┌─────────▼─────────┐             │             │
-│  │           │────►│ ATTITUDE ACTOR    │◄────────────┘             │
-│  │           │     │ (rate PIDs)       │                           │
-│  └───────────┘     └────────┬──────────┘                           │
-│                             │                                      │
-│                             ▼                                      │
-│                    ┌─────────────────┐     ┌───────────────────┐   │
-│                    │   Torque Bus    │────►│   MOTOR ACTOR     │   │
-│                    │                 │     │ (mixer+safety)    │   │
-│                    └─────────────────┘     └─────────┬─────────┘   │
+│  │  IMU Bus  │────►│ ESTIMATOR ACTOR │────►│    State Bus      │   │
+│  │           │     │ (sensor fusion) │     │                   │   │
+│  └───────────┘     └─────────────────┘     └─────────┬─────────┘   │
 │                                                      │             │
-└──────────────────────────────────────────────────────┼─────────────┘
-                                                       │
-                                                       ▼
-                                              platform_write_motors()
+│           ┌──────────────────────────────────────────┤             │
+│           │                                          │             │
+│           ▼                                          ▼             │
+│  ┌─────────────────┐     ┌───────────────────┐  ┌──────────────┐   │
+│  │ ALTITUDE ACTOR  │────►│   Thrust Bus      │  │ ANGLE ACTOR  │   │
+│  │ (altitude PID)  │     │                   │  │ (angle PIDs) │   │
+│  └─────────────────┘     └─────────┬─────────┘  └──────┬───────┘   │
+│                                    │                   │           │
+│                                    │                   ▼           │
+│                                    │      ┌───────────────────┐    │
+│                                    │      │ Rate Setpoint Bus │    │
+│                                    │      └─────────┬─────────┘    │
+│                                    │                │              │
+│                                    ▼                ▼              │
+│                          ┌─────────────────────────────┐           │
+│                          │     ATTITUDE ACTOR          │◄── State  │
+│                          │     (rate PIDs)             │           │
+│                          └──────────────┬──────────────┘           │
+│                                         │                          │
+│                                         ▼                          │
+│                                ┌─────────────────┐                 │
+│                                │   Torque Bus    │                 │
+│                                └────────┬────────┘                 │
+│                                         │                          │
+│                                         ▼                          │
+│                                ┌─────────────────┐                 │
+│                                │   MOTOR ACTOR   │                 │
+│                                │ (mixer+safety)  │                 │
+│                                └────────┬────────┘                 │
+│                                         │                          │
+└─────────────────────────────────────────┼──────────────────────────┘
+                                          │
+                                          ▼
+                                 platform_write_motors()
 ```
 
 ---
@@ -129,6 +139,7 @@ Code is split into focused modules:
 |------|---------|
 | `pilot.c` | Main loop, platform layer, bus setup |
 | `sensor_actor.c/h` | Reads hardware, publishes to IMU bus |
+| `estimator_actor.c/h` | Sensor fusion → state bus |
 | `altitude_actor.c/h` | Altitude PID → thrust |
 | `angle_actor.c/h` | Angle PIDs → rate setpoints |
 | `attitude_actor.c/h` | Rate PIDs → torque commands |
@@ -148,28 +159,31 @@ platform_read_imu() ◄── called by sensor_actor
        ▼
    IMU Bus
        │
-       ├──────────────────────┬────────────────────────┐
-       ▼                      ▼                        ▼
-Altitude Actor          Angle Actor           Attitude Actor
-(altitude PID)         (angle PIDs)             (rate PIDs)
-       │                      │                        ▲
-       ▼                      ▼                        │
-  Thrust Bus           Rate Setpoint Bus ──────────────┤
-       │                                               │
-       └───────────────────────────────────────────────┘
-                              │
-                              ▼
-                        Torque Bus
-                              │
-                              ▼
-                        Motor Actor
-                     (mixer + safety)
-                              │
-                              ▼
-                platform_write_motors()
-                              │
-                              ▼
-                   wb_motor_set_velocity()
+       ▼
+Estimator Actor ──► State Bus (includes vertical velocity)
+                        │
+       ┌────────────────┼────────────────────────┐
+       ▼                ▼                        ▼
+Altitude Actor    Angle Actor            Attitude Actor
+(altitude PID)   (angle PIDs)              (rate PIDs)
+       │                │                        ▲
+       ▼                ▼                        │
+  Thrust Bus     Rate Setpoint Bus ──────────────┤
+       │                                         │
+       └─────────────────────────────────────────┘
+                        │
+                        ▼
+                  Torque Bus
+                        │
+                        ▼
+                  Motor Actor
+               (mixer + safety)
+                        │
+                        ▼
+              platform_write_motors()
+                        │
+                        ▼
+             wb_motor_set_velocity()
 ```
 
 ---
@@ -253,10 +267,11 @@ while (wb_robot_step(TIME_STEP_MS) != -1) {
 
 Each `hive_step()` runs all ready actors once:
 1. Sensor actor reads hardware, publishes to IMU bus
-2. Altitude actor reads IMU bus, publishes thrust
-3. Angle actor reads IMU bus, publishes rate setpoints
-4. Attitude actor reads IMU + thrust + rate setpoints, publishes torque commands
-5. Motor actor applies mixer, writes to hardware
+2. Estimator actor reads IMU bus, publishes state estimate
+3. Altitude actor reads state bus, publishes thrust
+4. Angle actor reads state bus, publishes rate setpoints
+5. Attitude actor reads state + thrust + rate setpoints, publishes torque commands
+6. Motor actor applies mixer, writes to hardware
 
 ### Key Parameters
 
@@ -302,6 +317,7 @@ Actors receive platform functions via init:
 ### Portable Code (no hardware deps)
 
 - `pid.c/h` - Generic PID controller
+- `estimator_actor.c/h` - Uses only bus API
 - `altitude_actor.c/h` - Uses only bus API
 - `angle_actor.c/h` - Uses only bus API
 - `attitude_actor.c/h` - Uses only bus API
@@ -316,6 +332,7 @@ Actors receive platform functions via init:
 examples/pilot/
     pilot.c              # Main loop, platform layer, bus setup
     sensor_actor.c/h     # Hardware sensor reading → IMU bus
+    estimator_actor.c/h  # Sensor fusion → state bus
     altitude_actor.c/h   # Altitude PID → thrust
     angle_actor.c/h      # Angle PIDs → rate setpoints
     attitude_actor.c/h   # Rate PIDs → torque commands
@@ -461,25 +478,30 @@ IMU Bus ──► Angle Actor ──► Rate Setpoint Bus ──► Attitude Act
 - Rate controller tracks those setpoints
 - Easier to tune each layer independently
 
-### Step 5: Estimator Actor
+### Step 5: Estimator Actor ✓
 
 Add sensor fusion between raw sensors and controllers.
 
 **Before:**
 ```
-Sensor Actor ──► IMU Bus (raw) ──► Controllers
+Sensor Actor ──► IMU Bus ──► Controllers
 ```
 
 **After:**
 ```
-Sensor Actor ──► Raw Bus ──► Estimator Actor ──► State Bus ──► Controllers
-                             (complementary filter)
+Sensor Actor ──► IMU Bus ──► Estimator Actor ──► State Bus ──► Controllers
+                             (sensor fusion)
 ```
 
+**Implementation:**
+- For Webots: Mostly pass-through (inertial_unit provides clean attitude)
+- Computes vertical velocity by differentiating GPS altitude with low-pass filter
+- For real hardware: Would implement complementary filter or Kalman filter
+
 **Benefits:**
-- Cleaner sensor data
-- Filtered attitude estimate
-- Altitude rate estimation
+- Controllers use state estimate, not raw sensors
+- Derived values (vertical velocity) computed in one place
+- Clean abstraction for real hardware sensor fusion
 
 ### Step 6: Setpoint Actor
 
@@ -523,8 +545,8 @@ With default `hive_static_config.h`, the runtime uses ~1.2 MB RAM (mostly the 1 
 
 | Resource | Used | Default | Minimal |
 |----------|------|---------|---------|
-| Actors | 5 | 64 | 8 |
-| Buses | 4 | 32 | 4 |
+| Actors | 6 | 64 | 8 |
+| Buses | 5 | 32 | 8 |
 | Stack per actor | 1 KB | 64 KB | 1 KB |
 | Stack arena | 4 KB | 1 MB | 4 KB |
 | Mailbox entries | ~4 | 256 | 8 |

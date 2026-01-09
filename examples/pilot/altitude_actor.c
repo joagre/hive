@@ -1,6 +1,6 @@
 // Altitude actor - Altitude hold control
 //
-// Subscribes to IMU bus, runs altitude PID, publishes thrust commands.
+// Subscribes to state bus, runs altitude PID, publishes thrust commands.
 
 #include "altitude_actor.h"
 #include "types.h"
@@ -10,18 +10,18 @@
 #include "hive_bus.h"
 #include <stdio.h>
 
-static bus_id s_imu_bus;
+static bus_id s_state_bus;
 static bus_id s_thrust_bus;
 
-void altitude_actor_init(bus_id imu_bus, bus_id thrust_bus) {
-    s_imu_bus = imu_bus;
+void altitude_actor_init(bus_id state_bus, bus_id thrust_bus) {
+    s_state_bus = state_bus;
     s_thrust_bus = thrust_bus;
 }
 
 void altitude_actor(void *arg) {
     (void)arg;
 
-    hive_bus_subscribe(s_imu_bus);
+    hive_bus_subscribe(s_state_bus);
 
     pid_state_t alt_pid;
     pid_init(&alt_pid, ALT_PID_KP, ALT_PID_KI, ALT_PID_KD);
@@ -31,19 +31,19 @@ void altitude_actor(void *arg) {
     int count = 0;
 
     while (1) {
-        imu_data_t imu;
+        state_estimate_t state;
         size_t len;
 
-        if (hive_bus_read(s_imu_bus, &imu, sizeof(imu), &len).code == HIVE_OK) {
-            float correction = pid_update(&alt_pid, TARGET_ALTITUDE, imu.altitude, TIME_STEP_S);
+        if (hive_bus_read(s_state_bus, &state, sizeof(state), &len).code == HIVE_OK) {
+            float correction = pid_update(&alt_pid, TARGET_ALTITUDE, state.altitude, TIME_STEP_S);
             float thrust = CLAMPF(BASE_THRUST + correction, 0.0f, 1.0f);
 
             thrust_cmd_t cmd = {.thrust = thrust};
             hive_bus_publish(s_thrust_bus, &cmd, sizeof(cmd));
 
             if (++count % DEBUG_PRINT_INTERVAL == 0) {
-                printf("[ALT] alt=%.2f target=%.1f thrust=%.3f\n",
-                       imu.altitude, TARGET_ALTITUDE, thrust);
+                printf("[ALT] alt=%.2f vvel=%.2f target=%.1f thrust=%.3f\n",
+                       state.altitude, state.vertical_velocity, TARGET_ALTITUDE, thrust);
             }
         }
 

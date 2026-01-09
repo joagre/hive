@@ -1,6 +1,6 @@
 // Attitude actor - Rate stabilization
 //
-// Subscribes to IMU, thrust, and rate setpoint buses, runs rate PIDs,
+// Subscribes to state, thrust, and rate setpoint buses, runs rate PIDs,
 // publishes torque commands.
 
 #include "attitude_actor.h"
@@ -11,14 +11,14 @@
 #include "hive_bus.h"
 #include <stdio.h>
 
-static bus_id s_imu_bus;
+static bus_id s_state_bus;
 static bus_id s_thrust_bus;
 static bus_id s_rate_setpoint_bus;
 static bus_id s_torque_bus;
 
-void attitude_actor_init(bus_id imu_bus, bus_id thrust_bus,
+void attitude_actor_init(bus_id state_bus, bus_id thrust_bus,
                          bus_id rate_setpoint_bus, bus_id torque_bus) {
-    s_imu_bus = imu_bus;
+    s_state_bus = state_bus;
     s_thrust_bus = thrust_bus;
     s_rate_setpoint_bus = rate_setpoint_bus;
     s_torque_bus = torque_bus;
@@ -27,7 +27,7 @@ void attitude_actor_init(bus_id imu_bus, bus_id thrust_bus,
 void attitude_actor(void *arg) {
     (void)arg;
 
-    hive_bus_subscribe(s_imu_bus);
+    hive_bus_subscribe(s_state_bus);
     hive_bus_subscribe(s_thrust_bus);
     hive_bus_subscribe(s_rate_setpoint_bus);
 
@@ -46,7 +46,7 @@ void attitude_actor(void *arg) {
     int count = 0;
 
     while (1) {
-        imu_data_t imu;
+        state_estimate_t state;
         thrust_cmd_t thrust_cmd;
         rate_setpoint_t new_rate_sp;
         size_t len;
@@ -59,18 +59,18 @@ void attitude_actor(void *arg) {
             rate_sp = new_rate_sp;
         }
 
-        if (hive_bus_read(s_imu_bus, &imu, sizeof(imu), &len).code == HIVE_OK) {
+        if (hive_bus_read(s_state_bus, &state, sizeof(state), &len).code == HIVE_OK) {
             torque_cmd_t cmd;
             cmd.thrust = thrust;
-            cmd.roll   = pid_update(&roll_pid,  rate_sp.roll,  -imu.gyro_x, TIME_STEP_S);
-            cmd.pitch  = pid_update(&pitch_pid, rate_sp.pitch, -imu.gyro_y, TIME_STEP_S);
-            cmd.yaw    = pid_update(&yaw_pid,   rate_sp.yaw,   -imu.gyro_z, TIME_STEP_S);
+            cmd.roll   = pid_update(&roll_pid,  rate_sp.roll,  -state.roll_rate,  TIME_STEP_S);
+            cmd.pitch  = pid_update(&pitch_pid, rate_sp.pitch, -state.pitch_rate, TIME_STEP_S);
+            cmd.yaw    = pid_update(&yaw_pid,   rate_sp.yaw,   -state.yaw_rate,   TIME_STEP_S);
 
             hive_bus_publish(s_torque_bus, &cmd, sizeof(cmd));
 
             if (++count % DEBUG_PRINT_INTERVAL == 0) {
                 printf("[ATT] roll=%5.1f pitch=%5.1f yaw=%5.1f\n",
-                       imu.roll * RAD_TO_DEG, imu.pitch * RAD_TO_DEG, imu.yaw * RAD_TO_DEG);
+                       state.roll * RAD_TO_DEG, state.pitch * RAD_TO_DEG, state.yaw * RAD_TO_DEG);
             }
         }
 

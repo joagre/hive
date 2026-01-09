@@ -36,6 +36,15 @@
 #define MOTOR_WATCHDOG_TIMEOUT  50
 
 // ----------------------------------------------------------------------------
+// Estimator parameters
+// ----------------------------------------------------------------------------
+
+// Low-pass filter coefficient for vertical velocity (0.0 to 1.0)
+// Higher = more smoothing, slower response
+// Lower = less smoothing, more noise
+#define VVEL_FILTER_ALPHA  0.8f
+
+// ----------------------------------------------------------------------------
 // Control parameters (tuned for Webots Crazyflie)
 // ----------------------------------------------------------------------------
 

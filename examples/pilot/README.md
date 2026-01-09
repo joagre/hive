@@ -4,13 +4,14 @@ Quadcopter hover example using hive actor runtime with Webots simulator.
 
 ## What it does
 
-Demonstrates altitude-hold hover control with a Crazyflie quadcopter using 5 actors:
+Demonstrates altitude-hold hover control with a Crazyflie quadcopter using 6 actors:
 
 1. **Sensor actor** reads IMU/GPS from Webots, publishes to IMU bus
-2. **Altitude actor** runs altitude PID, publishes thrust commands
-3. **Angle actor** runs angle PIDs, publishes rate setpoints
-4. **Attitude actor** runs rate PIDs, publishes torque commands
-5. **Motor actor** applies mixer, enforces safety limits, writes to hardware
+2. **Estimator actor** sensor fusion, computes vertical velocity, publishes to state bus
+3. **Altitude actor** runs altitude PID, publishes thrust commands
+4. **Angle actor** runs angle PIDs, publishes rate setpoints
+5. **Attitude actor** runs rate PIDs, publishes torque commands
+6. **Motor actor** applies mixer, enforces safety limits, writes to hardware
 
 The drone rises to 1.0m altitude and holds position.
 
@@ -34,6 +35,7 @@ Then open `worlds/hover_test.wbt` in Webots and start the simulation.
 ```
 pilot.c              # Main loop, platform layer, bus setup
 sensor_actor.c/h     # Hardware sensor reading → IMU bus
+estimator_actor.c/h  # Sensor fusion → state bus
 altitude_actor.c/h   # Altitude PID → thrust
 angle_actor.c/h      # Angle PIDs → rate setpoints
 attitude_actor.c/h   # Rate PIDs → torque commands
@@ -45,17 +47,17 @@ config.h             # Shared constants (PID gains, timing)
 
 ## Architecture
 
-Five actors connected via buses:
+Six actors connected via buses:
 
 ```
-Sensor Actor ──► IMU Bus ──► Altitude Actor ──► Thrust Bus ──────────────┐
-                     │                                                    │
-                     ├──► Angle Actor ──► Rate Setpoint Bus ─┐            │
-                     │                                       │            │
-                     └──► Attitude Actor ◄───────────────────┴────────────┘
-                               │
-                               ▼
-                         Torque Bus ──► Motor Actor ──► Hardware
+Sensor ──► IMU Bus ──► Estimator ──► State Bus ──► Altitude ──► Thrust Bus ─┐
+                                          │                                  │
+                                          ├──► Angle ──► Rate Setpoint Bus ──┤
+                                          │                                  │
+                                          └──► Attitude ◄────────────────────┘
+                                                  │
+                                                  ▼
+                                            Torque Bus ──► Motor ──► Hardware
 ```
 
 Platform layer (in pilot.c) provides hardware abstraction:
@@ -70,13 +72,14 @@ All actors run at CRITICAL priority. Spawn order determines execution order
 within the same priority level (round-robin). Actors are spawned in data-flow
 order to ensure each actor sees fresh data from upstream actors in the same step:
 
-| Order | Actor    | Priority | Rationale |
-|-------|----------|----------|-----------|
-| 1     | sensor   | CRITICAL | Reads hardware first |
-| 2     | altitude | CRITICAL | Needs IMU, produces thrust |
-| 3     | angle    | CRITICAL | Needs IMU, produces rate setpoints |
-| 4     | attitude | CRITICAL | Needs IMU + thrust + rate setpoints |
-| 5     | motor    | CRITICAL | Needs torque, writes hardware last |
+| Order | Actor     | Priority | Rationale |
+|-------|-----------|----------|-----------|
+| 1     | sensor    | CRITICAL | Reads hardware first |
+| 2     | estimator | CRITICAL | Needs IMU, produces state estimate |
+| 3     | altitude  | CRITICAL | Needs state, produces thrust |
+| 4     | angle     | CRITICAL | Needs state, produces rate setpoints |
+| 5     | attitude  | CRITICAL | Needs state + thrust + rate setpoints |
+| 6     | motor     | CRITICAL | Needs torque, writes hardware last |
 
 ## Control System
 
