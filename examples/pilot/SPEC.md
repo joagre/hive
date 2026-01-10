@@ -264,9 +264,10 @@ thrust = BASE_THRUST + PI_correction - Kv * vertical_velocity
 
 Base thrust: 0.553 (approximate hover thrust for Webots Crazyflie model)
 
-### Mixer (in motor_actor, Crazyflie X Configuration)
+### Mixer (Platform-Specific, X Configuration)
 
-The Webots Crazyflie uses X-configuration where each motor affects both roll and pitch:
+Both platforms use X-configuration where each motor affects both roll and pitch.
+Motor layout is the same, but mixer formulas differ due to motor rotation directions:
 
 ```
         Front
@@ -277,14 +278,25 @@ The Webots Crazyflie uses X-configuration where each motor affects both roll and
         /  \
       M1    M4
         Rear
-
-M1 (rear-left):   thrust - roll + pitch + yaw
-M2 (front-left):  thrust - roll - pitch - yaw
-M3 (front-right): thrust + roll - pitch + yaw
-M4 (rear-right):  thrust + roll + pitch - yaw
 ```
 
-This matches the official Bitcraze Webots controller.
+**Crazyflie (Webots simulation):** Matches official Bitcraze firmware
+```
+M1 (rear-left, CCW):   thrust - roll + pitch + yaw
+M2 (front-left, CW):   thrust - roll - pitch - yaw
+M3 (front-right, CCW): thrust + roll - pitch + yaw
+M4 (rear-right, CW):   thrust + roll + pitch - yaw
+```
+
+**STEVAL-DRONE01 (STM32 hardware):** Different sign conventions
+```
+M1 (rear-left, CCW):   thrust + roll + pitch - yaw
+M2 (front-left, CW):   thrust + roll - pitch + yaw
+M3 (front-right, CCW): thrust - roll - pitch - yaw
+M4 (rear-right, CW):   thrust - roll + pitch + yaw
+```
+
+The mixer is selected at compile time via `#ifdef PLATFORM_STEVAL_DRONE01` in motor_actor.c.
 
 ### Motor Velocity Signs
 

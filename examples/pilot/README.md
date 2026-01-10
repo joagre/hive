@@ -178,9 +178,10 @@ to the target bus. Both altitude and position actors read from the target bus.
 
 After completing the route, the drone loops back to the first waypoint and repeats forever.
 
-### Motor Mixer (in motor_actor, X Configuration)
+### Motor Mixer (Platform-Specific, X Configuration)
 
-The Webots Crazyflie uses X-configuration (matching Bitcraze):
+Both platforms use X-configuration with the same motor layout, but mixer formulas differ
+due to motor rotation directions:
 
 ```
         Front
@@ -191,12 +192,25 @@ The Webots Crazyflie uses X-configuration (matching Bitcraze):
         /  \
       M1    M4
         Rear
-
-M1 = thrust - roll + pitch + yaw  (rear-left)
-M2 = thrust - roll - pitch - yaw  (front-left)
-M3 = thrust + roll - pitch + yaw  (front-right)
-M4 = thrust + roll + pitch - yaw  (rear-right)
 ```
+
+**Crazyflie (Webots simulation):** Matches Bitcraze firmware
+```
+M1 = thrust - roll + pitch + yaw  (rear-left, CCW)
+M2 = thrust - roll - pitch - yaw  (front-left, CW)
+M3 = thrust + roll - pitch + yaw  (front-right, CCW)
+M4 = thrust + roll + pitch - yaw  (rear-right, CW)
+```
+
+**STEVAL-DRONE01 (STM32 hardware):** Different sign conventions
+```
+M1 = thrust + roll + pitch - yaw  (rear-left, CCW)
+M2 = thrust + roll - pitch + yaw  (front-left, CW)
+M3 = thrust - roll - pitch - yaw  (front-right, CCW)
+M4 = thrust - roll + pitch + yaw  (rear-right, CW)
+```
+
+The mixer is selected at compile time via `#ifdef PLATFORM_STEVAL_DRONE01` in motor_actor.c.
 
 ## Main Loop
 
