@@ -10,6 +10,7 @@
 #include "hive_runtime.h"
 #include "hive_bus.h"
 #include "hive_log.h"
+#include <assert.h>
 
 static bus_id s_state_bus;
 static bus_id s_angle_setpoint_bus;
@@ -24,8 +25,8 @@ void angle_actor_init(bus_id state_bus, bus_id angle_setpoint_bus, bus_id rate_s
 void angle_actor(void *arg) {
     (void)arg;
 
-    hive_bus_subscribe(s_state_bus);
-    hive_bus_subscribe(s_angle_setpoint_bus);
+    assert(!HIVE_FAILED(hive_bus_subscribe(s_state_bus)));
+    assert(!HIVE_FAILED(hive_bus_subscribe(s_angle_setpoint_bus)));
 
     pid_state_t roll_pid, pitch_pid, yaw_pid;
     PID_INIT_RPY(roll_pid, pitch_pid, yaw_pid,

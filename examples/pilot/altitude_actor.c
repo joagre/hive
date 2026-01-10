@@ -13,6 +13,7 @@
 #include "hive_runtime.h"
 #include "hive_bus.h"
 #include "hive_log.h"
+#include <assert.h>
 
 static bus_id s_state_bus;
 static bus_id s_thrust_bus;
@@ -27,8 +28,8 @@ void altitude_actor_init(bus_id state_bus, bus_id thrust_bus, bus_id target_bus)
 void altitude_actor(void *arg) {
     (void)arg;
 
-    hive_bus_subscribe(s_state_bus);
-    hive_bus_subscribe(s_target_bus);
+    assert(!HIVE_FAILED(hive_bus_subscribe(s_state_bus)));
+    assert(!HIVE_FAILED(hive_bus_subscribe(s_target_bus)));
 
     pid_state_t alt_pid;
     pid_init_full(&alt_pid, ALT_PID_KP, ALT_PID_KI, ALT_PID_KD, ALT_PID_IMAX, ALT_PID_OMAX);

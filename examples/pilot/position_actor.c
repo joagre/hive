@@ -19,6 +19,7 @@
 #include "hive_runtime.h"
 #include "hive_bus.h"
 #include "hive_log.h"
+#include <assert.h>
 #include <math.h>
 
 static bus_id s_state_bus;
@@ -34,8 +35,8 @@ void position_actor_init(bus_id state_bus, bus_id angle_setpoint_bus, bus_id tar
 void position_actor(void *arg) {
     (void)arg;
 
-    hive_bus_subscribe(s_state_bus);
-    hive_bus_subscribe(s_target_bus);
+    assert(!HIVE_FAILED(hive_bus_subscribe(s_state_bus)));
+    assert(!HIVE_FAILED(hive_bus_subscribe(s_target_bus)));
 
     // Current target (updated from waypoint actor)
     position_target_t target = POSITION_TARGET_ZERO;

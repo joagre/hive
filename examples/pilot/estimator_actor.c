@@ -9,6 +9,7 @@
 #include "hive_runtime.h"
 #include "types.h"
 #include "config.h"
+#include <assert.h>
 #include <stdbool.h>
 
 static bus_id s_imu_bus;
@@ -22,7 +23,7 @@ void estimator_actor_init(bus_id imu_bus, bus_id state_bus) {
 void estimator_actor(void *arg) {
     (void)arg;
 
-    hive_bus_subscribe(s_imu_bus);
+    assert(!HIVE_FAILED(hive_bus_subscribe(s_imu_bus)));
 
     // State for velocity estimation (differentiate GPS position)
     float prev_x = 0.0f, prev_y = 0.0f, prev_altitude = 0.0f;

@@ -10,6 +10,7 @@
 #include "hive_runtime.h"
 #include "hive_bus.h"
 #include "hive_log.h"
+#include <assert.h>
 
 static bus_id s_state_bus;
 static bus_id s_thrust_bus;
@@ -27,9 +28,9 @@ void attitude_actor_init(bus_id state_bus, bus_id thrust_bus,
 void attitude_actor(void *arg) {
     (void)arg;
 
-    hive_bus_subscribe(s_state_bus);
-    hive_bus_subscribe(s_thrust_bus);
-    hive_bus_subscribe(s_rate_setpoint_bus);
+    assert(!HIVE_FAILED(hive_bus_subscribe(s_state_bus)));
+    assert(!HIVE_FAILED(hive_bus_subscribe(s_thrust_bus)));
+    assert(!HIVE_FAILED(hive_bus_subscribe(s_rate_setpoint_bus)));
 
     pid_state_t roll_pid, pitch_pid, yaw_pid;
     // Note: Different output limits per axis (yaw needs more authority)

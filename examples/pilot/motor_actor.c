@@ -46,7 +46,7 @@ void motor_actor_init(bus_id torque_bus, write_motors_fn write_motors) {
 void motor_actor(void *arg) {
     (void)arg;
 
-    hive_bus_subscribe(s_torque_bus);
+    assert(!HIVE_FAILED(hive_bus_subscribe(s_torque_bus)));
 
     int watchdog = 0;
     motor_cmd_t cmd = MOTOR_CMD_ZERO;

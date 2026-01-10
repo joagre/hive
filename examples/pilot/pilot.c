@@ -51,6 +51,7 @@
 #include "motor_actor.h"
 
 #include "hive_log.h"
+#include <assert.h>
 
 // ============================================================================
 // HELPER MACROS
@@ -61,7 +62,8 @@
     actor_config _cfg = HIVE_ACTOR_CONFIG_DEFAULT; \
     _cfg.priority = HIVE_PRIORITY_CRITICAL; \
     _cfg.name = name_str; \
-    hive_spawn_ex(func, NULL, &_cfg, &id); \
+    hive_status _status = hive_spawn_ex(func, NULL, &_cfg, &id); \
+    assert(!HIVE_FAILED(_status)); \
 } while (0)
 
 // ============================================================================
@@ -182,16 +184,13 @@ int main(void) {
     // Create buses (single entry = latest value only)
     hive_bus_config cfg = HIVE_BUS_CONFIG_DEFAULT;
     cfg.max_entries = 1;
-    if (HIVE_FAILED(hive_bus_create(&cfg, &s_imu_bus)) ||
-        HIVE_FAILED(hive_bus_create(&cfg, &s_state_bus)) ||
-        HIVE_FAILED(hive_bus_create(&cfg, &s_thrust_bus)) ||
-        HIVE_FAILED(hive_bus_create(&cfg, &s_target_bus)) ||
-        HIVE_FAILED(hive_bus_create(&cfg, &s_angle_setpoint_bus)) ||
-        HIVE_FAILED(hive_bus_create(&cfg, &s_rate_setpoint_bus)) ||
-        HIVE_FAILED(hive_bus_create(&cfg, &s_torque_bus))) {
-        HIVE_LOG_ERROR("failed to create buses");
-        return 1;
-    }
+    assert(!HIVE_FAILED(hive_bus_create(&cfg, &s_imu_bus)));
+    assert(!HIVE_FAILED(hive_bus_create(&cfg, &s_state_bus)));
+    assert(!HIVE_FAILED(hive_bus_create(&cfg, &s_thrust_bus)));
+    assert(!HIVE_FAILED(hive_bus_create(&cfg, &s_target_bus)));
+    assert(!HIVE_FAILED(hive_bus_create(&cfg, &s_angle_setpoint_bus)));
+    assert(!HIVE_FAILED(hive_bus_create(&cfg, &s_rate_setpoint_bus)));
+    assert(!HIVE_FAILED(hive_bus_create(&cfg, &s_torque_bus)));
 
     // Initialize actors with platform-specific callbacks
 #ifdef PLATFORM_STEVAL_DRONE01
