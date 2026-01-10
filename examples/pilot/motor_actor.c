@@ -8,6 +8,7 @@
 #include "hive_runtime.h"
 #include "hive_bus.h"
 #include "hive_log.h"
+#include <assert.h>
 #include <stdbool.h>
 
 static bus_id s_torque_bus;
@@ -37,6 +38,7 @@ static void mixer_apply(const torque_cmd_t *torque, motor_cmd_t *cmd) {
 }
 
 void motor_actor_init(bus_id torque_bus, write_motors_fn write_motors) {
+    assert(write_motors != NULL);
     s_torque_bus = torque_bus;
     s_write_motors = write_motors;
 }
@@ -59,9 +61,7 @@ void motor_actor(void *arg) {
             mixer_apply(&torque, &cmd);
             armed = true;
 
-            if (s_write_motors) {
-                s_write_motors(&cmd);
-            }
+            s_write_motors(&cmd);
         } else {
             watchdog++;
 
@@ -69,9 +69,7 @@ void motor_actor(void *arg) {
                 HIVE_LOG_WARN("MOTOR WATCHDOG: No commands for %dms - cutting motors!",
                               MOTOR_WATCHDOG_TIMEOUT * TIME_STEP_MS);
                 cmd = (motor_cmd_t)MOTOR_CMD_ZERO;
-                if (s_write_motors) {
-                    s_write_motors(&cmd);
-                }
+                s_write_motors(&cmd);
                 armed = false;
             }
         }
