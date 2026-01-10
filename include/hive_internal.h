@@ -123,6 +123,15 @@ typedef struct {
         } \
     } while(0)
 
+// Subsystem initialization check macro - returns error if subsystem not initialized
+// Used by: All public API functions that require a subsystem to be initialized
+#define HIVE_REQUIRE_INIT(initialized_flag, subsystem_name) \
+    do { \
+        if (!(initialized_flag)) { \
+            return HIVE_ERROR(HIVE_ERR_INVALID, subsystem_name " not initialized"); \
+        } \
+    } while(0)
+
 // Internal helper functions (implemented in hive_ipc.c)
 
 // Free message data back to the shared message pool

@@ -122,6 +122,10 @@ static void expire_old_entries(bus_t *bus) {
             break;
         }
 
+        // Handle clock adjustment (timestamp in future means clock went backward)
+        if (entry->timestamp_ms > now) {
+            break;  // Skip expiry check when clock adjusted backward
+        }
         uint64_t age = now - entry->timestamp_ms;
         if (age < bus->config.max_age_ms) {
             break;  // This entry and all newer ones are still fresh

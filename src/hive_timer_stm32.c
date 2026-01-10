@@ -148,9 +148,7 @@ static hive_status create_timer(uint32_t interval_us, bool periodic, timer_id *o
         return HIVE_ERROR(HIVE_ERR_INVALID, "Invalid arguments");
     }
 
-    if (!g_timer.initialized) {
-        return HIVE_ERROR(HIVE_ERR_INVALID, "Timer subsystem not initialized");
-    }
+    HIVE_REQUIRE_INIT(g_timer.initialized, "Timer");
 
     HIVE_REQUIRE_ACTOR_CONTEXT();
     actor *current = hive_actor_current();
@@ -189,9 +187,7 @@ hive_status hive_timer_every(uint32_t interval_us, timer_id *out) {
 }
 
 hive_status hive_timer_cancel(timer_id id) {
-    if (!g_timer.initialized) {
-        return HIVE_ERROR(HIVE_ERR_INVALID, "Timer subsystem not initialized");
-    }
+    HIVE_REQUIRE_INIT(g_timer.initialized, "Timer");
 
     // Find and remove timer from list
     timer_entry *found = NULL;

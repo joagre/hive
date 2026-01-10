@@ -124,9 +124,7 @@ static hive_status create_timer(uint32_t interval_us, bool periodic, timer_id *o
         return HIVE_ERROR(HIVE_ERR_INVALID, "Invalid arguments");
     }
 
-    if (!g_timer.initialized) {
-        return HIVE_ERROR(HIVE_ERR_INVALID, "Timer subsystem not initialized");
-    }
+    HIVE_REQUIRE_INIT(g_timer.initialized, "Timer");
 
     HIVE_REQUIRE_ACTOR_CONTEXT();
     actor *current = hive_actor_current();
@@ -134,7 +132,7 @@ static hive_status create_timer(uint32_t interval_us, bool periodic, timer_id *o
     // Create timerfd
     int tfd = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK);
     if (tfd < 0) {
-        return HIVE_ERROR(HIVE_ERR_IO, strerror(errno));
+        return HIVE_ERROR(HIVE_ERR_IO, "timerfd_create failed");
     }
 
     // Set timer
@@ -160,7 +158,7 @@ static hive_status create_timer(uint32_t interval_us, bool periodic, timer_id *o
 
     if (timerfd_settime(tfd, 0, &its, NULL) < 0) {
         close(tfd);
-        return HIVE_ERROR(HIVE_ERR_IO, strerror(errno));
+        return HIVE_ERROR(HIVE_ERR_IO, "timerfd_settime failed");
     }
 
     // Allocate timer entry from pool
@@ -192,7 +190,7 @@ static hive_status create_timer(uint32_t interval_us, bool periodic, timer_id *o
         SLIST_REMOVE(g_timer.timers, entry);
         close(tfd);
         hive_pool_free(&g_timer_pool_mgr, entry);
-        return HIVE_ERROR(HIVE_ERR_IO, strerror(errno));
+        return HIVE_ERROR(HIVE_ERR_IO, "epoll_ctl failed");
     }
 
     *out = entry->id;
@@ -208,9 +206,7 @@ hive_status hive_timer_every(uint32_t interval_us, timer_id *out) {
 }
 
 hive_status hive_timer_cancel(timer_id id) {
-    if (!g_timer.initialized) {
-        return HIVE_ERROR(HIVE_ERR_INVALID, "Timer subsystem not initialized");
-    }
+    HIVE_REQUIRE_INIT(g_timer.initialized, "Timer");
 
     // Find and remove timer from list
     timer_entry *found = NULL;

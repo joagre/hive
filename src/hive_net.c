@@ -75,7 +75,7 @@ void hive_net_handle_event(io_source *source) {
                     // Still not ready - this shouldn't happen with epoll, but handle it
                     return;  // Keep waiting
                 } else {
-                    status = HIVE_ERROR(HIVE_ERR_IO, strerror(errno));
+                    status = HIVE_ERROR(HIVE_ERR_IO, "accept failed");
                 }
             } else {
                 set_nonblocking(conn_fd);
@@ -89,7 +89,7 @@ void hive_net_handle_event(io_source *source) {
             int error = 0;
             socklen_t len = sizeof(error);
             if (getsockopt(net->fd, SOL_SOCKET, SO_ERROR, &error, &len) < 0 || error != 0) {
-                status = HIVE_ERROR(HIVE_ERR_IO, error ? strerror(error) : "Connection failed");
+                status = HIVE_ERROR(HIVE_ERR_IO, "connect failed");
                 close(net->fd);
             } else {
                 a->io_result_fd = net->fd;
@@ -104,7 +104,7 @@ void hive_net_handle_event(io_source *source) {
                     // Still not ready - shouldn't happen with epoll
                     return;  // Keep waiting
                 } else {
-                    status = HIVE_ERROR(HIVE_ERR_IO, strerror(errno));
+                    status = HIVE_ERROR(HIVE_ERR_IO, "recv failed");
                 }
             } else {
                 a->io_result_bytes = (size_t)n;
@@ -119,7 +119,7 @@ void hive_net_handle_event(io_source *source) {
                     // Still not ready - shouldn't happen with epoll
                     return;  // Keep waiting
                 } else {
-                    status = HIVE_ERROR(HIVE_ERR_IO, strerror(errno));
+                    status = HIVE_ERROR(HIVE_ERR_IO, "send failed");
                 }
             } else {
                 a->io_result_bytes = (size_t)n;
@@ -213,7 +213,7 @@ static hive_status try_or_epoll(int fd, uint32_t epoll_events, int operation,
         if (timeout_timer != TIMER_ID_INVALID) {
             hive_timer_cancel(timeout_timer);
         }
-        return HIVE_ERROR(HIVE_ERR_IO, strerror(errno));
+        return HIVE_ERROR(HIVE_ERR_IO, "epoll_ctl failed");
     }
 
     // Block actor until I/O ready
@@ -238,14 +238,12 @@ hive_status hive_net_listen(uint16_t port, int *fd_out) {
         return HIVE_ERROR(HIVE_ERR_INVALID, "Invalid arguments");
     }
 
-    if (!g_net.initialized) {
-        return HIVE_ERROR(HIVE_ERR_INVALID, "Network I/O subsystem not initialized");
-    }
+    HIVE_REQUIRE_INIT(g_net.initialized, "Network I/O");
 
     // Create socket (synchronous, doesn't block)
     int fd = socket(AF_INET, SOCK_STREAM, 0);
     if (fd < 0) {
-        return HIVE_ERROR(HIVE_ERR_IO, strerror(errno));
+        return HIVE_ERROR(HIVE_ERR_IO, "socket failed");
     }
 
     // Set SO_REUSEADDR to avoid "Address already in use" errors
@@ -258,15 +256,13 @@ hive_status hive_net_listen(uint16_t port, int *fd_out) {
     addr.sin_port = htons(port);
 
     if (bind(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
-        hive_status status = HIVE_ERROR(HIVE_ERR_IO, strerror(errno));
         close(fd);
-        return status;
+        return HIVE_ERROR(HIVE_ERR_IO, "bind failed");
     }
 
     if (listen(fd, HIVE_NET_LISTEN_BACKLOG) < 0) {
-        hive_status status = HIVE_ERROR(HIVE_ERR_IO, strerror(errno));
         close(fd);
-        return status;
+        return HIVE_ERROR(HIVE_ERR_IO, "listen failed");
     }
 
     set_nonblocking(fd);
@@ -279,9 +275,7 @@ hive_status hive_net_accept(int listen_fd, int *conn_fd_out, int32_t timeout_ms)
         return HIVE_ERROR(HIVE_ERR_INVALID, "Invalid arguments");
     }
 
-    if (!g_net.initialized) {
-        return HIVE_ERROR(HIVE_ERR_INVALID, "Network I/O subsystem not initialized");
-    }
+    HIVE_REQUIRE_INIT(g_net.initialized, "Network I/O");
 
     HIVE_REQUIRE_ACTOR_CONTEXT();
     actor *current = hive_actor_current();
@@ -300,7 +294,7 @@ hive_status hive_net_accept(int listen_fd, int *conn_fd_out, int32_t timeout_ms)
 
     if (errno != EAGAIN && errno != EWOULDBLOCK) {
         // Error (not just "would block")
-        return HIVE_ERROR(HIVE_ERR_IO, strerror(errno));
+        return HIVE_ERROR(HIVE_ERR_IO, "accept failed");
     }
 
     // Would block - register interest in epoll and yield
@@ -319,9 +313,7 @@ hive_status hive_net_connect(const char *ip, uint16_t port, int *fd_out, int32_t
         return HIVE_ERROR(HIVE_ERR_INVALID, "Invalid arguments");
     }
 
-    if (!g_net.initialized) {
-        return HIVE_ERROR(HIVE_ERR_INVALID, "Network I/O subsystem not initialized");
-    }
+    HIVE_REQUIRE_INIT(g_net.initialized, "Network I/O");
 
     HIVE_REQUIRE_ACTOR_CONTEXT();
     actor *current = hive_actor_current();
@@ -337,7 +329,7 @@ hive_status hive_net_connect(const char *ip, uint16_t port, int *fd_out, int32_t
     // Create non-blocking socket
     int fd = socket(AF_INET, SOCK_STREAM, 0);
     if (fd < 0) {
-        return HIVE_ERROR(HIVE_ERR_IO, strerror(errno));
+        return HIVE_ERROR(HIVE_ERR_IO, "socket failed");
     }
 
     set_nonblocking(fd);
@@ -345,9 +337,8 @@ hive_status hive_net_connect(const char *ip, uint16_t port, int *fd_out, int32_t
     // Try non-blocking connect
     if (connect(fd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
         if (errno != EINPROGRESS) {
-            hive_status status = HIVE_ERROR(HIVE_ERR_IO, strerror(errno));
             close(fd);
-            return status;
+            return HIVE_ERROR(HIVE_ERR_IO, "connect failed");
         }
 
         // Connection in progress - add to epoll and wait for writable
@@ -370,7 +361,7 @@ hive_status hive_net_connect(const char *ip, uint16_t port, int *fd_out, int32_t
 hive_status hive_net_close(int fd) {
     // Close is synchronous and fast
     if (close(fd) < 0) {
-        return HIVE_ERROR(HIVE_ERR_IO, strerror(errno));
+        return HIVE_ERROR(HIVE_ERR_IO, "close failed");
     }
     return HIVE_SUCCESS;
 }
@@ -380,9 +371,7 @@ hive_status hive_net_recv(int fd, void *buf, size_t len, size_t *received, int32
         return HIVE_ERROR(HIVE_ERR_INVALID, "Invalid arguments");
     }
 
-    if (!g_net.initialized) {
-        return HIVE_ERROR(HIVE_ERR_INVALID, "Network I/O subsystem not initialized");
-    }
+    HIVE_REQUIRE_INIT(g_net.initialized, "Network I/O");
 
     HIVE_REQUIRE_ACTOR_CONTEXT();
     actor *current = hive_actor_current();
@@ -397,7 +386,7 @@ hive_status hive_net_recv(int fd, void *buf, size_t len, size_t *received, int32
 
     if (errno != EAGAIN && errno != EWOULDBLOCK) {
         // Error (not just "would block")
-        return HIVE_ERROR(HIVE_ERR_IO, strerror(errno));
+        return HIVE_ERROR(HIVE_ERR_IO, "recv failed");
     }
 
     // Would block - register interest in epoll and yield
@@ -416,9 +405,7 @@ hive_status hive_net_send(int fd, const void *buf, size_t len, size_t *sent, int
         return HIVE_ERROR(HIVE_ERR_INVALID, "Invalid arguments");
     }
 
-    if (!g_net.initialized) {
-        return HIVE_ERROR(HIVE_ERR_INVALID, "Network I/O subsystem not initialized");
-    }
+    HIVE_REQUIRE_INIT(g_net.initialized, "Network I/O");
 
     HIVE_REQUIRE_ACTOR_CONTEXT();
     actor *current = hive_actor_current();
@@ -433,7 +420,7 @@ hive_status hive_net_send(int fd, const void *buf, size_t len, size_t *sent, int
 
     if (errno != EAGAIN && errno != EWOULDBLOCK) {
         // Error (not just "would block")
-        return HIVE_ERROR(HIVE_ERR_IO, strerror(errno));
+        return HIVE_ERROR(HIVE_ERR_IO, "send failed");
     }
 
     // Would block - register interest in epoll and yield
