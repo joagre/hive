@@ -689,21 +689,25 @@ typedef struct {
 // Check if message is exit notification
 bool hive_is_exit_msg(const hive_message *msg);
 
+// Decode exit message into struct
+hive_status hive_decode_exit(const hive_message *msg, hive_exit_msg *out);
+
 // Convert exit reason to string (for logging/debugging)
 const char *hive_exit_reason_str(hive_exit_reason reason);
 ```
 
 **Handling exit messages:**
 
-Exit messages can be accessed directly via cast (preferred) or decoded:
+Exit messages should be decoded using `hive_decode_exit()`:
 
 ```c
 hive_message msg;
 hive_ipc_recv(&msg, -1);
 
-if (msg.class == HIVE_MSG_EXIT) {
-    hive_exit_msg *exit_info = (hive_exit_msg *)msg.data;
-    printf("Actor %u died: %s\n", exit_info->actor, hive_exit_reason_str(exit_info->reason));
+if (hive_is_exit_msg(&msg)) {
+    hive_exit_msg exit_info;
+    hive_decode_exit(&msg, &exit_info);
+    printf("Actor %u died: %s\n", exit_info.actor, hive_exit_reason_str(exit_info.reason));
 }
 ```
 

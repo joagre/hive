@@ -118,11 +118,14 @@ Convenience macros:
 ### Exit Message Handling
 Exit messages are received when linked/monitored actors die:
 ```c
-if (msg.class == HIVE_MSG_EXIT) {
-    hive_exit_msg *exit_info = (hive_exit_msg *)msg.data;
-    printf("Actor %u died: %s\n", exit_info->actor, hive_exit_reason_str(exit_info->reason));
+if (hive_is_exit_msg(&msg)) {
+    hive_exit_msg exit_info;
+    hive_decode_exit(&msg, &exit_info);
+    printf("Actor %u died: %s\n", exit_info.actor, hive_exit_reason_str(exit_info.reason));
 }
 ```
+- `hive_is_exit_msg(msg)` checks if message is an exit notification
+- `hive_decode_exit(msg, out)` decodes exit message into `hive_exit_msg` struct
 - `hive_exit_reason_str(reason)` returns "NORMAL", "CRASH", "STACK_OVERFLOW", or "KILLED"
 - Exit reasons: `HIVE_EXIT_NORMAL`, `HIVE_EXIT_CRASH`, `HIVE_EXIT_CRASH_STACK`, `HIVE_EXIT_KILLED`
 

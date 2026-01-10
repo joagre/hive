@@ -1,7 +1,7 @@
 .\" Man page for linking and monitoring functions
 .TH HIVE_LINK 3 "January 2025" "Hive 1.0" "Actor Runtime Manual"
 .SH NAME
-hive_link, hive_link_remove, hive_monitor, hive_monitor_cancel, hive_is_exit_msg, hive_exit_reason_str \- actor linking and monitoring
+hive_link, hive_link_remove, hive_monitor, hive_monitor_cancel, hive_is_exit_msg, hive_decode_exit, hive_exit_reason_str \- actor linking and monitoring
 .SH SYNOPSIS
 .nf
 .B #include <hive_link.h>
@@ -11,6 +11,7 @@ hive_link, hive_link_remove, hive_monitor, hive_monitor_cancel, hive_is_exit_msg
 .BI "hive_status hive_monitor(actor_id " target ", uint32_t *" out ");"
 .BI "hive_status hive_monitor_cancel(uint32_t " id ");"
 .BI "bool hive_is_exit_msg(const hive_message *" msg ");"
+.BI "hive_status hive_decode_exit(const hive_message *" msg ", hive_exit_msg *" out ");"
 .BI "const char *hive_exit_reason_str(hive_exit_reason " reason ");"
 .fi
 .SH DESCRIPTION
@@ -50,14 +51,16 @@ typedef struct {
 } hive_exit_msg;
 .fi
 .PP
-Access the exit information by casting
-.IR msg.data :
+Use
+.BR hive_decode_exit ()
+to extract the exit information:
 .PP
 .nf
-if (msg.class == HIVE_MSG_EXIT) {
-    hive_exit_msg *info = (hive_exit_msg *)msg.data;
-    printf("Actor %u died: %s\\n", info->actor,
-           hive_exit_reason_str(info->reason));
+if (hive_is_exit_msg(&msg)) {
+    hive_exit_msg info;
+    hive_decode_exit(&msg, &info);
+    printf("Actor %u died: %s\\n", info.actor,
+           hive_exit_reason_str(info.reason));
 }
 .fi
 .SS Exit Reasons
@@ -82,6 +85,15 @@ returns true if
 has class
 .BR HIVE_MSG_EXIT .
 .PP
+.BR hive_decode_exit ()
+decodes an exit message, copying the exit information into
+.IR out .
+Returns
+.B HIVE_SUCCESS
+on success, or
+.B HIVE_ERR_INVALID
+if the message is not an exit message.
+.PP
 .BR hive_exit_reason_str ()
 returns a human-readable string for the exit reason:
 "NORMAL", "CRASH", "STACK_OVERFLOW", or "KILLED".
@@ -89,8 +101,9 @@ returns a human-readable string for the exit reason:
 .BR hive_link (),
 .BR hive_link_remove (),
 .BR hive_monitor (),
+.BR hive_monitor_cancel (),
 and
-.BR hive_monitor_cancel ()
+.BR hive_decode_exit ()
 return an
 .I hive_status
 structure.
@@ -196,13 +209,14 @@ void supervisor(void *arg) {
         hive_message msg;
         hive_ipc_recv(&msg, -1);
 
-        if (msg.class == HIVE_MSG_EXIT) {
-            hive_exit_msg *info = (hive_exit_msg *)msg.data;
+        if (hive_is_exit_msg(&msg)) {
+            hive_exit_msg info;
+            hive_decode_exit(&msg, &info);
             printf("Supervisor: worker %u exited (%s)\\n",
-                   info->actor, hive_exit_reason_str(info->reason));
+                   info.actor, hive_exit_reason_str(info.reason));
             exited++;
 
-            if (info->reason != HIVE_EXIT_NORMAL) {
+            if (info.reason != HIVE_EXIT_NORMAL) {
                 /* Could restart worker here */
                 printf("Supervisor: would restart crashed worker\\n");
             }

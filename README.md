@@ -276,10 +276,11 @@ hive_monitor(other, &mon_id);  // Unidirectional - only monitor gets notificatio
 
 hive_message msg;
 hive_ipc_recv(&msg, -1);
-if (msg.class == HIVE_MSG_EXIT) {
-    hive_exit_msg *exit_info = (hive_exit_msg *)msg.data;
-    printf("Actor %u died: %s\n", exit_info->actor, hive_exit_reason_str(exit_info->reason));
-    // exit_info->reason: HIVE_EXIT_NORMAL, HIVE_EXIT_CRASH, HIVE_EXIT_CRASH_STACK, HIVE_EXIT_KILLED
+if (hive_is_exit_msg(&msg)) {
+    hive_exit_msg exit_info;
+    hive_decode_exit(&msg, &exit_info);
+    printf("Actor %u died: %s\n", exit_info.actor, hive_exit_reason_str(exit_info.reason));
+    // exit_info.reason: HIVE_EXIT_NORMAL, HIVE_EXIT_CRASH, HIVE_EXIT_CRASH_STACK, HIVE_EXIT_KILLED
 }
 ```
 
@@ -321,6 +322,7 @@ if (msg.class == HIVE_MSG_EXIT) {
 - `hive_monitor(target, out)` - Create unidirectional monitor
 - `hive_monitor_cancel(id)` - Cancel monitor
 - `hive_is_exit_msg(msg)` - Check if message is exit notification
+- `hive_decode_exit(msg, out)` - Decode exit message into `hive_exit_msg` struct
 - `hive_exit_reason_str(reason)` - Convert exit reason to string ("NORMAL", "CRASH", etc.)
 
 ### Timers
