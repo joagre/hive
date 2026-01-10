@@ -59,6 +59,42 @@ cfg.max_entries = 1;  // Latest value only - correct for real-time control
 - Parameter tuning UI
 - Multiple vehicle types
 
+## Limitations (Production Requirements)
+
+**This example is a demonstration, not production-ready flight software.**
+
+A production flight controller would need error handling and failsafes that this example omits:
+
+### Missing Error Handling
+
+| Scenario | Current Behavior | Production Requirement |
+|----------|------------------|------------------------|
+| Sensor read fails | `BUS_READ()` returns false, actor skips iteration | Watchdog timeout, switch to backup sensor or land |
+| Bus publish fails | Error ignored | Log error, trigger failsafe |
+| Actor crashes | Runtime notifies linked actors | Auto-restart or emergency landing |
+| GPS signal lost | Position control uses stale data | Hold last position, descend slowly, or return-to-home |
+| IMU data invalid | Garbage in, garbage out | Sanity checks, sensor voting, reject outliers |
+
+### Missing Safety Features
+
+- **Motor watchdog**: motor_actor has a watchdog but only cuts thrust - no graceful landing
+- **Geofence**: No boundary limits - drone can fly away indefinitely
+- **Battery monitoring**: No low-voltage warning or auto-land
+- **Arming/disarming**: No safety switch to prevent accidental motor start
+- **Pre-flight checks**: No sensor validation before takeoff
+- **Communication loss**: No failsafe if telemetry link drops
+
+### Why These Are Omitted
+
+This example focuses on demonstrating the actor runtime architecture, not building a safe drone. Adding proper failsafes would obscure the core concepts (actors, buses, control loops) with error handling code.
+
+For a production system, each actor should:
+1. Validate inputs before processing
+2. Handle bus read/write failures
+3. Implement timeouts for expected data
+4. Report health status to a supervisor actor
+5. Respond to emergency stop commands
+
 ---
 
 ## Architecture Overview
