@@ -294,12 +294,13 @@ qemu-build: $(QEMU_ELF)
 	@echo "QEMU test binary built: $(QEMU_ELF)"
 
 # Run QEMU test
+# Note: Filter out "Timer with period zero" warning from unused LM3S6965 hardware timers
 .PHONY: qemu-test
 qemu-test: $(QEMU_ELF)
 	@echo "Running QEMU test..."
 	@qemu-system-arm -M lm3s6965evb -nographic \
 		-semihosting-config enable=on,target=native \
-		-kernel $(QEMU_ELF) \
+		-kernel $(QEMU_ELF) 2>&1 | grep -v "Timer with period zero" \
 		|| true
 	@echo "QEMU test completed"
 
@@ -309,7 +310,7 @@ qemu-test-ci: $(QEMU_ELF)
 	@echo "Running QEMU test with timeout..."
 	@timeout 10 qemu-system-arm -M lm3s6965evb -nographic \
 		-semihosting-config enable=on,target=native \
-		-kernel $(QEMU_ELF) \
+		-kernel $(QEMU_ELF) 2>&1 | grep -v "Timer with period zero" \
 		|| ([ $$? -eq 124 ] && echo "Test timed out" && exit 1)
 
 # ============================================================================
