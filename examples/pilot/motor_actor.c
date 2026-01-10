@@ -11,7 +11,7 @@
 #include <stdbool.h>
 
 static bus_id s_torque_bus;
-static motor_write_fn s_write_motors;
+static write_motors_fn s_write_motors;
 
 // Motor mixer for Crazyflie "X" configuration (matching Bitcraze/Webots).
 //
@@ -36,9 +36,9 @@ static void mixer_apply(const torque_cmd_t *torque, motor_cmd_t *cmd) {
     }
 }
 
-void motor_actor_init(bus_id torque_bus, motor_write_fn write_fn) {
+void motor_actor_init(bus_id torque_bus, write_motors_fn write_motors) {
     s_torque_bus = torque_bus;
-    s_write_motors = write_fn;
+    s_write_motors = write_motors;
 }
 
 void motor_actor(void *arg) {

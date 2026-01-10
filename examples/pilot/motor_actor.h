@@ -10,11 +10,11 @@
 #include "types.h"
 
 // Platform write function type - provided by platform layer
-typedef void (*motor_write_fn)(const motor_cmd_t *cmd);
+typedef void (*write_motors_fn)(const motor_cmd_t *cmd);
 
 // Initialize the motor actor module with bus ID and platform function.
 // Must be called before spawning the actor.
-void motor_actor_init(bus_id torque_bus, motor_write_fn write_fn);
+void motor_actor_init(bus_id torque_bus, write_motors_fn write_motors);
 
 // Actor entry point - spawn this with hive_spawn()
 void motor_actor(void *arg);

@@ -16,11 +16,11 @@
 #define SENSOR_INTERVAL_US  2500
 
 static bus_id s_imu_bus;
-static imu_read_fn s_read_imu;
+static read_imu_fn s_read_imu;
 
-void sensor_actor_init(bus_id imu_bus, imu_read_fn read_fn) {
+void sensor_actor_init(bus_id imu_bus, read_imu_fn read_imu) {
     s_imu_bus = imu_bus;
-    s_read_imu = read_fn;
+    s_read_imu = read_imu;
 }
 
 void sensor_actor(void *arg) {
