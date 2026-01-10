@@ -1,6 +1,10 @@
 # Pilot Example
 
-Quadcopter hover example using hive actor runtime with Webots simulator.
+Quadcopter waypoint navigation using hive actor runtime.
+
+Supports two platforms:
+- **Webots simulation** (default) - Crazyflie quadcopter in Webots simulator
+- **STM32 hardware** - STEVAL-DRONE01 mini drone kit (requires hive STM32 port)
 
 ## What it does
 
@@ -19,10 +23,18 @@ The drone flies a square pattern with altitude changes at each waypoint.
 
 ## Prerequisites
 
+**For Webots simulation:**
 - Webots installed (https://cyberbotics.com/)
 - hive runtime built: `cd ../.. && make`
 
+**For STM32 hardware:**
+- ARM GCC: `apt install gcc-arm-none-eabi`
+- ST-Link: `apt install stlink-tools`
+- hive runtime ported to STM32 (context switch, scheduler, timers)
+
 ## Build and Run
+
+### Webots Simulation
 
 ```bash
 export WEBOTS_HOME=/usr/local/webots  # adjust path
@@ -32,22 +44,55 @@ make install
 
 Then open `worlds/hover_test.wbt` in Webots and start the simulation.
 
+### STM32 Hardware (STEVAL-DRONE01)
+
+```bash
+make -f Makefile.stm32        # Build firmware (requires hive STM32 port)
+make -f Makefile.stm32 flash  # Flash to device
+```
+
+See `hal/STEVAL-DRONE01/README.md` for hardware details.
+
 ## Files
 
-```
-pilot.c              # Main loop, platform layer, bus setup
-sensor_actor.c/h     # Hardware sensor reading → IMU bus
-estimator_actor.c/h  # Sensor fusion → state bus
-altitude_actor.c/h   # Altitude PID → thrust
-waypoint_actor.c/h   # Waypoint manager → target bus
-position_actor.c/h   # Position PD → angle setpoints
-angle_actor.c/h      # Angle PIDs → rate setpoints
-attitude_actor.c/h   # Rate PIDs → torque commands
-motor_actor.c/h      # Mixer + safety: torque → motors → hardware
-pid.c/h              # Reusable PID controller
-types.h              # Portable data types
-config.h             # Shared constants (PID gains, timing)
-```
+### Application Code
+
+| File | Description |
+|------|-------------|
+| `pilot.c` | Main entry point, platform layer, bus setup |
+| `sensor_actor.c/h` | Hardware sensor reading → IMU bus |
+| `estimator_actor.c/h` | Sensor fusion → state bus |
+| `altitude_actor.c/h` | Altitude PID → thrust |
+| `waypoint_actor.c/h` | Waypoint manager → target bus |
+| `position_actor.c/h` | Position PD → angle setpoints |
+| `angle_actor.c/h` | Angle PIDs → rate setpoints |
+| `attitude_actor.c/h` | Rate PIDs → torque commands |
+| `motor_actor.c/h` | Mixer + safety: torque → motors → hardware |
+| `pid.c/h` | Reusable PID controller |
+| `types.h` | Shared data types (imu_data_t, motor_cmd_t, etc.) |
+| `config.h` | Shared constants (PID gains, timing, limits) |
+
+### Build System
+
+| File | Description |
+|------|-------------|
+| `Makefile` | Webots simulation build |
+| `Makefile.stm32` | STM32 hardware build (links hive + pilot + HAL) |
+
+### Documentation
+
+| File | Description |
+|------|-------------|
+| `README.md` | This file |
+| `SPEC.md` | Detailed design specification |
+
+### Directories
+
+| Directory | Description |
+|-----------|-------------|
+| `hal/STEVAL-DRONE01/` | Hardware abstraction layer for STM32 drone |
+| `controllers/pilot/` | Webots controller (symlink created by `make install`) |
+| `worlds/` | Webots world files (hover_test.wbt) |
 
 ## Architecture
 
@@ -67,10 +112,11 @@ graph TB
 ```
 
 Platform layer (in pilot.c) provides hardware abstraction:
-- `platform_read_imu()` - reads Webots sensors
-- `platform_write_motors()` - writes Webots motors
+- `platform_read_imu()` - reads sensors (Webots or STM32)
+- `platform_write_motors()` - writes motors (Webots or STM32)
 
-To port to real hardware, replace these functions.
+pilot.c uses conditional compilation (`#ifdef PLATFORM_STM32`) to select
+between Webots simulation and STM32 hardware at build time.
 
 ## Actor Priorities and Spawn Order
 
