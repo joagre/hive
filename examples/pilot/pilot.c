@@ -22,8 +22,9 @@
 //                                             Torque Bus → Motor ← Thrust Bus ←───┘
 //
 // Platform support:
-//   - Webots simulation (default)
+//   - Webots simulation (default) - hive_step() synced with wb_robot_step()
 //   - STM32 STEVAL-DRONE01 (build with -DPLATFORM_STEVAL_DRONE01)
+//     Timer-driven at 400Hz, uses hive_run() with WFI for power efficiency
 
 #ifdef PLATFORM_STEVAL_DRONE01
 #include "platform_stm32f4.h"
@@ -229,11 +230,9 @@ int main(void) {
 
     // Main loop
 #ifdef PLATFORM_STEVAL_DRONE01
-    // STM32: Run at 400Hz using hardware timing
-    while (1) {
-        hive_step();
-        platform_delay_us(2500);  // 400Hz = 2.5ms period
-    }
+    // STM32: Event-driven with 400Hz timer in sensor_actor.
+    // Scheduler uses WFI when idle for power efficiency.
+    hive_run();
 #else
     // Webots: Sync with simulation timestep
     while (wb_robot_step(TIME_STEP_MS) != -1) {
