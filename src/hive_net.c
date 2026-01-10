@@ -33,7 +33,7 @@ static io_source g_io_source_pool[HIVE_IO_SOURCE_POOL_SIZE];
 static bool g_io_source_used[HIVE_IO_SOURCE_POOL_SIZE];
 static hive_pool g_io_source_pool_mgr;
 
-// Network I/O subsystem state (simplified - no worker thread!)
+// Network I/O subsystem state
 static struct {
     bool initialized;
 } g_net = {0};

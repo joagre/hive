@@ -195,7 +195,6 @@ static hive_status create_timer(uint32_t interval_us, bool periodic, timer_id *o
         return HIVE_ERROR(HIVE_ERR_IO, strerror(errno));
     }
 
-    // Done! No worker thread, no queue, no blocking!
     *out = entry->id;
     return HIVE_SUCCESS;
 }
