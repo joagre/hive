@@ -4,6 +4,32 @@ Platform layer for the STMicroelectronics STEVAL-DRONE01 mini drone kit.
 
 This HAL provides bare-metal drivers for STM32F401, enabling the pilot example to run on real hardware instead of the Webots simulator.
 
+## Quick Start
+
+```bash
+# Build
+make
+
+# Flash via ST-Link
+make flash
+
+# Debug
+make debug
+```
+
+## Two Platform APIs
+
+This HAL provides two platform interfaces - choose based on your needs:
+
+| API | Header | Use Case |
+|-----|--------|----------|
+| **Callback-based** | `platform.h` | Standalone STM32 application with built-in main loop |
+| **Webots-compatible** | `platform_stm32f4.h` | Porting pilot.c from Webots with minimal changes |
+
+**Callback-based (`platform.h`):** You provide callbacks and the platform runs the 400Hz control loop for you. Best for new STM32-native applications.
+
+**Webots-compatible (`platform_stm32f4.h`):** Drop-in replacements for Webots API functions. Best for porting existing Webots code with minimal restructuring.
+
 ## Hardware Overview
 
 | Component | Part Number | Interface | Description |
@@ -59,8 +85,8 @@ This HAL provides bare-metal drivers for STM32F401, enabling the pilot example t
 ┌─────────────────────────────────────────────────────────────────┐
 │                    Peripheral Drivers                            │
 │  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐        │
-│  │   spi1   │  │   i2c1   │  │  motors  │  │  usart1  │        │
-│  │          │  │  (TODO)  │  │  (TODO)  │  │  (TODO)  │        │
+│  │   spi1   │  │   i2c1   │  │   tim4   │  │  usart1  │        │
+│  │ (10.5M)  │  │ (400kHz) │  │ (20kHz)  │  │(115200bd)│        │
 │  └──────────┘  └──────────┘  └──────────┘  └──────────┘        │
 └─────────────────────────────────────────────────────────────────┘
                               │
@@ -89,10 +115,15 @@ This HAL provides bare-metal drivers for STM32F401, enabling the pilot example t
 
 | File | Sensor | Interface | Status |
 |------|--------|-----------|--------|
-| `lsm6dsl.h/c` | LSM6DSL 6-axis IMU | SPI1 | **Integrated** |
-| `lis2mdl.h/c` | LIS2MDL magnetometer | I2C1 | **Integrated** |
-| `lps22hd.h/c` | LPS22HD barometer | I2C1 | **Integrated** |
-| `motors.h/c` | Brushed DC motors | TIM4 PWM | **Integrated** |
+| `lsm6dsl.h/c` | LSM6DSL 6-axis IMU | SPI1 | **Complete** |
+| `lis2mdl.h/c` | LIS2MDL magnetometer | I2C1 | **Complete** |
+| `lps22hd.h/c` | LPS22HD barometer | I2C1 | **Complete** |
+
+### Actuator Drivers
+
+| File | Device | Interface | Status |
+|------|--------|-----------|--------|
+| `motors.h/c` | Brushed DC motors (x4) | TIM4 PWM | **Complete** |
 
 ### Peripheral Drivers
 
