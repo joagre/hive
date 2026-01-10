@@ -144,6 +144,7 @@ This HAL provides two platform interfaces - select via `PLATFORM=` option:
 |------|-------------|
 | `system_config.h/c` | Clock tree (84MHz), SysTick (1ms), DWT (µs timing) |
 | `gpio_config.h/c` | Pin configuration for all peripherals |
+| `syscalls.c` | Newlib stubs for bare-metal (_read, _write, _sbrk, etc.) |
 | `startup_stm32f401.s` | Vector table, Reset_Handler, C runtime init |
 | `stm32f401_flash.ld` | Memory layout (512K Flash, 96K RAM) |
 | `Makefile` | ARM GCC build system |
