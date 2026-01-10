@@ -1,6 +1,7 @@
 # Pilot Example Specification
 
-A quadcopter autopilot example using the actor runtime with Webots simulator.
+A quadcopter autopilot example using the actor runtime. Supports Webots simulation
+(default) and STM32 hardware (STEVAL-DRONE01).
 
 ## Status
 
@@ -309,7 +310,7 @@ Each `hive_step()` runs all ready actors once:
 
 ### Platform Abstraction
 
-To port to real hardware, replace the platform functions in `pilot.c`:
+The platform layer provides hardware abstraction:
 
 ```c
 // Initialize hardware (sensors, motors)
@@ -325,6 +326,17 @@ void platform_write_motors(const motor_cmd_t *cmd);
 Actors receive platform functions via init:
 - `sensor_actor_init(bus, platform_read_imu)`
 - `motor_actor_init(bus, platform_write_motors)`
+
+### Supported Platforms
+
+**Webots simulation (default):**
+- Platform functions defined in `pilot.c`
+- Uses `webots/robot.h` APIs
+
+**STM32 hardware (STEVAL-DRONE01):**
+- Build with: `make -f Makefile.stm32`
+- Platform functions in `hal/STEVAL-DRONE01/platform_stm32f4.c`
+- Requires hive runtime ported to STM32 (context switch, timers)
 
 ### Portable Code (no hardware deps)
 
@@ -354,13 +366,16 @@ examples/pilot/
     pid.c/h              # Reusable PID controller
     types.h              # Portable data types
     config.h             # Shared constants
-    Makefile             # Build with auto-deps
+    Makefile             # Webots simulation build
+    Makefile.stm32       # STM32 hardware build
     SPEC.md              # This specification
     README.md            # Usage instructions
     worlds/
         hover_test.wbt   # Webots world file
     controllers/
         pilot/           # Webots controller (installed here)
+    hal/
+        STEVAL-DRONE01/  # STM32F401 HAL drivers
 ```
 
 ---
