@@ -3,15 +3,11 @@
 // Subscribes to state bus, runs simple PD position control,
 // publishes angle setpoints for the angle actor to track.
 //
-// Internal convention (intuitive physics):
-//   - Positive position error → positive command → accelerate toward target
+// Sign conventions:
+//   Internal: Positive error → positive command → accelerate toward target
+//   Aerospace: Positive pitch (nose up) → -X accel, positive roll → -Y accel
 //
-// Webots/aerospace convention (attitude → acceleration):
-//   - Positive pitch (nose up) → thrust tilts back → -X acceleration
-//   - Positive roll (right wing down) → thrust tilts left → -Y acceleration
-//
-// We negate both roll and pitch when publishing to convert from our
-// internal convention to Webots convention.
+// Roll is negated when publishing to convert from internal to aerospace.
 
 #include "position_actor.h"
 #include "types.h"
@@ -75,9 +71,8 @@ void position_actor(void *arg) {
         pitch_cmd = CLAMPF(pitch_cmd, -MAX_TILT_ANGLE, MAX_TILT_ANGLE);
         roll_cmd  = CLAMPF(roll_cmd,  -MAX_TILT_ANGLE, MAX_TILT_ANGLE);
 
-        // Sign conversion for Webots Crazyflie (matching Bitcraze):
-        // - Roll is negated: positive body Y error → negative roll → +Y body accel
-        // - Pitch is NOT negated: positive body X error → positive pitch → forward
+        // Sign conversion to aerospace convention:
+        // - Roll negated: positive body Y error → negative roll → +Y accel
         angle_setpoint_t setpoint = {
             .roll = -roll_cmd,
             .pitch = pitch_cmd,

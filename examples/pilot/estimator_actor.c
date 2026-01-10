@@ -1,9 +1,8 @@
 // Estimator actor - Sensor fusion and state estimation
 //
-// For Webots: Mostly pass-through since inertial_unit provides clean attitude.
-//             Computes velocities by differentiating GPS position.
-//
-// For real hardware: Would implement complementary filter or Kalman filter.
+// Subscribes to IMU bus, publishes fused state estimate.
+// Current implementation: pass-through with velocity differentiation.
+// Production: would add complementary filter or Kalman filter.
 
 #include "estimator_actor.h"
 #include "hive_runtime.h"
@@ -38,7 +37,7 @@ void estimator_actor(void *arg) {
 
         state_estimate_t state;
 
-        // Pass through attitude (Webots inertial_unit is already fused)
+        // Pass through attitude (assumes pre-fused IMU data)
         state.roll = imu.roll;
         state.pitch = imu.pitch;
         state.yaw = imu.yaw;
