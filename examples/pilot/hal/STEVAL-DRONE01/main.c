@@ -100,10 +100,12 @@ static float pid_update(pid_t *pid, float error, float dt) {
     return p + i + d;
 }
 
+#ifndef PLATFORM_WEBOTS
 static void pid_reset(pid_t *pid) {
     pid->integral = 0.0f;
     pid->prev_error = 0.0f;
 }
+#endif
 
 // ----------------------------------------------------------------------------
 // Flight Controller State
@@ -234,6 +236,7 @@ static void on_control(const platform_sensors_t *sensors,
     mix_motors(throttle, roll_cmd, pitch_cmd, yaw_cmd, motors);
 }
 
+#ifndef PLATFORM_WEBOTS
 static void on_state_change(platform_state_t old_state,
                             platform_state_t new_state) {
     (void)old_state;
@@ -267,6 +270,7 @@ static void on_state_change(platform_state_t old_state,
         break;
     }
 }
+#endif
 
 // ----------------------------------------------------------------------------
 // Main Entry Point

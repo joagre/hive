@@ -40,6 +40,7 @@ endif
 # HAL driver sources
 SRCS = \
 	main.c \
+	syscalls.c \
 	system_config.c \
 	gpio_config.c \
 	spi1.c \
