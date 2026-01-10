@@ -4,7 +4,8 @@
  * Tests:
  *   1. Runtime initialization
  *   2. Actor spawn and context switching
- *   3. IPC message passing (without timers)
+ *   3. IPC message passing
+ *   4. Timer/sleep functionality
  *
  * Run with: make qemu-test
  */
@@ -13,15 +14,41 @@
 #include "hive_runtime.h"
 #include "hive_actor.h"
 #include "hive_ipc.h"
+#include "hive_timer.h"
 #include "hive_scheduler.h"
 #include <stdint.h>
 #include <stdbool.h>
+
+/* SysTick registers (ARM Cortex-M) */
+#define SYST_CSR    (*(volatile uint32_t *)0xE000E010)  /* Control and Status */
+#define SYST_RVR    (*(volatile uint32_t *)0xE000E014)  /* Reload Value */
+#define SYST_CVR    (*(volatile uint32_t *)0xE000E018)  /* Current Value */
+
+/* SysTick control bits */
+#define SYST_CSR_ENABLE     (1 << 0)
+#define SYST_CSR_TICKINT    (1 << 1)
+#define SYST_CSR_CLKSOURCE  (1 << 2)
+
+/* LM3S6965 runs at 12 MHz in QEMU */
+#define CPU_CLOCK_HZ        12000000
+#define TICK_RATE_HZ        1000
+#define SYSTICK_RELOAD      ((CPU_CLOCK_HZ / TICK_RATE_HZ) - 1)
+
+/* Initialize SysTick for 1ms timer ticks */
+static void systick_init(void) {
+    SYST_CVR = 0;                    /* Clear current value */
+    SYST_RVR = SYSTICK_RELOAD;       /* Set reload value */
+    SYST_CSR = SYST_CSR_ENABLE |     /* Enable SysTick */
+               SYST_CSR_TICKINT |    /* Enable interrupt */
+               SYST_CSR_CLKSOURCE;   /* Use processor clock */
+}
 
 /* Test counters */
 static volatile int g_test_passed = 0;
 static volatile int g_test_failed = 0;
 static volatile int g_pong_count = 0;
 static volatile int g_context_switches = 0;
+static volatile int g_sleep_done = 0;
 static actor_id g_pong_actor = 0;
 
 /* Test macros */
@@ -104,12 +131,44 @@ static void yield_actor(void *arg) {
     semihosting_printf("Yield actor %d exiting\n", id);
 }
 
+/* Sleep test actor - tests timer-based sleep */
+static void sleep_actor(void *arg) {
+    (void)arg;
+    semihosting_printf("Sleep actor started (id=%u)\n", (unsigned)hive_self());
+
+    uint32_t start = hive_timer_get_ticks();
+    semihosting_printf("Sleep actor: ticks before sleep = %u\n", (unsigned)start);
+
+    /* Sleep for 50ms (50 ticks at 1ms/tick) */
+    hive_status s = hive_sleep(50000);
+
+    uint32_t end = hive_timer_get_ticks();
+    uint32_t elapsed = end - start;
+
+    semihosting_printf("Sleep actor: ticks after sleep = %u (elapsed=%u)\n",
+                      (unsigned)end, (unsigned)elapsed);
+
+    if (HIVE_FAILED(s)) {
+        semihosting_printf("Sleep actor: hive_sleep failed: %s\n", HIVE_ERR_STR(s));
+    } else {
+        semihosting_printf("Sleep actor: sleep completed successfully\n");
+    }
+
+    g_sleep_done = 1;
+    semihosting_printf("Sleep actor exiting\n");
+}
+
 /* Main test entry point */
 int main(void) {
     semihosting_printf("\n");
     semihosting_printf("=== Hive Runtime QEMU Test ===\n");
-    semihosting_printf("Testing: init, spawn, context switch, IPC\n");
+    semihosting_printf("Testing: init, spawn, context switch, IPC, sleep\n");
     semihosting_printf("\n");
+
+    /* Initialize SysTick for timer interrupts */
+    systick_init();
+    semihosting_printf("SysTick initialized (reload=%u, %u Hz)\n",
+                      (unsigned)SYSTICK_RELOAD, (unsigned)TICK_RATE_HZ);
 
     /* Test 1: Runtime initialization */
     hive_status s = hive_init();
@@ -166,6 +225,37 @@ int main(void) {
 
     TEST_ASSERT(g_pong_count >= 1, "IPC messages exchanged");
     semihosting_printf("Pong replies: %d\n", g_pong_count);
+
+    /* Test 4: Sleep/timer test */
+    semihosting_printf("\n--- Test: Timer/Sleep ---\n");
+
+    /* Check if ticks are incrementing */
+    uint32_t tick1 = hive_timer_get_ticks();
+    /* Busy wait - needs to be long enough for at least one tick (1ms at 12MHz = 12000 cycles) */
+    for (volatile int i = 0; i < 1000000; i++) { }
+    uint32_t tick2 = hive_timer_get_ticks();
+    semihosting_printf("Tick check: %u -> %u (delta=%u)\n",
+                      (unsigned)tick1, (unsigned)tick2, (unsigned)(tick2 - tick1));
+    TEST_ASSERT(tick2 > tick1, "SysTick is running");
+
+    if (tick2 > tick1) {
+        /* Ticks working, test sleep */
+        actor_id sleep_id;
+        s = hive_spawn(sleep_actor, NULL, &sleep_id);
+        TEST_ASSERT(!HIVE_FAILED(s), "Spawn sleep actor");
+
+        /* Run scheduler - need to process timer events */
+        semihosting_printf("Running scheduler for sleep test...\n");
+        for (int i = 0; i < 1000 && !g_sleep_done; i++) {
+            hive_scheduler_step();
+            /* Small delay to let time pass */
+            for (volatile int j = 0; j < 10000; j++) { }
+        }
+
+        TEST_ASSERT(g_sleep_done, "Sleep completed");
+    } else {
+        semihosting_printf("Skipping sleep test - SysTick not running\n");
+    }
 
     /* Cleanup */
     hive_cleanup();
