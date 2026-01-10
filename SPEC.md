@@ -1783,6 +1783,11 @@ The runtime uses **compile-time configuration** for deterministic memory allocat
 All resource limits are defined at compile-time and require recompilation to change:
 
 ```c
+// Feature toggles (set to 0 to disable)
+#define HIVE_ENABLE_NET 1                     // Network I/O subsystem
+#define HIVE_ENABLE_FILE 1                    // File I/O subsystem
+
+// Resource limits
 #define HIVE_MAX_ACTORS 64                    // Maximum concurrent actors
 #define HIVE_STACK_ARENA_SIZE (1*1024*1024)   // Stack arena size (1 MB)
 #define HIVE_MAX_BUSES 32                     // Maximum concurrent buses
@@ -1794,6 +1799,8 @@ All resource limits are defined at compile-time and require recompilation to cha
 #define HIVE_TIMER_ENTRY_POOL_SIZE 64         // Timer entry pool
 #define HIVE_DEFAULT_STACK_SIZE 65536         // Default actor stack size
 ```
+
+Feature toggles can also be set via Makefile: `make ENABLE_NET=0 ENABLE_FILE=0`.
 
 All runtime structures are **statically allocated** based on these limits. Actor stacks use a static arena allocator by default (configurable via `actor_config.malloc_stack` for malloc). This ensures:
 - Deterministic memory footprint (calculable at link time)
@@ -2083,9 +2090,39 @@ The runtime abstracts platform-specific functionality:
 |-----------|-------------|-------------------------|
 | Context switch | x86-64 asm | ARM Cortex-M asm |
 | Event notification | epoll | WFI + interrupt flags |
-| Timer | timerfd + epoll | Hardware timers (SysTick/TIM) |
+| Timer | timerfd + epoll | Software timer wheel (SysTick/TIM) |
 | Network | Non-blocking BSD sockets + epoll | lwIP NO_SYS mode |
 | File | Synchronous POSIX | Synchronous FATFS or littlefs |
+
+### Platform-Specific Source Files
+
+Platform-specific implementations use naming convention `*_linux.c` / `*_stm32.c`:
+
+| Component | Linux | STM32 |
+|-----------|-------|-------|
+| Scheduler | `hive_scheduler_linux.c` | `hive_scheduler_stm32.c` |
+| Timer | `hive_timer_linux.c` | `hive_timer_stm32.c` |
+| Context switch | `hive_context_x86_64.S` | `hive_context_arm_cm.S` |
+
+Shared code in `hive_context.c` handles platform-specific context initialization.
+
+### Building for Different Platforms
+
+```bash
+# Linux (default)
+make                           # Build for x86-64 Linux
+make PLATFORM=linux            # Explicit
+
+# STM32 (requires ARM cross-compiler)
+make PLATFORM=stm32 CC=arm-none-eabi-gcc
+
+# Feature toggles (disable network and file I/O)
+make ENABLE_NET=0 ENABLE_FILE=0
+
+# STM32 defaults to ENABLE_NET=0 ENABLE_FILE=0
+```
+
+Platform selection sets `HIVE_PLATFORM_LINUX` or `HIVE_PLATFORM_STM32` preprocessor defines.
 
 ## Stack Overflow
 
@@ -2112,7 +2149,7 @@ The runtime abstracts platform-specific functionality:
 
 **Caveat:** Without MPU-based stack isolation (future work), there is no hardware guarantee that overflow stays confined. The layout minimizes risk but does not eliminate it.
 
-**Implementation:** Guard patterns checked on every context switch (hive_scheduler.c)
+**Implementation:** Guard patterns checked on every context switch (platform-specific scheduler)
 
 ---
 

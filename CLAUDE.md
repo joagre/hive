@@ -267,9 +267,19 @@ See SPEC.md "Thread Safety" section for full details.
 Different implementations for Linux (dev) vs STM32 bare metal (prod):
 - Context switch: x86-64 asm vs ARM Cortex-M asm
 - Event notification: epoll vs WFI + interrupt flags
-- Timer: timerfd + epoll vs hardware timers (SysTick/TIM)
+- Timer: timerfd + epoll vs software timer wheel (SysTick/TIM)
 - Network: Non-blocking BSD sockets + epoll vs lwIP NO_SYS mode
 - File: Synchronous POSIX vs synchronous FATFS/littlefs
+
+Platform-specific source files:
+- Scheduler: `hive_scheduler_linux.c` / `hive_scheduler_stm32.c`
+- Timer: `hive_timer_linux.c` / `hive_timer_stm32.c`
+- Context: `hive_context_x86_64.S` / `hive_context_arm_cm.S`
+
+Build commands:
+- `make` or `make PLATFORM=linux` - Build for x86-64 Linux
+- `make PLATFORM=stm32 CC=arm-none-eabi-gcc` - Build for STM32
+- `make ENABLE_NET=0 ENABLE_FILE=0` - Disable optional subsystems
 
 ### Message Classes
 Messages are identified by class (accessible directly via `msg.class`):

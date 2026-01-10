@@ -210,6 +210,16 @@ All resource limits are defined in
 and can be overridden with
 .B -D
 compiler flags. Changing these values requires recompilation.
+.SS Feature Toggles
+.TP
+.B HIVE_ENABLE_NET (1)
+Enable network I/O subsystem. Set to 0 to disable.
+.TP
+.B HIVE_ENABLE_FILE (1)
+Enable file I/O subsystem. Set to 0 to disable.
+.PP
+Can also be set via Makefile:
+.I make ENABLE_NET=0 ENABLE_FILE=0
 .SS Actor Configuration
 .TP
 .B HIVE_MAX_ACTORS (64)

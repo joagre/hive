@@ -4,8 +4,7 @@
 
 A complete actor-based runtime designed for **embedded and safety-critical systems**. Features cooperative multitasking with priority-based scheduling and message passing using the actor model.
 
-**Current platform:** x86-64 Linux (fully implemented)
-**Future platform:** STM32/ARM Cortex-M bare metal (see `SPEC.md`)
+**Platforms:** x86-64 Linux (fully implemented), STM32/ARM Cortex-M bare metal (core runtime implemented)
 
 **Safety-critical caveat:** File I/O stalls the entire scheduler. Restrict file I/O to initialization, shutdown, or non–time-critical phases.
 
@@ -421,6 +420,23 @@ valgrind --leak-check=full ./build/ipc_test
 
 The test suite includes 18 test programs covering actors, IPC, timers, bus, networking, file I/O, linking, monitoring, and edge cases like pool exhaustion and stack overflow detection.
 
+## Building
+
+```bash
+# Linux (default)
+make                           # Build for x86-64 Linux
+
+# STM32 (requires ARM cross-compiler)
+make PLATFORM=stm32 CC=arm-none-eabi-gcc
+
+# Disable optional subsystems
+make ENABLE_NET=0 ENABLE_FILE=0
+
+# STM32 defaults to ENABLE_NET=0 ENABLE_FILE=0
+```
+
 ## Future Work
 
-- Port to ARM Cortex-M bare metal (STM32)
+- STM32: Network I/O (lwIP integration)
+- STM32: File I/O (FATFS/littlefs integration)
+- MPU-based stack guard pages for hardware-guaranteed overflow detection
