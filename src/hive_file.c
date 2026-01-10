@@ -12,7 +12,7 @@
 hive_status hive_file_init(void);
 void hive_file_cleanup(void);
 
-// File I/O subsystem state (simplified - no worker thread!)
+// File I/O subsystem state
 static struct {
     bool initialized;
 } g_file = {0};
