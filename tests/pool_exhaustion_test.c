@@ -4,6 +4,11 @@
 #include <stdio.h>
 #include <stdbool.h>
 
+/* TEST_STACK_SIZE caps stack for QEMU builds; passes through on native */
+#ifndef TEST_STACK_SIZE
+#define TEST_STACK_SIZE(x) (x)
+#endif
+
 // Receiver that accumulates messages without processing
 void slow_receiver_actor(void *arg) {
     (void)arg;

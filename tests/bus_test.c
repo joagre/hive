@@ -6,6 +6,24 @@
 #include <stdio.h>
 #include <string.h>
 
+/* TEST_STACK_SIZE caps stack for QEMU builds; passes through on native */
+#ifndef TEST_STACK_SIZE
+#define TEST_STACK_SIZE(x) (x)
+#endif
+
+/* Bus config for QEMU's reduced limits */
+#ifdef QEMU_TEST_STACK_SIZE
+#define TEST_BUS_CONFIG { \
+    .max_subscribers = 3, \
+    .consume_after_reads = 0, \
+    .max_age_ms = 0, \
+    .max_entries = 4, \
+    .max_entry_size = 128 \
+}
+#else
+#define TEST_BUS_CONFIG TEST_BUS_CONFIG
+#endif
+
 // Test results
 static int tests_passed = 0;
 static int tests_failed = 0;
@@ -22,7 +40,7 @@ static void test1_basic_pubsub(void *arg) {
     printf("\nTest 1: Basic publish/subscribe\n");
 
     // Create bus
-    hive_bus_config cfg = HIVE_BUS_CONFIG_DEFAULT;
+    hive_bus_config cfg = TEST_BUS_CONFIG;
     bus_id bus;
     hive_status status = hive_bus_create(&cfg, &bus);
     if (HIVE_FAILED(status)) {
@@ -103,7 +121,7 @@ static void test2_multi_subscriber(void *arg) {
     printf("\nTest 2: Multiple subscribers\n");
 
     // Create bus
-    hive_bus_config cfg = HIVE_BUS_CONFIG_DEFAULT;
+    hive_bus_config cfg = TEST_BUS_CONFIG;
     hive_status status = hive_bus_create(&cfg, &g_shared_bus);
     if (HIVE_FAILED(status)) {
         TEST_FAIL("hive_bus_create");
@@ -180,7 +198,7 @@ static void test3_max_readers(void *arg) {
     printf("\nTest 3: max_readers retention policy\n");
 
     // Create bus with max_readers = 2 (entry consumed after 2 subscribers read)
-    hive_bus_config cfg = HIVE_BUS_CONFIG_DEFAULT;
+    hive_bus_config cfg = TEST_BUS_CONFIG;
     cfg.consume_after_reads = 2;
     hive_status status = hive_bus_create(&cfg, &g_max_readers_bus);
     if (HIVE_FAILED(status)) {
@@ -243,7 +261,7 @@ static void test4_ring_buffer_wrap(void *arg) {
     printf("\nTest 4: Ring buffer wrap (oldest evicted)\n");
 
     // Create bus with small ring buffer
-    hive_bus_config cfg = HIVE_BUS_CONFIG_DEFAULT;
+    hive_bus_config cfg = TEST_BUS_CONFIG;
     cfg.max_entries = 4;
     bus_id bus;
     hive_status status = hive_bus_create(&cfg, &bus);
@@ -296,7 +314,7 @@ static void test5_nonblocking_read(void *arg) {
     (void)arg;
     printf("\nTest 5: Non-blocking read returns WOULDBLOCK\n");
 
-    hive_bus_config cfg = HIVE_BUS_CONFIG_DEFAULT;
+    hive_bus_config cfg = TEST_BUS_CONFIG;
     bus_id bus;
     hive_bus_create(&cfg, &bus);
     hive_bus_subscribe(bus);
@@ -325,7 +343,7 @@ static void test6_blocking_read_timeout(void *arg) {
     (void)arg;
     printf("\nTest 6: Blocking read with timeout\n");
 
-    hive_bus_config cfg = HIVE_BUS_CONFIG_DEFAULT;
+    hive_bus_config cfg = TEST_BUS_CONFIG;
     bus_id bus;
     hive_bus_create(&cfg, &bus);
     hive_bus_subscribe(bus);
@@ -357,7 +375,7 @@ static void test7_destroy_with_subscribers(void *arg) {
     (void)arg;
     printf("\nTest 7: Destroy bus with subscribers fails\n");
 
-    hive_bus_config cfg = HIVE_BUS_CONFIG_DEFAULT;
+    hive_bus_config cfg = TEST_BUS_CONFIG;
     bus_id bus;
     hive_bus_create(&cfg, &bus);
     hive_bus_subscribe(bus);
@@ -429,7 +447,7 @@ static void test9_max_age_expiry(void *arg) {
     fflush(stdout);
 
     // Create bus with 100ms expiry
-    hive_bus_config cfg = HIVE_BUS_CONFIG_DEFAULT;
+    hive_bus_config cfg = TEST_BUS_CONFIG;
     cfg.max_age_ms = 100;  // Entries expire after 100ms
 
     bus_id bus;
@@ -502,7 +520,7 @@ static void test10_entry_count(void *arg) {
     printf("\nTest 10: hive_bus_entry_count\n");
     fflush(stdout);
 
-    hive_bus_config cfg = HIVE_BUS_CONFIG_DEFAULT;
+    hive_bus_config cfg = TEST_BUS_CONFIG;
     cfg.max_entries = 10;
     bus_id bus;
     hive_status status = hive_bus_create(&cfg, &bus);
@@ -582,7 +600,7 @@ static void test11_subscribe_destroyed_bus(void *arg) {
     printf("\nTest 11: Subscribe to destroyed bus\n");
     fflush(stdout);
 
-    hive_bus_config cfg = HIVE_BUS_CONFIG_DEFAULT;
+    hive_bus_config cfg = TEST_BUS_CONFIG;
     bus_id bus;
     hive_status status = hive_bus_create(&cfg, &bus);
     if (HIVE_FAILED(status)) {
@@ -617,7 +635,7 @@ static void test12_buffer_overflow_protection(void *arg) {
     printf("\nTest 12: Buffer overflow protection\n");
     fflush(stdout);
 
-    hive_bus_config cfg = HIVE_BUS_CONFIG_DEFAULT;
+    hive_bus_config cfg = TEST_BUS_CONFIG;
     bus_id bus;
     hive_status status = hive_bus_create(&cfg, &bus);
     if (HIVE_FAILED(status)) {
@@ -695,7 +713,7 @@ static void run_all_tests(void *arg) {
 
     for (size_t i = 0; i < NUM_TESTS; i++) {
         actor_config cfg = HIVE_ACTOR_CONFIG_DEFAULT;
-        cfg.stack_size = 64 * 1024;
+        cfg.stack_size = TEST_STACK_SIZE(64 * 1024);
 
         actor_id test;
         if (HIVE_FAILED(hive_spawn_ex(test_funcs[i], NULL, &cfg, &test))) {
@@ -723,7 +741,7 @@ int main(void) {
     }
 
     actor_config cfg = HIVE_ACTOR_CONFIG_DEFAULT;
-    cfg.stack_size = 128 * 1024;
+    cfg.stack_size = TEST_STACK_SIZE(128 * 1024);
 
     actor_id runner;
     if (HIVE_FAILED(hive_spawn_ex(run_all_tests, NULL, &cfg, &runner))) {

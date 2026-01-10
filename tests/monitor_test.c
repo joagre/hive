@@ -6,6 +6,11 @@
 #include <stdio.h>
 #include <string.h>
 
+/* TEST_STACK_SIZE caps stack for QEMU builds; passes through on native */
+#ifndef TEST_STACK_SIZE
+#define TEST_STACK_SIZE(x) (x)
+#endif
+
 // Test results
 static int tests_passed = 0;
 static int tests_failed = 0;
@@ -408,7 +413,7 @@ static void test9_monitor_pool_exhaustion(void *arg) {
     for (int i = 0; i < HIVE_MONITOR_ENTRY_POOL_SIZE + 10; i++) {
         actor_config cfg = HIVE_ACTOR_CONFIG_DEFAULT;
         cfg.malloc_stack = true;
-        cfg.stack_size = 8 * 1024;
+        cfg.stack_size = TEST_STACK_SIZE(8 * 1024);
 
         actor_id target;
         if (HIVE_FAILED(hive_spawn_ex(monitor_pool_target, NULL, &cfg, &target))) {
@@ -473,7 +478,7 @@ static void run_all_tests(void *arg) {
 
     for (size_t i = 0; i < NUM_TESTS; i++) {
         actor_config cfg = HIVE_ACTOR_CONFIG_DEFAULT;
-        cfg.stack_size = 64 * 1024;
+        cfg.stack_size = TEST_STACK_SIZE(64 * 1024);
 
         actor_id test;
         if (HIVE_FAILED(hive_spawn_ex(test_funcs[i], NULL, &cfg, &test))) {
@@ -503,7 +508,7 @@ int main(void) {
     }
 
     actor_config cfg = HIVE_ACTOR_CONFIG_DEFAULT;
-    cfg.stack_size = 128 * 1024;
+    cfg.stack_size = TEST_STACK_SIZE(128 * 1024);
 
     actor_id runner;
     if (HIVE_FAILED(hive_spawn_ex(run_all_tests, NULL, &cfg, &runner))) {

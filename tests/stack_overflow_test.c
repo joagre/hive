@@ -1,3 +1,8 @@
+
+/* TEST_STACK_SIZE caps stack for QEMU builds; passes through on native */
+#ifndef TEST_STACK_SIZE
+#define TEST_STACK_SIZE(x) (x)
+#endif
 // NOTE: This test intentionally causes stack overflow, which corrupts memory.
 // Valgrind will report errors - this is expected behavior for this test.
 // Run with: valgrind --error-exitcode=0 ./build/stack_overflow_test
@@ -8,6 +13,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+/* Buffer size to overflow stack - must exceed stack size */
+#ifdef QEMU_TEST_STACK_SIZE
+#define OVERFLOW_BUFFER_SIZE 3000  /* QEMU stack is 2KB, this exceeds it */
+#else
+#define OVERFLOW_BUFFER_SIZE 8200  /* Native stack is 8KB, this exceeds it */
+#endif
+
 // Actor that deliberately corrupts stack guard
 void overflow_actor(void *arg) {
     (void)arg;
@@ -15,9 +27,9 @@ void overflow_actor(void *arg) {
     printf("Overflow actor: Deliberately corrupting stack guard...\n");
 
     // Allocate buffer that will overflow the stack
-    // Stack is 8KB, usable is ~8176 bytes after guards (8 bytes each end)
+    // Stack is 8KB (native) or 2KB (QEMU), usable is less after guards
     // This will overflow and corrupt the guard at the bottom of the stack
-    volatile char buffer[8200];
+    volatile char buffer[OVERFLOW_BUFFER_SIZE];
 
     // Touch the buffer to force allocation and prevent optimization
     volatile int sum = 0;
@@ -26,7 +38,7 @@ void overflow_actor(void *arg) {
         sum += buffer[i];
     }
     // Also touch near the end to ensure full allocation
-    buffer[8199] = (char)sum;
+    buffer[OVERFLOW_BUFFER_SIZE - 1] = (char)sum;
 
     // Yield to trigger guard check
     printf("Overflow actor: Yielding to allow guard check...\n");
@@ -91,7 +103,7 @@ int main(void) {
 
     // Spawn actor with small stack (8KB) to make overflow easy
     actor_config cfg = HIVE_ACTOR_CONFIG_DEFAULT;
-    cfg.stack_size = 8 * 1024;  // 8KB stack
+    cfg.stack_size = TEST_STACK_SIZE(8 * 1024);  // 8KB stack
     cfg.priority = HIVE_PRIORITY_NORMAL;
 
     actor_id overflow;

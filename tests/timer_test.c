@@ -5,6 +5,11 @@
 #include <stdio.h>
 #include <time.h>
 
+/* TEST_STACK_SIZE caps stack for QEMU builds; passes through on native */
+#ifndef TEST_STACK_SIZE
+#define TEST_STACK_SIZE(x) (x)
+#endif
+
 // Test results
 static int tests_passed = 0;
 static int tests_failed = 0;
@@ -468,7 +473,7 @@ int main(void) {
     }
 
     actor_config cfg = HIVE_ACTOR_CONFIG_DEFAULT;
-    cfg.stack_size = 128 * 1024;
+    cfg.stack_size = TEST_STACK_SIZE(128 * 1024);
 
     actor_id runner;
     if (HIVE_FAILED(hive_spawn_ex(run_timer_tests, NULL, &cfg, &runner))) {

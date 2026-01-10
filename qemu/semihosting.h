@@ -14,7 +14,7 @@ void semihosting_putc(char c);
 /* Exit the application with status code */
 void semihosting_exit(int status) __attribute__((noreturn));
 
-/* Minimal printf implementation */
-void semihosting_printf(const char *fmt, ...);
+/* Minimal printf implementation (returns number of chars written for printf compat) */
+int semihosting_printf(const char *fmt, ...);
 
 #endif /* SEMIHOSTING_H */

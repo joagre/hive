@@ -4,6 +4,11 @@
 #include "hive_static_config.h"
 #include <stdio.h>
 
+/* TEST_STACK_SIZE caps stack for QEMU builds; passes through on native */
+#ifndef TEST_STACK_SIZE
+#define TEST_STACK_SIZE(x) (x)
+#endif
+
 // Slow processor that drains messages gradually
 void slow_processor_actor(void *arg) {
     (void)arg;

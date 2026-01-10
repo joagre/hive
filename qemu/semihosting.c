@@ -114,7 +114,7 @@ static void uint_to_str(uint32_t val, char *buf, int base) {
 }
 
 /* Minimal printf implementation for semihosting output */
-void semihosting_printf(const char *fmt, ...) {
+int semihosting_printf(const char *fmt, ...) {
     va_list args;
     va_start(args, fmt);
 
@@ -124,12 +124,19 @@ void semihosting_printf(const char *fmt, ...) {
     while (*fmt) {
         if (*fmt == '%' && *(fmt + 1)) {
             fmt++;
-            char num_buf[12];
+            char num_buf[24];  /* Increased for long values */
+            int is_long = 0;
+
+            /* Check for 'l' modifier */
+            if (*fmt == 'l') {
+                is_long = 1;
+                fmt++;
+            }
 
             switch (*fmt) {
                 case 'd':
                 case 'i': {
-                    int32_t val = va_arg(args, int32_t);
+                    int32_t val = is_long ? (int32_t)va_arg(args, long) : va_arg(args, int32_t);
                     int_to_str(val, num_buf, 10);
                     for (char *p = num_buf; *p && buf_idx < 126; p++) {
                         buf[buf_idx++] = *p;
@@ -137,7 +144,7 @@ void semihosting_printf(const char *fmt, ...) {
                     break;
                 }
                 case 'u': {
-                    uint32_t val = va_arg(args, uint32_t);
+                    uint32_t val = is_long ? (uint32_t)va_arg(args, unsigned long) : va_arg(args, uint32_t);
                     uint_to_str(val, num_buf, 10);
                     for (char *p = num_buf; *p && buf_idx < 126; p++) {
                         buf[buf_idx++] = *p;
@@ -146,7 +153,7 @@ void semihosting_printf(const char *fmt, ...) {
                 }
                 case 'x':
                 case 'X': {
-                    uint32_t val = va_arg(args, uint32_t);
+                    uint32_t val = is_long ? (uint32_t)va_arg(args, unsigned long) : va_arg(args, uint32_t);
                     uint_to_str(val, num_buf, 16);
                     for (char *p = num_buf; *p && buf_idx < 126; p++) {
                         buf[buf_idx++] = *p;
@@ -176,6 +183,7 @@ void semihosting_printf(const char *fmt, ...) {
                     break;
                 }
                 default:
+                    /* Unknown format, skip */
                     break;
             }
             fmt++;
@@ -191,4 +199,5 @@ void semihosting_printf(const char *fmt, ...) {
     semihosting_puts(buf);
 
     va_end(args);
+    return buf_idx;
 }

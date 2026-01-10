@@ -314,6 +314,67 @@ qemu-test-ci: $(QEMU_ELF)
 		|| ([ $$? -eq 124 ] && echo "Test timed out" && exit 1)
 
 # ============================================================================
+# QEMU Test Suite (run tests/*.c on ARM/QEMU)
+# ============================================================================
+
+# Compatible tests (exclude net_test.c and file_test.c which require disabled features)
+QEMU_COMPAT_TESTS := actor_test ipc_test timer_test link_test \
+                     monitor_test bus_test priority_test runtime_test \
+                     timeout_test arena_test pool_exhaustion_test \
+                     backoff_retry_test simple_backoff_test congestion_demo \
+                     stack_overflow_test
+
+# Runtime objects for test linking (exclude test_main.o which has its own main)
+QEMU_RUNTIME_OBJS := $(filter-out $(QEMU_BUILD_DIR)/test_main.o,$(QEMU_OBJS))
+
+# Test runner object (provides main with SysTick init)
+$(QEMU_BUILD_DIR)/test_runner.o: $(QEMU_DIR)/test_runner.c | $(QEMU_BUILD_DIR)
+	$(ARM_CC) $(ARM_CFLAGS) $(ARM_CPPFLAGS) -c $< -o $@
+
+# Pattern rule: compile test source for ARM
+# -Dmain=test_main renames the test's main() so our runner provides main()
+# -include qemu/qemu_compat.h adds printf/clock_gettime overrides
+$(QEMU_BUILD_DIR)/qemu_%.o: $(TESTS_DIR)/%.c | $(QEMU_BUILD_DIR)
+	$(ARM_CC) $(ARM_CFLAGS) $(ARM_CPPFLAGS) \
+		-include $(QEMU_DIR)/qemu_compat.h \
+		-Dmain=test_main \
+		-c $< -o $@
+
+# Pattern rule: link test ELF
+$(QEMU_BUILD_DIR)/test_%.elf: $(QEMU_BUILD_DIR)/qemu_%.o $(QEMU_BUILD_DIR)/test_runner.o $(QEMU_RUNTIME_OBJS)
+	$(ARM_CC) $(ARM_LDFLAGS) $^ -o $@
+	$(ARM_SIZE) $@
+
+# Preserve test ELF files (prevent make from deleting intermediates)
+.PRECIOUS: $(QEMU_BUILD_DIR)/test_%.elf $(QEMU_BUILD_DIR)/qemu_%.o
+
+# Run a single test: make qemu-run-actor_test
+.PHONY: qemu-run-%
+qemu-run-%: $(QEMU_BUILD_DIR)/test_%.elf
+	@echo "=== Running $* on QEMU ==="
+	@qemu-system-arm -M lm3s6965evb -nographic \
+		-semihosting-config enable=on,target=native \
+		-kernel $< 2>&1 | grep -v "Timer with period zero" || true
+	@echo "=== $* completed ==="
+
+# Run all compatible tests
+.PHONY: qemu-test-suite
+qemu-test-suite:
+	@echo "Running QEMU test suite ($(words $(QEMU_COMPAT_TESTS)) tests)..."
+	@failed=0; \
+	for test in $(QEMU_COMPAT_TESTS); do \
+		echo ""; \
+		$(MAKE) --no-print-directory qemu-run-$$test || failed=1; \
+	done; \
+	echo ""; \
+	if [ $$failed -eq 0 ]; then \
+		echo "All QEMU tests completed!"; \
+	else \
+		echo "Some QEMU tests failed!"; \
+		exit 1; \
+	fi
+
+# ============================================================================
 # Help
 # ============================================================================
 
@@ -334,6 +395,8 @@ help:
 	@echo "  qemu-build        - Cross-compile for Cortex-M3 (QEMU target)"
 	@echo "  qemu-test         - Run runtime tests in QEMU emulator"
 	@echo "  qemu-test-ci      - Run QEMU tests with timeout (for CI)"
+	@echo "  qemu-run-<test>   - Run specific test on QEMU (e.g., qemu-run-actor_test)"
+	@echo "  qemu-test-suite   - Run all compatible tests on QEMU"
 	@echo "  help              - Show this help message"
 	@echo ""
 	@echo "Platform selection:"

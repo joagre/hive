@@ -5,6 +5,11 @@
 #include <stdio.h>
 #include <string.h>
 
+/* TEST_STACK_SIZE caps stack for QEMU builds; passes through on native */
+#ifndef TEST_STACK_SIZE
+#define TEST_STACK_SIZE(x) (x)
+#endif
+
 // Test results
 static int tests_passed = 0;
 static int tests_failed = 0;
@@ -172,7 +177,12 @@ static void test4_actor_alive(void *arg) {
 // Test 5: Scheduler handles many actors
 // ============================================================================
 
+/* Reduce actor count for QEMU's limited actor table */
+#ifdef QEMU_TEST_STACK_SIZE
+#define MANY_ACTORS 4
+#else
 #define MANY_ACTORS 10
+#endif
 static int g_many_actors_count = 0;
 
 static void many_actor(void *arg) {
@@ -254,12 +264,19 @@ static void small_stack_actor(void *arg) {
     hive_exit();
 }
 
+/* Buffer size for large stack test - reduced for QEMU */
+#ifdef QEMU_TEST_STACK_SIZE
+#define LARGE_STACK_BUFFER_SIZE 1024
+#else
+#define LARGE_STACK_BUFFER_SIZE 16384
+#endif
+
 static void large_stack_actor(void *arg) {
     (void)arg;
     // Use more stack
-    char buffer[16384];  // 16KB
+    char buffer[LARGE_STACK_BUFFER_SIZE];
     memset(buffer, 'A', sizeof(buffer));
-    if (buffer[16383] == 'A') {
+    if (buffer[LARGE_STACK_BUFFER_SIZE - 1] == 'A') {
         g_large_stack_ok = true;
     }
     hive_exit();
@@ -275,7 +292,7 @@ static void test7_stack_sizes(void *arg) {
 
     // Small stack
     actor_config small_cfg = HIVE_ACTOR_CONFIG_DEFAULT;
-    small_cfg.stack_size = 8 * 1024;  // 8KB
+    small_cfg.stack_size = TEST_STACK_SIZE(8 * 1024);  // 8KB
 
     actor_id small;
     if (HIVE_SUCCEEDED(hive_spawn_ex(small_stack_actor, NULL, &small_cfg, &small))) {
@@ -294,7 +311,7 @@ static void test7_stack_sizes(void *arg) {
 
     // Large stack
     actor_config large_cfg = HIVE_ACTOR_CONFIG_DEFAULT;
-    large_cfg.stack_size = 32 * 1024;  // 32KB
+    large_cfg.stack_size = TEST_STACK_SIZE(32 * 1024);  // 32KB
 
     actor_id large;
     if (HIVE_SUCCEEDED(hive_spawn_ex(large_stack_actor, NULL, &large_cfg, &large))) {
@@ -396,7 +413,7 @@ static void run_all_tests(void *arg) {
 
     for (size_t i = 0; i < NUM_TESTS; i++) {
         actor_config cfg = HIVE_ACTOR_CONFIG_DEFAULT;
-        cfg.stack_size = 64 * 1024;
+        cfg.stack_size = TEST_STACK_SIZE(64 * 1024);
 
         actor_id test;
         if (HIVE_FAILED(hive_spawn_ex(test_funcs[i], NULL, &cfg, &test))) {
@@ -426,7 +443,7 @@ int main(void) {
     }
 
     actor_config cfg = HIVE_ACTOR_CONFIG_DEFAULT;
-    cfg.stack_size = 128 * 1024;
+    cfg.stack_size = TEST_STACK_SIZE(128 * 1024);
 
     actor_id runner;
     if (HIVE_FAILED(hive_spawn_ex(run_all_tests, NULL, &cfg, &runner))) {

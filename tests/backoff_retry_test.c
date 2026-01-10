@@ -6,6 +6,11 @@
 #include <stdbool.h>
 #include <string.h>
 
+/* TEST_STACK_SIZE caps stack for QEMU builds; passes through on native */
+#ifndef TEST_STACK_SIZE
+#define TEST_STACK_SIZE(x) (x)
+#endif
+
 // Leave room for control messages and timers
 #define MESSAGES_TO_FILL_POOL (HIVE_MAILBOX_ENTRY_POOL_SIZE / 2)
 

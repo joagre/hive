@@ -7,6 +7,11 @@
 #include <string.h>
 #include <time.h>
 
+/* TEST_STACK_SIZE caps stack for QEMU builds; passes through on native */
+#ifndef TEST_STACK_SIZE
+#define TEST_STACK_SIZE(x) (x)
+#endif
+
 // Test results
 static int tests_passed = 0;
 static int tests_failed = 0;
@@ -648,6 +653,13 @@ static void test14_send_to_dead_actor(void *arg) {
 // Pool size: HIVE_MESSAGE_DATA_POOL_SIZE
 // ============================================================================
 
+/* Number of messages to send in pool test - adjust for QEMU's smaller pool */
+#ifdef QEMU_TEST_STACK_SIZE
+#define POOL_TEST_MSG_COUNT 20  /* QEMU has pool size 32, leave room for overhead */
+#else
+#define POOL_TEST_MSG_COUNT 100
+#endif
+
 static void test15_message_pool_info(void *arg) {
     (void)arg;
     printf("\nTest 15: Message pool info (HIVE_MESSAGE_DATA_POOL_SIZE=%d)\n",
@@ -658,7 +670,7 @@ static void test15_message_pool_info(void *arg) {
     actor_id self = hive_self();
     int sent = 0;
 
-    for (int i = 0; i < 100; i++) {
+    for (int i = 0; i < POOL_TEST_MSG_COUNT; i++) {
         int data = i;
         hive_status status = hive_ipc_notify(self, &data, sizeof(data));
         if (HIVE_FAILED(status)) {
@@ -679,8 +691,8 @@ static void test15_message_pool_info(void *arg) {
 
     printf("    Received %d messages\n", received);
 
-    if (sent == received && sent == 100) {
-        TEST_PASS("can send and receive 100 messages");
+    if (sent == received && sent == POOL_TEST_MSG_COUNT) {
+        TEST_PASS("can send and receive messages");
     } else {
         TEST_FAIL("message count mismatch");
     }
@@ -737,7 +749,7 @@ static void test17_spawn_death_cycle_leak(void *arg) {
     for (int i = 0; i < cycles; i++) {
         actor_config cfg = HIVE_ACTOR_CONFIG_DEFAULT;
         cfg.malloc_stack = true;
-        cfg.stack_size = 8 * 1024;
+        cfg.stack_size = TEST_STACK_SIZE(8 * 1024);
 
         actor_id child;
         if (HIVE_FAILED(hive_spawn_ex(short_lived_actor, &self, &cfg, &child))) {
@@ -797,7 +809,7 @@ static void run_all_tests(void *arg) {
 
     for (size_t i = 0; i < NUM_TESTS; i++) {
         actor_config cfg = HIVE_ACTOR_CONFIG_DEFAULT;
-        cfg.stack_size = 64 * 1024;
+        cfg.stack_size = TEST_STACK_SIZE(64 * 1024);
 
         actor_id test;
         if (HIVE_FAILED(hive_spawn_ex(test_funcs[i], NULL, &cfg, &test))) {
@@ -825,7 +837,7 @@ int main(void) {
     }
 
     actor_config cfg = HIVE_ACTOR_CONFIG_DEFAULT;
-    cfg.stack_size = 128 * 1024;
+    cfg.stack_size = TEST_STACK_SIZE(128 * 1024);
 
     actor_id runner;
     if (HIVE_FAILED(hive_spawn_ex(run_all_tests, NULL, &cfg, &runner))) {

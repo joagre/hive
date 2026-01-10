@@ -2,6 +2,11 @@
 #include "hive_ipc.h"
 #include <stdio.h>
 
+/* TEST_STACK_SIZE caps stack for QEMU builds; passes through on native */
+#ifndef TEST_STACK_SIZE
+#define TEST_STACK_SIZE(x) (x)
+#endif
+
 // Simple actor that just exits
 void simple_actor(void *arg) {
     (void)arg;
@@ -23,7 +28,7 @@ int main(void) {
     printf("Expected actors that fit: ~30-32\n\n");
 
     actor_config cfg = HIVE_ACTOR_CONFIG_DEFAULT;
-    cfg.stack_size = 32 * 1024;  // 32 KB stacks
+    cfg.stack_size = TEST_STACK_SIZE(32 * 1024);
     cfg.malloc_stack = false;     // Use arena (default)
 
     int count = 0;

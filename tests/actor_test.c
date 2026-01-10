@@ -6,6 +6,11 @@
 #include <stdio.h>
 #include <string.h>
 
+/* TEST_STACK_SIZE caps stack for QEMU builds; passes through on native */
+#ifndef TEST_STACK_SIZE
+#define TEST_STACK_SIZE(x) (x)
+#endif
+
 // Test results
 static int tests_passed = 0;
 static int tests_failed = 0;
@@ -276,12 +281,19 @@ static void test6_custom_priority(void *arg) {
 
 static bool g_large_stack_ok = false;
 
+/* Buffer size for stack test - reduced for QEMU's limited stack */
+#ifdef QEMU_TEST_STACK_SIZE
+#define LARGE_STACK_BUFFER_SIZE 1024
+#else
+#define LARGE_STACK_BUFFER_SIZE 32768
+#endif
+
 static void large_stack_actor(void *arg) {
     (void)arg;
     // Allocate a large array on stack
-    char buffer[32768];  // 32KB
+    char buffer[LARGE_STACK_BUFFER_SIZE];
     memset(buffer, 'A', sizeof(buffer));
-    if (buffer[32767] == 'A') {
+    if (buffer[LARGE_STACK_BUFFER_SIZE - 1] == 'A') {
         g_large_stack_ok = true;
     }
     hive_exit();
@@ -294,7 +306,7 @@ static void test7_custom_stack_size(void *arg) {
     g_large_stack_ok = false;
 
     actor_config cfg = HIVE_ACTOR_CONFIG_DEFAULT;
-    cfg.stack_size = 64 * 1024;  // 64KB
+    cfg.stack_size = TEST_STACK_SIZE(64 * 1024);
 
     actor_id id;
     if (HIVE_FAILED(hive_spawn_ex(large_stack_actor, NULL, &cfg, &id))) {
@@ -335,7 +347,7 @@ static void test8_malloc_stack(void *arg) {
 
     actor_config cfg = HIVE_ACTOR_CONFIG_DEFAULT;
     cfg.malloc_stack = true;
-    cfg.stack_size = 32 * 1024;
+    cfg.stack_size = TEST_STACK_SIZE(32 * 1024);
 
     actor_id id;
     if (HIVE_FAILED(hive_spawn_ex(malloc_stack_actor, NULL, &cfg, &id))) {
@@ -417,14 +429,21 @@ static void counting_actor(void *arg) {
     hive_exit();
 }
 
+/* Number of actors to spawn in test 11 - reduced for QEMU's limited actor table */
+#ifdef QEMU_TEST_STACK_SIZE
+#define MULTI_SPAWN_COUNT 4
+#else
+#define MULTI_SPAWN_COUNT 10
+#endif
+
 static void test11_multiple_spawns(void *arg) {
     (void)arg;
     printf("\nTest 11: Multiple spawns\n");
 
     g_multi_spawn_count = 0;
 
-    actor_id ids[10];
-    for (int i = 0; i < 10; i++) {
+    actor_id ids[MULTI_SPAWN_COUNT];
+    for (int i = 0; i < MULTI_SPAWN_COUNT; i++) {
         if (HIVE_FAILED(hive_spawn(counting_actor, NULL, &ids[i]))) {
             printf("    Failed to spawn actor %d\n", i);
             TEST_FAIL("multiple spawns failed");
@@ -434,15 +453,15 @@ static void test11_multiple_spawns(void *arg) {
     }
 
     // Wait for all to complete
-    for (int i = 0; i < 10; i++) {
+    for (int i = 0; i < MULTI_SPAWN_COUNT; i++) {
         hive_message msg;
         hive_ipc_recv(&msg, 1000);
     }
 
-    if (g_multi_spawn_count == 10) {
-        TEST_PASS("spawned and ran 10 actors");
+    if (g_multi_spawn_count == MULTI_SPAWN_COUNT) {
+        TEST_PASS("spawned and ran multiple actors");
     } else {
-        printf("    Only %d/10 actors ran\n", g_multi_spawn_count);
+        printf("    Only %d/%d actors ran\n", g_multi_spawn_count, MULTI_SPAWN_COUNT);
         TEST_FAIL("not all actors ran");
     }
 
@@ -524,7 +543,7 @@ static void test13_actor_table_exhaustion(void *arg) {
     // This tests the actual actor table limit, not stack arena
     actor_config cfg = HIVE_ACTOR_CONFIG_DEFAULT;
     cfg.malloc_stack = true;
-    cfg.stack_size = 8 * 1024;  // 8KB stacks
+    cfg.stack_size = TEST_STACK_SIZE(8 * 1024);
 
     // We're already using slots for: test runner + this test actor
     // Try to spawn until we hit the limit
@@ -593,7 +612,7 @@ static void run_all_tests(void *arg) {
 
     for (size_t i = 0; i < NUM_TESTS; i++) {
         actor_config cfg = HIVE_ACTOR_CONFIG_DEFAULT;
-        cfg.stack_size = 64 * 1024;
+        cfg.stack_size = TEST_STACK_SIZE(64 * 1024);
 
         actor_id test;
         if (HIVE_FAILED(hive_spawn_ex(test_funcs[i], NULL, &cfg, &test))) {
@@ -622,7 +641,7 @@ int main(void) {
     }
 
     actor_config cfg = HIVE_ACTOR_CONFIG_DEFAULT;
-    cfg.stack_size = 128 * 1024;
+    cfg.stack_size = TEST_STACK_SIZE(128 * 1024);
 
     actor_id runner;
     if (HIVE_FAILED(hive_spawn_ex(run_all_tests, NULL, &cfg, &runner))) {
