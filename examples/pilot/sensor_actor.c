@@ -16,11 +16,11 @@
 #define SENSOR_INTERVAL_US  2500
 
 static bus_id s_imu_bus;
-static imu_read_fn s_read_fn;
+static imu_read_fn s_read_imu;
 
 void sensor_actor_init(bus_id imu_bus, imu_read_fn read_fn) {
     s_imu_bus = imu_bus;
-    s_read_fn = read_fn;
+    s_read_imu = read_fn;
 }
 
 void sensor_actor(void *arg) {
@@ -35,18 +35,18 @@ void sensor_actor(void *arg) {
         hive_message msg;
         hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
 
-        if (s_read_fn) {
+        if (s_read_imu) {
             imu_data_t imu;
-            s_read_fn(&imu);
+            s_read_imu(&imu);
             hive_bus_publish(s_imu_bus, &imu, sizeof(imu));
         }
     }
 #else
     // Webots: Yield each step, external loop calls hive_step()
     while (1) {
-        if (s_read_fn) {
+        if (s_read_imu) {
             imu_data_t imu;
-            s_read_fn(&imu);
+            s_read_imu(&imu);
             hive_bus_publish(s_imu_bus, &imu, sizeof(imu));
         }
 

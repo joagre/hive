@@ -11,7 +11,7 @@
 #include <stdbool.h>
 
 static bus_id s_torque_bus;
-static motor_write_fn s_write_fn;
+static motor_write_fn s_write_motors;
 
 // Motor mixer for Crazyflie "X" configuration (matching Bitcraze/Webots).
 //
@@ -38,7 +38,7 @@ static void mixer_apply(const torque_cmd_t *torque, motor_cmd_t *cmd) {
 
 void motor_actor_init(bus_id torque_bus, motor_write_fn write_fn) {
     s_torque_bus = torque_bus;
-    s_write_fn = write_fn;
+    s_write_motors = write_fn;
 }
 
 void motor_actor(void *arg) {
@@ -59,8 +59,8 @@ void motor_actor(void *arg) {
             mixer_apply(&torque, &cmd);
             armed = true;
 
-            if (s_write_fn) {
-                s_write_fn(&cmd);
+            if (s_write_motors) {
+                s_write_motors(&cmd);
             }
         } else {
             watchdog++;
@@ -69,8 +69,8 @@ void motor_actor(void *arg) {
                 HIVE_LOG_WARN("MOTOR WATCHDOG: No commands for %dms - cutting motors!",
                               MOTOR_WATCHDOG_TIMEOUT * TIME_STEP_MS);
                 cmd = (motor_cmd_t)MOTOR_CMD_ZERO;
-                if (s_write_fn) {
-                    s_write_fn(&cmd);
+                if (s_write_motors) {
+                    s_write_motors(&cmd);
                 }
                 armed = false;
             }
