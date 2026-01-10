@@ -67,9 +67,15 @@ static struct {
 
 // Get current time in milliseconds
 static uint64_t get_time_ms(void) {
+#ifdef HIVE_PLATFORM_STM32
+    // On STM32, use hive_timer which provides millisecond ticks
+    extern uint32_t hive_timer_get_ticks(void);
+    return (uint64_t)hive_timer_get_ticks();
+#else
     struct timeval tv;
     gettimeofday(&tv, NULL);
     return (uint64_t)tv.tv_sec * 1000 + tv.tv_usec / 1000;
+#endif
 }
 
 // Find bus by ID

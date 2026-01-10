@@ -521,7 +521,11 @@ static void test10_entry_count(void *arg) {
     fflush(stdout);
 
     hive_bus_config cfg = TEST_BUS_CONFIG;
+#ifdef QEMU_TEST_STACK_SIZE
+    cfg.max_entries = 6;  // QEMU limit is 8, use smaller value
+#else
     cfg.max_entries = 10;
+#endif
     bus_id bus;
     hive_status status = hive_bus_create(&cfg, &bus);
     if (HIVE_FAILED(status)) {
@@ -572,17 +576,27 @@ static void test10_entry_count(void *arg) {
     printf("    After reading 2 entries, count = %zu\n", count);
 
     // Publish more to fill buffer
-    for (int i = 5; i < 12; i++) {
+#ifdef QEMU_TEST_STACK_SIZE
+    int fill_count = 6;  // Fill to max_entries=6
+#else
+    int fill_count = 12;  // Fill to max_entries=10
+#endif
+    for (int i = 5; i < fill_count; i++) {
         char msg[16];
         snprintf(msg, sizeof(msg), "Entry %d", i);
         hive_bus_publish(bus, msg, strlen(msg) + 1);
     }
 
     count = hive_bus_entry_count(bus);
-    if (count == 10) {
+#ifdef QEMU_TEST_STACK_SIZE
+    size_t expected = 6;
+#else
+    size_t expected = 10;
+#endif
+    if (count == expected) {
         TEST_PASS("entry_count capped at max_entries after overflow");
     } else {
-        printf("    Expected 10, got %zu\n", count);
+        printf("    Expected %zu, got %zu\n", expected, count);
         TEST_FAIL("entry_count wrong after buffer wrap");
     }
 
