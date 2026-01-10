@@ -105,6 +105,7 @@ All runtime functions return `hive_status` with a code and optional string liter
 
 Convenience macros:
 - `HIVE_SUCCESS` - Success status
+- `HIVE_SUCCEEDED(s)` - Check if status indicates success
 - `HIVE_FAILED(s)` - Check if status indicates failure
 - `HIVE_ERROR(code, msg)` - Create error status
 - `HIVE_ERR_STR(s)` - Get error message string (handles NULL msg)

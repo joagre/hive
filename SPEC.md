@@ -487,6 +487,7 @@ Convenience macros:
 
 ```c
 #define HIVE_SUCCESS ((hive_status){HIVE_OK, NULL})
+#define HIVE_SUCCEEDED(s) ((s).code == HIVE_OK)
 #define HIVE_FAILED(s) ((s).code != HIVE_OK)
 #define HIVE_ERROR(code, msg) ((hive_status){(code), (msg)})
 #define HIVE_ERR_STR(s) ((s).msg ? (s).msg : "unknown error")
