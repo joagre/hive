@@ -23,9 +23,9 @@
 //
 // Platform support:
 //   - Webots simulation (default)
-//   - STM32 STEVAL-DRONE01 (build with -DPLATFORM_STM32)
+//   - STM32 STEVAL-DRONE01 (build with -DPLATFORM_STEVAL_DRONE01)
 
-#ifdef PLATFORM_STM32
+#ifdef PLATFORM_STEVAL_DRONE01
 #include "platform_stm32f4.h"
 #else
 #include <webots/robot.h>
@@ -79,7 +79,7 @@ static bus_id s_torque_bus;
 // PLATFORM LAYER
 // ============================================================================
 
-#ifdef PLATFORM_STM32
+#ifdef PLATFORM_STEVAL_DRONE01
 // ----------------------------------------------------------------------------
 // STM32 STEVAL-DRONE01 Platform
 // ----------------------------------------------------------------------------
@@ -166,7 +166,7 @@ static void webots_write_motors(const motor_cmd_t *cmd) {
 // ============================================================================
 
 int main(void) {
-#ifdef PLATFORM_STM32
+#ifdef PLATFORM_STEVAL_DRONE01
     // STM32: Initialize hardware platform
     if (platform_init() != 0) return 1;
     platform_calibrate();
@@ -193,7 +193,7 @@ int main(void) {
     }
 
     // Initialize actors with platform-specific callbacks
-#ifdef PLATFORM_STM32
+#ifdef PLATFORM_STEVAL_DRONE01
     sensor_actor_init(s_imu_bus, stm32_read_imu);
     motor_actor_init(s_torque_bus, stm32_write_motors);
 #else
@@ -228,7 +228,7 @@ int main(void) {
     printf("Pilot: 8 actors spawned, waypoint navigation active\n");
 
     // Main loop
-#ifdef PLATFORM_STM32
+#ifdef PLATFORM_STEVAL_DRONE01
     // STM32: Run at 400Hz using hardware timing
     while (1) {
         hive_step();

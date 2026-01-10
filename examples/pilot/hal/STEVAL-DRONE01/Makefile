@@ -109,7 +109,7 @@ CFLAGS += -ffunction-sections -fdata-sections
 # STM32 defines
 CFLAGS += -DSTM32F401xE
 CFLAGS += -DUSE_HAL_DRIVER
-CFLAGS += -DPLATFORM_STM32
+CFLAGS += -DPLATFORM_STEVAL_DRONE01
 
 # Math library
 CFLAGS += -DARM_MATH_CM4

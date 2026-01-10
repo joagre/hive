@@ -110,7 +110,7 @@ CFLAGS += -ffunction-sections -fdata-sections
 # Platform defines
 CFLAGS += -DSTM32F401xE
 CFLAGS += -DUSE_HAL_DRIVER
-CFLAGS += -DPLATFORM_STM32
+CFLAGS += -DPLATFORM_STEVAL_DRONE01
 CFLAGS += -DARM_MATH_CM4
 
 # Hive configuration for embedded

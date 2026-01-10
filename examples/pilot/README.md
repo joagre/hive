@@ -115,7 +115,7 @@ Platform layer (in pilot.c) provides hardware abstraction:
 - `platform_read_imu()` - reads sensors (Webots or STM32)
 - `platform_write_motors()` - writes motors (Webots or STM32)
 
-pilot.c uses conditional compilation (`#ifdef PLATFORM_STM32`) to select
+pilot.c uses conditional compilation (`#ifdef PLATFORM_STEVAL_DRONE01`) to select
 between Webots simulation and STM32 hardware at build time.
 
 ## Actor Priorities and Spawn Order
