@@ -1,0 +1,279 @@
+# Makefile.stm32 - Build pilot for STEVAL-DRONE01 (STM32F401)
+#
+# Links together:
+#   - Hive runtime (requires STM32 port)
+#   - Pilot code (actors, control logic)
+#   - STEVAL-DRONE01 HAL (sensors, motors, platform)
+#
+# Usage:
+#   make -f Makefile.stm32          # Build firmware
+#   make -f Makefile.stm32 flash    # Flash to device
+#   make -f Makefile.stm32 clean    # Clean all build artifacts
+#
+# Prerequisites:
+#   - ARM GCC: apt install gcc-arm-none-eabi
+#   - ST-Link: apt install stlink-tools
+#   - Hive runtime ported to STM32 (context switch, scheduler)
+
+# ------------------------------------------------------------------------------
+# Project Configuration
+# ------------------------------------------------------------------------------
+
+TARGET = pilot_stm32
+BUILD_DIR = build_stm32
+
+# Paths relative to examples/pilot/
+HIVE_SRC_DIR = ../../src
+HIVE_INC_DIR = ../../include
+HAL_DIR = hal/STEVAL-DRONE01
+
+# ------------------------------------------------------------------------------
+# Source Files
+# ------------------------------------------------------------------------------
+
+# Pilot application code
+PILOT_SRCS = \
+	pilot.c \
+	pid.c \
+	sensor_actor.c \
+	motor_actor.c \
+	attitude_actor.c \
+	altitude_actor.c \
+	position_actor.c \
+	waypoint_actor.c \
+	angle_actor.c \
+	estimator_actor.c
+
+# Hive runtime (core only - no Linux-specific I/O)
+# TODO: Add your STM32-ported versions of these files
+HIVE_SRCS = \
+	$(HIVE_SRC_DIR)/hive_runtime.c \
+	$(HIVE_SRC_DIR)/hive_actor.c \
+	$(HIVE_SRC_DIR)/hive_scheduler.c \
+	$(HIVE_SRC_DIR)/hive_ipc.c \
+	$(HIVE_SRC_DIR)/hive_bus.c \
+	$(HIVE_SRC_DIR)/hive_timer.c \
+	$(HIVE_SRC_DIR)/hive_link.c \
+	$(HIVE_SRC_DIR)/hive_pool.c \
+	$(HIVE_SRC_DIR)/hive_context.c \
+	$(HIVE_SRC_DIR)/hive_log.c
+
+# Excluded from STM32 build (Linux-specific, require epoll/sockets):
+#   hive_net.c  - TCP sockets (use lwIP or remove)
+#   hive_file.c - File I/O (use FATFS or remove)
+
+# HAL sources (all drivers except HAL's main.c)
+HAL_SRCS = \
+	$(HAL_DIR)/platform_stm32f4.c \
+	$(HAL_DIR)/attitude.c \
+	$(HAL_DIR)/lsm6dsl.c \
+	$(HAL_DIR)/lis2mdl.c \
+	$(HAL_DIR)/lps22hd.c \
+	$(HAL_DIR)/motors.c \
+	$(HAL_DIR)/spi1.c \
+	$(HAL_DIR)/i2c1.c \
+	$(HAL_DIR)/tim4.c \
+	$(HAL_DIR)/usart1.c \
+	$(HAL_DIR)/system_config.c \
+	$(HAL_DIR)/gpio_config.c \
+	$(HAL_DIR)/syscalls.c
+
+# Assembly sources
+ASM_SRCS = \
+	$(HAL_DIR)/startup_stm32f401.s
+
+# TODO: Add ARM Cortex-M4 context switch when you port hive
+# ASM_SRCS += $(HIVE_SRC_DIR)/hive_context_arm.s
+
+# ------------------------------------------------------------------------------
+# Include Paths
+# ------------------------------------------------------------------------------
+
+INCLUDES = \
+	-I. \
+	-I$(HIVE_INC_DIR) \
+	-I$(HAL_DIR)
+
+# ------------------------------------------------------------------------------
+# Toolchain
+# ------------------------------------------------------------------------------
+
+PREFIX = arm-none-eabi-
+CC = $(PREFIX)gcc
+AS = $(PREFIX)gcc -x assembler-with-cpp
+CP = $(PREFIX)objcopy
+SZ = $(PREFIX)size
+GDB = $(PREFIX)gdb
+
+# ------------------------------------------------------------------------------
+# MCU Configuration (STM32F401CEU6)
+# ------------------------------------------------------------------------------
+
+CPU = -mcpu=cortex-m4
+FPU = -mfpu=fpv4-sp-d16
+FLOAT-ABI = -mfloat-abi=hard
+MCU = $(CPU) -mthumb $(FPU) $(FLOAT-ABI)
+
+# ------------------------------------------------------------------------------
+# Compiler Flags
+# ------------------------------------------------------------------------------
+
+CFLAGS = -std=c11 -Wall -Wextra -Wpedantic
+CFLAGS += $(MCU)
+CFLAGS += -O2
+CFLAGS += -g3 -gdwarf-2
+CFLAGS += -ffunction-sections -fdata-sections
+
+# Platform defines
+CFLAGS += -DSTM32F401xE
+CFLAGS += -DUSE_HAL_DRIVER
+CFLAGS += -DPLATFORM_STM32
+CFLAGS += -DARM_MATH_CM4
+
+# Hive configuration for embedded
+CFLAGS += -DHIVE_PLATFORM_STM32
+CFLAGS += -DHIVE_NO_NET        # Disable network I/O
+CFLAGS += -DHIVE_NO_FILE       # Disable file I/O
+
+CFLAGS += $(INCLUDES)
+CFLAGS += -MMD -MP
+
+# ------------------------------------------------------------------------------
+# Assembler Flags
+# ------------------------------------------------------------------------------
+
+ASFLAGS = $(MCU) -g3
+
+# ------------------------------------------------------------------------------
+# Linker Flags
+# ------------------------------------------------------------------------------
+
+LDSCRIPT = $(HAL_DIR)/stm32f401_flash.ld
+
+LDFLAGS = $(MCU)
+LDFLAGS += -T$(LDSCRIPT)
+LDFLAGS += -Wl,--gc-sections
+LDFLAGS += -Wl,-Map=$(BUILD_DIR)/$(TARGET).map,--cref
+LDFLAGS += --specs=nano.specs
+LDFLAGS += --specs=nosys.specs
+LDFLAGS += -lm -lc
+
+# ------------------------------------------------------------------------------
+# Object Files
+# ------------------------------------------------------------------------------
+
+PILOT_OBJS = $(PILOT_SRCS:%.c=$(BUILD_DIR)/pilot/%.o)
+HIVE_OBJS = $(notdir $(HIVE_SRCS:%.c=%.o))
+HIVE_OBJS := $(addprefix $(BUILD_DIR)/hive/, $(HIVE_OBJS))
+HAL_OBJS = $(notdir $(HAL_SRCS:%.c=%.o))
+HAL_OBJS := $(addprefix $(BUILD_DIR)/hal/, $(HAL_OBJS))
+ASM_OBJS = $(notdir $(ASM_SRCS:%.s=%.o))
+ASM_OBJS := $(addprefix $(BUILD_DIR)/hal/, $(ASM_OBJS))
+
+ALL_OBJS = $(PILOT_OBJS) $(HIVE_OBJS) $(HAL_OBJS) $(ASM_OBJS)
+DEPS = $(ALL_OBJS:.o=.d)
+
+# ------------------------------------------------------------------------------
+# Build Rules
+# ------------------------------------------------------------------------------
+
+all: $(BUILD_DIR)/$(TARGET).elf $(BUILD_DIR)/$(TARGET).hex $(BUILD_DIR)/$(TARGET).bin size
+
+# Create build directories
+$(BUILD_DIR)/pilot $(BUILD_DIR)/hive $(BUILD_DIR)/hal:
+	mkdir -p $@
+
+# Compile pilot sources
+$(BUILD_DIR)/pilot/%.o: %.c | $(BUILD_DIR)/pilot
+	@echo "CC (pilot) $<"
+	@$(CC) $(CFLAGS) -c $< -o $@
+
+# Compile hive sources
+$(BUILD_DIR)/hive/%.o: $(HIVE_SRC_DIR)/%.c | $(BUILD_DIR)/hive
+	@echo "CC (hive) $<"
+	@$(CC) $(CFLAGS) -c $< -o $@
+
+# Compile HAL sources
+$(BUILD_DIR)/hal/%.o: $(HAL_DIR)/%.c | $(BUILD_DIR)/hal
+	@echo "CC (hal) $<"
+	@$(CC) $(CFLAGS) -c $< -o $@
+
+# Compile assembly sources
+$(BUILD_DIR)/hal/%.o: $(HAL_DIR)/%.s | $(BUILD_DIR)/hal
+	@echo "AS $<"
+	@$(AS) $(ASFLAGS) -c $< -o $@
+
+# Link
+$(BUILD_DIR)/$(TARGET).elf: $(ALL_OBJS)
+	@echo "LD $@"
+	@$(CC) $^ $(LDFLAGS) -o $@
+
+# Generate hex
+$(BUILD_DIR)/$(TARGET).hex: $(BUILD_DIR)/$(TARGET).elf
+	@echo "HEX $@"
+	@$(CP) -O ihex $< $@
+
+# Generate binary
+$(BUILD_DIR)/$(TARGET).bin: $(BUILD_DIR)/$(TARGET).elf
+	@echo "BIN $@"
+	@$(CP) -O binary -S $< $@
+
+# ------------------------------------------------------------------------------
+# Utility Targets
+# ------------------------------------------------------------------------------
+
+size: $(BUILD_DIR)/$(TARGET).elf
+	@echo ""
+	@echo "Memory usage:"
+	@$(SZ) $<
+
+flash: $(BUILD_DIR)/$(TARGET).bin
+	@echo "Flashing $(TARGET).bin..."
+	st-flash write $< 0x8000000
+
+debug: $(BUILD_DIR)/$(TARGET).elf
+	$(GDB) -ex "target extended-remote :3333" \
+	       -ex "monitor reset halt" \
+	       -ex "load" \
+	       $<
+
+openocd:
+	openocd -f interface/stlink.cfg -f target/stm32f4x.cfg
+
+clean:
+	rm -rf $(BUILD_DIR)
+
+# Include dependencies
+-include $(DEPS)
+
+.PHONY: all clean flash debug openocd size
+
+# ------------------------------------------------------------------------------
+# Help
+# ------------------------------------------------------------------------------
+
+help:
+	@echo "Pilot STM32 Build System"
+	@echo ""
+	@echo "This Makefile links together:"
+	@echo "  - Hive runtime (actor framework)"
+	@echo "  - Pilot code (flight controller actors)"
+	@echo "  - STEVAL-DRONE01 HAL (hardware drivers)"
+	@echo ""
+	@echo "Targets:"
+	@echo "  all     - Build firmware (default)"
+	@echo "  clean   - Remove build artifacts"
+	@echo "  flash   - Flash via ST-Link"
+	@echo "  debug   - Start GDB session"
+	@echo "  openocd - Start OpenOCD server"
+	@echo "  size    - Show memory usage"
+	@echo "  help    - Show this help"
+	@echo ""
+	@echo "Prerequisites for hive port:"
+	@echo "  1. Port hive_context.c to ARM Cortex-M4 (context switch)"
+	@echo "  2. Port hive_scheduler.c event loop (replace epoll with SysTick)"
+	@echo "  3. Port hive_timer.c (use hardware timers instead of timerfd)"
+	@echo ""
+	@echo "Usage:"
+	@echo "  make -f Makefile.stm32"
+	@echo "  make -f Makefile.stm32 flash"

@@ -1,4 +1,4 @@
-// Pilot example - Quadcopter waypoint navigation using actor runtime with Webots
+// Pilot example - Quadcopter waypoint navigation using actor runtime
 //
 // Demonstrates waypoint navigation for a Crazyflie quadcopter
 // using the hive actor runtime. Eight actors work together:
@@ -21,13 +21,19 @@
 //                                                   ↓                             │
 //                                             Torque Bus → Motor ← Thrust Bus ←───┘
 //
-// To port to real hardware, replace the platform layer functions.
+// Platform support:
+//   - Webots simulation (default)
+//   - STM32 STEVAL-DRONE01 (build with -DPLATFORM_STM32)
 
+#ifdef PLATFORM_STM32
+#include "platform_stm32f4.h"
+#else
 #include <webots/robot.h>
 #include <webots/motor.h>
 #include <webots/gyro.h>
 #include <webots/inertial_unit.h>
 #include <webots/gps.h>
+#endif
 
 #include "hive_runtime.h"
 #include "hive_bus.h"
@@ -70,15 +76,36 @@ static bus_id s_rate_setpoint_bus;
 static bus_id s_torque_bus;
 
 // ============================================================================
-// WEBOTS PLATFORM LAYER
+// PLATFORM LAYER
 // ============================================================================
+
+#ifdef PLATFORM_STM32
+// ----------------------------------------------------------------------------
+// STM32 STEVAL-DRONE01 Platform
+// ----------------------------------------------------------------------------
+// platform_init(), platform_read_imu(), platform_write_motors() are provided
+// by platform_stm32f4.h. We just need wrapper functions for the actor init.
+
+static void stm32_read_imu(imu_data_t *imu) {
+    platform_update();  // Run sensor fusion at 400Hz
+    platform_read_imu(imu);
+}
+
+static void stm32_write_motors(const motor_cmd_t *cmd) {
+    platform_write_motors(cmd);
+}
+
+#else
+// ----------------------------------------------------------------------------
+// Webots Simulation Platform
+// ----------------------------------------------------------------------------
 
 static WbDeviceTag motors[NUM_MOTORS];
 static WbDeviceTag gyro_dev;
 static WbDeviceTag imu_dev;
 static WbDeviceTag gps_dev;
 
-static int platform_init(void) {
+static int webots_platform_init(void) {
     wb_robot_init();
 
     const char *motor_names[NUM_MOTORS] = {"m1_motor", "m2_motor", "m3_motor", "m4_motor"};
@@ -108,7 +135,7 @@ static int platform_init(void) {
     return 0;
 }
 
-static void platform_read_imu(imu_data_t *imu) {
+static void webots_read_imu(imu_data_t *imu) {
     const double *g = wb_gyro_get_values(gyro_dev);
     const double *rpy = wb_inertial_unit_get_roll_pitch_yaw(imu_dev);
     const double *pos = wb_gps_get_values(gps_dev);
@@ -124,7 +151,7 @@ static void platform_read_imu(imu_data_t *imu) {
     imu->altitude = pos[2];
 }
 
-static void platform_write_motors(const motor_cmd_t *cmd) {
+static void webots_write_motors(const motor_cmd_t *cmd) {
     static const float signs[NUM_MOTORS] = {-1.0f, 1.0f, -1.0f, 1.0f};
 
     for (int i = 0; i < NUM_MOTORS; i++) {
@@ -132,13 +159,22 @@ static void platform_write_motors(const motor_cmd_t *cmd) {
             signs[i] * cmd->motor[i] * MOTOR_MAX_VELOCITY);
     }
 }
+#endif
 
 // ============================================================================
 // MAIN
 // ============================================================================
 
 int main(void) {
-    if (platform_init() < 0) return 1;
+#ifdef PLATFORM_STM32
+    // STM32: Initialize hardware platform
+    if (platform_init() != 0) return 1;
+    platform_calibrate();
+    platform_arm();
+#else
+    // Webots: Initialize simulation
+    if (webots_platform_init() < 0) return 1;
+#endif
 
     hive_init();
 
@@ -156,15 +192,20 @@ int main(void) {
         return 1;
     }
 
-    // Initialize actors
-    sensor_actor_init(s_imu_bus, platform_read_imu);
+    // Initialize actors with platform-specific callbacks
+#ifdef PLATFORM_STM32
+    sensor_actor_init(s_imu_bus, stm32_read_imu);
+    motor_actor_init(s_torque_bus, stm32_write_motors);
+#else
+    sensor_actor_init(s_imu_bus, webots_read_imu);
+    motor_actor_init(s_torque_bus, webots_write_motors);
+#endif
     estimator_actor_init(s_imu_bus, s_state_bus);
     altitude_actor_init(s_state_bus, s_thrust_bus, s_target_bus);
     waypoint_actor_init(s_state_bus, s_target_bus);
     position_actor_init(s_state_bus, s_angle_setpoint_bus, s_target_bus);
     angle_actor_init(s_state_bus, s_angle_setpoint_bus, s_rate_setpoint_bus);
     attitude_actor_init(s_state_bus, s_thrust_bus, s_rate_setpoint_bus, s_torque_bus);
-    motor_actor_init(s_torque_bus, platform_write_motors);
 
     // Spawn actors in data-flow order to minimize latency.
     // All CRITICAL priority, round-robin within priority follows spawn order.
@@ -183,12 +224,20 @@ int main(void) {
 
     printf("Pilot: 8 actors spawned, waypoint navigation active\n");
 
-    // Main loop: just run actors, sensor actor handles IMU reading
+    // Main loop
+#ifdef PLATFORM_STM32
+    // STM32: Run at 400Hz using hardware timing
+    while (1) {
+        hive_step();
+        platform_delay_us(2500);  // 400Hz = 2.5ms period
+    }
+#else
+    // Webots: Sync with simulation timestep
     while (wb_robot_step(TIME_STEP_MS) != -1) {
         hive_step();
     }
-
     hive_cleanup();
     wb_robot_cleanup();
+#endif
     return 0;
 }

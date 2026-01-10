@@ -1,45 +1,28 @@
-# Makefile for STEVAL-DRONE01 (STM32F401)
+# Makefile for STEVAL-DRONE01 HAL (STM32F401)
+#
+# Builds HAL drivers as a static library for use with pilot.
+# For full firmware build, use: make -f Makefile.stm32 (from examples/pilot/)
 #
 # Requires: ARM GCC toolchain (arm-none-eabi-gcc)
 # Install: apt install gcc-arm-none-eabi
 #
 # Usage:
-#   make          - Build firmware
-#   make flash    - Flash to device (requires ST-Link)
-#   make debug    - Start GDB debug session
+#   make          - Build HAL library (libhal.a)
 #   make clean    - Remove build artifacts
-#   make size     - Show memory usage
 
 # ------------------------------------------------------------------------------
 # Project Configuration
 # ------------------------------------------------------------------------------
 
-TARGET = pilot
+TARGET = libhal.a
 BUILD_DIR = build
-
-# Platform API selection:
-#   PLATFORM=webots   - Webots-compatible interface (default)
-#   PLATFORM=callback - Callback-based with built-in main loop
-PLATFORM ?= webots
 
 # ------------------------------------------------------------------------------
 # Source Files
 # ------------------------------------------------------------------------------
 
-# Platform-specific source and defines
-ifeq ($(PLATFORM),webots)
-  PLATFORM_SRC = platform_stm32f4.c
-  PLATFORM_DEF = -DPLATFORM_WEBOTS
-else ifeq ($(PLATFORM),callback)
-  PLATFORM_SRC = platform.c
-  PLATFORM_DEF = -DPLATFORM_CALLBACK
-else
-  $(error Unknown PLATFORM=$(PLATFORM). Use 'webots' or 'callback')
-endif
-
-# HAL driver sources
+# HAL driver sources (no main.c - pilot.c is the entry point)
 SRCS = \
-	main.c \
 	syscalls.c \
 	system_config.c \
 	gpio_config.c \
@@ -47,7 +30,7 @@ SRCS = \
 	i2c1.c \
 	tim4.c \
 	usart1.c \
-	$(PLATFORM_SRC) \
+	platform_stm32f4.c \
 	attitude.c \
 	lsm6dsl.c \
 	lis2mdl.c \
@@ -92,9 +75,8 @@ INCLUDES = \
 PREFIX = arm-none-eabi-
 CC = $(PREFIX)gcc
 AS = $(PREFIX)gcc -x assembler-with-cpp
-CP = $(PREFIX)objcopy
+AR = $(PREFIX)ar
 SZ = $(PREFIX)size
-GDB = $(PREFIX)gdb
 
 # ------------------------------------------------------------------------------
 # MCU Configuration (STM32F401CEU6)
@@ -127,7 +109,7 @@ CFLAGS += -ffunction-sections -fdata-sections
 # STM32 defines
 CFLAGS += -DSTM32F401xE
 CFLAGS += -DUSE_HAL_DRIVER
-CFLAGS += $(PLATFORM_DEF)
+CFLAGS += -DPLATFORM_STM32
 
 # Math library
 CFLAGS += -DARM_MATH_CM4
@@ -145,24 +127,6 @@ CFLAGS += -MMD -MP
 ASFLAGS = $(MCU) -g3
 
 # ------------------------------------------------------------------------------
-# Linker Flags
-# ------------------------------------------------------------------------------
-
-# Linker script (from STM32CubeMX)
-# LDSCRIPT = ../STM32F401CEUX_FLASH.ld
-
-# For now, use a placeholder
-LDSCRIPT = stm32f401_flash.ld
-
-LDFLAGS = $(MCU)
-LDFLAGS += -T$(LDSCRIPT)
-LDFLAGS += -Wl,--gc-sections
-LDFLAGS += -Wl,-Map=$(BUILD_DIR)/$(TARGET).map,--cref
-LDFLAGS += --specs=nano.specs
-LDFLAGS += --specs=nosys.specs
-LDFLAGS += -lm -lc
-
-# ------------------------------------------------------------------------------
 # Build Rules
 # ------------------------------------------------------------------------------
 
@@ -174,7 +138,7 @@ ASM_OBJS = $(ASM_SRCS:%.s=$(BUILD_DIR)/%.o)
 DEPS = $(OBJS:.o=.d)
 
 # Default target
-all: $(BUILD_DIR)/$(TARGET).elf $(BUILD_DIR)/$(TARGET).hex $(BUILD_DIR)/$(TARGET).bin size
+all: $(BUILD_DIR)/$(TARGET)
 
 # Create build directory
 $(BUILD_DIR):
@@ -190,108 +154,37 @@ $(BUILD_DIR)/%.o: %.s | $(BUILD_DIR)
 	@echo "AS $<"
 	@$(AS) $(ASFLAGS) -c $< -o $@
 
-# Link
-$(BUILD_DIR)/$(TARGET).elf: $(OBJS) $(ASM_OBJS) | $(BUILD_DIR)
-	@echo "LD $@"
-	@$(CC) $(OBJS) $(ASM_OBJS) $(LDFLAGS) -o $@
-
-# Generate hex file
-$(BUILD_DIR)/$(TARGET).hex: $(BUILD_DIR)/$(TARGET).elf
-	@echo "HEX $@"
-	@$(CP) -O ihex $< $@
-
-# Generate binary file
-$(BUILD_DIR)/$(TARGET).bin: $(BUILD_DIR)/$(TARGET).elf
-	@echo "BIN $@"
-	@$(CP) -O binary -S $< $@
-
-# ------------------------------------------------------------------------------
-# Utility Targets
-# ------------------------------------------------------------------------------
-
-# Show memory usage
-size: $(BUILD_DIR)/$(TARGET).elf
+# Create static library
+$(BUILD_DIR)/$(TARGET): $(OBJS) $(ASM_OBJS) | $(BUILD_DIR)
+	@echo "AR $@"
+	@$(AR) rcs $@ $^
 	@echo ""
-	@echo "Memory usage:"
-	@$(SZ) $<
-
-# Flash to device using ST-Link
-flash: $(BUILD_DIR)/$(TARGET).bin
-	@echo "Flashing $(TARGET).bin..."
-	st-flash write $< 0x8000000
-
-# Alternative: Flash using OpenOCD
-flash-openocd: $(BUILD_DIR)/$(TARGET).elf
-	openocd -f interface/stlink.cfg -f target/stm32f4x.cfg \
-		-c "program $< verify reset exit"
-
-# Start GDB debug session
-debug: $(BUILD_DIR)/$(TARGET).elf
-	$(GDB) -ex "target extended-remote :3333" \
-	       -ex "monitor reset halt" \
-	       -ex "load" \
-	       $<
-
-# Start OpenOCD server (run in separate terminal)
-openocd:
-	openocd -f interface/stlink.cfg -f target/stm32f4x.cfg
+	@echo "Built: $@"
 
 # Clean build artifacts
 clean:
 	rm -rf $(BUILD_DIR)
 
-# Generate linker script placeholder
-$(LDSCRIPT):
-	@echo "Creating placeholder linker script..."
-	@echo "/* STM32F401CEU6 - 512KB Flash, 96KB RAM */" > $@
-	@echo "/* Replace with STM32CubeMX generated script */" >> $@
-	@echo "" >> $@
-	@echo "MEMORY {" >> $@
-	@echo "  FLASH (rx) : ORIGIN = 0x08000000, LENGTH = 512K" >> $@
-	@echo "  RAM (rwx)  : ORIGIN = 0x20000000, LENGTH = 96K" >> $@
-	@echo "}" >> $@
-	@echo "" >> $@
-	@echo "ENTRY(Reset_Handler)" >> $@
-	@echo "" >> $@
-	@echo "SECTIONS {" >> $@
-	@echo "  .text : { *(.text*) } > FLASH" >> $@
-	@echo "  .rodata : { *(.rodata*) } > FLASH" >> $@
-	@echo "  .data : { *(.data*) } > RAM AT > FLASH" >> $@
-	@echo "  .bss : { *(.bss*) } > RAM" >> $@
-	@echo "}" >> $@
-
 # Include dependencies
 -include $(DEPS)
 
 # Phony targets
-.PHONY: all clean flash flash-openocd debug openocd size
+.PHONY: all clean help
 
 # ------------------------------------------------------------------------------
 # Help
 # ------------------------------------------------------------------------------
 
 help:
-	@echo "STEVAL-DRONE01 Build System"
+	@echo "STEVAL-DRONE01 HAL Build System"
+	@echo ""
+	@echo "This builds HAL drivers as a static library (libhal.a)."
+	@echo "For full firmware, use: make -f Makefile.stm32 (from examples/pilot/)"
 	@echo ""
 	@echo "Targets:"
-	@echo "  all          - Build firmware (default)"
-	@echo "  clean        - Remove build artifacts"
-	@echo "  flash        - Flash using ST-Link"
-	@echo "  flash-openocd - Flash using OpenOCD"
-	@echo "  debug        - Start GDB debug session"
-	@echo "  openocd      - Start OpenOCD server"
-	@echo "  size         - Show memory usage"
-	@echo "  help         - Show this help"
-	@echo ""
-	@echo "Options:"
-	@echo "  PLATFORM=webots   - Webots-compatible API (default)"
-	@echo "  PLATFORM=callback - Callback-based API with main loop"
-	@echo ""
-	@echo "Examples:"
-	@echo "  make                      # Build with Webots-compatible API"
-	@echo "  make PLATFORM=callback    # Build with callback-based API"
+	@echo "  all   - Build HAL library (default)"
+	@echo "  clean - Remove build artifacts"
+	@echo "  help  - Show this help"
 	@echo ""
 	@echo "Requirements:"
 	@echo "  - ARM GCC toolchain: apt install gcc-arm-none-eabi"
-	@echo "  - ST-Link tools: apt install stlink-tools"
-	@echo "  - OpenOCD (optional): apt install openocd"

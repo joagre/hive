@@ -7,31 +7,24 @@ This HAL provides bare-metal drivers for STM32F401, enabling the pilot example t
 ## Quick Start
 
 ```bash
-# Build with Webots-compatible API (default)
-make
+# Build full firmware (from examples/pilot/)
+cd ..
+make -f Makefile.stm32
+make -f Makefile.stm32 flash
 
-# Build with callback-based API
-make PLATFORM=callback
-
-# Flash via ST-Link
-make flash
-
-# Debug
-make debug
+# Or build just the HAL library (from this directory)
+make          # Build libhal.a
+make clean    # Remove build artifacts
 ```
 
-## Two Platform APIs
+## Integration with Pilot
 
-This HAL provides two platform interfaces - select via `PLATFORM=` option:
+This HAL is designed to be linked with `pilot.c` and the hive runtime. The platform API (`platform_stm32f4.h`) provides Webots-compatible functions so pilot.c can run on real hardware with minimal changes.
 
-| Option | Header | Use Case |
-|--------|--------|----------|
-| `PLATFORM=webots` (default) | `platform_stm32f4.h` | Porting pilot.c from Webots with minimal changes |
-| `PLATFORM=callback` | `platform.h` | Standalone STM32 application with built-in main loop |
-
-**Webots-compatible (`PLATFORM=webots`):** Drop-in replacements for Webots API functions. You write your own main loop calling `platform_update()` at 400Hz. Best for porting existing Webots code.
-
-**Callback-based (`PLATFORM=callback`):** You provide callbacks and the platform runs the 400Hz control loop for you via `platform_run()`. Best for new STM32-native applications.
+Build the complete firmware from `examples/pilot/`:
+```bash
+make -f Makefile.stm32
+```
 
 ## Hardware Overview
 
@@ -70,13 +63,13 @@ This HAL provides two platform interfaces - select via `PLATFORM=` option:
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                         main.c                                   │
-│                    (PID Flight Controller)                       │
+│                   pilot.c + hive runtime                         │
+│                (Actor-based Flight Controller)                   │
 └─────────────────────────────────────────────────────────────────┘
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                       platform.h/c                               │
+│                  platform_stm32f4.h/c                            │
 │              (400Hz Control Loop, Sensor Fusion)                 │
 │  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐        │
 │  │ attitude │  │ lsm6dsl  │  │ lis2mdl  │  │ lps22hd  │        │
@@ -105,14 +98,12 @@ This HAL provides two platform interfaces - select via `PLATFORM=` option:
 
 ## File Overview
 
-### Application Layer
+### Platform Layer
 
 | File | Description |
 |------|-------------|
-| `main.c` | Example PID flight controller with altitude hold |
-| `platform_types.h` | Shared types and timing constants for both APIs |
-| `platform.h/c` | Callback-based API with built-in 400Hz control loop |
-| `platform_stm32f4.h/c` | Webots-compatible interface for porting pilot.c |
+| `platform_stm32f4.h/c` | Webots-compatible interface for pilot.c |
+| `platform_types.h` | Shared types (imu_data_t, motor_cmd_t, etc.) |
 | `attitude.h/c` | Complementary filter for roll/pitch/yaw estimation |
 
 ### Sensor Drivers
@@ -237,19 +228,16 @@ sudo apt install openocd
 ### Build Commands
 
 ```bash
-make          # Build firmware → build/pilot.elf
-make flash    # Flash to device via ST-Link
-make debug    # Start GDB debug session
+# Build HAL library only (from this directory)
+make          # Build libhal.a
 make clean    # Remove build artifacts
-make size     # Show memory usage
-make help     # Show all targets
+make help     # Show targets
+
+# Build full firmware (from examples/pilot/)
+make -f Makefile.stm32           # Build pilot_stm32.elf
+make -f Makefile.stm32 flash     # Flash to device
+make -f Makefile.stm32 debug     # Start GDB session
 ```
-
-### Memory Usage
-
-Typical footprint:
-- Flash: ~20KB (code + constants)
-- RAM: ~8KB (stack + heap + BSS)
 
 ## API Reference
 
@@ -376,26 +364,9 @@ attitude_update_mag(mag);              // Optional yaw correction (50Hz)
 attitude_get(&att);                    // Get roll, pitch, yaw (radians)
 ```
 
-### Platform (Callback-based)
+### Platform API
 
-```c
-#include "platform.h"
-
-platform_callbacks_t callbacks = {
-    .on_init = my_init,
-    .on_control = my_control,          // Called at 400Hz
-    .on_state_change = my_state_cb
-};
-
-platform_init(&callbacks);
-platform_calibrate();                  // Keep drone still!
-platform_arm();
-platform_run();                        // Never returns
-```
-
-### Platform (Webots-compatible)
-
-For porting pilot.c from Webots simulation to STM32:
+Webots-compatible interface for running pilot.c on STM32:
 
 ```c
 #include "platform_stm32f4.h"
@@ -469,15 +440,7 @@ Before flight, `platform_calibrate()` performs:
 
 ## Tuning PID Gains
 
-The default PID gains in `main.c` are starting points:
-
-```c
-#define ROLL_KP     2.0f
-#define PITCH_KP    2.0f
-#define YAW_KP      1.0f
-#define ALT_KP      0.5f
-#define THROTTLE_HOVER  0.5f
-```
+The pilot example uses PID controllers for attitude and altitude control. Tune the gains in `examples/pilot/config.h`.
 
 Tuning procedure:
 1. Start with very low gains (0.5)
@@ -498,23 +461,18 @@ Tuning procedure:
 ## TODO
 
 ### Completed
-- [x] LSM6DSL driver (SPI) - **Fully integrated**
-- [x] LIS2MDL driver (I2C) - **Fully integrated**
-- [x] LPS22HD driver (I2C) - **Fully integrated**
-- [x] Motor driver (TIM4) - **Fully integrated**
+- [x] LSM6DSL driver (SPI)
+- [x] LIS2MDL driver (I2C)
+- [x] LPS22HD driver (I2C)
+- [x] Motor driver (TIM4)
 - [x] Complementary filter for attitude
-- [x] Platform init and main loop (callback-based)
 - [x] Webots-compatible platform interface (platform_stm32f4.h/c)
-- [x] Example main.c with PID control
-- [x] Makefile for ARM GCC build
+- [x] Makefile.stm32 for pilot+hive+HAL integration
 - [x] Linker script (stm32f401_flash.ld)
 - [x] Startup code (startup_stm32f401.s)
 - [x] System clock configuration (84MHz)
 - [x] GPIO pin configuration
-- [x] SPI1 peripheral driver
-- [x] I2C1 peripheral driver (400kHz Fast Mode)
-- [x] TIM4 PWM driver (20kHz, 10-bit resolution)
-- [x] USART1 debug serial (115200 baud, printf support)
+- [x] All peripheral drivers (SPI1, I2C1, TIM4, USART1)
 
 ### Remaining
-- [ ] hive runtime port for STM32F4
+- [ ] hive runtime port for STM32F4 (context switch, scheduler, timers)
