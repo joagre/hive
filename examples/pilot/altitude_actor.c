@@ -12,7 +12,7 @@
 #include "pid.h"
 #include "hive_runtime.h"
 #include "hive_bus.h"
-#include <stdio.h>
+#include "hive_log.h"
 
 static bus_id s_state_bus;
 static bus_id s_thrust_bus;
@@ -59,8 +59,8 @@ void altitude_actor(void *arg) {
             hive_bus_publish(s_thrust_bus, &cmd, sizeof(cmd));
 
             if (++count % DEBUG_PRINT_INTERVAL == 0) {
-                printf("[ALT] tgt=%.2f alt=%.2f vvel=%.2f thrust=%.3f\n",
-                       target_altitude, state.altitude, state.vertical_velocity, thrust);
+                HIVE_LOG_DEBUG("[ALT] tgt=%.2f alt=%.2f vvel=%.2f thrust=%.3f",
+                               target_altitude, state.altitude, state.vertical_velocity, thrust);
             }
         }
 

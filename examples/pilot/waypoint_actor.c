@@ -8,7 +8,7 @@
 #include "config.h"
 #include "hive_runtime.h"
 #include "hive_bus.h"
-#include <stdio.h>
+#include "hive_log.h"
 #include <stdbool.h>
 #include <math.h>
 
@@ -90,11 +90,11 @@ void waypoint_actor(void *arg) {
                 if (hover_ticks >= WAYPOINT_HOVER_TICKS) {
                     waypoint_index = (waypoint_index + 1) % NUM_WAYPOINTS;
                     hover_ticks = 0;
-                    printf("[WPT] Advancing to waypoint %d: (%.1f, %.1f, %.1f) yaw=%.0f°\n",
-                           waypoint_index, waypoints[waypoint_index].x,
-                           waypoints[waypoint_index].y,
-                           waypoints[waypoint_index].z,
-                           waypoints[waypoint_index].yaw * RAD_TO_DEG);
+                    HIVE_LOG_INFO("[WPT] Advancing to waypoint %d: (%.1f, %.1f, %.1f) yaw=%.0f deg",
+                                  waypoint_index, waypoints[waypoint_index].x,
+                                  waypoints[waypoint_index].y,
+                                  waypoints[waypoint_index].z,
+                                  waypoints[waypoint_index].yaw * RAD_TO_DEG);
                 }
             } else {
                 hover_ticks = 0;  // Reset if we leave tolerance
@@ -102,10 +102,10 @@ void waypoint_actor(void *arg) {
 
             // Debug output
             if (++count % DEBUG_PRINT_INTERVAL == 0) {
-                printf("[WPT] wp=%d/%d xy=%.2f z=%.2f yaw=%.1f° hover=%d%s\n",
-                       waypoint_index, (int)NUM_WAYPOINTS - 1, dist_xy, alt_err,
-                       yaw_err * RAD_TO_DEG, hover_ticks,
-                       arrived ? " ARRIVED" : "");
+                HIVE_LOG_DEBUG("[WPT] wp=%d/%d xy=%.2f z=%.2f yaw=%.1f deg hover=%d%s",
+                               waypoint_index, (int)NUM_WAYPOINTS - 1, dist_xy, alt_err,
+                               yaw_err * RAD_TO_DEG, hover_ticks,
+                               arrived ? " ARRIVED" : "");
             }
         }
 

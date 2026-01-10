@@ -50,7 +50,7 @@
 #include "attitude_actor.h"
 #include "motor_actor.h"
 
-#include <stdio.h>
+#include "hive_log.h"
 
 // ============================================================================
 // HELPER MACROS
@@ -113,7 +113,7 @@ static int webots_platform_init(void) {
     for (int i = 0; i < NUM_MOTORS; i++) {
         motors[i] = wb_robot_get_device(motor_names[i]);
         if (motors[i] == 0) {
-            printf("Error: motor %s not found\n", motor_names[i]);
+            HIVE_LOG_ERROR("motor %s not found", motor_names[i]);
             return -1;
         }
         wb_motor_set_position(motors[i], INFINITY);
@@ -125,7 +125,7 @@ static int webots_platform_init(void) {
     gps_dev = wb_robot_get_device("gps");
 
     if (gyro_dev == 0 || imu_dev == 0 || gps_dev == 0) {
-        printf("Error: sensors not found\n");
+        HIVE_LOG_ERROR("sensors not found");
         return -1;
     }
 
@@ -189,7 +189,7 @@ int main(void) {
         HIVE_FAILED(hive_bus_create(&cfg, &s_angle_setpoint_bus)) ||
         HIVE_FAILED(hive_bus_create(&cfg, &s_rate_setpoint_bus)) ||
         HIVE_FAILED(hive_bus_create(&cfg, &s_torque_bus))) {
-        printf("Error: failed to create buses\n");
+        HIVE_LOG_ERROR("failed to create buses");
         return 1;
     }
 
@@ -226,7 +226,7 @@ int main(void) {
     SPAWN_CRITICAL_ACTOR(attitude_actor,  "attitude",  attitude);
     SPAWN_CRITICAL_ACTOR(motor_actor,     "motor",     motor);
 
-    printf("Pilot: 8 actors spawned, waypoint navigation active\n");
+    HIVE_LOG_INFO("8 actors spawned, waypoint navigation active");
 
     // Main loop
 #ifdef PLATFORM_STEVAL_DRONE01

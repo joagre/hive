@@ -9,7 +9,7 @@
 #include "pid.h"
 #include "hive_runtime.h"
 #include "hive_bus.h"
-#include <stdio.h>
+#include "hive_log.h"
 
 static bus_id s_state_bus;
 static bus_id s_thrust_bus;
@@ -68,8 +68,8 @@ void attitude_actor(void *arg) {
             hive_bus_publish(s_torque_bus, &cmd, sizeof(cmd));
 
             if (++count % DEBUG_PRINT_INTERVAL == 0) {
-                printf("[ATT] roll=%.1f pitch=%.1f yaw=%.1f\n",
-                       state.roll * RAD_TO_DEG, state.pitch * RAD_TO_DEG, state.yaw * RAD_TO_DEG);
+                HIVE_LOG_DEBUG("[ATT] roll=%.1f pitch=%.1f yaw=%.1f",
+                               state.roll * RAD_TO_DEG, state.pitch * RAD_TO_DEG, state.yaw * RAD_TO_DEG);
             }
         }
 

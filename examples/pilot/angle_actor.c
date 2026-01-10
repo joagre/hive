@@ -9,7 +9,7 @@
 #include "pid.h"
 #include "hive_runtime.h"
 #include "hive_bus.h"
-#include <stdio.h>
+#include "hive_log.h"
 
 static bus_id s_state_bus;
 static bus_id s_angle_setpoint_bus;
@@ -53,9 +53,9 @@ void angle_actor(void *arg) {
             hive_bus_publish(s_rate_setpoint_bus, &setpoint, sizeof(setpoint));
 
             if (++count % DEBUG_PRINT_INTERVAL == 0) {
-                printf("[ANG] sp_r=%.2f st_r=%.2f rate_r=%.2f | sp_p=%.2f st_p=%.2f rate_p=%.2f\n",
-                       angle_sp.roll * RAD_TO_DEG, state.roll * RAD_TO_DEG, setpoint.roll * RAD_TO_DEG,
-                       angle_sp.pitch * RAD_TO_DEG, state.pitch * RAD_TO_DEG, setpoint.pitch * RAD_TO_DEG);
+                HIVE_LOG_DEBUG("[ANG] sp_r=%.2f st_r=%.2f rate_r=%.2f | sp_p=%.2f st_p=%.2f rate_p=%.2f",
+                               angle_sp.roll * RAD_TO_DEG, state.roll * RAD_TO_DEG, setpoint.roll * RAD_TO_DEG,
+                               angle_sp.pitch * RAD_TO_DEG, state.pitch * RAD_TO_DEG, setpoint.pitch * RAD_TO_DEG);
             }
         }
 

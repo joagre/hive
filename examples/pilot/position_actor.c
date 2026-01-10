@@ -18,7 +18,7 @@
 #include "config.h"
 #include "hive_runtime.h"
 #include "hive_bus.h"
-#include <stdio.h>
+#include "hive_log.h"
 #include <math.h>
 
 static bus_id s_state_bus;
@@ -83,9 +83,9 @@ void position_actor(void *arg) {
             hive_bus_publish(s_angle_setpoint_bus, &setpoint, sizeof(setpoint));
 
             if (++count % DEBUG_PRINT_INTERVAL == 0) {
-                printf("[POS] tgt=(%.1f,%.1f) x=%.2f y=%.2f pitch=%.1f roll=%.1f\n",
-                       target.x, target.y, state.x, state.y,
-                       pitch_cmd * RAD_TO_DEG, roll_cmd * RAD_TO_DEG);
+                HIVE_LOG_DEBUG("[POS] tgt=(%.1f,%.1f) x=%.2f y=%.2f pitch=%.1f roll=%.1f",
+                               target.x, target.y, state.x, state.y,
+                               pitch_cmd * RAD_TO_DEG, roll_cmd * RAD_TO_DEG);
             }
         }
 

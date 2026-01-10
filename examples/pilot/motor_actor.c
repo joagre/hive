@@ -7,7 +7,7 @@
 #include "config.h"
 #include "hive_runtime.h"
 #include "hive_bus.h"
-#include <stdio.h>
+#include "hive_log.h"
 #include <stdbool.h>
 
 static bus_id s_torque_bus;
@@ -66,8 +66,8 @@ void motor_actor(void *arg) {
             watchdog++;
 
             if (watchdog >= MOTOR_WATCHDOG_TIMEOUT && armed) {
-                printf("MOTOR WATCHDOG: No commands for %dms - cutting motors!\n",
-                       MOTOR_WATCHDOG_TIMEOUT * TIME_STEP_MS);
+                HIVE_LOG_WARN("MOTOR WATCHDOG: No commands for %dms - cutting motors!",
+                              MOTOR_WATCHDOG_TIMEOUT * TIME_STEP_MS);
                 cmd = (motor_cmd_t)MOTOR_CMD_ZERO;
                 if (s_write_fn) {
                     s_write_fn(&cmd);
