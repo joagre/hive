@@ -28,8 +28,8 @@ void altitude_actor_init(bus_id state_bus, bus_id thrust_bus, bus_id target_bus)
 void altitude_actor(void *arg) {
     (void)arg;
 
-    assert(HIVE_SUCCEEDED(hive_bus_subscribe(s_state_bus)));
-    assert(HIVE_SUCCEEDED(hive_bus_subscribe(s_target_bus)));
+    BUS_SUBSCRIBE(s_state_bus);
+    BUS_SUBSCRIBE(s_target_bus);
 
     pid_state_t alt_pid;
     pid_init_full(&alt_pid, ALT_PID_KP, ALT_PID_KI, ALT_PID_KD, ALT_PID_IMAX, ALT_PID_OMAX);
@@ -61,7 +61,7 @@ void altitude_actor(void *arg) {
         thrust_cmd_t cmd = {.thrust = thrust};
         hive_bus_publish(s_thrust_bus, &cmd, sizeof(cmd));
 
-        if (++count % DEBUG_PRINT_INTERVAL == 0) {
+        if (DEBUG_THROTTLE(count, DEBUG_PRINT_INTERVAL)) {
             HIVE_LOG_DEBUG("[ALT] tgt=%.2f alt=%.2f vvel=%.2f thrust=%.3f",
                            target_altitude, state.altitude, state.vertical_velocity, thrust);
         }

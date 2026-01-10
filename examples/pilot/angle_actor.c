@@ -25,8 +25,8 @@ void angle_actor_init(bus_id state_bus, bus_id angle_setpoint_bus, bus_id rate_s
 void angle_actor(void *arg) {
     (void)arg;
 
-    assert(HIVE_SUCCEEDED(hive_bus_subscribe(s_state_bus)));
-    assert(HIVE_SUCCEEDED(hive_bus_subscribe(s_angle_setpoint_bus)));
+    BUS_SUBSCRIBE(s_state_bus);
+    BUS_SUBSCRIBE(s_angle_setpoint_bus);
 
     pid_state_t roll_pid, pitch_pid, yaw_pid;
     PID_INIT_RPY(roll_pid, pitch_pid, yaw_pid,
@@ -55,7 +55,7 @@ void angle_actor(void *arg) {
 
         hive_bus_publish(s_rate_setpoint_bus, &setpoint, sizeof(setpoint));
 
-        if (++count % DEBUG_PRINT_INTERVAL == 0) {
+        if (DEBUG_THROTTLE(count, DEBUG_PRINT_INTERVAL)) {
             HIVE_LOG_DEBUG("[ANG] sp_r=%.2f st_r=%.2f rate_r=%.2f | sp_p=%.2f st_p=%.2f rate_p=%.2f",
                            angle_sp.roll * RAD_TO_DEG, state.roll * RAD_TO_DEG, setpoint.roll * RAD_TO_DEG,
                            angle_sp.pitch * RAD_TO_DEG, state.pitch * RAD_TO_DEG, setpoint.pitch * RAD_TO_DEG);

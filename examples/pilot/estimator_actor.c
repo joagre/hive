@@ -5,9 +5,10 @@
 // Production: would add complementary filter or Kalman filter.
 
 #include "estimator_actor.h"
-#include "hive_runtime.h"
 #include "types.h"
 #include "config.h"
+#include "hive_runtime.h"
+#include "hive_bus.h"
 #include <assert.h>
 #include <stdbool.h>
 
@@ -22,7 +23,7 @@ void estimator_actor_init(bus_id imu_bus, bus_id state_bus) {
 void estimator_actor(void *arg) {
     (void)arg;
 
-    assert(HIVE_SUCCEEDED(hive_bus_subscribe(s_imu_bus)));
+    BUS_SUBSCRIBE(s_imu_bus);
 
     // State for velocity estimation (differentiate GPS position)
     float prev_x = 0.0f, prev_y = 0.0f, prev_altitude = 0.0f;

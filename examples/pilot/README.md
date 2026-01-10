@@ -59,15 +59,15 @@ See `hal/STEVAL-DRONE01/README.md` for hardware details.
 
 | File | Description |
 |------|-------------|
-| `pilot.c` | Main entry point, platform layer, bus setup |
-| `sensor_actor.c/h` | Hardware sensor reading → IMU bus |
+| `pilot.c` | Main entry point, bus setup, actor spawn |
+| `sensor_actor.c/h` | Reads IMU via HAL → IMU bus |
 | `estimator_actor.c/h` | Sensor fusion → state bus |
 | `altitude_actor.c/h` | Altitude PID → thrust |
 | `waypoint_actor.c/h` | Waypoint manager → target bus |
 | `position_actor.c/h` | Position PD → angle setpoints |
 | `angle_actor.c/h` | Angle PIDs → rate setpoints |
 | `attitude_actor.c/h` | Rate PIDs → torque commands |
-| `motor_actor.c/h` | Mixer + safety: torque → motors → hardware |
+| `motor_actor.c/h` | Output: torque → HAL → motors |
 | `pid.c/h` | Reusable PID controller |
 | `types.h` | Shared data types (imu_data_t, motor_cmd_t, etc.) |
 | `config.h` | Shared constants (PID gains, timing, limits) |
@@ -90,7 +90,9 @@ See `hal/STEVAL-DRONE01/README.md` for hardware details.
 
 | Directory | Description |
 |-----------|-------------|
-| `hal/STEVAL-DRONE01/` | Hardware abstraction layer for STM32 drone |
+| `hal/` | Hardware abstraction layer (common interface in `hal.h`) |
+| `hal/webots-crazyflie/` | HAL implementation for Webots simulation |
+| `hal/STEVAL-DRONE01/` | HAL implementation for STM32 drone |
 | `controllers/pilot/` | Webots controller (symlink created by `make install`) |
 | `worlds/` | Webots world files (hover_test.wbt) |
 
@@ -111,12 +113,16 @@ graph TB
     Attitude --> TorqueBus([Torque Bus]) --> Motor[Motor]
 ```
 
-Platform layer (in pilot.c) provides hardware abstraction:
-- `platform_read_imu()` - reads sensors (Webots or STM32)
-- `platform_write_motors()` - writes motors (Webots or STM32)
+Hardware Abstraction Layer (HAL) provides platform independence:
+- `hal_read_imu()` - reads sensors (called by sensor_actor)
+- `hal_write_torque()` - writes motors with mixing (called by motor_actor)
 
-pilot.c uses conditional compilation (`#ifdef PLATFORM_STEVAL_DRONE01`) to select
-between Webots simulation and STM32 hardware at build time.
+HAL implementations:
+- `hal/webots-crazyflie/hal_webots.c` - Webots simulation
+- `hal/STEVAL-DRONE01/hal_stm32.c` - STM32 hardware
+
+Actor code is identical across platforms. The only compile-time difference is
+`SIMULATED_TIME` which controls the main loop (simulation vs real-time).
 
 ## Actor Priorities and Spawn Order
 
@@ -180,8 +186,8 @@ After completing the route, the drone loops back to the first waypoint and repea
 
 ### Motor Mixer (Platform-Specific, X Configuration)
 
-Both platforms use X-configuration with the same motor layout, but mixer formulas differ
-due to motor rotation directions:
+The mixer converts torque commands to individual motor speeds. Each HAL
+implementation contains its own mixer. Both platforms use X-configuration:
 
 ```
         Front
@@ -194,7 +200,7 @@ due to motor rotation directions:
         Rear
 ```
 
-**Crazyflie (Webots simulation):** Matches Bitcraze firmware
+**Crazyflie (hal/webots-crazyflie/):** Matches Bitcraze firmware
 ```
 M1 = thrust - roll + pitch + yaw  (rear-left, CCW)
 M2 = thrust - roll - pitch - yaw  (front-left, CW)
@@ -202,7 +208,7 @@ M3 = thrust + roll - pitch + yaw  (front-right, CCW)
 M4 = thrust + roll + pitch - yaw  (rear-right, CW)
 ```
 
-**STEVAL-DRONE01 (STM32 hardware):** Different sign conventions
+**STEVAL-DRONE01 (hal/STEVAL-DRONE01/):** Different sign conventions
 ```
 M1 = thrust + roll + pitch - yaw  (rear-left, CCW)
 M2 = thrust + roll - pitch + yaw  (front-left, CW)
@@ -210,20 +216,20 @@ M3 = thrust - roll - pitch - yaw  (front-right, CCW)
 M4 = thrust - roll + pitch + yaw  (rear-right, CW)
 ```
 
-The mixer is selected at compile time via `#ifdef PLATFORM_STEVAL_DRONE01` in motor_actor.c.
+The mixer is implemented in each HAL's `hal_write_torque()` function.
 
 ## Main Loop
 
 The main loop is minimal - all logic is in actors:
 
 ```c
-while (wb_robot_step(TIME_STEP_MS) != -1) {
-    hive_advance_time(TIME_STEP_MS * 1000);  // Advance simulation time (ms -> us)
-    hive_run_until_blocked();                 // Run actors until all blocked
+while (hal_step()) {
+    hive_advance_time(HAL_TIME_STEP_US);  // Advance simulation time, fire due timers
+    hive_run_until_blocked();              // Run actors until all blocked
 }
 ```
 
-Webots controls time via `wb_robot_step()`. Each call:
+Webots controls time via `hal_step()` (which wraps `wb_robot_step()`). Each call:
 1. Blocks until Webots simulates TIME_STEP milliseconds
 2. Returns, `hive_advance_time()` fires due timers
 3. `hive_run_until_blocked()` runs all ready actors

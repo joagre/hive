@@ -19,7 +19,7 @@ void motor_actor_init(bus_id torque_bus) {
 void motor_actor(void *arg) {
     (void)arg;
 
-    assert(HIVE_SUCCEEDED(hive_bus_subscribe(s_torque_bus)));
+    BUS_SUBSCRIBE(s_torque_bus);
 
     while (1) {
         torque_cmd_t torque;

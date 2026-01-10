@@ -31,8 +31,8 @@ void position_actor_init(bus_id state_bus, bus_id angle_setpoint_bus, bus_id tar
 void position_actor(void *arg) {
     (void)arg;
 
-    assert(HIVE_SUCCEEDED(hive_bus_subscribe(s_state_bus)));
-    assert(HIVE_SUCCEEDED(hive_bus_subscribe(s_target_bus)));
+    BUS_SUBSCRIBE(s_state_bus);
+    BUS_SUBSCRIBE(s_target_bus);
 
     // Current target (updated from waypoint actor)
     position_target_t target = POSITION_TARGET_ZERO;
@@ -80,7 +80,7 @@ void position_actor(void *arg) {
         };
         hive_bus_publish(s_angle_setpoint_bus, &setpoint, sizeof(setpoint));
 
-        if (++count % DEBUG_PRINT_INTERVAL == 0) {
+        if (DEBUG_THROTTLE(count, DEBUG_PRINT_INTERVAL)) {
             HIVE_LOG_DEBUG("[POS] tgt=(%.1f,%.1f) x=%.2f y=%.2f pitch=%.1f roll=%.1f",
                            target.x, target.y, state.x, state.y,
                            pitch_cmd * RAD_TO_DEG, roll_cmd * RAD_TO_DEG);

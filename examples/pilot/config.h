@@ -49,6 +49,15 @@
     hive_bus_read_wait((bus), (dest_ptr), sizeof(*(dest_ptr)), &_len, -1); \
 } while(0)
 
+// Subscribe to bus with assert (common pattern in actors)
+// Usage: BUS_SUBSCRIBE(s_state_bus);
+#define BUS_SUBSCRIBE(bus) \
+    assert(HIVE_SUCCEEDED(hive_bus_subscribe(bus)))
+
+// Debug throttle: returns true every N calls
+// Usage: int count = 0; ... if (DEBUG_THROTTLE(count, interval)) { log(...); }
+#define DEBUG_THROTTLE(counter, interval) (++(counter) % (interval) == 0)
+
 // ----------------------------------------------------------------------------
 // Hardware configuration
 // ----------------------------------------------------------------------------
@@ -66,9 +75,6 @@
 #define TIME_STEP_S   0.004f   // Control loop period (seconds)
 
 #define DEBUG_PRINT_INTERVAL  250  // Print every N iterations (250 = 1 second at 250Hz)
-
-// Motor watchdog timeout in iterations (~200ms at 250Hz)
-#define MOTOR_WATCHDOG_TIMEOUT  50
 
 // ----------------------------------------------------------------------------
 // Estimator parameters

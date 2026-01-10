@@ -28,9 +28,9 @@ void attitude_actor_init(bus_id state_bus, bus_id thrust_bus,
 void attitude_actor(void *arg) {
     (void)arg;
 
-    assert(HIVE_SUCCEEDED(hive_bus_subscribe(s_state_bus)));
-    assert(HIVE_SUCCEEDED(hive_bus_subscribe(s_thrust_bus)));
-    assert(HIVE_SUCCEEDED(hive_bus_subscribe(s_rate_setpoint_bus)));
+    BUS_SUBSCRIBE(s_state_bus);
+    BUS_SUBSCRIBE(s_thrust_bus);
+    BUS_SUBSCRIBE(s_rate_setpoint_bus);
 
     pid_state_t roll_pid, pitch_pid, yaw_pid;
     // Note: Different output limits per axis (yaw needs more authority)
@@ -68,7 +68,7 @@ void attitude_actor(void *arg) {
 
         hive_bus_publish(s_torque_bus, &cmd, sizeof(cmd));
 
-        if (++count % DEBUG_PRINT_INTERVAL == 0) {
+        if (DEBUG_THROTTLE(count, DEBUG_PRINT_INTERVAL)) {
             HIVE_LOG_DEBUG("[ATT] roll=%.1f pitch=%.1f yaw=%.1f",
                            state.roll * RAD_TO_DEG, state.pitch * RAD_TO_DEG, state.yaw * RAD_TO_DEG);
         }

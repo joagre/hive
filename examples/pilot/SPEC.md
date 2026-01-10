@@ -17,7 +17,7 @@ A quadcopter autopilot example using the actor runtime. Supports Webots simulati
 - Step 5: Estimator actor (sensor fusion, vertical velocity)
 - Step 6: Position actor (horizontal position hold + heading hold)
 - Step 7: Waypoint actor (waypoint navigation)
-- Mixer moved to motor_actor (X-configuration for Crazyflie)
+- Mixer moved to HAL (platform-specific, X-configuration)
 
 ## Goals
 
@@ -25,7 +25,7 @@ A quadcopter autopilot example using the actor runtime. Supports Webots simulati
 2. **Improve the runtime** - if problems arise (latency, scheduling), fix the runtime, don't work around it
 3. **Beautiful code** - show how an autopilot can be elegantly written using actors
 4. **Hover control** - maintain stable altitude and attitude
-5. **Clean architecture** - portable control code with platform abstraction
+5. **Clean architecture** - portable actor code with HAL abstraction
 6. **Webots integration** - use `hive_advance_time()` + `hive_run_until_blocked()` per simulation step
 
 The pilot serves dual purposes: a real-world stress test that exposes runtime weaknesses, and a showcase of clean actor-based embedded design.
@@ -110,9 +110,9 @@ graph TB
         Motors[Motors x4]
     end
 
-    subgraph PLATFORM["PLATFORM LAYER (pilot.c)"]
-        ReadIMU[platform_read_imu]
-        WriteMotors[platform_write_motors]
+    subgraph HAL["HARDWARE ABSTRACTION LAYER (hal/)"]
+        ReadIMU[hal_read_imu]
+        WriteTorque[hal_write_torque]
     end
 
     subgraph RUNTIME["ACTOR RUNTIME"]
@@ -132,13 +132,13 @@ graph TB
         Angle[ANGLE ACTOR<br/>angle PIDs]
         RateSPBus([Rate Setpoint Bus])
         TorqueBus([Torque Bus])
-        Motor[MOTOR ACTOR<br/>mixer+safety]
+        Motor[MOTOR ACTOR<br/>output]
     end
 
     IMU --> ReadIMU
     GPS --> ReadIMU
     Gyro --> ReadIMU
-    WriteMotors --> Motors
+    WriteTorque --> Motors
 
     ReadIMU --> Sensor
     Sensor --> IMUBus --> Estimator --> StateBus
@@ -149,7 +149,7 @@ graph TB
     StateBus --> Position --> AngleSPBus --> Angle
     StateBus --> Angle --> RateSPBus --> Attitude --> TorqueBus --> Motor
 
-    Motor --> WriteMotors
+    Motor --> WriteTorque
 ```
 
 ---
@@ -162,15 +162,15 @@ Code is split into focused modules:
 
 | File | Purpose |
 |------|---------|
-| `pilot.c` | Main loop, platform layer, bus setup |
-| `sensor_actor.c/h` | Reads hardware, publishes to IMU bus |
+| `pilot.c` | Main loop, bus setup, actor spawn |
+| `sensor_actor.c/h` | Reads IMU via HAL, publishes to IMU bus |
 | `estimator_actor.c/h` | Sensor fusion → state bus |
 | `altitude_actor.c/h` | Altitude PID → thrust |
 | `waypoint_actor.c/h` | Waypoint navigation → target bus |
 | `position_actor.c/h` | Position PD → angle setpoints |
 | `angle_actor.c/h` | Angle PIDs → rate setpoints |
 | `attitude_actor.c/h` | Rate PIDs → torque commands |
-| `motor_actor.c/h` | Mixer + safety: torque → motors → hardware |
+| `motor_actor.c/h` | Output: torque → HAL → motors |
 | `pid.c/h` | Reusable PID controller |
 | `types.h` | Portable data types |
 | `config.h` | All tuning parameters and constants |
@@ -180,12 +180,12 @@ Code is split into focused modules:
 ```mermaid
 graph TB
     subgraph HW["Hardware"]
-        Sensors[Webots Sensors]
-        Motors[wb_motor_set_velocity]
+        Sensors[Sensors]
+        Motors[Motors]
     end
 
-    ReadIMU[platform_read_imu]
-    WriteMotors[platform_write_motors]
+    ReadIMU[hal_read_imu]
+    WriteTorque[hal_write_torque]
 
     Sensors --> ReadIMU --> Sensor[Sensor Actor]
     Sensor --> IMUBus([IMU Bus])
@@ -209,9 +209,9 @@ graph TB
     RateSP --> Attitude
 
     Attitude --> TorqueBus([Torque Bus])
-    TorqueBus --> Motor[Motor Actor<br/>mixer + safety]
+    TorqueBus --> Motor[Motor Actor<br/>output]
 
-    Motor --> WriteMotors --> Motors
+    Motor --> WriteTorque --> Motors
 ```
 
 ---
@@ -266,8 +266,12 @@ Base thrust: 0.553 (approximate hover thrust for Webots Crazyflie model)
 
 ### Mixer (Platform-Specific, X Configuration)
 
+The motor mixer converts torque commands (thrust, roll, pitch, yaw) to individual
+motor commands. Each HAL implementation contains its own mixer since different
+platforms have different motor rotation directions and sign conventions.
+
 Both platforms use X-configuration where each motor affects both roll and pitch.
-Motor layout is the same, but mixer formulas differ due to motor rotation directions:
+Motor layout:
 
 ```
         Front
@@ -280,7 +284,7 @@ Motor layout is the same, but mixer formulas differ due to motor rotation direct
         Rear
 ```
 
-**Crazyflie (Webots simulation):** Matches official Bitcraze firmware
+**Crazyflie (hal/webots-crazyflie/):** Matches official Bitcraze firmware
 ```
 M1 (rear-left, CCW):   thrust - roll + pitch + yaw
 M2 (front-left, CW):   thrust - roll - pitch - yaw
@@ -288,7 +292,7 @@ M3 (front-right, CCW): thrust + roll - pitch + yaw
 M4 (rear-right, CW):   thrust + roll + pitch - yaw
 ```
 
-**STEVAL-DRONE01 (STM32 hardware):** Different sign conventions
+**STEVAL-DRONE01 (hal/STEVAL-DRONE01/):** Different sign conventions
 ```
 M1 (rear-left, CCW):   thrust + roll + pitch - yaw
 M2 (front-left, CW):   thrust + roll - pitch + yaw
@@ -296,7 +300,7 @@ M3 (front-right, CCW): thrust - roll - pitch - yaw
 M4 (rear-right, CW):   thrust - roll + pitch + yaw
 ```
 
-The mixer is selected at compile time via `#ifdef PLATFORM_STEVAL_DRONE01` in motor_actor.c.
+The mixer is implemented in each HAL's `hal_write_torque()` function.
 
 ### Motor Velocity Signs
 
@@ -318,9 +322,9 @@ static const float signs[4] = {-1.0f, 1.0f, -1.0f, 1.0f};
 The main loop is minimal - all logic lives in actors:
 
 ```c
-while (wb_robot_step(TIME_STEP_MS) != -1) {
-    hive_advance_time(TIME_STEP_MS * 1000);  // Fire due timers
-    hive_run_until_blocked();                 // Run actors until blocked
+while (hal_step()) {
+    hive_advance_time(HAL_TIME_STEP_US);  // Advance simulation time, fire due timers
+    hive_run_until_blocked();              // Run actors until all blocked
 }
 ```
 
@@ -357,47 +361,63 @@ Each simulation step fires the sensor_actor's timer, which triggers the control 
 
 ## Portability
 
-### Platform Abstraction
+### Hardware Abstraction Layer (HAL)
 
-The platform layer provides hardware abstraction:
+All hardware access goes through `hal/hal.h`. Each platform provides its own
+implementation of this interface:
 
 ```c
-// Initialize hardware (sensors, motors)
-int platform_init(void);
+// Platform lifecycle
+int hal_init(void);        // Initialize hardware
+void hal_cleanup(void);    // Release resources
+void hal_calibrate(void);  // Calibrate sensors
+void hal_arm(void);        // Enable motor output
+void hal_disarm(void);     // Disable motor output
 
-// Read sensors into portable struct (called by sensor_actor)
-void platform_read_imu(imu_data_t *imu);
+// Sensor interface (called by sensor_actor)
+void hal_read_imu(imu_data_t *imu);
 
-// Write motor commands (called by motor_actor)
-void platform_write_motors(const motor_cmd_t *cmd);
+// Motor interface (called by motor_actor)
+void hal_write_torque(const torque_cmd_t *cmd);
+
+// Simulation time (only for SIMULATED_TIME builds)
+bool hal_step(void);  // Advance simulation, returns false when done
 ```
 
-Actors receive platform functions via init:
-- `sensor_actor_init(bus, platform_read_imu)`
-- `motor_actor_init(bus, platform_write_motors)`
+Actors use the HAL directly - no function pointers needed:
+- `sensor_actor.c` calls `hal_read_imu()`
+- `motor_actor.c` calls `hal_write_torque()`
 
 ### Supported Platforms
 
 **Webots simulation (default):**
-- Platform functions defined in `pilot.c`
+- HAL implementation: `hal/webots-crazyflie/hal_webots.c`
+- Build with: `make` (sets `-DSIMULATED_TIME`)
 - Uses `webots/robot.h` APIs
 
 **STM32 hardware (STEVAL-DRONE01):**
+- HAL implementation: `hal/STEVAL-DRONE01/hal_stm32.c`
 - Build with: `make -f Makefile.STEVAL-DRONE01`
-- Platform functions in `hal/STEVAL-DRONE01/platform_stm32f4.c`
 - Requires hive runtime ported to STM32 (context switch, timers)
 
 ### Platform Differences
 
-The following differences are handled via `#ifdef PLATFORM_STEVAL_DRONE01`:
+All hardware differences are encapsulated in the HAL. Actor code is identical
+across platforms.
 
-| Component | Webots (Crazyflie) | STM32 (STEVAL-DRONE01) | File |
-|-----------|-------------------|------------------------|------|
-| Motor mixer | Crazyflie formula | STEVAL formula (inverted roll/yaw signs) | `motor_actor.c` |
-| Pitch sign | Negated | Not negated | `attitude_actor.c` |
-| Motor output | Signed velocity | Unsigned PWM duty cycle | `pilot.c` |
-| Main loop | `hive_advance_time()` + `hive_run_until_blocked()` | `hive_run()` event-driven | `pilot.c` |
-| Sensor rate | 250 Hz (timer-driven, TIME_STEP_MS=4) | 250 Hz (timer-driven) | `sensor_actor.c` |
+| Component | Webots (Crazyflie) | STM32 (STEVAL-DRONE01) | Location |
+|-----------|-------------------|------------------------|----------|
+| Motor mixer | Crazyflie formula | STEVAL formula | HAL `hal_write_torque()` |
+| Pitch sign | Negated in mixer | Standard | HAL `hal_write_torque()` |
+| Motor output | Signed velocity | Unsigned PWM duty cycle | HAL implementation |
+| Sensor reading | Webots API | STM32 drivers | HAL `hal_read_imu()` |
+
+The only compile-time difference in pilot.c is `SIMULATED_TIME`:
+
+| Mode | Build flag | Main loop | Time control |
+|------|------------|-----------|--------------|
+| Simulation | `-DSIMULATED_TIME` | `hal_step()` + `hive_advance_time()` + `hive_run_until_blocked()` | External (Webots) |
+| Real-time | (none) | `hive_run()` | Wall clock |
 
 **Known limitations on STM32:**
 
@@ -408,15 +428,25 @@ The following differences are handled via `#ifdef PLATFORM_STEVAL_DRONE01`:
 | PID gains | Tuned for Webots Crazyflie | May need retuning for hardware |
 | TIME_STEP_S mismatch | PIDs use 4ms but STM32 runs at 2.5ms | Gains absorb difference; retune if needed |
 
-### Portable Code (no hardware deps)
+### Portable Code
 
-- `pid.c/h` - Generic PID controller
-- `estimator_actor.c/h` - Uses only bus API
-- `altitude_actor.c/h` - Uses only bus API
-- `angle_actor.c/h` - Uses only bus API
-- `attitude_actor.c/h` - Uses only bus API
-- `types.h` - Data structures
-- `config.h` - Tuning parameters
+All actor code is platform-independent. Actors use:
+- Bus API for inter-actor communication
+- HAL API for hardware access (abstracted)
+
+| File | Dependencies |
+|------|--------------|
+| `sensor_actor.c/h` | HAL (hal_read_imu) + bus API |
+| `estimator_actor.c/h` | Bus API only |
+| `altitude_actor.c/h` | Bus API only |
+| `waypoint_actor.c/h` | Bus API only |
+| `position_actor.c/h` | Bus API only |
+| `angle_actor.c/h` | Bus API only |
+| `attitude_actor.c/h` | Bus API only |
+| `motor_actor.c/h` | HAL (hal_write_torque) + bus API |
+| `pid.c/h` | Pure C, no runtime deps |
+| `types.h` | Data structures |
+| `config.h` | Tuning parameters |
 
 ---
 
@@ -424,15 +454,15 @@ The following differences are handled via `#ifdef PLATFORM_STEVAL_DRONE01`:
 
 ```
 examples/pilot/
-    pilot.c              # Main loop, platform layer, bus setup
-    sensor_actor.c/h     # Hardware sensor reading → IMU bus
+    pilot.c              # Main loop, bus setup, actor spawn
+    sensor_actor.c/h     # Reads IMU via HAL → IMU bus
     estimator_actor.c/h  # Sensor fusion → state bus
     altitude_actor.c/h   # Altitude PID → thrust
     waypoint_actor.c/h   # Waypoint navigation → target bus
     position_actor.c/h   # Position PD → angle setpoints
     angle_actor.c/h      # Angle PIDs → rate setpoints
     attitude_actor.c/h   # Rate PIDs → torque commands
-    motor_actor.c/h      # Mixer + safety: torque → motors → hardware
+    motor_actor.c/h      # Output: torque → HAL → motors
     pid.c/h              # Reusable PID controller
     types.h              # Portable data types
     config.h             # Shared constants
@@ -445,7 +475,12 @@ examples/pilot/
     controllers/
         pilot/           # Webots controller (installed here)
     hal/
-        STEVAL-DRONE01/  # STM32F401 HAL drivers
+        hal.h                # Common HAL interface
+        webots-crazyflie/    # Webots simulation HAL
+            hal_webots.c     # Webots implementation
+        STEVAL-DRONE01/      # STM32F401 HAL
+            hal_stm32.c      # STM32 wrapper
+            platform_*.c/h   # Low-level drivers
 ```
 
 ---
@@ -516,18 +551,18 @@ graph LR
 | **Position** | Target + State Bus | Angle Setpoint Bus | CRITICAL | Position PD (250Hz) |
 | **Angle** | Angle Setpoint + State | Rate Setpoint Bus | CRITICAL | Angle PIDs (250Hz) |
 | **Attitude** | State + Thrust + Rate SP | Torque Bus | CRITICAL | Rate PIDs (250Hz) |
-| **Motor** | Torque Bus | Hardware | CRITICAL | Mixer, safety, limits, write motors |
+| **Motor** | Torque Bus | Hardware | CRITICAL | Output to hardware via HAL |
 
 ### Step 1: Motor Actor ✓
 
-Separate motor output into dedicated actor with mixer and safety features.
+Separate motor output into dedicated actor.
 
 ```
-Attitude Actor ──► Torque Bus ──► Motor Actor ──► Hardware
-                                  (mixer+safety)
+Attitude Actor ──► Torque Bus ──► Motor Actor ──► HAL ──► Hardware
+                                  (output)         (mixer)
 ```
 
-**Features:** Subscribe to torque bus, apply mixer, enforce limits, watchdog, platform write.
+**Features:** Subscribe to torque bus, call HAL for motor output. Mixer is in HAL.
 
 ### Step 2: Separate Altitude Actor ✓
 
@@ -545,8 +580,8 @@ IMU Bus ──► Altitude Actor ──► Thrust Bus ──► Attitude Actor �
 Move sensor reading from main loop into actor.
 
 ```
-Main Loop: hive_advance_time() + hive_run_until_blocked()
-Sensor Actor: timer ──► platform_read_imu() ──► IMU Bus
+Main Loop: hal_step() + hive_advance_time() + hive_run_until_blocked()
+Sensor Actor: timer ──► hal_read_imu() ──► IMU Bus
 ```
 
 **Benefits:** Main loop is minimal, all logic in timer-driven actors.

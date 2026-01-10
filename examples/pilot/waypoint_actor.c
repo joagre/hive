@@ -41,7 +41,7 @@ void waypoint_actor_init(bus_id state_bus, bus_id target_bus) {
 void waypoint_actor(void *arg) {
     (void)arg;
 
-    assert(HIVE_SUCCEEDED(hive_bus_subscribe(s_state_bus)));
+    BUS_SUBSCRIBE(s_state_bus);
 
     int waypoint_index = 0;
     int hover_ticks = 0;
@@ -105,7 +105,7 @@ void waypoint_actor(void *arg) {
             }
 
             // Debug output
-            if (++count % DEBUG_PRINT_INTERVAL == 0) {
+            if (DEBUG_THROTTLE(count, DEBUG_PRINT_INTERVAL)) {
                 HIVE_LOG_DEBUG("[WPT] wp=%d/%d xy=%.2f z=%.2f yaw=%.1f deg hover=%d%s",
                                waypoint_index, (int)NUM_WAYPOINTS - 1, dist_xy, alt_err,
                                yaw_err * RAD_TO_DEG, hover_ticks,
