@@ -816,34 +816,30 @@ hive_status hive_ipc_recv(hive_message *msg, int32_t timeout_ms);
 ```c
 // Receive with filtering on sender, class, and/or tag
 // Blocks until message matches ALL non-wildcard criteria, or timeout
-// Pass NULL for any filter parameter to accept any value
-hive_status hive_ipc_recv_match(const actor_id *from, const hive_msg_class *class,
-                            const uint32_t *tag, hive_message *msg, int32_t timeout_ms);
+// Use HIVE_SENDER_ANY, HIVE_MSG_ANY, HIVE_TAG_ANY as wildcards
+hive_status hive_ipc_recv_match(actor_id from, hive_msg_class class,
+                            uint32_t tag, hive_message *msg, int32_t timeout_ms);
 ```
 
 **Filter semantics:**
-- `from == NULL` or `*from == HIVE_SENDER_ANY` → match any sender
-- `class == NULL` or `*class == HIVE_MSG_ANY` → match any class
-- `tag == NULL` or `*tag == HIVE_TAG_ANY` → match any tag
+- `from == HIVE_SENDER_ANY` → match any sender
+- `class == HIVE_MSG_ANY` → match any class
+- `tag == HIVE_TAG_ANY` → match any tag
 - Non-wildcard values must match exactly
 
 **Usage examples:**
 ```c
 // Match any message (equivalent to hive_ipc_recv)
-hive_ipc_recv_match(NULL, NULL, NULL, &msg, -1);
+hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_ANY, HIVE_TAG_ANY, &msg, -1);
 
 // Match only from specific sender
-actor_id sender = some_actor;
-hive_ipc_recv_match(&sender, NULL, NULL, &msg, -1);
+hive_ipc_recv_match(some_actor, HIVE_MSG_ANY, HIVE_TAG_ANY, &msg, -1);
 
 // Match REQUEST messages from any sender
-hive_msg_class cls = HIVE_MSG_REQUEST;
-hive_ipc_recv_match(NULL, &cls, NULL, &msg, -1);
+hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_REQUEST, HIVE_TAG_ANY, &msg, -1);
 
 // Match REPLY with specific tag (used internally by hive_ipc_request)
-hive_msg_class reply_cls = HIVE_MSG_REPLY;
-uint32_t expected_tag = my_tag;
-hive_ipc_recv_match(NULL, &reply_cls, &expected_tag, &msg, 5000);
+hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_REPLY, expected_tag, &msg, 5000);
 ```
 
 #### Request/Reply
@@ -1030,10 +1026,8 @@ hive_message reply;
 hive_ipc_request(server, &request, sizeof(request), &reply, 5000);
 
 // Or manually using selective receive:
-actor_id from = server;
-hive_msg_class class = HIVE_MSG_REPLY;
 uint32_t expected_tag = 42;  // Known tag from earlier call
-hive_ipc_recv_match(&from, &class, &expected_tag, &reply, 5000);
+hive_ipc_recv_match(server, HIVE_MSG_REPLY, expected_tag, &reply, 5000);
 
 // During the wait:
 // - NOTIFY messages from other actors: skipped, stay in mailbox
