@@ -7,6 +7,11 @@
 // Forward declaration of assembly function
 extern void hive_context_switch_asm(hive_context *from, hive_context *to);
 
+#if defined(HIVE_PLATFORM_LINUX) || !defined(HIVE_PLATFORM_STM32)
+// =============================================================================
+// x86-64 Implementation
+// =============================================================================
+
 // Wrapper function that calls the actor function and handles return
 static void context_entry(void) {
     // When we first enter, r12 and r13 contain our function and argument
@@ -75,6 +80,57 @@ void hive_context_init(hive_context *ctx, void *stack, size_t stack_size,
 
     ctx->rsp = (void *)stack_top;
 }
+
+#elif defined(HIVE_PLATFORM_STM32)
+// =============================================================================
+// ARM Cortex-M Implementation
+// =============================================================================
+
+// Wrapper function that calls the actor function and handles return
+static void context_entry(void) {
+    // When we first enter, r4 and r5 contain our function and argument
+    // We need to extract them via inline assembly
+    void (*fn)(void *);
+    void *arg;
+
+    __asm__ volatile (
+        "mov %0, r4\n"
+        "mov %1, r5\n"
+        : "=r"(fn), "=r"(arg)
+        :
+        : "r4", "r5"
+    );
+
+    fn(arg);
+
+    // Actor returned without calling hive_exit() - this is a crash
+    hive_exit_crash();
+}
+
+void hive_context_init(hive_context *ctx, void *stack, size_t stack_size,
+                     void (*fn)(void *), void *arg) {
+    // Zero out context
+    memset(ctx, 0, sizeof(hive_context));
+
+    // Stack grows down on ARM
+    // Calculate stack top (align to 8 bytes as required by ARM AAPCS)
+    uintptr_t stack_top = (uintptr_t)stack + stack_size;
+    stack_top &= ~((uintptr_t)7);  // Align to 8 bytes
+
+    // Store function and argument in callee-saved registers
+    // These will be preserved across the context switch
+    ctx->r4 = (void *)fn;
+    ctx->r5 = arg;
+
+    // Push return address (context_entry) onto stack
+    // The context switch will pop this into PC via ldmia
+    stack_top -= sizeof(void *);
+    *(void **)stack_top = (void *)context_entry;
+
+    ctx->sp = (void *)stack_top;
+}
+
+#endif
 
 void hive_context_switch(hive_context *from, hive_context *to) {
     hive_context_switch_asm(from, to);

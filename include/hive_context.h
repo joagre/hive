@@ -2,7 +2,9 @@
 #define HIVE_CONTEXT_H
 
 #include <stddef.h>
+#include "hive_static_config.h"
 
+#if defined(HIVE_PLATFORM_LINUX) || !defined(HIVE_PLATFORM_STM32)
 // Context for x86-64
 // Stores callee-saved registers: rbx, rbp, r12-r15, and rsp
 typedef struct {
@@ -14,6 +16,24 @@ typedef struct {
     void *r14;
     void *r15;
 } hive_context;
+
+#elif defined(HIVE_PLATFORM_STM32)
+// Context for ARM Cortex-M
+// Stores callee-saved registers: r4-r11 and sp (r13)
+// Note: lr (r14) is saved on stack by context switch
+typedef struct {
+    void *sp;   // Stack pointer (r13)
+    void *r4;
+    void *r5;
+    void *r6;
+    void *r7;
+    void *r8;
+    void *r9;
+    void *r10;
+    void *r11;
+} hive_context;
+
+#endif
 
 // Switch from 'from' context to 'to' context
 // Saves current context in 'from' and restores 'to'
