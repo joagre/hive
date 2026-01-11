@@ -17,6 +17,79 @@ make          # Build libhal.a
 make clean    # Remove build artifacts
 ```
 
+## Hardware Test Program
+
+Before running the full pilot firmware, use the standalone test program to verify
+hardware connectivity. It reads all sensors and prints values over serial.
+
+### Build and Flash
+
+```bash
+# From this directory (hal/STEVAL-DRONE01/)
+make -f Makefile.test          # Build test_sensors.elf (~7KB)
+make -f Makefile.test flash    # Flash via ST-Link
+make -f Makefile.test clean    # Clean build
+```
+
+### Serial Connection
+
+Connect to the ST-Link virtual COM port:
+- **Baud rate:** 115200
+- **Settings:** 8N1
+- **Linux device:** Usually `/dev/ttyACM0`
+
+```bash
+# Using screen
+screen /dev/ttyACM0 115200
+
+# Using minicom
+minicom -D /dev/ttyACM0 -b 115200
+
+# Using picocom
+picocom -b 115200 /dev/ttyACM0
+```
+
+### Expected Output
+
+```
+========================================
+STEVAL-DRONE01 Hardware Test
+========================================
+
+Initializing I2C1... OK
+Initializing LSM6DSL (IMU)... OK
+Initializing LIS2MDL (mag)... OK
+Initializing LPS22HD (baro)... OK
+
+All peripherals initialized.
+
+--- Sensor Test (Ctrl+C to stop) ---
+
+Accel:   0.123  -0.045   9.812 m/s2  Gyro:   0.002  -0.001   0.000 rad/s
+Mag:     23.4   -12.1    45.6 uT    Baro: 1013.25 hPa  Temp:  24.5 C
+```
+
+### Motor Test
+
+To test motors, edit `test_sensors.c` and set:
+```c
+#define TEST_SENSORS    0   // Disable sensor loop
+#define TEST_MOTORS     1   // Enable motor test
+```
+
+**WARNING:** Remove propellers before running motor test!
+
+The motor test spins each motor individually at 10% power for 2 seconds.
+
+### Troubleshooting
+
+| Problem | Likely Cause | Solution |
+|---------|--------------|----------|
+| No serial output | Wrong COM port | Check `dmesg` for device |
+| "FAILED" on init | Sensor not responding | Check solder joints, I2C/SPI wiring |
+| Garbage on serial | Wrong baud rate | Ensure 115200 baud |
+| Permission denied | No access to serial | Add user to `dialout` group |
+
 ## Integration with Pilot
 
 This HAL is designed to be linked with `pilot.c` and the hive runtime. The platform API (`platform_stm32f4.h`) provides Webots-compatible functions so pilot.c can run on real hardware with minimal changes.
