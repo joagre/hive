@@ -1,9 +1,9 @@
 # Makefile.STEVAL-DRONE01 - Build pilot for STEVAL-DRONE01 (STM32F401)
 #
 # Links together:
-#   - Hive runtime (requires STM32 port)
-#   - Pilot code (actors, control logic)
-#   - STEVAL-DRONE01 HAL (sensors, motors, platform)
+#   - libhive.a (built with STM32-specific hive_static_config.h)
+#   - libhal.a  (built by hal/STEVAL-DRONE01/Makefile)
+#   - Pilot actor code
 #
 # Usage:
 #   make -f Makefile.STEVAL-DRONE01          # Build firmware
@@ -13,7 +13,6 @@
 # Prerequisites:
 #   - ARM GCC: apt install gcc-arm-none-eabi
 #   - ST-Link: apt install stlink-tools
-#   - Hive runtime ported to STM32 (context switch, scheduler)
 
 # ------------------------------------------------------------------------------
 # Project Configuration
@@ -23,59 +22,10 @@ TARGET = pilot_STEVAL-DRONE01
 BUILD_DIR = build_STEVAL-DRONE01
 
 # Paths relative to examples/pilot/
-HIVE_SRC_DIR = ../../src
-HIVE_INC_DIR = ../../include
+HIVE_ROOT = ../..
+HIVE_SRC_DIR = $(HIVE_ROOT)/src
+HIVE_INC_DIR = $(HIVE_ROOT)/include
 HAL_DIR = hal/STEVAL-DRONE01
-
-# ------------------------------------------------------------------------------
-# Source Files
-# ------------------------------------------------------------------------------
-
-# Pilot application code
-PILOT_SRCS = \
-	pilot.c \
-	pid.c \
-	sensor_actor.c \
-	motor_actor.c \
-	attitude_actor.c \
-	altitude_actor.c \
-	position_actor.c \
-	waypoint_actor.c \
-	angle_actor.c \
-	estimator_actor.c
-
-# Hive runtime (core only - no Linux-specific I/O)
-# TODO: Add your STM32-ported versions of these files
-HIVE_SRCS = \
-	$(HIVE_SRC_DIR)/hive_runtime.c \
-	$(HIVE_SRC_DIR)/hive_actor.c \
-	$(HIVE_SRC_DIR)/hive_scheduler.c \
-	$(HIVE_SRC_DIR)/hive_ipc.c \
-	$(HIVE_SRC_DIR)/hive_bus.c \
-	$(HIVE_SRC_DIR)/hive_timer.c \
-	$(HIVE_SRC_DIR)/hive_link.c \
-	$(HIVE_SRC_DIR)/hive_pool.c \
-	$(HIVE_SRC_DIR)/hive_context.c \
-	$(HIVE_SRC_DIR)/hive_log.c
-
-# Excluded from STM32 build (Linux-specific, require epoll/sockets):
-#   hive_net.c  - TCP sockets (use lwIP or remove)
-#   hive_file.c - File I/O (use FATFS or remove)
-
-# HAL library (built separately in hal/STEVAL-DRONE01/)
-HAL_LIB = $(HAL_DIR)/build/libhal.a
-
-# TODO: Add ARM Cortex-M4 context switch when you port hive
-# ASM_SRCS += $(HIVE_SRC_DIR)/hive_context_arm.s
-
-# ------------------------------------------------------------------------------
-# Include Paths
-# ------------------------------------------------------------------------------
-
-INCLUDES = \
-	-I. \
-	-I$(HIVE_INC_DIR) \
-	-I$(HAL_DIR)
 
 # ------------------------------------------------------------------------------
 # Toolchain
@@ -84,6 +34,7 @@ INCLUDES = \
 PREFIX = arm-none-eabi-
 CC = $(PREFIX)gcc
 AS = $(PREFIX)gcc -x assembler-with-cpp
+AR = $(PREFIX)ar
 CP = $(PREFIX)objcopy
 SZ = $(PREFIX)size
 GDB = $(PREFIX)gdb
@@ -98,36 +49,86 @@ FLOAT-ABI = -mfloat-abi=hard
 MCU = $(CPU) -mthumb $(FPU) $(FLOAT-ABI)
 
 # ------------------------------------------------------------------------------
+# Source Files
+# ------------------------------------------------------------------------------
+
+# Pilot application code
+PILOT_SRCS = \
+	pilot.c \
+	pid.c \
+	sensor_actor.c \
+	estimator_actor.c \
+	altitude_actor.c \
+	waypoint_actor.c \
+	position_actor.c \
+	angle_actor.c \
+	attitude_actor.c \
+	motor_actor.c
+
+# Hive runtime (STM32 platform - no net, no file)
+HIVE_CORE_SRCS = \
+	hive_actor.c \
+	hive_bus.c \
+	hive_context.c \
+	hive_ipc.c \
+	hive_link.c \
+	hive_log.c \
+	hive_pool.c \
+	hive_runtime.c \
+	hive_scheduler_stm32.c \
+	hive_timer_stm32.c
+
+HIVE_ASM = hive_context_arm_cm.S
+
+# HAL library (built by HAL Makefile)
+HAL_LIB = $(HAL_DIR)/build/libhal.a
+
+# ------------------------------------------------------------------------------
 # Compiler Flags
 # ------------------------------------------------------------------------------
 
+# Common flags
 CFLAGS = -std=c11 -Wall -Wextra -Wpedantic
 CFLAGS += $(MCU)
 CFLAGS += -O2
 CFLAGS += -g3 -gdwarf-2
 CFLAGS += -ffunction-sections -fdata-sections
+CFLAGS += -MMD -MP
 
 # Platform defines
 CFLAGS += -DSTM32F401xE
 CFLAGS += -DUSE_HAL_DRIVER
 CFLAGS += -DPLATFORM_STEVAL_DRONE01
 CFLAGS += -DARM_MATH_CM4
-
-# Hive configuration for embedded
 CFLAGS += -DHIVE_PLATFORM_STM32
-CFLAGS += -DHIVE_NO_NET        # Disable network I/O
-CFLAGS += -DHIVE_NO_FILE       # Disable file I/O
 
-# Log level: NONE for production (all logging compiled out)
+# Hive feature flags (disable net/file for STM32)
+CFLAGS += -DHIVE_ENABLE_NET=0
+CFLAGS += -DHIVE_ENABLE_FILE=0
+
+# Hive memory configuration for STM32F401 (96KB RAM)
+# Tightened to actual pilot usage: 8 actors, 7 buses, 1 timer
+CFLAGS += -DHIVE_MAX_ACTORS=10
+CFLAGS += -DHIVE_MAX_BUSES=8
+CFLAGS += -DHIVE_MAILBOX_ENTRY_POOL_SIZE=16
+CFLAGS += -DHIVE_MESSAGE_DATA_POOL_SIZE=16
+CFLAGS += -DHIVE_LINK_ENTRY_POOL_SIZE=8
+CFLAGS += -DHIVE_MONITOR_ENTRY_POOL_SIZE=8
+CFLAGS += -DHIVE_TIMER_ENTRY_POOL_SIZE=4
+CFLAGS += -DHIVE_MAX_BUS_SUBSCRIBERS=6
+CFLAGS += -DHIVE_MAX_BUS_ENTRIES=4
+CFLAGS += -DHIVE_MAX_MESSAGE_SIZE=64
+CFLAGS += -DHIVE_DEFAULT_STACK_SIZE=2048
+CFLAGS += '-DHIVE_STACK_ARENA_SIZE=(20*1024)'
+
+# Log level: NONE for production
 CFLAGS += -DHIVE_LOG_LEVEL=HIVE_LOG_LEVEL_NONE
 
-CFLAGS += $(INCLUDES)
-CFLAGS += -MMD -MP
+# Include paths
+PILOT_INCLUDES = -I. -I$(HAL_DIR) -I$(HIVE_INC_DIR)
+HIVE_INCLUDES = -I$(HAL_DIR) -I$(HIVE_INC_DIR)
 
-# ------------------------------------------------------------------------------
-# Assembler Flags
-# ------------------------------------------------------------------------------
-
+# Assembler flags
 ASFLAGS = $(MCU) -g3
 
 # ------------------------------------------------------------------------------
@@ -148,16 +149,24 @@ LDFLAGS += -lm -lc
 # Object Files
 # ------------------------------------------------------------------------------
 
+# Pilot objects
 PILOT_OBJS = $(PILOT_SRCS:%.c=$(BUILD_DIR)/pilot/%.o)
-HIVE_OBJS = $(notdir $(HIVE_SRCS:%.c=%.o))
-HIVE_OBJS := $(addprefix $(BUILD_DIR)/hive/, $(HIVE_OBJS))
 
-ALL_OBJS = $(PILOT_OBJS) $(HIVE_OBJS)
-DEPS = $(ALL_OBJS:.o=.d)
+# Hive objects (built into libhive.a)
+HIVE_OBJS = $(HIVE_CORE_SRCS:%.c=$(BUILD_DIR)/hive/%.o)
+HIVE_ASM_OBJS = $(HIVE_ASM:%.S=$(BUILD_DIR)/hive/%.o)
+
+# Hive library
+HIVE_LIB = $(BUILD_DIR)/libhive.a
+
+# Dependencies
+DEPS = $(PILOT_OBJS:.o=.d) $(HIVE_OBJS:.o=.d)
 
 # ------------------------------------------------------------------------------
 # Build Rules
 # ------------------------------------------------------------------------------
+
+.PHONY: all clean flash debug openocd size help
 
 all: $(BUILD_DIR)/$(TARGET).elf $(BUILD_DIR)/$(TARGET).hex $(BUILD_DIR)/$(TARGET).bin size
 
@@ -165,26 +174,41 @@ all: $(BUILD_DIR)/$(TARGET).elf $(BUILD_DIR)/$(TARGET).hex $(BUILD_DIR)/$(TARGET
 $(BUILD_DIR)/pilot $(BUILD_DIR)/hive:
 	mkdir -p $@
 
+# --- Hive library ---
+
+# Compile hive C sources
+$(BUILD_DIR)/hive/%.o: $(HIVE_SRC_DIR)/%.c | $(BUILD_DIR)/hive
+	@echo "CC (hive) $<"
+	@$(CC) $(CFLAGS) $(HIVE_INCLUDES) -c $< -o $@
+
+# Compile hive assembly
+$(BUILD_DIR)/hive/%.o: $(HIVE_SRC_DIR)/%.S | $(BUILD_DIR)/hive
+	@echo "AS (hive) $<"
+	@$(CC) $(ASFLAGS) $(HIVE_INCLUDES) -c $< -o $@
+
+# Create libhive.a
+$(HIVE_LIB): $(HIVE_OBJS) $(HIVE_ASM_OBJS)
+	@echo "AR $@"
+	@$(AR) rcs $@ $^
+
+# --- Pilot application ---
+
 # Compile pilot sources
 $(BUILD_DIR)/pilot/%.o: %.c | $(BUILD_DIR)/pilot
 	@echo "CC (pilot) $<"
-	@$(CC) $(CFLAGS) -c $< -o $@
+	@$(CC) $(CFLAGS) $(PILOT_INCLUDES) -c $< -o $@
 
-# Compile hive sources
-$(BUILD_DIR)/hive/%.o: $(HIVE_SRC_DIR)/%.c | $(BUILD_DIR)/hive
-	@echo "CC (hive) $<"
-	@$(CC) $(CFLAGS) -c $< -o $@
+# --- HAL library (delegate to HAL Makefile) ---
 
-# Build HAL library (delegate to HAL Makefile)
 $(HAL_LIB):
 	@echo "Building HAL library..."
 	@$(MAKE) -C $(HAL_DIR)
 
-# Link (pilot + hive + HAL library)
-# HAL_LIB listed first so it builds before compiling objects that may fail
-$(BUILD_DIR)/$(TARGET).elf: $(HAL_LIB) $(ALL_OBJS)
+# --- Final link ---
+
+$(BUILD_DIR)/$(TARGET).elf: $(PILOT_OBJS) $(HIVE_LIB) $(HAL_LIB)
 	@echo "LD $@"
-	@$(CC) $(ALL_OBJS) $(HAL_LIB) $(LDFLAGS) -o $@
+	@$(CC) $(PILOT_OBJS) $(HIVE_LIB) $(HAL_LIB) $(LDFLAGS) -o $@
 
 # Generate hex
 $(BUILD_DIR)/$(TARGET).hex: $(BUILD_DIR)/$(TARGET).elf
@@ -225,8 +249,6 @@ clean:
 # Include dependencies
 -include $(DEPS)
 
-.PHONY: all clean flash debug openocd size
-
 # ------------------------------------------------------------------------------
 # Help
 # ------------------------------------------------------------------------------
@@ -234,10 +256,10 @@ clean:
 help:
 	@echo "Pilot STEVAL-DRONE01 Build System"
 	@echo ""
-	@echo "This Makefile links together:"
-	@echo "  - Hive runtime (actor framework)"
-	@echo "  - Pilot code (flight controller actors)"
-	@echo "  - STEVAL-DRONE01 HAL (hardware drivers)"
+	@echo "Build structure:"
+	@echo "  libhive.a  - Hive runtime (built with STM32-specific config)"
+	@echo "  libhal.a   - Hardware abstraction (built by hal/STEVAL-DRONE01/)"
+	@echo "  pilot/*.o  - Flight controller actors"
 	@echo ""
 	@echo "Targets:"
 	@echo "  all     - Build firmware (default)"
@@ -248,10 +270,9 @@ help:
 	@echo "  size    - Show memory usage"
 	@echo "  help    - Show this help"
 	@echo ""
-	@echo "Prerequisites for hive port:"
-	@echo "  1. Port hive_context.c to ARM Cortex-M4 (context switch)"
-	@echo "  2. Port hive_scheduler.c event loop (replace epoll with SysTick)"
-	@echo "  3. Port hive_timer.c (use hardware timers instead of timerfd)"
+	@echo "Configuration:"
+	@echo "  Memory limits set via -D flags (see CFLAGS in this Makefile)"
+	@echo "  Tightened for pilot: 8 actors, 7 buses, ~29KB RAM usage"
 	@echo ""
 	@echo "Usage:"
 	@echo "  make -f Makefile.STEVAL-DRONE01"

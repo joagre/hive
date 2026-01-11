@@ -35,7 +35,8 @@ SRCS = \
 	lsm6dsl.c \
 	lis2mdl.c \
 	lps22hd.c \
-	motors.c
+	motors.c \
+	hal_stm32.c
 
 # Startup file
 ASM_SRCS = startup_stm32f401.s
@@ -59,7 +60,8 @@ ASM_SRCS = startup_stm32f401.s
 # ------------------------------------------------------------------------------
 
 INCLUDES = \
-	-I.
+	-I. \
+	-I../..  # For types.h, config.h (via hal.h)
 
 # STM32 HAL includes (add when integrating)
 # INCLUDES += \
