@@ -8,18 +8,20 @@ Supports two platforms:
 
 ## What it does
 
-Demonstrates 3D waypoint navigation with a quadcopter using 8 actors:
+Demonstrates waypoint navigation with a quadcopter using 8 actors:
 
-1. **Sensor actor** reads IMU/GPS via HAL, publishes to IMU bus
-2. **Estimator actor** sensor fusion, computes velocities, publishes to state bus
+1. **Sensor actor** reads raw sensors via HAL, publishes to sensor bus
+2. **Estimator actor** runs complementary filter, computes velocities, publishes to state bus
 3. **Altitude actor** reads target altitude from target bus, runs altitude PID
-4. **Waypoint actor** manages 3D waypoint list (x, y, z, yaw), publishes to target bus
+4. **Waypoint actor** manages waypoint list, publishes to target bus
 5. **Position actor** reads target XY/yaw from target bus, runs position PD
 6. **Angle actor** runs angle PIDs, publishes rate setpoints
 7. **Attitude actor** runs rate PIDs, publishes torque commands
 8. **Motor actor** reads torque bus, writes to hardware via HAL (mixer is in HAL)
 
-The drone flies a square pattern with altitude changes at each waypoint.
+**Webots:** Flies a square pattern with altitude changes at each waypoint (full 3D navigation with GPS).
+
+**STEVAL-DRONE01:** Hovers and changes altitude only (no GPS, so XY position fixed at origin).
 
 ## Prerequisites
 
@@ -62,7 +64,7 @@ See `hal/STEVAL-DRONE01/README.md` for hardware details.
 | File | Description |
 |------|-------------|
 | `pilot.c` | Main entry point, bus setup, actor spawn |
-| `sensor_actor.c/h` | Reads IMU via HAL → IMU bus |
+| `sensor_actor.c/h` | Reads sensors via HAL → sensor bus |
 | `estimator_actor.c/h` | Sensor fusion → state bus |
 | `altitude_actor.c/h` | Altitude PID → thrust |
 | `waypoint_actor.c/h` | Waypoint manager → target bus |
@@ -71,7 +73,8 @@ See `hal/STEVAL-DRONE01/README.md` for hardware details.
 | `attitude_actor.c/h` | Rate PIDs → torque commands |
 | `motor_actor.c/h` | Output: torque → HAL → motors |
 | `pid.c/h` | Reusable PID controller |
-| `types.h` | Shared data types (imu_data_t, motor_cmd_t, etc.) |
+| `fusion/complementary_filter.c/h` | Portable attitude estimation (accel+gyro fusion) |
+| `types.h` | Shared data types (sensor_data_t, state_estimate_t, etc.) |
 | `config.h` | Shared constants (PID gains, timing, limits) |
 
 ### Build System
@@ -104,7 +107,7 @@ Eight actors connected via buses:
 
 ```mermaid
 graph TB
-    Sensor[Sensor] --> IMUBus([IMU Bus]) --> Estimator[Estimator] --> StateBus([State Bus])
+    Sensor[Sensor] --> SensorBus([Sensor Bus]) --> Estimator[Estimator] --> StateBus([State Bus])
 
     StateBus --> Waypoint[Waypoint] --> TargetBus([Target Bus])
     TargetBus --> Altitude[Altitude] --> ThrustBus([Thrust Bus]) --> Attitude[Attitude]
@@ -167,18 +170,24 @@ to handle the ±π wrap-around correctly.
 
 ### Waypoint Navigation
 
-The waypoint actor manages a list of 3D waypoints and publishes the current target
+The waypoint actor manages a list of waypoints and publishes the current target
 to the target bus. Both altitude and position actors read from the target bus.
 
-**Demo route (square pattern with gentle altitude changes):**
+**Webots demo route (square pattern with altitude changes):**
 1. (0, 0, 1.0m) heading 0° - start at 1m
 2. (1, 0, 1.2m) heading 0° - rise to 1.2m
 3. (1, 1, 1.4m) heading 90° - rise to 1.4m, face east
 4. (0, 1, 1.2m) heading 180° - drop to 1.2m, face south
 5. (0, 0, 1.0m) heading 0° - return to 1m
 
+**STEVAL-DRONE01 demo route (altitude only, no GPS):**
+1. 1.0m - hover at 1m
+2. 1.5m - rise to 1.5m
+3. 2.0m - rise to 2.0m
+4. 1.5m - drop to 1.5m (loop back to 1)
+
 **Arrival detection:** The drone must satisfy all conditions before advancing:
-- XY position within 0.15m of waypoint
+- XY position within 0.15m of waypoint (Webots only)
 - Altitude within 0.15m of target
 - Heading within 0.1 rad (~6°) of target
 - Velocity below 0.1 m/s (nearly stopped)
