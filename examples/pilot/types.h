@@ -43,27 +43,6 @@ typedef struct sensor_data {
     .gps_x = 0.0f, .gps_y = 0.0f, .gps_z = 0.0f, .gps_valid = false \
 }
 
-// ----------------------------------------------------------------------------
-// Legacy IMU Data (being phased out)
-// ----------------------------------------------------------------------------
-
-// Raw sensor data from IMU and GPS.
-// On real hardware, this would be populated from SPI/I2C sensor drivers.
-// For Webots, inertial_unit provides fused attitude (not truly raw).
-// Note: gyro_x/y/z are body-frame rates, mapped to roll/pitch/yaw in estimator.
-typedef struct {
-    float roll, pitch, yaw;        // Euler angles in radians
-    float gyro_x, gyro_y, gyro_z;  // Angular rates in rad/s (body frame: x=roll, y=pitch, z=yaw)
-    float x, y;                    // GPS position (meters, world frame)
-    float altitude;                // Height above ground in meters (Z)
-} imu_data_t;
-
-#define IMU_DATA_ZERO { \
-    .roll = 0.0f, .pitch = 0.0f, .yaw = 0.0f, \
-    .gyro_x = 0.0f, .gyro_y = 0.0f, .gyro_z = 0.0f, \
-    .x = 0.0f, .y = 0.0f, .altitude = 0.0f \
-}
-
 // State estimate from estimator actor.
 // Controllers use this instead of raw sensor data.
 // Includes derived values like vertical velocity.
@@ -94,15 +73,15 @@ typedef struct {
 // Zero motor command initializer
 #define MOTOR_CMD_ZERO  {.motor = {0.0f, 0.0f, 0.0f, 0.0f}}
 
-// Thrust command from altitude actor to attitude actor.
+// Thrust command from altitude actor to rate actor (via thrust bus).
 typedef struct {
     float thrust;  // Normalized thrust (0.0 to 1.0)
 } thrust_cmd_t;
 
 #define THRUST_CMD_ZERO {.thrust = 0.0f}
 
-// Rate setpoint from angle actor to attitude actor.
-// Attitude actor tracks these angular rates.
+// Rate setpoint from attitude actor to rate actor.
+// Rate actor tracks these angular rates.
 typedef struct {
     float roll;   // Target roll rate (rad/s)
     float pitch;  // Target pitch rate (rad/s)
