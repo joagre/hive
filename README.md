@@ -49,7 +49,7 @@ man man/man3/hive_ipc.3
 - Configurable per-actor stack sizes with arena allocator
 - Actor lifecycle management (spawn, exit)
 - IPC with selective receive and request/reply
-- Message classes: NOTIFY (async), REQUEST/REPLY, TIMER, SYSTEM
+- Message classes: NOTIFY (async), REQUEST/REPLY, TIMER, EXIT
 - Actor linking and monitoring (bidirectional links, unidirectional monitors)
 - Exit notifications with exit reasons (normal, crash, stack overflow, killed)
 - Timers (one-shot and periodic with timerfd/epoll)
@@ -417,7 +417,7 @@ valgrind --leak-check=full ./build/ipc_test
 
 ```
 
-The test suite includes 17 test programs covering actors, IPC, timers, bus, networking, file I/O, linking, monitoring, and edge cases like pool exhaustion.
+The test suite includes 16 test programs covering actors, IPC, timers, bus, networking, file I/O, linking, monitoring, and edge cases like pool exhaustion.
 
 ## Building
 
