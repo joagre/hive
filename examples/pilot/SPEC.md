@@ -111,13 +111,13 @@ graph TB
     end
 
     subgraph HAL["HARDWARE ABSTRACTION LAYER (hal/)"]
-        ReadIMU[hal_read_imu]
+        ReadSensors[hal_read_sensors]
         WriteTorque[hal_write_torque]
     end
 
     subgraph RUNTIME["ACTOR RUNTIME"]
         Sensor[SENSOR ACTOR]
-        IMUBus([IMU Bus])
+        SensorBus([Sensor Bus])
         Estimator[ESTIMATOR ACTOR]
         StateBus([State Bus])
 
@@ -135,13 +135,13 @@ graph TB
         Motor[MOTOR ACTOR<br/>output]
     end
 
-    IMU --> ReadIMU
-    GPS --> ReadIMU
-    Gyro --> ReadIMU
+    IMU --> ReadSensors
+    GPS --> ReadSensors
+    Gyro --> ReadSensors
     WriteTorque --> Motors
 
-    ReadIMU --> Sensor
-    Sensor --> IMUBus --> Estimator --> StateBus
+    ReadSensors --> Sensor
+    Sensor --> SensorBus --> Estimator --> StateBus
 
     StateBus --> Waypoint --> TargetBus --> Altitude --> ThrustBus --> Attitude
     TargetBus --> Position
@@ -163,7 +163,7 @@ Code is split into focused modules:
 | File | Purpose |
 |------|---------|
 | `pilot.c` | Main loop, bus setup, actor spawn |
-| `sensor_actor.c/h` | Reads IMU via HAL, publishes to IMU bus |
+| `sensor_actor.c/h` | Reads sensors via HAL, publishes to sensor bus |
 | `estimator_actor.c/h` | Sensor fusion → state bus |
 | `altitude_actor.c/h` | Altitude PID → thrust |
 | `waypoint_actor.c/h` | Waypoint navigation → target bus |
@@ -184,12 +184,12 @@ graph TB
         Motors[Motors]
     end
 
-    ReadIMU[hal_read_imu]
+    ReadSensors[hal_read_sensors]
     WriteTorque[hal_write_torque]
 
-    Sensors --> ReadIMU --> Sensor[Sensor Actor]
-    Sensor --> IMUBus([IMU Bus])
-    IMUBus --> Estimator[Estimator Actor]
+    Sensors --> ReadSensors --> Sensor[Sensor Actor]
+    Sensor --> SensorBus([Sensor Bus])
+    SensorBus --> Estimator[Estimator Actor]
     Estimator --> StateBus([State Bus])
 
     StateBus --> Waypoint[Waypoint Actor<br/>navigation]
@@ -329,8 +329,8 @@ while (hal_step()) {
 ```
 
 Each simulation step fires the sensor_actor's timer, which triggers the control chain:
-1. Sensor actor reads hardware, publishes to IMU bus
-2. Estimator actor reads IMU bus, publishes state estimate
+1. Sensor actor reads hardware, publishes to sensor bus
+2. Estimator actor reads sensor bus, runs fusion, publishes state estimate
 3. Altitude actor reads state bus, publishes thrust
 4. Waypoint actor reads state bus, publishes position target
 5. Position actor reads target bus, publishes angle setpoints
@@ -375,7 +375,7 @@ void hal_arm(void);        // Enable motor output
 void hal_disarm(void);     // Disable motor output
 
 // Sensor interface (called by sensor_actor)
-void hal_read_imu(imu_data_t *imu);
+void hal_read_sensors(sensor_data_t *sensors);
 
 // Motor interface (called by motor_actor)
 void hal_write_torque(const torque_cmd_t *cmd);
@@ -385,7 +385,7 @@ bool hal_step(void);  // Advance simulation, returns false when done
 ```
 
 Actors use the HAL directly - no function pointers needed:
-- `sensor_actor.c` calls `hal_read_imu()`
+- `sensor_actor.c` calls `hal_read_sensors()`
 - `motor_actor.c` calls `hal_write_torque()`
 
 ### Supported Platforms
@@ -411,7 +411,7 @@ across platforms.
 | Motor mixer | Crazyflie formula | STEVAL formula | HAL `hal_write_torque()` |
 | Pitch sign | Negated in mixer | Standard | HAL `hal_write_torque()` |
 | Motor output | Signed velocity | Unsigned PWM duty cycle | HAL implementation |
-| Sensor reading | Webots API | STM32 drivers | HAL `hal_read_imu()` |
+| Sensor reading | Webots API | STM32 drivers | HAL `hal_read_sensors()` |
 
 The only compile-time difference in pilot.c is `SIMULATED_TIME`:
 
@@ -437,7 +437,7 @@ All actor code is platform-independent. Actors use:
 
 | File | Dependencies |
 |------|--------------|
-| `sensor_actor.c/h` | HAL (hal_read_imu) + bus API |
+| `sensor_actor.c/h` | HAL (hal_read_sensors) + bus API |
 | `estimator_actor.c/h` | Bus API only |
 | `altitude_actor.c/h` | Bus API only |
 | `waypoint_actor.c/h` | Bus API only |
@@ -456,7 +456,7 @@ All actor code is platform-independent. Actors use:
 ```
 examples/pilot/
     pilot.c              # Main loop, bus setup, actor spawn
-    sensor_actor.c/h     # Reads IMU via HAL → IMU bus
+    sensor_actor.c/h     # Reads sensors via HAL → sensor bus
     estimator_actor.c/h  # Sensor fusion → state bus
     altitude_actor.c/h   # Altitude PID → thrust
     waypoint_actor.c/h   # Waypoint navigation → target bus
@@ -467,6 +467,8 @@ examples/pilot/
     pid.c/h              # Reusable PID controller
     types.h              # Portable data types
     config.h             # Shared constants
+    fusion/
+        complementary_filter.c/h  # Portable attitude estimation
     Makefile                 # Webots simulation build
     Makefile.STEVAL-DRONE01  # STM32 hardware build
     SPEC.md              # This specification
@@ -545,10 +547,10 @@ graph LR
 
 | Actor | Input | Output | Priority | Responsibility |
 |-------|-------|--------|----------|----------------|
-| **Sensor** | Hardware | IMU Bus | CRITICAL | Read IMU/GPS, timestamp, publish |
-| **Estimator** | IMU Bus | State Bus | CRITICAL | Sensor fusion, state estimate |
+| **Sensor** | Hardware | Sensor Bus | CRITICAL | Read raw sensors, publish |
+| **Estimator** | Sensor Bus | State Bus | CRITICAL | Complementary filter fusion, state estimate |
 | **Altitude** | State + Target Bus | Thrust Bus | CRITICAL | Altitude PID (250Hz) |
-| **Waypoint** | State Bus | Target Bus | CRITICAL | 3D waypoint navigation, loops forever |
+| **Waypoint** | State Bus | Target Bus | CRITICAL | Waypoint navigation (3D on Webots, altitude-only on STM32) |
 | **Position** | Target + State Bus | Angle Setpoint Bus | CRITICAL | Position PD (250Hz) |
 | **Angle** | Angle Setpoint + State | Rate Setpoint Bus | CRITICAL | Angle PIDs (250Hz) |
 | **Attitude** | State + Thrust + Rate SP | Torque Bus | CRITICAL | Rate PIDs (250Hz) |
@@ -570,7 +572,7 @@ Attitude Actor ──► Torque Bus ──► Motor Actor ──► HAL ──�
 Split altitude control from rate control.
 
 ```
-IMU Bus ──► Altitude Actor ──► Thrust Bus ──► Attitude Actor ──► Torque Bus
+Sensor Bus ──► Altitude Actor ──► Thrust Bus ──► Attitude Actor ──► Torque Bus
             (altitude PID)                    (rate PIDs only)
 ```
 
@@ -582,7 +584,7 @@ Move sensor reading from main loop into actor.
 
 ```
 Main Loop: hal_step() + hive_advance_time() + hive_run_until_blocked()
-Sensor Actor: timer ──► hal_read_imu() ──► IMU Bus
+Sensor Actor: timer ──► hal_read_sensors() ──► Sensor Bus
 ```
 
 **Benefits:** Main loop is minimal, all logic in timer-driven actors.
@@ -593,12 +595,12 @@ Add attitude angle control between altitude and rate control.
 
 **Before:**
 ```
-IMU Bus ──► Attitude Actor (rate PIDs with hardcoded 0.0 setpoints)
+Sensor Bus ──► Attitude Actor (rate PIDs with hardcoded 0.0 setpoints)
 ```
 
 **After:**
 ```
-IMU Bus ──► Angle Actor ──► Rate Setpoint Bus ──► Attitude Actor
+Sensor Bus ──► Angle Actor ──► Rate Setpoint Bus ──► Attitude Actor
             (angle PIDs)                          (rate PIDs)
 ```
 
@@ -614,24 +616,27 @@ Add sensor fusion between raw sensors and controllers.
 
 **Before:**
 ```
-Sensor Actor ──► IMU Bus ──► Controllers
+Sensor Actor ──► Sensor Bus ──► Controllers
 ```
 
 **After:**
 ```
-Sensor Actor ──► IMU Bus ──► Estimator Actor ──► State Bus ──► Controllers
-                             (sensor fusion)
+Sensor Actor ──► Sensor Bus ──► Estimator Actor ──► State Bus ──► Controllers
+                             (complementary filter)
 ```
 
 **Implementation:**
-- For Webots: Mostly pass-through (inertial_unit provides clean attitude)
-- Computes vertical velocity by differentiating GPS altitude with low-pass filter
-- For real hardware: Would implement complementary filter or Kalman filter
+- Runs portable complementary filter (`fusion/complementary_filter.c`)
+- Fuses accelerometer and gyroscope for roll/pitch estimation
+- Fuses magnetometer for yaw (when available)
+- Computes velocities by differentiating position with low-pass filter
+- Webots: synthesizes accelerometer from gravity + inertial_unit angles
 
 **Benefits:**
 - Controllers use state estimate, not raw sensors
-- Derived values (vertical velocity) computed in one place
-- Clean abstraction for real hardware sensor fusion
+- Derived values (velocities) computed in one place
+- Fusion algorithm is portable (same code on all platforms)
+- HALs are simpler (just raw sensor reads)
 
 ### Step 6: Position Actor ✓
 
@@ -664,7 +669,7 @@ State Bus ──► Position Actor ──► Angle Setpoint Bus ──► Angle 
 
 ### Step 7: Waypoint Actor ✓
 
-Add 3D waypoint navigation with altitude changes.
+Add waypoint navigation with platform-specific routes.
 
 **Before:**
 ```
@@ -681,15 +686,18 @@ State Bus ──► Waypoint Actor ──► Target Bus
 ```
 
 **Implementation:**
-- Manages list of 3D waypoints (x, y, z, yaw)
+- Manages list of waypoints (platform-specific)
 - Publishes current target to target bus
 - Altitude actor reads target altitude from target bus
 - Position actor reads target XY and yaw from target bus
 - Monitors state bus for arrival detection
-- Arrival requires: XY position, altitude, heading within tolerance, velocity below threshold
+- Arrival requires: altitude, heading within tolerance, velocity below threshold
 - Hovers briefly at each waypoint before advancing
 - Loops forever: returns to first waypoint after completing route
-- Demo route: square pattern with gentle altitude changes (1.0m → 1.2m → 1.4m → 1.2m → 1.0m)
+
+**Platform-specific routes:**
+- **Webots (GPS available):** 3D waypoints with square pattern (1.0m → 1.2m → 1.4m → 1.2m → 1.0m)
+- **STEVAL-DRONE01 (no GPS):** Altitude-only waypoints (1.0m → 1.5m → 2.0m → 1.5m), XY fixed at origin
 
 **Benefits:**
 - Decouples waypoint logic from both position and altitude control
