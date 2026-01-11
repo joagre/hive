@@ -31,7 +31,13 @@ make clean              # Clean build
 ```
 
 The `sensor_motor_test` reads all sensors and spins motors briefly.
-Connect serial at 115200 baud to see output.
+Feedback is via LED blinks (no serial output):
+- 1 blink = starting
+- 2 blinks = sensors initialized
+- 3 blinks = reading sensor data
+- 4 blinks = motors test starting (REMOVE PROPS!)
+- Fast blink = success
+- Slow blink = failure
 
 ## Integration with Pilot
 
@@ -147,11 +153,14 @@ make -f Makefile.STEVAL-DRONE01
 | `stm32f401_flash.ld` | Memory layout (512K Flash, 96K RAM) |
 | `Makefile` | Build libhal.a static library |
 
-### Debug (Optional)
+### Debug (Optional, Not Implemented)
 
 | File | Description |
 |------|-------------|
-| `usart1.h/c` | USART1 debug serial driver (not in main build) |
+| `usart1.h/c` | USART1 driver (not compiled - P7 header available on board) |
+
+Note: Serial debug output requires adding `usart1.c` to Makefile, connecting
+`syscalls.c` `_write()` to USART, and changing `HIVE_LOG_LEVEL`.
 
 ### Vendor Drivers (vendor/)
 
@@ -187,10 +196,10 @@ PB8  - TIM4_CH3 (M3)
 PB9  - TIM4_CH4 (M4)
 ```
 
-### USART1 (Debug Serial - Optional)
+### USART1 (Debug Serial - Not Implemented)
 ```
-PA9  - USART1_TX
-PA10 - USART1_RX
+PA9  - USART1_TX  (directly to P7 header pin 2)
+PA10 - USART1_RX  (directly to P7 header pin 3)
 ```
 
 ### Misc
