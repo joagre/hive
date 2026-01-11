@@ -244,9 +244,8 @@ float pid_update(pid_state_t *pid, float setpoint, float measurement, float dt) 
 |------------|------|------|-------|------------|---------|
 | Altitude   | 0.3  | 0.05 | 0     | 0.15       | Track target altitude (PI) |
 | Position   | 0.2  | -    | 0.1   | 0.35 rad   | Track target XY (PD) |
-| Yaw angle  | 4.0  | 0    | 0     | 3.0 rad/s  | Track target heading (P) |
-| Roll angle | 4.0  | 0    | 0     | 3.0 rad/s  | Level attitude |
-| Pitch angle| 4.0  | 0    | 0     | 3.0 rad/s  | Level attitude |
+| Attitude   | 4.0  | 0    | 0     | 3.0 rad/s  | Level attitude (roll/pitch) |
+| Yaw attitude | 4.0 | 0   | 0     | 3.0 rad/s  | Track target heading (P) |
 | Roll rate  | 0.02 | 0    | 0.001 | 0.1        | Stabilize roll |
 | Pitch rate | 0.02 | 0    | 0.001 | 0.1        | Stabilize pitch |
 | Yaw rate   | 0.02 | 0    | 0.001 | 0.15       | Stabilize yaw |
@@ -500,14 +499,14 @@ examples/pilot/
 ### Console Output
 
 ```
-Pilot started - hover mode
-alt=0.01 thrust=0.75 | roll=  0.0 pitch=  0.0
-alt=0.02 thrust=0.75 | roll=  0.0 pitch=  0.0
-alt=1.41 thrust=0.35 | roll=  0.0 pitch=  0.0
+8 actors spawned, waypoint navigation active
+[ALT] tgt=1.00 alt=0.01 vvel=0.00 thrust=0.750
+[ALT] tgt=1.00 alt=0.05 vvel=0.12 thrust=0.720
 ...
-alt=1.05 thrust=0.55 | roll=  0.0 pitch=  0.0
-alt=1.04 thrust=0.55 | roll=  0.0 pitch=  0.0
-alt=1.01 thrust=0.55 | roll=  0.0 pitch=  0.0
+[WPT] Advancing to waypoint 1: (1.0, 0.0, 1.2) yaw=0 deg
+[ALT] tgt=1.20 alt=1.02 vvel=0.05 thrust=0.560
+[POS] tgt=(1.0,0.0) x=0.12 y=0.00 pitch=5.2 roll=0.0
+...
 ```
 
 ---
