@@ -4,7 +4,7 @@ Quadcopter waypoint navigation using hive actor runtime.
 
 Supports two platforms:
 - **Webots simulation** (default) - Crazyflie quadcopter in Webots simulator
-- **STM32 hardware** - STEVAL-DRONE01 mini drone kit (34 KB flash, 29 KB RAM)
+- **STM32 hardware** - STEVAL-DRONE01 mini drone kit (55 KB flash, 29 KB RAM)
 
 ## What it does
 
@@ -48,12 +48,12 @@ Then open `worlds/hover_test.wbt` in Webots and start the simulation.
 ### STM32 Hardware (STEVAL-DRONE01)
 
 ```bash
-make -f Makefile.STEVAL-DRONE01        # Build firmware (34 KB flash, 29 KB RAM)
+make -f Makefile.STEVAL-DRONE01        # Build firmware (55 KB flash, 29 KB RAM)
 make -f Makefile.STEVAL-DRONE01 flash  # Flash to device via ST-Link
 make -f Makefile.STEVAL-DRONE01 clean  # Clean build artifacts
 ```
 
-Memory fits STM32F401 (512 KB flash, 96 KB RAM) with 67 KB RAM headroom.
+Memory fits STM32F401 (512 KB flash, 96 KB RAM) with room to spare.
 
 See `hal/STEVAL-DRONE01/README.md` for hardware details.
 
