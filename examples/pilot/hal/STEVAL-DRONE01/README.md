@@ -65,15 +65,16 @@ make -f Makefile.STEVAL-DRONE01
 ┌─────────────────────────────────────────────────────────────────┐
 │                   pilot.c + hive runtime                         │
 │                (Actor-based Flight Controller)                   │
+│         Sensor fusion in fusion/complementary_filter.c           │
 └─────────────────────────────────────────────────────────────────┘
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                  platform_stm32f4.h/c                            │
-│              (400Hz Control Loop, Sensor Fusion)                 │
+│                       hal_stm32.c                                │
+│         (HAL Interface: hal_read_sensors, hal_write_torque)      │
 │  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐        │
-│  │ attitude │  │ lsm6dsl  │  │ lis2mdl  │  │ lps22hd  │        │
-│  │ (filter) │  │  (IMU)   │  │  (mag)   │  │ (baro)   │        │
+│  │ lsm6dsl  │  │ lis2mdl  │  │ lps22hd  │  │  motors  │        │
+│  │  (IMU)   │  │  (mag)   │  │ (baro)   │  │  (PWM)   │        │
 │  └──────────┘  └──────────┘  └──────────┘  └──────────┘        │
 └─────────────────────────────────────────────────────────────────┘
                               │
@@ -98,13 +99,13 @@ make -f Makefile.STEVAL-DRONE01
 
 ## File Overview
 
-### Platform Layer
+### HAL Layer
 
 | File | Description |
 |------|-------------|
-| `platform_stm32f4.h/c` | Webots-compatible interface for pilot.c |
-| `platform_types.h` | Shared types (imu_data_t, motor_cmd_t, etc.) |
-| `attitude.h/c` | Complementary filter for roll/pitch/yaw estimation |
+| `hal_stm32.c` | HAL interface (hal_read_sensors, hal_write_torque) |
+| `platform_stm32f4.h/c` | Platform-specific sensor reading and motor control |
+| `platform_types.h` | Platform-specific types (platform_sensors_t, etc.) |
 
 ### Sensor Drivers
 
@@ -205,10 +206,11 @@ HSE (16MHz) ──► PLL (×336/16/4) ──► SYSCLK (84MHz)
 | Feature | Webots | STEVAL-DRONE01 |
 |---------|--------|----------------|
 | Position | GPS (perfect) | None (need external tracking) |
-| Attitude | Inertial unit (fused) | Raw IMU (need sensor fusion) |
+| Attitude | Synthesized from inertial unit | Raw IMU → complementary filter |
 | Altitude | GPS Z | Barometer (relative only) |
-| Heading | Direct yaw | Magnetometer (calibration needed) |
-| Timing | Simulation step | Real-time (hardware timers) |
+| Heading | Synthesized yaw | Magnetometer |
+| Timing | Simulation step | Real-time (hive scheduler) |
+| Fusion | Same portable code (fusion/) | Same portable code (fusion/) |
 
 ## Building
 
@@ -353,46 +355,33 @@ motors_set(&cmd);                      // Set speeds (0.0-1.0)
 motors_emergency_stop();               // Immediate stop + disarm
 ```
 
-### Attitude Filter
+### HAL API
+
+The HAL provides a platform-independent interface used by pilot actors:
 
 ```c
-#include "attitude.h"
+#include "hal/hal.h"
 
-attitude_init(NULL, NULL);             // Default: alpha=0.98
-attitude_update(accel, gyro, dt);      // Fuse sensors (call at 400Hz)
-attitude_update_mag(mag);              // Optional yaw correction (50Hz)
-attitude_get(&att);                    // Get roll, pitch, yaw (radians)
-```
+// Initialization
+hal_init();         // Initialize hardware
+hal_calibrate();    // Calibrate sensors (keep drone still and level)
+hal_arm();          // Arm motors
 
-### Platform API
+// Sensor reading (called by sensor_actor)
+sensor_data_t sensors;
+hal_read_sensors(&sensors);   // Raw accel, gyro, mag, baro (no GPS)
 
-Webots-compatible interface for running pilot.c on STM32:
+// Motor output (called by motor_actor)
+torque_cmd_t cmd = {.thrust = 0.5f, .roll = 0.0f, .pitch = 0.0f, .yaw = 0.0f};
+hal_write_torque(&cmd);       // HAL applies mixer internally
 
-```c
-#include "platform_stm32f4.h"
-
-// Replace Webots functions with platform equivalents
-platform_init();                       // Instead of wb_robot_init()
-platform_calibrate();                  // Calibrate sensors
-
-while (1) {
-    platform_update();                 // Call at 400Hz (sensor fusion)
-
-    imu_data_t imu;
-    platform_read_imu(&imu);           // Get attitude, rates, altitude
-
-    // Your PID control logic here...
-
-    motor_cmd_t cmd = {.motor = {m1, m2, m3, m4}};
-    platform_write_motors(&cmd);       // Output to motors
-
-    platform_delay_us(2500);           // 400Hz loop
-}
+// Shutdown
+hal_disarm();
 ```
 
 Key differences from Webots:
-- No x/y position (no GPS) - `imu.x` and `imu.y` always return 0
-- Must call `platform_update()` manually at 400Hz for sensor fusion
+- No GPS - `sensors.gps_valid` is always false, x/y position fixed at origin
+- Sensor fusion done in portable code (`fusion/complementary_filter.c`)
 - Altitude is relative (barometer-based), not absolute
 
 ## Motor Layout
@@ -419,18 +408,22 @@ Motor mixing:
 ## Control Loop Timing
 
 ```
-400 Hz (2.5ms) ─┬─► Read IMU (LSM6DSL)
-                ├─► Update attitude filter
-                ├─► Run PID controllers
-                └─► Output to motors
-
- 50 Hz (20ms) ──┬─► Read magnetometer (LIS2MDL)
-                └─► Read barometer (LPS22HD)
+250 Hz (4ms) ───┬─► sensor_actor: Read all sensors (IMU, mag, baro)
+                ├─► estimator_actor: Run complementary filter
+                ├─► altitude_actor: Altitude PID
+                ├─► waypoint_actor: Check arrival, publish target
+                ├─► position_actor: Position PD
+                ├─► attitude_actor: Attitude PID
+                ├─► rate_actor: Rate PID
+                └─► motor_actor: Output to motors (HAL applies mixer)
 ```
+
+Note: All sensors are read at the same rate. The sensor drivers handle
+internal ODR (output data rate) configuration.
 
 ## Calibration
 
-Before flight, `platform_calibrate()` performs:
+Before flight, `hal_calibrate()` performs:
 
 1. **Gyro bias** - Average 500 samples while stationary
 2. **Barometer reference** - Average 50 samples for ground level
@@ -475,4 +468,5 @@ Tuning procedure:
 - [x] All peripheral drivers (SPI1, I2C1, TIM4, USART1)
 
 ### Remaining
-- [ ] hive runtime port for STM32F4 (context switch, scheduler, timers)
+- [ ] Flight testing on real hardware
+- [ ] BLE remote control via SPBTLE-RF
