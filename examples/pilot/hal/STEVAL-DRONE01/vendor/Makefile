@@ -39,8 +39,12 @@ COMMON_SRCS = \
 	Drivers/BSP/lsm303agr/LSM303AGR_ACC_driver.c \
 	Drivers/BSP/lsm303agr/LSM303AGR_ACC_driver_HL.c
 
+# USART1 driver for debug output (from parent directory)
+# usart1.c is self-contained, no other dependencies needed
+DEBUG_SRCS = ../usart1.c
+
 # Test-specific source
-C_SRCS = $(TEST).c $(COMMON_SRCS)
+C_SRCS = $(TEST).c $(COMMON_SRCS) $(DEBUG_SRCS)
 
 ASM_SRCS = ../startup_stm32f401.s
 
@@ -61,6 +65,7 @@ MCU = $(CPU) -mthumb $(FPU) $(FLOAT-ABI)
 # Include paths
 INCLUDES = \
 	-I. \
+	-I.. \
 	-IDrivers/STM32F4xx_HAL_Driver/Inc \
 	-IDrivers/CMSIS/Device/ST/STM32F4xx/Include \
 	-IDrivers/CMSIS/Include \

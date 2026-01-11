@@ -2,11 +2,45 @@
 //
 // Direct register access implementation for debug output.
 // Uses polling mode for simplicity.
+// Self-contained: does not depend on system_config.c or gpio_config.c
 
 #include "usart1.h"
-#include "system_config.h"
-#include "gpio_config.h"
 #include <stdarg.h>
+
+// ----------------------------------------------------------------------------
+// RCC and GPIO Register Definitions (for self-contained init)
+// ----------------------------------------------------------------------------
+
+// RCC registers
+#define RCC_BASE            0x40023800U
+#define RCC_AHB1ENR         (*(volatile uint32_t *)(RCC_BASE + 0x30))
+#define RCC_APB2ENR         (*(volatile uint32_t *)(RCC_BASE + 0x44))
+
+// RCC bits
+#define RCC_AHB1ENR_GPIOAEN (1U << 0)
+#define RCC_APB2ENR_USART1EN (1U << 4)
+
+// GPIOA registers (USART1 TX=PA9, RX=PA10)
+#define GPIOA_BASE          0x40020000U
+#define GPIOA_MODER         (*(volatile uint32_t *)(GPIOA_BASE + 0x00))
+#define GPIOA_OTYPER        (*(volatile uint32_t *)(GPIOA_BASE + 0x04))
+#define GPIOA_OSPEEDR       (*(volatile uint32_t *)(GPIOA_BASE + 0x08))
+#define GPIOA_PUPDR         (*(volatile uint32_t *)(GPIOA_BASE + 0x0C))
+#define GPIOA_AFRH          (*(volatile uint32_t *)(GPIOA_BASE + 0x24))
+
+// Clock frequency for baud rate calculation
+// Default: 16 MHz HSI (overridden if system uses PLL)
+#ifndef PCLK2_FREQ
+#define PCLK2_FREQ          16000000U
+#endif
+
+// SysTick for timeout (optional, weak symbol)
+// If system_get_tick() is not available, use HAL_GetTick() or a stub
+__attribute__((weak)) uint32_t system_get_tick(void) {
+    // Try to use HAL_GetTick if available (linked externally)
+    extern uint32_t HAL_GetTick(void);
+    return HAL_GetTick();
+}
 
 // ----------------------------------------------------------------------------
 // USART1 Register Definitions
@@ -284,11 +318,31 @@ void usart1_init(const usart1_config_t *config) {
         s_config = (usart1_config_t)USART1_CONFIG_DEFAULT;
     }
 
-    // Enable USART1 clock
-    system_enable_usart1();
+    // Enable GPIOA clock (for PA9/PA10)
+    RCC_AHB1ENR |= RCC_AHB1ENR_GPIOAEN;
 
-    // Initialize GPIO pins
-    gpio_init_usart1();
+    // Enable USART1 clock
+    RCC_APB2ENR |= RCC_APB2ENR_USART1EN;
+
+    // Small delay for clock to stabilize
+    for (volatile int i = 0; i < 100; i++);
+
+    // Configure PA9 (TX) as alternate function 7 (USART1), push-pull, high speed
+    GPIOA_MODER &= ~(3U << (9 * 2));    // Clear mode bits
+    GPIOA_MODER |= (2U << (9 * 2));     // Set alternate function mode
+    GPIOA_OTYPER &= ~(1U << 9);         // Push-pull
+    GPIOA_OSPEEDR |= (3U << (9 * 2));   // High speed
+    GPIOA_PUPDR &= ~(3U << (9 * 2));    // No pull-up/down
+    GPIOA_AFRH &= ~(0xFU << ((9 - 8) * 4));  // Clear AF bits for PA9
+    GPIOA_AFRH |= (7U << ((9 - 8) * 4));     // AF7 = USART1
+
+    // Configure PA10 (RX) as alternate function 7 (USART1), pull-up
+    GPIOA_MODER &= ~(3U << (10 * 2));   // Clear mode bits
+    GPIOA_MODER |= (2U << (10 * 2));    // Set alternate function mode
+    GPIOA_PUPDR &= ~(3U << (10 * 2));   // Clear pull-up/down
+    GPIOA_PUPDR |= (1U << (10 * 2));    // Pull-up
+    GPIOA_AFRH &= ~(0xFU << ((10 - 8) * 4));  // Clear AF bits for PA10
+    GPIOA_AFRH |= (7U << ((10 - 8) * 4));     // AF7 = USART1
 
     // Disable USART before configuration
     USART1_CR1 = 0;

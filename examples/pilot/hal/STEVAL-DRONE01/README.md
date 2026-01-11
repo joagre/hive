@@ -31,13 +31,33 @@ make clean              # Clean build
 ```
 
 The `sensor_motor_test` reads all sensors and spins motors briefly.
-Feedback is via LED blinks (no serial output):
+Feedback is via LED blinks and serial output (115200 baud on P7 header):
 - 1 blink = starting
 - 2 blinks = sensors initialized
-- 3 blinks = reading sensor data
+- 3 blinks = reading sensor data (prints values to serial)
 - 4 blinks = motors test starting (REMOVE PROPS!)
 - Fast blink = success
 - Slow blink = failure
+
+Serial output shows sensor initialization status and readings:
+```
+========================================
+STEVAL-FCU001V1 Sensor + Motor Test
+========================================
+
+Starting... (1 blink)
+Initializing SPI bus...
+  SPI bus OK
+Initializing LSM6DSL accelerometer...
+  Accelerometer OK
+...
+Sample 1:
+  Accel: X=10 Y=-5 Z=1002 mg
+  Gyro:  X=100 Y=-50 Z=20 mdps
+  Mag:   X=150 Y=-80 Z=400 mGauss
+  Press: 1013.2 hPa
+...
+```
 
 ## Integration with Pilot
 

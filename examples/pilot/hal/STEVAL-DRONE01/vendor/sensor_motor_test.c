@@ -12,6 +12,9 @@
  *   4 blinks = Motors test starting (DANGER!)
  *   Fast blink = Success, all tests passed
  *   Slow blink = Failure
+ *
+ * Serial output (115200 baud on P7 header):
+ *   Detailed sensor readings and test progress
  */
 
 #include "stm32f4xx_hal.h"
@@ -20,6 +23,7 @@
 #include "steval_fcu001_v1_gyro.h"
 #include "steval_fcu001_v1_magneto.h"
 #include "steval_fcu001_v1_pressure.h"
+#include "usart1.h"
 
 #include <stdbool.h>
 
@@ -144,63 +148,96 @@ static void motors_set_all(uint16_t speed) {
 
 /* Initialize all sensors */
 static bool sensors_init(void) {
+    usart1_puts("Initializing SPI bus...\r\n");
+
     // Initialize SPI bus
     if (Sensor_IO_SPI_Init() != COMPONENT_OK) {
+        usart1_puts("ERROR: SPI init failed!\r\n");
         return false;
     }
     Sensor_IO_SPI_CS_Init_All();
+    usart1_puts("  SPI bus OK\r\n");
 
     // Initialize accelerometer
+    usart1_puts("Initializing LSM6DSL accelerometer...\r\n");
     if (BSP_ACCELERO_Init(LSM6DSL_X_0, &accel_handle) != COMPONENT_OK) {
+        usart1_puts("ERROR: Accelerometer init failed!\r\n");
         return false;
     }
     BSP_ACCELERO_Sensor_Enable(accel_handle);
+    usart1_puts("  Accelerometer OK\r\n");
 
     // Initialize gyroscope
+    usart1_puts("Initializing LSM6DSL gyroscope...\r\n");
     if (BSP_GYRO_Init(LSM6DSL_G_0, &gyro_handle) != COMPONENT_OK) {
+        usart1_puts("ERROR: Gyroscope init failed!\r\n");
         return false;
     }
     BSP_GYRO_Sensor_Enable(gyro_handle);
+    usart1_puts("  Gyroscope OK\r\n");
 
     // Initialize magnetometer
+    usart1_puts("Initializing LIS2MDL magnetometer...\r\n");
     if (BSP_MAGNETO_Init(LIS2MDL_M_0, &mag_handle) != COMPONENT_OK) {
+        usart1_puts("ERROR: Magnetometer init failed!\r\n");
         return false;
     }
     BSP_MAGNETO_Sensor_Enable(mag_handle);
+    usart1_puts("  Magnetometer OK\r\n");
 
     // Initialize pressure sensor
+    usart1_puts("Initializing LPS22HB pressure sensor...\r\n");
     if (BSP_PRESSURE_Init(LPS22HB_P_0, &press_handle) != COMPONENT_OK) {
+        usart1_puts("ERROR: Pressure sensor init failed!\r\n");
         return false;
     }
     BSP_PRESSURE_Sensor_Enable(press_handle);
+    usart1_puts("  Pressure sensor OK\r\n");
 
+    usart1_puts("All sensors initialized!\r\n\r\n");
     return true;
 }
 
-/* Read and validate sensor data */
-static bool sensors_read_test(void) {
+/* Read and validate sensor data (with optional verbose output) */
+static bool sensors_read_test(bool verbose) {
     SensorAxes_t accel, gyro, mag;
     float pressure;
     bool ok = true;
 
     // Read accelerometer (expect ~1g on one axis when level)
     if (BSP_ACCELERO_Get_Axes(accel_handle, &accel) != COMPONENT_OK) {
+        if (verbose) usart1_puts("  ERROR: Accel read failed\r\n");
         ok = false;
+    } else if (verbose) {
+        usart1_printf("  Accel: X=%d Y=%d Z=%d mg\r\n",
+                      (int)accel.AXIS_X, (int)accel.AXIS_Y, (int)accel.AXIS_Z);
     }
 
     // Read gyroscope (expect near-zero when stationary)
     if (BSP_GYRO_Get_Axes(gyro_handle, &gyro) != COMPONENT_OK) {
+        if (verbose) usart1_puts("  ERROR: Gyro read failed\r\n");
         ok = false;
+    } else if (verbose) {
+        usart1_printf("  Gyro:  X=%d Y=%d Z=%d mdps\r\n",
+                      (int)gyro.AXIS_X, (int)gyro.AXIS_Y, (int)gyro.AXIS_Z);
     }
 
     // Read magnetometer
     if (BSP_MAGNETO_Get_Axes(mag_handle, &mag) != COMPONENT_OK) {
+        if (verbose) usart1_puts("  ERROR: Mag read failed\r\n");
         ok = false;
+    } else if (verbose) {
+        usart1_printf("  Mag:   X=%d Y=%d Z=%d mGauss\r\n",
+                      (int)mag.AXIS_X, (int)mag.AXIS_Y, (int)mag.AXIS_Z);
     }
 
     // Read pressure (expect ~1000 hPa at sea level)
     if (BSP_PRESSURE_Get_Press(press_handle, &pressure) != COMPONENT_OK) {
+        if (verbose) usart1_puts("  ERROR: Pressure read failed\r\n");
         ok = false;
+    } else if (verbose) {
+        usart1_printf("  Press: %d.%d hPa\r\n",
+                      (int)pressure, (int)((pressure - (int)pressure) * 10));
     }
 
     // Basic sanity checks
@@ -209,11 +246,13 @@ static bool sensors_read_test(void) {
                         accel.AXIS_Y * accel.AXIS_Y +
                         accel.AXIS_Z * accel.AXIS_Z;
     if (accel_mag < 500000) {  // Should be ~1000000 (1g = 1000mg squared)
+        if (verbose) usart1_puts("  WARNING: Accel magnitude too low!\r\n");
         ok = false;
     }
 
     // Pressure: should be in reasonable range (800-1200 hPa)
     if (pressure < 800.0f || pressure > 1200.0f) {
+        if (verbose) usart1_puts("  WARNING: Pressure out of range!\r\n");
         ok = false;
     }
 
@@ -231,12 +270,23 @@ int main(void) {
     BSP_LED_Init(LED1);
     BSP_LED_Off(LED1);
 
+    // Initialize USART1 for debug output (115200 baud)
+    usart1_init(NULL);
+
+    usart1_puts("\r\n");
+    usart1_puts("========================================\r\n");
+    usart1_puts("STEVAL-FCU001V1 Sensor + Motor Test\r\n");
+    usart1_puts("========================================\r\n\r\n");
+
     // 1 blink = Starting
+    usart1_puts("Starting... (1 blink)\r\n");
     blink_n(1, 200, 200);
 
     // Initialize sensors
     if (!sensors_init()) {
         // Sensor init failed - slow blink
+        usart1_puts("FATAL: Sensor initialization failed!\r\n");
+        usart1_puts("Entering slow blink error loop.\r\n");
         while (1) {
             BSP_LED_Toggle(LED1);
             HAL_Delay(1000);
@@ -244,12 +294,15 @@ int main(void) {
     }
 
     // 2 blinks = Sensors initialized
+    usart1_puts("Sensors initialized! (2 blinks)\r\n\r\n");
     blink_n(2, 200, 200);
 
     // Read sensor data a few times
+    usart1_puts("Reading sensor data (10 samples)...\r\n");
     bool sensor_ok = true;
     for (int i = 0; i < 10; i++) {
-        if (!sensors_read_test()) {
+        usart1_printf("Sample %d:\r\n", i + 1);
+        if (!sensors_read_test(true)) {
             sensor_ok = false;
         }
         BSP_LED_Toggle(LED1);
@@ -260,6 +313,8 @@ int main(void) {
 
     if (!sensor_ok) {
         // Sensor read failed - slow blink
+        usart1_puts("\r\nFATAL: Sensor read validation failed!\r\n");
+        usart1_puts("Entering slow blink error loop.\r\n");
         while (1) {
             BSP_LED_Toggle(LED1);
             HAL_Delay(1000);
@@ -267,23 +322,31 @@ int main(void) {
     }
 
     // 3 blinks = Sensor data OK
+    usart1_puts("\r\nSensor data OK! (3 blinks)\r\n\r\n");
     blink_n(3, 200, 200);
 
     // Initialize motors
+    usart1_puts("Initializing motor PWM (TIM4)...\r\n");
     if (!motors_init()) {
         // Motor init failed - slow blink
+        usart1_puts("FATAL: Motor init failed!\r\n");
+        usart1_puts("Entering slow blink error loop.\r\n");
         while (1) {
             BSP_LED_Toggle(LED1);
             HAL_Delay(1000);
         }
     }
+    usart1_puts("  Motors OK\r\n\r\n");
 
     // 4 blinks = Motors test starting (WARNING!)
+    usart1_puts("*** MOTOR TEST STARTING! (4 blinks) ***\r\n");
+    usart1_puts("*** REMOVE PROPELLERS! ***\r\n\r\n");
     blink_n(4, 200, 200);
 
     // Brief motor test - spin each motor at low speed
     // *** REMOVE PROPELLERS BEFORE RUNNING! ***
     for (int m = 0; m < 4; m++) {
+        usart1_printf("Testing motor %d (10%% duty)...\r\n", m + 1);
         motor_set(m, 100);  // 10% duty cycle
         HAL_Delay(500);
         motor_set(m, 0);
@@ -291,9 +354,14 @@ int main(void) {
     }
 
     // All motors together briefly
+    usart1_puts("Testing all motors together...\r\n");
     motors_set_all(100);
     HAL_Delay(500);
     motors_set_all(0);
+
+    usart1_puts("\r\n========================================\r\n");
+    usart1_puts("ALL TESTS PASSED! (fast blink)\r\n");
+    usart1_puts("========================================\r\n");
 
     // Fast blink = All tests passed!
     while (1) {
