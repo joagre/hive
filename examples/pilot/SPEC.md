@@ -398,7 +398,8 @@ Actors use the HAL directly - no function pointers needed:
 **STM32 hardware (STEVAL-DRONE01):**
 - HAL implementation: `hal/STEVAL-DRONE01/hal_stm32.c`
 - Build with: `make -f Makefile.STEVAL-DRONE01`
-- Requires hive runtime ported to STM32 (context switch, timers)
+- Flash with: `make -f Makefile.STEVAL-DRONE01 flash`
+- Memory: 34 KB flash, 29 KB RAM (fits STM32F401 with 67 KB headroom)
 
 ### Platform Differences
 
@@ -708,37 +709,44 @@ State Bus ──► Waypoint Actor ──► Target Bus
 
 ## Memory Requirements
 
-### Code Size (Flash/ROM)
+### STM32 Build (STEVAL-DRONE01)
 
-| Component | Text (code) |
-|-----------|-------------|
-| Pilot application | ~4 KB |
-| Hive runtime | ~27 KB |
-| **Total** | **~31 KB** |
+Actual memory usage from `make -f Makefile.STEVAL-DRONE01`:
 
-Note: STM32 builds will differ slightly. Webots platform layer adds ~1.5 KB.
+| Section | Size | Description |
+|---------|------|-------------|
+| Flash | 34 KB | Code + constants (7% of 512 KB) |
+| RAM | 29 KB | Static data (30% of 96 KB) |
 
-### RAM (Static Memory)
+**RAM breakdown:**
 
-With default `hive_static_config.h`, the runtime uses ~1.2 MB RAM (mostly the 1 MB stack arena). This example needs far less.
+| Component | Size | Notes |
+|-----------|------|-------|
+| Stack arena | 20 KB | 8 actors × 2 KB + headroom |
+| Actor table | 1.2 KB | 10 slots |
+| Message pool | 1 KB | 16 entries × 64 bytes |
+| Bus structures | 2 KB | 8 buses + subscribers + entries |
+| Other pools | 1 KB | Mailbox, timers, links, monitors |
+| Main stack | 3 KB | Heap + stack for main() |
 
-**Minimal configuration for pilot example:**
+**Tightened configuration** (in Makefile.STEVAL-DRONE01):
 
-| Resource | Used | Default | Minimal |
-|----------|------|---------|---------|
-| Actors | 8 | 64 | 8 |
-| Buses | 7 | 32 | 8 |
-| Stack per actor | 1 KB | 64 KB | 1 KB |
-| Stack arena | 8 KB | 1 MB | 8 KB |
-| Mailbox entries | 0 | 256 | 8 |
-| Message data | ~7 | 256 | 8 |
-| Timer entries | 0 | 64 | 4 |
-| Link entries | 0 | 128 | 4 |
-| Monitor entries | 0 | 128 | 4 |
+| Resource | Used | Configured | Default |
+|----------|------|------------|---------|
+| Actors | 8 | 10 | 64 |
+| Buses | 7 | 8 | 32 |
+| Stack per actor | 2 KB | 2 KB | 64 KB |
+| Stack arena | 16 KB | 20 KB | 1 MB |
+| Mailbox entries | 1 | 16 | 256 |
+| Message data | 7 | 16 | 256 |
+| Timer entries | 1 | 4 | 64 |
+| Link entries | 0 | 8 | 128 |
+| Monitor entries | 0 | 8 | 128 |
+| Max message size | 48 | 64 | 256 |
 
-**Result: ~12 KB RAM** vs default ~1.2 MB
+**Stack safety margin:** 4x (worst-case ~500 bytes per actor, 2048 available)
 
-This fits comfortably on small STM32 chips (e.g., STM32F103 with 20 KB RAM).
+Fits comfortably on STM32F401 (96 KB RAM) with 67 KB headroom.
 
 ---
 

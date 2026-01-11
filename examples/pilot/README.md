@@ -4,7 +4,7 @@ Quadcopter waypoint navigation using hive actor runtime.
 
 Supports two platforms:
 - **Webots simulation** (default) - Crazyflie quadcopter in Webots simulator
-- **STM32 hardware** - STEVAL-DRONE01 mini drone kit (requires hive STM32 port)
+- **STM32 hardware** - STEVAL-DRONE01 mini drone kit (34 KB flash, 29 KB RAM)
 
 ## What it does
 
@@ -17,7 +17,7 @@ Demonstrates 3D waypoint navigation with a Crazyflie quadcopter using 8 actors:
 5. **Position actor** reads target XY/yaw from target bus, runs position PD
 6. **Angle actor** runs angle PIDs, publishes rate setpoints
 7. **Attitude actor** runs rate PIDs, publishes torque commands
-8. **Motor actor** applies X-config mixer, enforces safety limits, writes to hardware
+8. **Motor actor** reads torque bus, writes to hardware via HAL (mixer is in HAL)
 
 The drone flies a square pattern with altitude changes at each waypoint.
 
@@ -30,7 +30,6 @@ The drone flies a square pattern with altitude changes at each waypoint.
 **For STM32 hardware:**
 - ARM GCC: `apt install gcc-arm-none-eabi`
 - ST-Link: `apt install stlink-tools`
-- hive runtime ported to STM32 (context switch, scheduler, timers)
 
 ## Build and Run
 
@@ -47,9 +46,12 @@ Then open `worlds/hover_test.wbt` in Webots and start the simulation.
 ### STM32 Hardware (STEVAL-DRONE01)
 
 ```bash
-make -f Makefile.STEVAL-DRONE01        # Build firmware (requires hive STM32 port)
-make -f Makefile.STEVAL-DRONE01 flash  # Flash to device
+make -f Makefile.STEVAL-DRONE01        # Build firmware (34 KB flash, 29 KB RAM)
+make -f Makefile.STEVAL-DRONE01 flash  # Flash to device via ST-Link
+make -f Makefile.STEVAL-DRONE01 clean  # Clean build artifacts
 ```
+
+Memory fits STM32F401 (512 KB flash, 96 KB RAM) with 67 KB RAM headroom.
 
 See `hal/STEVAL-DRONE01/README.md` for hardware details.
 
@@ -77,7 +79,7 @@ See `hal/STEVAL-DRONE01/README.md` for hardware details.
 | File | Description |
 |------|-------------|
 | `Makefile` | Webots simulation build |
-| `Makefile.STEVAL-DRONE01` | STM32 hardware build (links hive + pilot + HAL) |
+| `Makefile.STEVAL-DRONE01` | STM32 hardware build (builds libhive.a + links pilot + HAL) |
 
 ### Documentation
 
