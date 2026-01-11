@@ -1,6 +1,6 @@
 // Altitude actor - Altitude hold control
 //
-// Subscribes to state and target buses, runs altitude PI with velocity damping,
+// Subscribes to state and position target buses, runs altitude PI with velocity damping,
 // publishes thrust commands.
 //
 // Uses measured vertical velocity for damping instead of differentiating
@@ -17,19 +17,19 @@
 
 static bus_id s_state_bus;
 static bus_id s_thrust_bus;
-static bus_id s_target_bus;
+static bus_id s_position_target_bus;
 
-void altitude_actor_init(bus_id state_bus, bus_id thrust_bus, bus_id target_bus) {
+void altitude_actor_init(bus_id state_bus, bus_id thrust_bus, bus_id position_target_bus) {
     s_state_bus = state_bus;
     s_thrust_bus = thrust_bus;
-    s_target_bus = target_bus;
+    s_position_target_bus = position_target_bus;
 }
 
 void altitude_actor(void *arg) {
     (void)arg;
 
     BUS_SUBSCRIBE(s_state_bus);
-    BUS_SUBSCRIBE(s_target_bus);
+    BUS_SUBSCRIBE(s_position_target_bus);
 
     pid_state_t alt_pid;
     pid_init_full(&alt_pid, ALT_PID_KP, ALT_PID_KI, ALT_PID_KD, ALT_PID_IMAX, ALT_PID_OMAX);
@@ -46,7 +46,7 @@ void altitude_actor(void *arg) {
         BUS_READ_WAIT(s_state_bus, &state);
 
         // Read target altitude (non-blocking, use last known if not available)
-        if (BUS_READ(s_target_bus, &target)) {
+        if (BUS_READ(s_position_target_bus, &target)) {
             target_altitude = target.z;
         }
 

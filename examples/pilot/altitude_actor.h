@@ -1,6 +1,6 @@
 // Altitude actor - Altitude hold control
 //
-// Subscribes to state and target buses, runs altitude PID controller,
+// Subscribes to state and position target buses, runs altitude PID controller,
 // publishes thrust commands to thrust bus.
 
 #ifndef ALTITUDE_ACTOR_H
@@ -10,7 +10,7 @@
 
 // Initialize the altitude actor module with bus IDs.
 // Must be called before spawning the actor.
-void altitude_actor_init(bus_id state_bus, bus_id thrust_bus, bus_id target_bus);
+void altitude_actor_init(bus_id state_bus, bus_id thrust_bus, bus_id position_target_bus);
 
 // Actor entry point - spawn this with hive_spawn()
 void altitude_actor(void *arg);

@@ -61,8 +61,8 @@ PILOT_SRCS = \
 	altitude_actor.c \
 	waypoint_actor.c \
 	position_actor.c \
-	angle_actor.c \
 	attitude_actor.c \
+	rate_actor.c \
 	motor_actor.c \
 	fusion/complementary_filter.c
 

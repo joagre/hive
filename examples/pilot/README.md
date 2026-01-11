@@ -12,11 +12,11 @@ Demonstrates waypoint navigation with a quadcopter using 8 actors:
 
 1. **Sensor actor** reads raw sensors via HAL, publishes to sensor bus
 2. **Estimator actor** runs complementary filter, computes velocities, publishes to state bus
-3. **Altitude actor** reads target altitude from target bus, runs altitude PID
-4. **Waypoint actor** manages waypoint list, publishes to target bus
-5. **Position actor** reads target XY/yaw from target bus, runs position PD
-6. **Angle actor** runs angle PIDs, publishes rate setpoints
-7. **Attitude actor** runs rate PIDs, publishes torque commands
+3. **Altitude actor** reads target altitude from position target bus, runs altitude PID
+4. **Waypoint actor** manages waypoint list, publishes to position target bus
+5. **Position actor** reads target XY/yaw from position target bus, runs position PD
+6. **Attitude actor** runs attitude PIDs, publishes rate setpoints
+7. **Rate actor** runs rate PIDs, publishes torque commands
 8. **Motor actor** reads torque bus, writes to hardware via HAL (mixer is in HAL)
 
 **Webots:** Flies a square pattern with altitude changes at each waypoint (full 3D navigation with GPS).
@@ -67,10 +67,10 @@ See `hal/STEVAL-DRONE01/README.md` for hardware details.
 | `sensor_actor.c/h` | Reads sensors via HAL → sensor bus |
 | `estimator_actor.c/h` | Sensor fusion → state bus |
 | `altitude_actor.c/h` | Altitude PID → thrust |
-| `waypoint_actor.c/h` | Waypoint manager → target bus |
-| `position_actor.c/h` | Position PD → angle setpoints |
-| `angle_actor.c/h` | Angle PIDs → rate setpoints |
-| `attitude_actor.c/h` | Rate PIDs → torque commands |
+| `waypoint_actor.c/h` | Waypoint manager → position target bus |
+| `position_actor.c/h` | Position PD → attitude setpoints |
+| `attitude_actor.c/h` | Attitude PIDs → rate setpoints |
+| `rate_actor.c/h` | Rate PIDs → torque commands |
 | `motor_actor.c/h` | Output: torque → HAL → motors |
 | `pid.c/h` | Reusable PID controller |
 | `fusion/complementary_filter.c/h` | Portable attitude estimation (accel+gyro fusion) |
@@ -109,17 +109,17 @@ Eight actors connected via buses:
 graph TB
     Sensor[Sensor] --> SensorBus([Sensor Bus]) --> Estimator[Estimator] --> StateBus([State Bus])
 
-    StateBus --> Waypoint[Waypoint] --> TargetBus([Target Bus])
-    TargetBus --> Altitude[Altitude] --> ThrustBus([Thrust Bus]) --> Attitude[Attitude]
-    TargetBus --> Position[Position]
+    StateBus --> Waypoint[Waypoint] --> PositionTargetBus([Position Target Bus])
+    PositionTargetBus --> Altitude[Altitude] --> ThrustBus([Thrust Bus]) --> Rate[Rate]
+    PositionTargetBus --> Position[Position]
     StateBus --> Altitude
-    StateBus --> Position --> AngleSP([Angle SP Bus]) --> Angle[Angle]
-    StateBus --> Angle --> RateSP([Rate SP Bus]) --> Attitude
-    Attitude --> TorqueBus([Torque Bus]) --> Motor[Motor]
+    StateBus --> Position --> AttitudeSP([Attitude SP Bus]) --> Attitude[Attitude]
+    StateBus --> Attitude --> RateSP([Rate SP Bus]) --> Rate
+    Rate --> TorqueBus([Torque Bus]) --> Motor[Motor]
 ```
 
 Hardware Abstraction Layer (HAL) provides platform independence:
-- `hal_read_imu()` - reads sensors (called by sensor_actor)
+- `hal_read_sensors()` - reads sensors (called by sensor_actor)
 - `hal_write_torque()` - writes motors with mixing (called by motor_actor)
 
 HAL implementations:
@@ -138,12 +138,12 @@ order to ensure each actor sees fresh data from upstream actors in the same step
 | Order | Actor     | Priority | Rationale |
 |-------|-----------|----------|-----------|
 | 1     | sensor    | CRITICAL | Reads hardware first |
-| 2     | estimator | CRITICAL | Needs IMU, produces state estimate |
+| 2     | estimator | CRITICAL | Needs sensors, produces state estimate |
 | 3     | altitude  | CRITICAL | Needs state, produces thrust |
 | 4     | waypoint  | CRITICAL | Needs state, produces position targets |
-| 5     | position  | CRITICAL | Needs target, produces angle setpoints |
-| 6     | angle     | CRITICAL | Needs angle setpoints, produces rate setpoints |
-| 7     | attitude  | CRITICAL | Needs state + thrust + rate setpoints |
+| 5     | position  | CRITICAL | Needs target, produces attitude setpoints |
+| 6     | attitude  | CRITICAL | Needs attitude setpoints, produces rate setpoints |
+| 7     | rate      | CRITICAL | Needs state + thrust + rate setpoints |
 | 8     | motor     | CRITICAL | Needs torque, writes hardware last |
 
 ## Control System
@@ -154,8 +154,8 @@ order to ensure each actor sees fresh data from upstream actors in the same step
 |------------|------|------|-------|---------|
 | Altitude   | 0.3  | 0.05 | 0     | Track target altitude (PI + velocity damping) |
 | Position   | 0.2  | -    | 0.1   | Track target XY (PD, max tilt 0.35 rad) |
-| Angle      | 4.0  | 0    | 0     | Level attitude (roll/pitch) |
-| Yaw angle  | 4.0  | 0    | 0     | Track target heading (uses pid_update_angle for wrap-around) |
+| Attitude   | 4.0  | 0    | 0     | Level attitude (roll/pitch) |
+| Yaw attitude | 4.0 | 0   | 0     | Track target heading (uses pid_update_angle for wrap-around) |
 | Roll rate  | 0.02 | 0    | 0.001 | Stabilize roll |
 | Pitch rate | 0.02 | 0    | 0.001 | Stabilize pitch |
 | Yaw rate   | 0.02 | 0    | 0.001 | Stabilize yaw |
@@ -165,13 +165,13 @@ of differentiating position error. This provides smoother response with less noi
 
 Position control uses simple PD with velocity damping. Commands are transformed
 from world frame to body frame based on current yaw. Heading hold is achieved
-via yaw angle setpoint published to the angle actor, which uses `pid_update_angle()`
+via yaw attitude setpoint published to the attitude actor, which uses `pid_update_angle()`
 to handle the ±π wrap-around correctly.
 
 ### Waypoint Navigation
 
 The waypoint actor manages a list of waypoints and publishes the current target
-to the target bus. Both altitude and position actors read from the target bus.
+to the position target bus. Both altitude and position actors read from this bus.
 
 **Webots demo route (square pattern with altitude changes):**
 1. (0, 0, 1.0m) heading 0° - start at 1m

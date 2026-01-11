@@ -120,12 +120,12 @@
 // Maximum tilt angle for position control (safety limit)
 #define MAX_TILT_ANGLE   0.35f   // ~20 degrees
 
-// Angle PID gains (angle error → rate setpoint)
-#define ANGLE_PID_KP   4.0f     // Typical autopilot: 4-8
-#define ANGLE_PID_KI   0.0f
-#define ANGLE_PID_KD   0.0f     // Derivative on error causes kick on setpoint change
-#define ANGLE_PID_IMAX 0.5f     // Integral limit
-#define ANGLE_PID_OMAX 3.0f     // Max rate setpoint (rad/s)
+// Attitude PID gains (attitude angle error → rate setpoint)
+#define ATTITUDE_PID_KP   4.0f     // Typical autopilot: 4-8
+#define ATTITUDE_PID_KI   0.0f
+#define ATTITUDE_PID_KD   0.0f     // Derivative on error causes kick on setpoint change
+#define ATTITUDE_PID_IMAX 0.5f     // Integral limit
+#define ATTITUDE_PID_OMAX 3.0f     // Max rate setpoint (rad/s)
 
 // Rate PID gains (rate error → torque)
 #define RATE_PID_KP   0.02f

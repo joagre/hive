@@ -6,20 +6,20 @@
 //   sensor_actor    - Reads raw sensors via HAL → sensor bus
 //   estimator_actor - Complementary filter fusion → state bus
 //   altitude_actor  - Altitude PID → thrust command
-//   waypoint_actor  - Waypoint manager → target bus
-//   position_actor  - Position PID → angle setpoints
-//   angle_actor     - Angle PIDs → rate setpoints
-//   attitude_actor  - Rate PIDs → torque commands
+//   waypoint_actor  - Waypoint manager → position target bus
+//   position_actor  - Position PD → attitude setpoints
+//   attitude_actor  - Attitude PIDs → rate setpoints
+//   rate_actor      - Rate PIDs → torque commands
 //   motor_actor     - Output to hardware via HAL
 //
 // Data flows through buses:
 //
-//   Sensor → Sensor Bus → Estimator → State Bus ─┬→ Altitude → Thrust Bus ──────────┐
-//                                                ├→ Position → Angle SP Bus → Angle │
-//                                                │                             ↓    │
-//                                                └→ Attitude ← Rate SP Bus ←───┘    │
-//                                                      ↓                             │
-//                                                Torque Bus → Motor ← Thrust Bus ←───┘
+//   Sensor → Sensor Bus → Estimator → State Bus ─┬→ Altitude → Thrust Bus ────────────┐
+//                                                ├→ Position → Attitude SP Bus → Attitude │
+//                                                │                                ↓        │
+//                                                └→ Rate ← Rate SP Bus ←──────────┘        │
+//                                                      ↓                                    │
+//                                                Torque Bus → Motor ← Thrust Bus ←─────────┘
 //
 // Hardware abstraction:
 //   All hardware access goes through the HAL (hal/hal.h).
@@ -39,8 +39,8 @@
 #include "altitude_actor.h"
 #include "waypoint_actor.h"
 #include "position_actor.h"
-#include "angle_actor.h"
 #include "attitude_actor.h"
+#include "rate_actor.h"
 #include "motor_actor.h"
 
 #include <assert.h>
@@ -65,8 +65,8 @@
 static bus_id s_sensor_bus;
 static bus_id s_state_bus;
 static bus_id s_thrust_bus;
-static bus_id s_target_bus;
-static bus_id s_angle_setpoint_bus;
+static bus_id s_position_target_bus;
+static bus_id s_attitude_setpoint_bus;
 static bus_id s_rate_setpoint_bus;
 static bus_id s_torque_bus;
 
@@ -91,19 +91,19 @@ int main(void) {
     assert(HIVE_SUCCEEDED(hive_bus_create(&cfg, &s_sensor_bus)));
     assert(HIVE_SUCCEEDED(hive_bus_create(&cfg, &s_state_bus)));
     assert(HIVE_SUCCEEDED(hive_bus_create(&cfg, &s_thrust_bus)));
-    assert(HIVE_SUCCEEDED(hive_bus_create(&cfg, &s_target_bus)));
-    assert(HIVE_SUCCEEDED(hive_bus_create(&cfg, &s_angle_setpoint_bus)));
+    assert(HIVE_SUCCEEDED(hive_bus_create(&cfg, &s_position_target_bus)));
+    assert(HIVE_SUCCEEDED(hive_bus_create(&cfg, &s_attitude_setpoint_bus)));
     assert(HIVE_SUCCEEDED(hive_bus_create(&cfg, &s_rate_setpoint_bus)));
     assert(HIVE_SUCCEEDED(hive_bus_create(&cfg, &s_torque_bus)));
 
     // Initialize actors with bus connections
     sensor_actor_init(s_sensor_bus);
     estimator_actor_init(s_sensor_bus, s_state_bus);
-    altitude_actor_init(s_state_bus, s_thrust_bus, s_target_bus);
-    waypoint_actor_init(s_state_bus, s_target_bus);
-    position_actor_init(s_state_bus, s_angle_setpoint_bus, s_target_bus);
-    angle_actor_init(s_state_bus, s_angle_setpoint_bus, s_rate_setpoint_bus);
-    attitude_actor_init(s_state_bus, s_thrust_bus, s_rate_setpoint_bus, s_torque_bus);
+    altitude_actor_init(s_state_bus, s_thrust_bus, s_position_target_bus);
+    waypoint_actor_init(s_state_bus, s_position_target_bus);
+    position_actor_init(s_state_bus, s_attitude_setpoint_bus, s_position_target_bus);
+    attitude_actor_init(s_state_bus, s_attitude_setpoint_bus, s_rate_setpoint_bus);
+    rate_actor_init(s_state_bus, s_thrust_bus, s_rate_setpoint_bus, s_torque_bus);
     motor_actor_init(s_torque_bus);
 
     // Spawn actors in data-flow order to minimize latency.
@@ -111,15 +111,15 @@ int main(void) {
     //
     // Actor IDs are kept for future use (linking, monitoring, IPC). Currently
     // unused since all communication goes through buses.
-    actor_id sensor, estimator, altitude, waypoint, position, angle, attitude, motor;
+    actor_id sensor, estimator, altitude, waypoint, position, attitude, rate, motor;
 
     SPAWN_CRITICAL_ACTOR(sensor_actor,    "sensor",    sensor);
     SPAWN_CRITICAL_ACTOR(estimator_actor, "estimator", estimator);
     SPAWN_CRITICAL_ACTOR(altitude_actor,  "altitude",  altitude);
     SPAWN_CRITICAL_ACTOR(waypoint_actor,  "waypoint",  waypoint);
     SPAWN_CRITICAL_ACTOR(position_actor,  "position",  position);
-    SPAWN_CRITICAL_ACTOR(angle_actor,     "angle",     angle);
     SPAWN_CRITICAL_ACTOR(attitude_actor,  "attitude",  attitude);
+    SPAWN_CRITICAL_ACTOR(rate_actor,      "rate",      rate);
     SPAWN_CRITICAL_ACTOR(motor_actor,     "motor",     motor);
 
     HIVE_LOG_INFO("8 actors spawned, waypoint navigation active");

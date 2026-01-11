@@ -1,7 +1,7 @@
 // Position actor - Horizontal position hold control
 //
 // Subscribes to state bus, runs simple PD position control,
-// publishes angle setpoints for the angle actor to track.
+// publishes attitude setpoints for the attitude actor to track.
 //
 // Sign conventions:
 //   Internal: Positive error → positive command → accelerate toward target
@@ -19,20 +19,20 @@
 #include <math.h>
 
 static bus_id s_state_bus;
-static bus_id s_angle_setpoint_bus;
-static bus_id s_target_bus;
+static bus_id s_attitude_setpoint_bus;
+static bus_id s_position_target_bus;
 
-void position_actor_init(bus_id state_bus, bus_id angle_setpoint_bus, bus_id target_bus) {
+void position_actor_init(bus_id state_bus, bus_id attitude_setpoint_bus, bus_id position_target_bus) {
     s_state_bus = state_bus;
-    s_angle_setpoint_bus = angle_setpoint_bus;
-    s_target_bus = target_bus;
+    s_attitude_setpoint_bus = attitude_setpoint_bus;
+    s_position_target_bus = position_target_bus;
 }
 
 void position_actor(void *arg) {
     (void)arg;
 
     BUS_SUBSCRIBE(s_state_bus);
-    BUS_SUBSCRIBE(s_target_bus);
+    BUS_SUBSCRIBE(s_position_target_bus);
 
     // Current target (updated from waypoint actor)
     position_target_t target = POSITION_TARGET_ZERO;
@@ -46,7 +46,7 @@ void position_actor(void *arg) {
         BUS_READ_WAIT(s_state_bus, &state);
 
         // Read target from waypoint actor (non-blocking, use last known)
-        if (BUS_READ(s_target_bus, &new_target)) {
+        if (BUS_READ(s_position_target_bus, &new_target)) {
             target = new_target;
         }
 
@@ -73,12 +73,12 @@ void position_actor(void *arg) {
 
         // Sign conversion to aerospace convention:
         // - Roll negated: positive body Y error → negative roll → +Y accel
-        angle_setpoint_t setpoint = {
+        attitude_setpoint_t setpoint = {
             .roll = -roll_cmd,
             .pitch = pitch_cmd,
             .yaw = target.yaw
         };
-        hive_bus_publish(s_angle_setpoint_bus, &setpoint, sizeof(setpoint));
+        hive_bus_publish(s_attitude_setpoint_bus, &setpoint, sizeof(setpoint));
 
         if (DEBUG_THROTTLE(count, DEBUG_PRINT_INTERVAL)) {
             HIVE_LOG_DEBUG("[POS] tgt=(%.1f,%.1f) x=%.2f y=%.2f pitch=%.1f roll=%.1f",

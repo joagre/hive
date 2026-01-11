@@ -1,7 +1,7 @@
 // Waypoint actor - Waypoint navigation manager
 //
 // Subscribes to state bus to monitor position, publishes current target
-// to target bus. Advances through waypoint list when arrival detected.
+// to position target bus. Advances through waypoint list when arrival detected.
 
 #include "waypoint_actor.h"
 #include "types.h"
@@ -42,11 +42,11 @@ static const waypoint_t waypoints[] = {
 #define NUM_WAYPOINTS (sizeof(waypoints) / sizeof(waypoints[0]))
 
 static bus_id s_state_bus;
-static bus_id s_target_bus;
+static bus_id s_position_target_bus;
 
-void waypoint_actor_init(bus_id state_bus, bus_id target_bus) {
+void waypoint_actor_init(bus_id state_bus, bus_id position_target_bus) {
     s_state_bus = state_bus;
-    s_target_bus = target_bus;
+    s_position_target_bus = position_target_bus;
 }
 
 void waypoint_actor(void *arg) {
@@ -74,7 +74,7 @@ void waypoint_actor(void *arg) {
             .z = wp->z,
             .yaw = wp->yaw
         };
-        hive_bus_publish(s_target_bus, &target, sizeof(target));
+        hive_bus_publish(s_position_target_bus, &target, sizeof(target));
 
         // Check arrival
         {

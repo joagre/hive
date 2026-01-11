@@ -13,7 +13,7 @@ A quadcopter autopilot example using the actor runtime. Supports Webots simulati
 - Step 1: Motor actor (mixer, safety, watchdog)
 - Step 2: Separate altitude actor (altitude/rate split)
 - Step 3: Sensor actor (hardware abstraction)
-- Step 4: Angle actor (attitude angle control)
+- Step 4: Attitude actor (attitude angle control)
 - Step 5: Estimator actor (sensor fusion, vertical velocity)
 - Step 6: Position actor (horizontal position hold + heading hold)
 - Step 7: Waypoint actor (waypoint navigation)
@@ -123,14 +123,13 @@ graph TB
 
         Altitude[ALTITUDE ACTOR<br/>altitude PID]
         Waypoint[WAYPOINT ACTOR<br/>navigation]
-        TargetBus([Target Bus])
+        PositionTargetBus([Position Target Bus])
         Position[POSITION ACTOR<br/>position PD]
-        Attitude[ATTITUDE ACTOR<br/>rate PIDs]
-
         ThrustBus([Thrust Bus])
-        AngleSPBus([Angle Setpoint Bus])
-        Angle[ANGLE ACTOR<br/>angle PIDs]
+        AttitudeSPBus([Attitude Setpoint Bus])
+        Attitude[ATTITUDE ACTOR<br/>attitude PIDs]
         RateSPBus([Rate Setpoint Bus])
+        Rate[RATE ACTOR<br/>rate PIDs]
         TorqueBus([Torque Bus])
         Motor[MOTOR ACTOR<br/>output]
     end
@@ -143,11 +142,11 @@ graph TB
     ReadSensors --> Sensor
     Sensor --> SensorBus --> Estimator --> StateBus
 
-    StateBus --> Waypoint --> TargetBus --> Altitude --> ThrustBus --> Attitude
-    TargetBus --> Position
+    StateBus --> Waypoint --> PositionTargetBus --> Altitude --> ThrustBus --> Rate
+    PositionTargetBus --> Position
     StateBus --> Altitude
-    StateBus --> Position --> AngleSPBus --> Angle
-    StateBus --> Angle --> RateSPBus --> Attitude --> TorqueBus --> Motor
+    StateBus --> Position --> AttitudeSPBus --> Attitude
+    StateBus --> Attitude --> RateSPBus --> Rate --> TorqueBus --> Motor
 
     Motor --> WriteTorque
 ```
@@ -166,10 +165,10 @@ Code is split into focused modules:
 | `sensor_actor.c/h` | Reads sensors via HAL, publishes to sensor bus |
 | `estimator_actor.c/h` | Sensor fusion → state bus |
 | `altitude_actor.c/h` | Altitude PID → thrust |
-| `waypoint_actor.c/h` | Waypoint navigation → target bus |
-| `position_actor.c/h` | Position PD → angle setpoints |
-| `angle_actor.c/h` | Angle PIDs → rate setpoints |
-| `attitude_actor.c/h` | Rate PIDs → torque commands |
+| `waypoint_actor.c/h` | Waypoint navigation → position target bus |
+| `position_actor.c/h` | Position PD → attitude setpoints |
+| `attitude_actor.c/h` | Attitude PIDs → rate setpoints |
+| `rate_actor.c/h` | Rate PIDs → torque commands |
 | `motor_actor.c/h` | Output: torque → HAL → motors |
 | `pid.c/h` | Reusable PID controller |
 | `types.h` | Portable data types |
@@ -195,20 +194,20 @@ graph TB
     StateBus --> Waypoint[Waypoint Actor<br/>navigation]
     StateBus --> Altitude[Altitude Actor<br/>altitude PID]
     StateBus --> Position[Position Actor<br/>position PD]
-    StateBus --> Angle[Angle Actor<br/>angle PIDs]
-    StateBus --> Attitude[Attitude Actor<br/>rate PIDs]
+    StateBus --> Attitude[Attitude Actor<br/>attitude PIDs]
+    StateBus --> Rate[Rate Actor<br/>rate PIDs]
 
-    Waypoint --> TargetBus([Target Bus])
-    TargetBus --> Altitude
-    TargetBus --> Position
+    Waypoint --> PositionTargetBus([Position Target Bus])
+    PositionTargetBus --> Altitude
+    PositionTargetBus --> Position
     Altitude --> ThrustBus([Thrust Bus])
-    ThrustBus --> Attitude
-    Position --> AngleSP([Angle Setpoint Bus])
-    AngleSP --> Angle
-    Angle --> RateSP([Rate Setpoint Bus])
-    RateSP --> Attitude
+    ThrustBus --> Rate
+    Position --> AttitudeSP([Attitude Setpoint Bus])
+    AttitudeSP --> Attitude
+    Attitude --> RateSP([Rate Setpoint Bus])
+    RateSP --> Rate
 
-    Attitude --> TorqueBus([Torque Bus])
+    Rate --> TorqueBus([Torque Bus])
     TorqueBus --> Motor[Motor Actor<br/>output]
 
     Motor --> WriteTorque --> Motors
@@ -333,9 +332,9 @@ Each simulation step fires the sensor_actor's timer, which triggers the control 
 2. Estimator actor reads sensor bus, runs fusion, publishes state estimate
 3. Altitude actor reads state bus, publishes thrust
 4. Waypoint actor reads state bus, publishes position target
-5. Position actor reads target bus, publishes angle setpoints
-6. Angle actor reads angle setpoints, publishes rate setpoints
-7. Attitude actor reads state + thrust + rate setpoints, publishes torque commands
+5. Position actor reads position target bus, publishes attitude setpoints
+6. Attitude actor reads attitude setpoints, publishes rate setpoints
+7. Rate actor reads state + thrust + rate setpoints, publishes torque commands
 8. Motor actor applies mixer, writes to hardware
 
 ### Key Parameters
@@ -442,8 +441,8 @@ All actor code is platform-independent. Actors use:
 | `altitude_actor.c/h` | Bus API only |
 | `waypoint_actor.c/h` | Bus API only |
 | `position_actor.c/h` | Bus API only |
-| `angle_actor.c/h` | Bus API only |
 | `attitude_actor.c/h` | Bus API only |
+| `rate_actor.c/h` | Bus API only |
 | `motor_actor.c/h` | HAL (hal_write_torque) + bus API |
 | `pid.c/h` | Pure C, no runtime deps |
 | `types.h` | Data structures |
@@ -459,10 +458,10 @@ examples/pilot/
     sensor_actor.c/h     # Reads sensors via HAL → sensor bus
     estimator_actor.c/h  # Sensor fusion → state bus
     altitude_actor.c/h   # Altitude PID → thrust
-    waypoint_actor.c/h   # Waypoint navigation → target bus
-    position_actor.c/h   # Position PD → angle setpoints
-    angle_actor.c/h      # Angle PIDs → rate setpoints
-    attitude_actor.c/h   # Rate PIDs → torque commands
+    waypoint_actor.c/h   # Waypoint navigation → position target bus
+    position_actor.c/h   # Position PD → attitude setpoints
+    attitude_actor.c/h   # Attitude PIDs → rate setpoints
+    rate_actor.c/h       # Rate PIDs → torque commands
     motor_actor.c/h      # Output: torque → HAL → motors
     pid.c/h              # Reusable PID controller
     types.h              # Portable data types
@@ -530,8 +529,8 @@ graph LR
     subgraph Control
         Setpoint[Setpoint Actor<br/>RC/Waypoints]
         Altitude[Altitude Actor<br/>Z control]
-        Angle[Angle Actor<br/>Angle control]
-        Attitude[Attitude Actor<br/>Rate control]
+        Attitude[Attitude Actor<br/>Attitude control]
+        Rate[Rate Actor<br/>Rate control]
     end
 
     subgraph Output
@@ -540,7 +539,7 @@ graph LR
 
     Sensor --> Estimator --> StateBus([State Bus])
     Setpoint --> Altitude
-    StateBus --> Altitude --> Angle --> Attitude --> Motor
+    StateBus --> Altitude --> Attitude --> Rate --> Motor
 ```
 
 ### Actor Responsibilities (Current)
@@ -549,11 +548,11 @@ graph LR
 |-------|-------|--------|----------|----------------|
 | **Sensor** | Hardware | Sensor Bus | CRITICAL | Read raw sensors, publish |
 | **Estimator** | Sensor Bus | State Bus | CRITICAL | Complementary filter fusion, state estimate |
-| **Altitude** | State + Target Bus | Thrust Bus | CRITICAL | Altitude PID (250Hz) |
-| **Waypoint** | State Bus | Target Bus | CRITICAL | Waypoint navigation (3D on Webots, altitude-only on STM32) |
-| **Position** | Target + State Bus | Angle Setpoint Bus | CRITICAL | Position PD (250Hz) |
-| **Angle** | Angle Setpoint + State | Rate Setpoint Bus | CRITICAL | Angle PIDs (250Hz) |
-| **Attitude** | State + Thrust + Rate SP | Torque Bus | CRITICAL | Rate PIDs (250Hz) |
+| **Altitude** | State + Position Target Bus | Thrust Bus | CRITICAL | Altitude PID (250Hz) |
+| **Waypoint** | State Bus | Position Target Bus | CRITICAL | Waypoint navigation (3D on Webots, altitude-only on STM32) |
+| **Position** | Position Target + State Bus | Attitude Setpoint Bus | CRITICAL | Position PD (250Hz) |
+| **Attitude** | Attitude Setpoint + State | Rate Setpoint Bus | CRITICAL | Attitude PIDs (250Hz) |
+| **Rate** | State + Thrust + Rate SP | Torque Bus | CRITICAL | Rate PIDs (250Hz) |
 | **Motor** | Torque Bus | Hardware | CRITICAL | Output to hardware via HAL |
 
 ### Step 1: Motor Actor ✓
@@ -561,8 +560,8 @@ graph LR
 Separate motor output into dedicated actor.
 
 ```
-Attitude Actor ──► Torque Bus ──► Motor Actor ──► HAL ──► Hardware
-                                  (output)         (mixer)
+Rate Actor ──► Torque Bus ──► Motor Actor ──► HAL ──► Hardware
+                               (output)         (mixer)
 ```
 
 **Features:** Subscribe to torque bus, call HAL for motor output. Mixer is in HAL.
@@ -572,7 +571,7 @@ Attitude Actor ──► Torque Bus ──► Motor Actor ──► HAL ──�
 Split altitude control from rate control.
 
 ```
-Sensor Bus ──► Altitude Actor ──► Thrust Bus ──► Attitude Actor ──► Torque Bus
+Sensor Bus ──► Altitude Actor ──► Thrust Bus ──► Rate Actor ──► Torque Bus
             (altitude PID)                    (rate PIDs only)
 ```
 
@@ -589,24 +588,24 @@ Sensor Actor: timer ──► hal_read_sensors() ──► Sensor Bus
 
 **Benefits:** Main loop is minimal, all logic in timer-driven actors.
 
-### Step 4: Angle Actor ✓
+### Step 4: Attitude Actor ✓
 
 Add attitude angle control between altitude and rate control.
 
 **Before:**
 ```
-Sensor Bus ──► Attitude Actor (rate PIDs with hardcoded 0.0 setpoints)
+Sensor Bus ──► Rate Actor (rate PIDs with hardcoded 0.0 setpoints)
 ```
 
 **After:**
 ```
-Sensor Bus ──► Angle Actor ──► Rate Setpoint Bus ──► Attitude Actor
-            (angle PIDs)                          (rate PIDs)
+Sensor Bus ──► Attitude Actor ──► Rate Setpoint Bus ──► Rate Actor
+            (attitude PIDs)                          (rate PIDs)
 ```
 
 **Benefits:**
 - Cascaded control (proper drone architecture)
-- Angle controller generates rate setpoints
+- Attitude controller generates rate setpoints
 - Rate controller tracks those setpoints
 - Easier to tune each layer independently
 
@@ -644,17 +643,17 @@ Add horizontal position hold and heading hold.
 
 **Before:**
 ```
-Angle Actor uses hardcoded 0.0 angle setpoints
+Attitude Actor uses hardcoded 0.0 attitude setpoints
 ```
 
 **After:**
 ```
-State Bus ──► Position Actor ──► Angle Setpoint Bus ──► Angle Actor
-              (position PD)       (roll, pitch, yaw)    (angle PIDs)
+State Bus ──► Position Actor ──► Attitude Setpoint Bus ──► Attitude Actor
+              (position PD)       (roll, pitch, yaw)    (attitude PIDs)
 ```
 
 **Implementation:**
-- Simple PD controller: position error → angle command
+- Simple PD controller: position error → attitude command
 - Velocity damping: reduces overshoot
 - Max tilt limit: 0.35 rad (~20°) for safety
 - Sign conventions match Bitcraze Webots controller
@@ -680,16 +679,16 @@ Position Actor uses hardcoded TARGET_X, TARGET_Y, TARGET_YAW
 **After:**
 ```
                               ┌──► Altitude Actor (reads z)
-State Bus ──► Waypoint Actor ──► Target Bus
+State Bus ──► Waypoint Actor ──► Position Target Bus
               (navigation)       (x, y, z, yaw)
                               └──► Position Actor (reads x, y, yaw)
 ```
 
 **Implementation:**
 - Manages list of waypoints (platform-specific)
-- Publishes current target to target bus
-- Altitude actor reads target altitude from target bus
-- Position actor reads target XY and yaw from target bus
+- Publishes current target to position target bus
+- Altitude actor reads target altitude from position target bus
+- Position actor reads target XY and yaw from position target bus
 - Monitors state bus for arrival detection
 - Arrival requires: altitude, heading within tolerance, velocity below threshold
 - Hovers briefly at each waypoint before advancing

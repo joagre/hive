@@ -111,15 +111,15 @@ typedef struct {
 
 #define RATE_SETPOINT_ZERO {.roll = 0.0f, .pitch = 0.0f, .yaw = 0.0f}
 
-// Angle setpoint from position actor to angle actor.
-// Angle actor tracks these target angles.
+// Attitude setpoint from position actor to attitude actor.
+// Attitude actor tracks these target angles.
 typedef struct {
     float roll;   // Target roll angle (rad)
     float pitch;  // Target pitch angle (rad)
     float yaw;    // Target yaw angle (rad)
-} angle_setpoint_t;
+} attitude_setpoint_t;
 
-#define ANGLE_SETPOINT_ZERO {.roll = 0.0f, .pitch = 0.0f, .yaw = 0.0f}
+#define ATTITUDE_SETPOINT_ZERO {.roll = 0.0f, .pitch = 0.0f, .yaw = 0.0f}
 
 // Position target from waypoint actor to position and altitude actors.
 // Position actor tracks x, y, yaw. Altitude actor tracks z.
