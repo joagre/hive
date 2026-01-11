@@ -8,9 +8,9 @@ Supports two platforms:
 
 ## What it does
 
-Demonstrates 3D waypoint navigation with a Crazyflie quadcopter using 8 actors:
+Demonstrates 3D waypoint navigation with a quadcopter using 8 actors:
 
-1. **Sensor actor** reads IMU/GPS from Webots, publishes to IMU bus
+1. **Sensor actor** reads IMU/GPS via HAL, publishes to IMU bus
 2. **Estimator actor** sensor fusion, computes velocities, publishes to state bus
 3. **Altitude actor** reads target altitude from target bus, runs altitude PID
 4. **Waypoint actor** manages 3D waypoint list (x, y, z, yaw), publishes to target bus
