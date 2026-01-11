@@ -187,7 +187,68 @@ void gpio_lsm6dsl_cs_high(void) {
 }
 
 // ----------------------------------------------------------------------------
-// I2C1 GPIO Configuration (LIS2MDL, LPS22HD)
+// SPI2 GPIO Configuration (LIS2MDL, LPS22HD)
+// ----------------------------------------------------------------------------
+
+void gpio_init_spi2(void) {
+    // Enable GPIO clocks
+    system_enable_gpio(SPI2_SCK_PORT);
+
+    // SPI2_SCK (PB13) - Alternate function, push-pull, high speed
+    gpio_set_mode(SPI2_SCK_PORT, SPI2_SCK_PIN, GPIO_MODE_AF);
+    gpio_set_otype(SPI2_SCK_PORT, SPI2_SCK_PIN, GPIO_OTYPE_PUSHPULL);
+    gpio_set_speed(SPI2_SCK_PORT, SPI2_SCK_PIN, GPIO_SPEED_VERYHIGH);
+    gpio_set_pupd(SPI2_SCK_PORT, SPI2_SCK_PIN, GPIO_PUPD_NONE);
+    gpio_set_af(SPI2_SCK_PORT, SPI2_SCK_PIN, SPI2_AF);
+
+    // SPI2_MISO (PB14) - Alternate function
+    gpio_set_mode(SPI2_MISO_PORT, SPI2_MISO_PIN, GPIO_MODE_AF);
+    gpio_set_speed(SPI2_MISO_PORT, SPI2_MISO_PIN, GPIO_SPEED_VERYHIGH);
+    gpio_set_pupd(SPI2_MISO_PORT, SPI2_MISO_PIN, GPIO_PUPD_NONE);
+    gpio_set_af(SPI2_MISO_PORT, SPI2_MISO_PIN, SPI2_AF);
+
+    // SPI2_MOSI (PB15) - Alternate function, push-pull
+    gpio_set_mode(SPI2_MOSI_PORT, SPI2_MOSI_PIN, GPIO_MODE_AF);
+    gpio_set_otype(SPI2_MOSI_PORT, SPI2_MOSI_PIN, GPIO_OTYPE_PUSHPULL);
+    gpio_set_speed(SPI2_MOSI_PORT, SPI2_MOSI_PIN, GPIO_SPEED_VERYHIGH);
+    gpio_set_pupd(SPI2_MOSI_PORT, SPI2_MOSI_PIN, GPIO_PUPD_NONE);
+    gpio_set_af(SPI2_MOSI_PORT, SPI2_MOSI_PIN, SPI2_AF);
+
+    // LIS2MDL_CS (PB12) - GPIO output, push-pull, high speed
+    // Start with CS high (deselected)
+    gpio_write(LIS2MDL_CS_PORT, LIS2MDL_CS_PIN, true);
+    gpio_set_mode(LIS2MDL_CS_PORT, LIS2MDL_CS_PIN, GPIO_MODE_OUTPUT);
+    gpio_set_otype(LIS2MDL_CS_PORT, LIS2MDL_CS_PIN, GPIO_OTYPE_PUSHPULL);
+    gpio_set_speed(LIS2MDL_CS_PORT, LIS2MDL_CS_PIN, GPIO_SPEED_VERYHIGH);
+    gpio_set_pupd(LIS2MDL_CS_PORT, LIS2MDL_CS_PIN, GPIO_PUPD_NONE);
+
+    // LPS22HD_CS (PB10) - GPIO output, push-pull, high speed
+    // Start with CS high (deselected)
+    gpio_write(LPS22HD_CS_PORT, LPS22HD_CS_PIN, true);
+    gpio_set_mode(LPS22HD_CS_PORT, LPS22HD_CS_PIN, GPIO_MODE_OUTPUT);
+    gpio_set_otype(LPS22HD_CS_PORT, LPS22HD_CS_PIN, GPIO_OTYPE_PUSHPULL);
+    gpio_set_speed(LPS22HD_CS_PORT, LPS22HD_CS_PIN, GPIO_SPEED_VERYHIGH);
+    gpio_set_pupd(LPS22HD_CS_PORT, LPS22HD_CS_PIN, GPIO_PUPD_NONE);
+}
+
+void gpio_lis2mdl_cs_low(void) {
+    gpio_write(LIS2MDL_CS_PORT, LIS2MDL_CS_PIN, false);
+}
+
+void gpio_lis2mdl_cs_high(void) {
+    gpio_write(LIS2MDL_CS_PORT, LIS2MDL_CS_PIN, true);
+}
+
+void gpio_lps22hd_cs_low(void) {
+    gpio_write(LPS22HD_CS_PORT, LPS22HD_CS_PIN, false);
+}
+
+void gpio_lps22hd_cs_high(void) {
+    gpio_write(LPS22HD_CS_PORT, LPS22HD_CS_PIN, true);
+}
+
+// ----------------------------------------------------------------------------
+// I2C1 GPIO Configuration (not used, sensors on SPI2)
 // ----------------------------------------------------------------------------
 
 void gpio_init_i2c1(void) {

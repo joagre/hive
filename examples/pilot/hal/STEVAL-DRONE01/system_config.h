@@ -18,16 +18,17 @@
 #define HSE_VALUE           16000000U
 
 // Target system clock frequency
-#define SYSCLK_FREQ         84000000U   // 84 MHz (max for STM32F401)
+// NOTE: Currently running on HSI (no PLL) at 16MHz for testing
+#define SYSCLK_FREQ         16000000U   // 16 MHz (HSI mode)
 
 // AHB clock (HCLK) - feeds Cortex-M4 core, memory, DMA
-#define HCLK_FREQ           84000000U   // 84 MHz
+#define HCLK_FREQ           16000000U   // 16 MHz (HSI mode)
 
 // APB1 clock (PCLK1) - low-speed peripherals (I2C, UART2, TIM2-5)
-#define PCLK1_FREQ          42000000U   // 42 MHz (max)
+#define PCLK1_FREQ          16000000U   // 16 MHz (HSI mode)
 
 // APB2 clock (PCLK2) - high-speed peripherals (SPI1, UART1, TIM1)
-#define PCLK2_FREQ          84000000U   // 84 MHz
+#define PCLK2_FREQ          16000000U   // 16 MHz (HSI mode)
 
 // PLL configuration for 84MHz from 16MHz HSE:
 //   SYSCLK = HSE * PLLN / PLLM / PLLP

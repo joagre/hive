@@ -23,9 +23,26 @@
 
 // LSM6DSL chip select (directly controlled GPIO)
 #define LSM6DSL_CS_PORT     'A'
-#define LSM6DSL_CS_PIN      4
+#define LSM6DSL_CS_PIN      8       // PA8 on STEVAL-FCU001V1
 
-// I2C1 - LIS2MDL, LPS22HD
+// SPI2 - LIS2MDL, LPS22HD (magnetometer and barometer)
+#define SPI2_SCK_PORT       'B'
+#define SPI2_SCK_PIN        13
+#define SPI2_MISO_PORT      'B'
+#define SPI2_MISO_PIN       14
+#define SPI2_MOSI_PORT      'B'
+#define SPI2_MOSI_PIN       15
+#define SPI2_AF             5       // Alternate function 5
+
+// LIS2MDL chip select (magnetometer)
+#define LIS2MDL_CS_PORT     'B'
+#define LIS2MDL_CS_PIN      12
+
+// LPS22HD chip select (barometer)
+#define LPS22HD_CS_PORT     'B'
+#define LPS22HD_CS_PIN      10
+
+// I2C1 - (not used, sensors are on SPI2)
 #define I2C1_SCL_PORT       'B'
 #define I2C1_SCL_PIN        6
 #define I2C1_SDA_PORT       'B'
@@ -67,9 +84,9 @@
 #define USART2_RX_PIN       3
 #define USART2_AF           7       // Alternate function 7
 
-// LED (optional, board-dependent)
-#define LED_PORT            'C'
-#define LED_PIN             13
+// LED (PB5 = LD1 on STEVAL-FCU001V1)
+#define LED_PORT            'B'
+#define LED_PIN             5
 
 // User button (optional, board-dependent)
 #define BTN_PORT            'A'
@@ -113,6 +130,7 @@ void gpio_init_all(void);
 
 // Individual peripheral GPIO initialization
 void gpio_init_spi1(void);
+void gpio_init_spi2(void);
 void gpio_init_i2c1(void);
 void gpio_init_tim4_pwm(void);
 void gpio_init_usart1(void);
@@ -120,9 +138,17 @@ void gpio_init_usart2(void);
 void gpio_init_led(void);
 void gpio_init_button(void);
 
-// LSM6DSL chip select control
+// LSM6DSL chip select control (SPI1)
 void gpio_lsm6dsl_cs_low(void);
 void gpio_lsm6dsl_cs_high(void);
+
+// LIS2MDL chip select control (SPI2)
+void gpio_lis2mdl_cs_low(void);
+void gpio_lis2mdl_cs_high(void);
+
+// LPS22HD chip select control (SPI2)
+void gpio_lps22hd_cs_low(void);
+void gpio_lps22hd_cs_high(void);
 
 // I2C1 bus recovery (clock toggle to release stuck SDA)
 void gpio_i2c1_release_bus(void);

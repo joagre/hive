@@ -1,6 +1,8 @@
 # Makefile for STEVAL-DRONE01 HAL (STM32F401)
 #
 # Builds HAL drivers as a static library for use with pilot.
+# Uses STM32 HAL + BSP for sensor access (SPI).
+#
 # For full firmware build, use: make -f Makefile.STEVAL-DRONE01 (from examples/pilot/)
 #
 # Requires: ARM GCC toolchain (arm-none-eabi-gcc)
@@ -17,43 +19,59 @@
 TARGET = libhal.a
 BUILD_DIR = build
 
+# Path to vendor directory containing ST HAL + BSP drivers
+VENDOR_DIR = vendor
+
 # ------------------------------------------------------------------------------
 # Source Files
 # ------------------------------------------------------------------------------
 
-# HAL driver sources (no main.c - pilot.c is the entry point)
-# Note: Sensor fusion (attitude estimation) moved to portable fusion/ library
+# Platform-specific sources
 SRCS = \
 	syscalls.c \
 	system_config.c \
 	gpio_config.c \
-	spi1.c \
-	i2c1.c \
 	tim4.c \
-	usart1.c \
-	platform_stm32f4.c \
-	lsm6dsl.c \
-	lis2mdl.c \
-	lps22hd.c \
 	motors.c \
-	hal_stm32.c
+	platform_stm32f4.c \
+	hal_stm32.c \
+	$(VENDOR_DIR)/system_stm32f4xx.c \
+	$(VENDOR_DIR)/stm32f4xx_it.c
+
+# STM32 HAL Driver sources (minimal set for sensors)
+# Note: TIM driver not included - we use tim4.c for motor PWM
+SRCS += \
+	$(VENDOR_DIR)/Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal.c \
+	$(VENDOR_DIR)/Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_cortex.c \
+	$(VENDOR_DIR)/Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_rcc.c \
+	$(VENDOR_DIR)/Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_rcc_ex.c \
+	$(VENDOR_DIR)/Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_gpio.c \
+	$(VENDOR_DIR)/Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_spi.c
+
+# BSP sources (board support package for STEVAL-FCU001V1)
+SRCS += \
+	$(VENDOR_DIR)/Drivers/BSP/STEVAL_FCU001_V1/steval_fcu001_v1.c \
+	$(VENDOR_DIR)/Drivers/BSP/STEVAL_FCU001_V1/steval_fcu001_v1_accelero.c \
+	$(VENDOR_DIR)/Drivers/BSP/STEVAL_FCU001_V1/steval_fcu001_v1_gyro.c \
+	$(VENDOR_DIR)/Drivers/BSP/STEVAL_FCU001_V1/steval_fcu001_v1_magneto.c \
+	$(VENDOR_DIR)/Drivers/BSP/STEVAL_FCU001_V1/steval_fcu001_v1_pressure.c \
+	$(VENDOR_DIR)/Drivers/BSP/STEVAL_FCU001_V1/steval_fcu001_v1_temperature.c
+
+# Sensor driver sources
+SRCS += \
+	$(VENDOR_DIR)/Drivers/BSP/lsm6dsl/LSM6DSL_ACC_GYRO_driver.c \
+	$(VENDOR_DIR)/Drivers/BSP/lsm6dsl/LSM6DSL_ACC_GYRO_driver_HL.c \
+	$(VENDOR_DIR)/Drivers/BSP/lis2mdl/LIS2MDL_MAG_driver.c \
+	$(VENDOR_DIR)/Drivers/BSP/lis2mdl/LIS2MDL_MAG_driver_HL.c \
+	$(VENDOR_DIR)/Drivers/BSP/lps22hb/LPS22HB_Driver.c \
+	$(VENDOR_DIR)/Drivers/BSP/lps22hb/LPS22HB_Driver_HL.c \
+	$(VENDOR_DIR)/Drivers/BSP/lsm303agr/LSM303AGR_ACC_driver.c \
+	$(VENDOR_DIR)/Drivers/BSP/lsm303agr/LSM303AGR_ACC_driver_HL.c \
+	$(VENDOR_DIR)/Drivers/BSP/lsm303agr/LSM303AGR_MAG_driver.c \
+	$(VENDOR_DIR)/Drivers/BSP/lsm303agr/LSM303AGR_MAG_driver_HL.c
 
 # Startup file
 ASM_SRCS = startup_stm32f401.s
-
-# STM32 HAL sources (add when integrating with CubeMX-generated code)
-# SRCS += \
-# 	../Core/Src/stm32f4xx_it.c \
-# 	../Core/Src/stm32f4xx_hal_msp.c \
-# 	../Core/Src/system_stm32f4xx.c \
-# 	../Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal.c \
-# 	../Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_cortex.c \
-# 	../Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_gpio.c \
-# 	../Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_rcc.c \
-# 	../Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_spi.c \
-# 	../Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_i2c.c \
-# 	../Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_tim.c \
-# 	../Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_pwr.c
 
 # ------------------------------------------------------------------------------
 # Include Paths
@@ -61,14 +79,17 @@ ASM_SRCS = startup_stm32f401.s
 
 INCLUDES = \
 	-I. \
-	-I../..  # For types.h, config.h (via hal.h)
-
-# STM32 HAL includes (add when integrating)
-# INCLUDES += \
-# 	-I../Core/Inc \
-# 	-I../Drivers/STM32F4xx_HAL_Driver/Inc \
-# 	-I../Drivers/CMSIS/Device/ST/STM32F4xx/Include \
-# 	-I../Drivers/CMSIS/Include
+	-I../.. \
+	-I$(VENDOR_DIR) \
+	-I$(VENDOR_DIR)/Drivers/STM32F4xx_HAL_Driver/Inc \
+	-I$(VENDOR_DIR)/Drivers/CMSIS/Device/ST/STM32F4xx/Include \
+	-I$(VENDOR_DIR)/Drivers/CMSIS/Include \
+	-I$(VENDOR_DIR)/Drivers/BSP/STEVAL_FCU001_V1 \
+	-I$(VENDOR_DIR)/Drivers/BSP/Common \
+	-I$(VENDOR_DIR)/Drivers/BSP/lsm6dsl \
+	-I$(VENDOR_DIR)/Drivers/BSP/lis2mdl \
+	-I$(VENDOR_DIR)/Drivers/BSP/lps22hb \
+	-I$(VENDOR_DIR)/Drivers/BSP/lsm303agr
 
 # ------------------------------------------------------------------------------
 # Toolchain
@@ -145,22 +166,21 @@ DEPS = $(OBJS:.o=.d)
 # Default target
 all: $(BUILD_DIR)/$(TARGET)
 
-# Create build directory
-$(BUILD_DIR):
-	mkdir -p $@
-
-# Compile C sources
-$(BUILD_DIR)/%.o: %.c | $(BUILD_DIR)
+# Compile C sources (create output dir as needed)
+$(BUILD_DIR)/%.o: %.c
+	@mkdir -p $(dir $@)
 	@echo "CC $<"
 	@$(CC) $(CFLAGS) -c $< -o $@
 
 # Compile assembly sources
-$(BUILD_DIR)/%.o: %.s | $(BUILD_DIR)
+$(BUILD_DIR)/%.o: %.s
+	@mkdir -p $(dir $@)
 	@echo "AS $<"
 	@$(AS) $(ASFLAGS) -c $< -o $@
 
 # Create static library
-$(BUILD_DIR)/$(TARGET): $(OBJS) $(ASM_OBJS) | $(BUILD_DIR)
+$(BUILD_DIR)/$(TARGET): $(OBJS) $(ASM_OBJS)
+	@mkdir -p $(dir $@)
 	@echo "AR $@"
 	@$(AR) rcs $@ $^
 	@echo ""

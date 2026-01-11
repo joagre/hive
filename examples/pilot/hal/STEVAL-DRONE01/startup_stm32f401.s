@@ -19,7 +19,6 @@
 
     .section .isr_vector, "a", %progbits
     .type g_pfnVectors, %object
-    .size g_pfnVectors, .-g_pfnVectors
 
 g_pfnVectors:
     .word _estack                   /* Top of stack */
@@ -126,6 +125,8 @@ g_pfnVectors:
     .word 0                         /* Reserved */
     .word SPI4_IRQHandler           /* SPI4 */
 
+    .size g_pfnVectors, .-g_pfnVectors
+
 /* ----------------------------------------------------------------------------
  * Reset handler
  * -------------------------------------------------------------------------- */
@@ -138,49 +139,45 @@ Reset_Handler:
     /* Set stack pointer */
     ldr sp, =_estack
 
-    /* Enable FPU (CP10 and CP11 full access) */
-    ldr r0, =0xE000ED88
+    /* Enable FPU (Cortex-M4 has FPU) */
+    /* Set CP10 and CP11 to full access in CPACR */
+    ldr r0, =0xE000ED88     /* CPACR address */
     ldr r1, [r0]
-    orr r1, r1, #(0xF << 20)
+    orr r1, r1, #(0xF << 20) /* Enable CP10 and CP11 */
     str r1, [r0]
-    dsb
-    isb
+    dsb                      /* Data sync barrier */
+    isb                      /* Instruction sync barrier */
 
     /* Copy .data section from Flash to RAM */
-    ldr r0, =_sdata         /* Destination (RAM) */
-    ldr r1, =_edata         /* End of destination */
-    ldr r2, =_sidata        /* Source (Flash) */
-    movs r3, #0
-    b LoopCopyDataInit
-
-CopyDataInit:
-    ldr r4, [r2, r3]
-    str r4, [r0, r3]
-    adds r3, r3, #4
-
-LoopCopyDataInit:
-    adds r4, r0, r3
-    cmp r4, r1
-    bcc CopyDataInit
+    ldr r0, =_sidata        /* Source: .data in flash */
+    ldr r1, =_sdata         /* Dest start: .data in RAM */
+    ldr r2, =_edata         /* Dest end */
+copy_data:
+    cmp r1, r2
+    bhs copy_data_done      /* Unsigned comparison */
+    ldr r3, [r0]
+    str r3, [r1]
+    adds r0, r0, #4
+    adds r1, r1, #4
+    b copy_data
+copy_data_done:
 
     /* Zero .bss section */
     ldr r0, =_sbss          /* Start of BSS */
     ldr r1, =_ebss          /* End of BSS */
     movs r2, #0
-    b LoopFillZerobss
-
-FillZerobss:
+zero_bss:
+    cmp r0, r1
+    bhs zero_bss_done       /* Unsigned comparison */
     str r2, [r0]
     adds r0, r0, #4
+    b zero_bss
+zero_bss_done:
 
-LoopFillZerobss:
-    cmp r0, r1
-    bcc FillZerobss
+    /* Re-set stack pointer to ensure it's valid and aligned */
+    ldr sp, =_estack
 
-    /* Call static constructors (C++) */
-    bl __libc_init_array
-
-    /* Call main() */
+    /* Call main */
     bl main
 
     /* If main returns, loop forever */
@@ -200,6 +197,25 @@ Infinite_Loop:
 
     .size Default_Handler, .-Default_Handler
 
+/* Special WWDG handler - clears interrupt and returns instead of looping */
+    .section .text.WWDG_IRQHandler, "ax", %progbits
+    .global WWDG_IRQHandler
+    .type WWDG_IRQHandler, %function
+
+WWDG_IRQHandler:
+    /* Clear EWIF flag in WWDG_SR (0x40002C08) by writing 0 */
+    ldr r0, =0x40002C08
+    movs r1, #0
+    str r1, [r0]
+    /* Refresh watchdog counter to maximum (0x7F) to prevent reset */
+    /* WWDG_CR = 0x40002C00, write 0xFF (WDGA=1, T=0x7F) */
+    ldr r0, =0x40002C00
+    movs r1, #0xFF
+    str r1, [r0]
+    bx lr
+
+    .size WWDG_IRQHandler, .-WWDG_IRQHandler
+
 /* Macro for weak aliases */
     .macro def_irq_handler handler_name
     .weak \handler_name
@@ -218,7 +234,7 @@ Infinite_Loop:
     def_irq_handler SysTick_Handler
 
 /* External interrupts */
-    def_irq_handler WWDG_IRQHandler
+    /* WWDG_IRQHandler defined above - not a weak alias */
     def_irq_handler PVD_IRQHandler
     def_irq_handler TAMP_STAMP_IRQHandler
     def_irq_handler RTC_WKUP_IRQHandler

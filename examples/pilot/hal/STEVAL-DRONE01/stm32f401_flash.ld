@@ -19,10 +19,11 @@ _Min_Heap_Size = 0x400;   /* 1KB heap */
 _Min_Stack_Size = 0x800;  /* 2KB stack */
 
 /* Memory regions */
+/* STM32F401xB/xC has 64KB SRAM (not 96KB like STM32F401xD/xE) */
 MEMORY
 {
-    FLASH (rx)  : ORIGIN = 0x08000000, LENGTH = 512K
-    RAM (rwx)   : ORIGIN = 0x20000000, LENGTH = 96K
+    FLASH (rx)  : ORIGIN = 0x08000000, LENGTH = 256K
+    RAM (rwx)   : ORIGIN = 0x20000000, LENGTH = 64K
 }
 
 /* Section definitions */
