@@ -29,7 +29,7 @@
 #define ACCEL_NOISE_STDDEV  0.05f   // m/s² (~0.5% of gravity)
 #define GYRO_NOISE_STDDEV   0.002f  // rad/s (~0.1 deg/s)
 #define GYRO_BIAS_DRIFT     0.0f    // rad/s per step (0 = disabled)
-#define GPS_NOISE_STDDEV    0.0f    // meters (0 = keep disabled - causes instability)
+#define GPS_NOISE_STDDEV    0.0f    // meters (disabled - causes velocity noise issues)
 
 // Xorshift32 PRNG state (deterministic, fast)
 static uint32_t g_rng_state = 12345;

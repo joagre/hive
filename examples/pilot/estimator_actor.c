@@ -42,10 +42,15 @@ void estimator_actor(void *arg) {
     config.use_mag = true;  // Use magnetometer for yaw if available
     cf_init(&filter, &config);
 
-    // State for velocity estimation (differentiate GPS position)
+    // State for velocity estimation (differentiate filtered GPS position)
     float prev_x = 0.0f, prev_y = 0.0f, prev_altitude = 0.0f;
+    float filtered_gps_x = 0.0f, filtered_gps_y = 0.0f;
     float x_velocity = 0.0f, y_velocity = 0.0f, vertical_velocity = 0.0f;
     bool first_sample = true;
+
+    // GPS position filter alpha (filter before differentiating for velocity)
+    // Higher = more smoothing, less noise in velocity estimate
+    const float GPS_POS_FILTER_ALPHA = 0.7f;
 
     // Barometer reference (set from first reading)
     float baro_ref_pressure = 0.0f;
@@ -88,22 +93,30 @@ void estimator_actor(void *arg) {
             }
         }
 
-        // Compute velocities by differentiating position
+        // Compute velocities by differentiating filtered GPS position
+        // Filter GPS first to reduce noise amplification from differentiation
         if (first_sample) {
+            filtered_gps_x = state.x;
+            filtered_gps_y = state.y;
             x_velocity = 0.0f;
             y_velocity = 0.0f;
             vertical_velocity = 0.0f;
             first_sample = false;
         } else {
-            float raw_vx = (state.x - prev_x) / TIME_STEP_S;
-            float raw_vy = (state.y - prev_y) / TIME_STEP_S;
+            // Filter GPS position before differentiating
+            filtered_gps_x = LPF(filtered_gps_x, state.x, GPS_POS_FILTER_ALPHA);
+            filtered_gps_y = LPF(filtered_gps_y, state.y, GPS_POS_FILTER_ALPHA);
+
+            // Differentiate filtered position for velocity
+            float raw_vx = (filtered_gps_x - prev_x) / TIME_STEP_S;
+            float raw_vy = (filtered_gps_y - prev_y) / TIME_STEP_S;
             float raw_vvel = (state.altitude - prev_altitude) / TIME_STEP_S;
             x_velocity = LPF(x_velocity, raw_vx, HVEL_FILTER_ALPHA);
             y_velocity = LPF(y_velocity, raw_vy, HVEL_FILTER_ALPHA);
             vertical_velocity = LPF(vertical_velocity, raw_vvel, VVEL_FILTER_ALPHA);
         }
-        prev_x = state.x;
-        prev_y = state.y;
+        prev_x = filtered_gps_x;
+        prev_y = filtered_gps_y;
         prev_altitude = state.altitude;
         state.x_velocity = x_velocity;
         state.y_velocity = y_velocity;

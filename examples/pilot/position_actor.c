@@ -38,6 +38,14 @@ void position_actor(void *arg) {
     position_target_t target = POSITION_TARGET_ZERO;
     int count = 0;
 
+    // Low-pass filtered position (reduces GPS noise sensitivity)
+    // Alpha: 0.0 = no filtering, 1.0 = no smoothing (use raw)
+    // 0.5 provides good balance of responsiveness and noise rejection
+    const float GPS_FILTER_ALPHA = 0.5f;
+    float filtered_x = 0.0f;
+    float filtered_y = 0.0f;
+    bool filter_initialized = false;
+
     while (1) {
         state_estimate_t state;
         position_target_t new_target;
@@ -50,9 +58,19 @@ void position_actor(void *arg) {
             target = new_target;
         }
 
-        // Simple PD controller in world frame
-        float x_error = target.x - state.x;
-        float y_error = target.y - state.y;
+        // Low-pass filter GPS position to reduce noise
+        if (!filter_initialized) {
+            filtered_x = state.x;
+            filtered_y = state.y;
+            filter_initialized = true;
+        } else {
+            filtered_x = GPS_FILTER_ALPHA * state.x + (1.0f - GPS_FILTER_ALPHA) * filtered_x;
+            filtered_y = GPS_FILTER_ALPHA * state.y + (1.0f - GPS_FILTER_ALPHA) * filtered_y;
+        }
+
+        // Simple PD controller in world frame (using filtered position)
+        float x_error = target.x - filtered_x;
+        float y_error = target.y - filtered_y;
 
         // Desired acceleration in world frame
         float accel_x = POS_KP * x_error - POS_KD * state.x_velocity;
