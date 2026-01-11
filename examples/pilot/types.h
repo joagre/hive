@@ -131,8 +131,8 @@ typedef struct {
 
 #define POSITION_TARGET_ZERO {.x = 0.0f, .y = 0.0f, .z = 1.0f, .yaw = 0.0f}
 
-// Torque command from attitude actor to motor actor.
-// Motor actor applies mixer to convert to motor commands.
+// Torque command from rate actor to motor actor.
+// HAL applies mixer to convert to motor commands.
 typedef struct {
     float thrust;  // Normalized thrust (0.0 to 1.0)
     float roll;    // Roll torque

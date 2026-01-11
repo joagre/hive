@@ -10,7 +10,7 @@ A quadcopter autopilot example using the actor runtime. Supports Webots simulati
 - Horizontal position hold (GPS-based XY control)
 - Heading hold (yaw control with angle wrap-around)
 - Waypoint navigation (square demo route with altitude and heading changes)
-- Step 1: Motor actor (mixer, safety, watchdog)
+- Step 1: Motor actor (safety, watchdog)
 - Step 2: Separate altitude actor (altitude/rate split)
 - Step 3: Sensor actor (hardware abstraction)
 - Step 4: Attitude actor (attitude angle control)
@@ -334,7 +334,7 @@ Each simulation step fires the sensor_actor's timer, which triggers the control 
 5. Position actor reads position target bus, publishes attitude setpoints
 6. Attitude actor reads attitude setpoints, publishes rate setpoints
 7. Rate actor reads state + thrust + rate setpoints, publishes torque commands
-8. Motor actor applies mixer, writes to hardware
+8. Motor actor writes to HAL (HAL applies mixer)
 
 ### Key Parameters
 
