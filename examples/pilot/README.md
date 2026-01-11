@@ -48,14 +48,15 @@ Then open `worlds/hover_test.wbt` in Webots and start the simulation.
 ### STM32 Hardware (STEVAL-DRONE01)
 
 ```bash
-make -f Makefile.STEVAL-DRONE01        # Build firmware (55 KB flash, 29 KB RAM)
+make -f Makefile.STEVAL-DRONE01        # Build firmware (58 KB flash, 29 KB RAM)
 make -f Makefile.STEVAL-DRONE01 flash  # Flash to device via ST-Link
 make -f Makefile.STEVAL-DRONE01 clean  # Clean build artifacts
 ```
 
 Memory fits STM32F401 (512 KB flash, 96 KB RAM) with room to spare.
 
-See `hal/STEVAL-DRONE01/README.md` for hardware details.
+Debug output via USART1 (115200 baud) on the P7 header. See
+`hal/STEVAL-DRONE01/README.md` for hardware details and serial connection.
 
 ## Files
 

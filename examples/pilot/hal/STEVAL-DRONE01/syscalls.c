@@ -1,10 +1,11 @@
 // Newlib syscall stubs for bare-metal STM32
 //
 // These stubs satisfy the linker when using newlib (nano).
-// They are not functional - just return error codes.
+// _write sends output to USART1 for debug, others return error.
 
 #include <sys/stat.h>
 #include <errno.h>
+#include "usart1.h"
 
 int _close(int fd) {
     (void)fd;
@@ -26,9 +27,11 @@ int _read(int fd, char *buf, int len) {
 }
 
 int _write(int fd, const char *buf, int len) {
-    (void)fd;
-    (void)buf;
-    (void)len;
+    // Send stdout/stderr to USART1
+    if (fd == 1 || fd == 2) {
+        usart1_write(buf, len);
+        return len;
+    }
     return -1;
 }
 

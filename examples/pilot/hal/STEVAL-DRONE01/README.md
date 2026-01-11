@@ -153,14 +153,17 @@ make -f Makefile.STEVAL-DRONE01
 | `stm32f401_flash.ld` | Memory layout (512K Flash, 96K RAM) |
 | `Makefile` | Build libhal.a static library |
 
-### Debug (Optional, Not Implemented)
+### Debug Serial
 
 | File | Description |
 |------|-------------|
-| `usart1.h/c` | USART1 driver (not compiled - P7 header available on board) |
+| `usart1.h/c` | USART1 driver for debug output via P7 header |
 
-Note: Serial debug output requires adding `usart1.c` to Makefile, connecting
-`syscalls.c` `_write()` to USART, and changing `HIVE_LOG_LEVEL`.
+Serial debug is enabled by default. Output goes to USART1 at 115200 baud.
+Connect a USB-to-serial adapter to the P7 header (pin 2 = TX, pin 3 = RX).
+
+To disable serial debug for production, change `HIVE_LOG_LEVEL` in both
+Makefiles from `HIVE_LOG_LEVEL_INFO` to `HIVE_LOG_LEVEL_NONE`.
 
 ### Vendor Drivers (vendor/)
 
@@ -196,10 +199,10 @@ PB8  - TIM4_CH3 (M3)
 PB9  - TIM4_CH4 (M4)
 ```
 
-### USART1 (Debug Serial - Not Implemented)
+### USART1 (Debug Serial)
 ```
-PA9  - USART1_TX  (directly to P7 header pin 2)
-PA10 - USART1_RX  (directly to P7 header pin 3)
+PA9  - USART1_TX  (P7 header pin 2)
+PA10 - USART1_RX  (P7 header pin 3)
 ```
 
 ### Misc

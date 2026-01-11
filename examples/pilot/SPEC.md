@@ -397,7 +397,7 @@ Actors use the HAL directly - no function pointers needed:
 - HAL implementation: `hal/STEVAL-DRONE01/hal_stm32.c`
 - Build with: `make -f Makefile.STEVAL-DRONE01`
 - Flash with: `make -f Makefile.STEVAL-DRONE01 flash`
-- Memory: 55 KB flash, 29 KB RAM (fits STM32F401 with 38 KB RAM headroom)
+- Memory: 58 KB flash, 29 KB RAM (fits STM32F401 with 38 KB RAM headroom)
 
 ### Platform Differences
 
@@ -721,7 +721,7 @@ Actual memory usage from `make -f Makefile.STEVAL-DRONE01`:
 
 | Section | Size | Description |
 |---------|------|-------------|
-| Flash | 55 KB | Code + constants (11% of 512 KB) |
+| Flash | 58 KB | Code + constants (11% of 512 KB) |
 | RAM | 29 KB | Static data (30% of 96 KB) |
 
 **RAM breakdown:**

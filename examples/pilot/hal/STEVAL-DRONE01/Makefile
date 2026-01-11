@@ -33,6 +33,7 @@ SRCS = \
 	gpio_config.c \
 	tim4.c \
 	motors.c \
+	usart1.c \
 	platform_stm32f4.c \
 	hal_stm32.c \
 	$(VENDOR_DIR)/system_stm32f4xx.c \
@@ -137,8 +138,8 @@ CFLAGS += -DPLATFORM_STEVAL_DRONE01
 # Math library
 CFLAGS += -DARM_MATH_CM4
 
-# Log level: NONE for production (all logging compiled out)
-CFLAGS += -DHIVE_LOG_LEVEL=HIVE_LOG_LEVEL_NONE
+# Log level: INFO for debugging (change to NONE for production)
+CFLAGS += -DHIVE_LOG_LEVEL=HIVE_LOG_LEVEL_INFO
 
 # Include paths
 CFLAGS += $(INCLUDES)

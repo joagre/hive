@@ -13,8 +13,11 @@
 #include "steval_fcu001_v1_temperature.h"
 #include "tim4.h"
 #include "motors.h"
+#include "usart1.h"
 
 #include <stdbool.h>
+#include <stdarg.h>
+#include <stdio.h>
 #include <math.h>
 
 // ----------------------------------------------------------------------------
@@ -74,6 +77,9 @@ int platform_init(void) {
     if (HAL_Init() != HAL_OK) {
         return -1;
     }
+
+    // Initialize debug serial early (before sensors)
+    platform_debug_init();
 
     // Initialize LED for status indication
     BSP_LED_Init(LED1);
@@ -290,12 +296,20 @@ void platform_delay_us(uint32_t us) {
 }
 
 void platform_debug_init(void) {
-    // USART1 debug output - not implemented yet
+    // Initialize USART1 for debug output (115200 baud, TX only)
+    usart1_init(NULL);  // NULL = use defaults
 }
 
 void platform_debug_printf(const char *fmt, ...) {
-    (void)fmt;
-    // Debug output not implemented yet
+    va_list args;
+    va_start(args, fmt);
+    // usart1_printf doesn't support va_list, use fixed buffer
+    char buf[128];
+    int len = vsnprintf(buf, sizeof(buf), fmt, args);
+    va_end(args);
+    if (len > 0) {
+        usart1_write(buf, len < (int)sizeof(buf) ? len : (int)sizeof(buf) - 1);
+    }
 }
 
 void platform_emergency_stop(void) {
