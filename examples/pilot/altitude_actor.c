@@ -33,7 +33,7 @@ void altitude_actor(void *arg) {
     BUS_SUBSCRIBE(s_position_target_bus);
 
     pid_state_t alt_pid;
-    pid_init_full(&alt_pid, ALT_PID_KP, ALT_PID_KI, ALT_PID_KD, ALT_PID_IMAX, ALT_PID_OMAX);
+    pid_init_full(&alt_pid, ALT_PID_KP, ALT_PID_KI, ALT_PID_KD, ALT_PID_IMAX, HAL_ALT_PID_OMAX);
 
     // Target altitude (updated from waypoint actor)
     float target_altitude = 1.0f;  // Default to 1m

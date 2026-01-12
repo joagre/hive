@@ -6,6 +6,7 @@
 #include "waypoint_actor.h"
 #include "types.h"
 #include "config.h"
+#include "hal_config.h"
 #include "hive_runtime.h"
 #include "hive_bus.h"
 #include "hive_log.h"
@@ -103,7 +104,7 @@ void waypoint_actor(void *arg) {
             if (arrived) {
                 hover_ticks++;
                 // Advance after hovering at waypoint (loop back to start)
-                if (hover_ticks >= WAYPOINT_HOVER_TICKS) {
+                if (hover_ticks >= HAL_WAYPOINT_HOVER_TICKS) {
                     waypoint_index = (waypoint_index + 1) % NUM_WAYPOINTS;
                     hover_ticks = 0;
                     HIVE_LOG_INFO("[WPT] Advancing to waypoint %d: (%.1f, %.1f, %.1f) yaw=%.0f deg",

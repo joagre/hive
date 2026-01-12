@@ -30,7 +30,7 @@
 // Start at 0.20 (20%), increase in steps of 0.05 until drone lifts.
 // Values: 0.0 = off, 0.5 = 50%, 1.0 = full power
 // DANGER: High values will cause drone to take off!
-#define TEST_THRUST  0.20f
+#define TEST_THRUST  0.30f
 
 // Test duration in seconds
 #define TEST_DURATION_SEC  5

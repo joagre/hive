@@ -100,11 +100,7 @@
 #define ALT_PID_KI   0.05f
 #define ALT_PID_KD   0.0f    // Using velocity feedback instead
 #define ALT_PID_IMAX 0.2f    // Integral limit
-#ifdef PLATFORM_STEVAL_DRONE01
-#define ALT_PID_OMAX 0.08f   // Conservative output limit for slow climbs
-#else
-#define ALT_PID_OMAX 0.15f   // Output limit for simulation
-#endif
+// HAL_ALT_PID_OMAX defined in platform-specific hal_config.h
 
 // Vertical velocity damping (measured velocity → thrust correction)
 // Provides smoother response than differentiating position error
@@ -115,11 +111,7 @@
 #define WAYPOINT_TOLERANCE_Z    0.15f  // meters - altitude tolerance
 #define WAYPOINT_TOLERANCE_YAW  0.1f   // radians (~6 degrees)
 #define WAYPOINT_TOLERANCE_VEL  0.1f   // m/s - must be nearly stopped
-#ifdef PLATFORM_STEVAL_DRONE01
-#define WAYPOINT_HOVER_TICKS    1250   // 5 seconds at 250Hz (conservative for hardware testing)
-#else
-#define WAYPOINT_HOVER_TICKS    50     // 200ms for simulation
-#endif
+// HAL_WAYPOINT_HOVER_TICKS defined in platform-specific hal_config.h
 
 // Position PD gains (simple PD controller)
 #define POS_KP           0.2f    // Position gain: rad per meter error
