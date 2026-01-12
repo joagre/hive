@@ -33,7 +33,7 @@ void altitude_actor(void *arg) {
     BUS_SUBSCRIBE(s_position_target_bus);
 
     pid_state_t alt_pid;
-    pid_init_full(&alt_pid, ALT_PID_KP, ALT_PID_KI, ALT_PID_KD, ALT_PID_IMAX, HAL_ALT_PID_OMAX);
+    pid_init_full(&alt_pid, HAL_ALT_PID_KP, HAL_ALT_PID_KI, HAL_ALT_PID_KD, HAL_ALT_PID_IMAX, HAL_ALT_PID_OMAX);
 
     // Target altitude (updated from waypoint actor)
     float target_altitude = 1.0f;  // Default to 1m
@@ -55,7 +55,7 @@ void altitude_actor(void *arg) {
         float pos_correction = pid_update(&alt_pid, target_altitude, state.altitude, TIME_STEP_S);
 
         // Velocity damping: reduce thrust when moving up, increase when moving down
-        float vel_damping = -VVEL_DAMPING_GAIN * state.vertical_velocity;
+        float vel_damping = -HAL_VVEL_DAMPING_GAIN * state.vertical_velocity;
 
         float thrust = CLAMPF(HAL_BASE_THRUST + pos_correction + vel_damping, 0.0f, 1.0f);
 

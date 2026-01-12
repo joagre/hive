@@ -6,6 +6,7 @@
 #include "rate_actor.h"
 #include "types.h"
 #include "config.h"
+#include "hal_config.h"
 #include "pid.h"
 #include "hive_runtime.h"
 #include "hive_bus.h"
@@ -34,9 +35,9 @@ void rate_actor(void *arg) {
 
     pid_state_t roll_pid, pitch_pid, yaw_pid;
     // Note: Different output limits per axis (yaw needs more authority)
-    pid_init_full(&roll_pid,  RATE_PID_KP, RATE_PID_KI, RATE_PID_KD, RATE_PID_IMAX, RATE_PID_OMAX_ROLL);
-    pid_init_full(&pitch_pid, RATE_PID_KP, RATE_PID_KI, RATE_PID_KD, RATE_PID_IMAX, RATE_PID_OMAX_PITCH);
-    pid_init_full(&yaw_pid,   RATE_PID_KP, RATE_PID_KI, RATE_PID_KD, RATE_PID_IMAX, RATE_PID_OMAX_YAW);
+    pid_init_full(&roll_pid,  HAL_RATE_PID_KP, HAL_RATE_PID_KI, HAL_RATE_PID_KD, HAL_RATE_PID_IMAX, HAL_RATE_PID_OMAX_ROLL);
+    pid_init_full(&pitch_pid, HAL_RATE_PID_KP, HAL_RATE_PID_KI, HAL_RATE_PID_KD, HAL_RATE_PID_IMAX, HAL_RATE_PID_OMAX_PITCH);
+    pid_init_full(&yaw_pid,   HAL_RATE_PID_KP, HAL_RATE_PID_KI, HAL_RATE_PID_KD, HAL_RATE_PID_IMAX, HAL_RATE_PID_OMAX_YAW);
 
     float thrust = 0.0f;
     rate_setpoint_t rate_sp = RATE_SETPOINT_ZERO;

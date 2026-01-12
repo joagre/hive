@@ -1,6 +1,7 @@
 // Configuration constants for pilot example
 //
 // Shared constants used across multiple actors.
+// Platform-specific tuning parameters are in hal_config.h.
 
 #ifndef PILOT_CONFIG_H
 #define PILOT_CONFIG_H
@@ -89,51 +90,47 @@
 #define HVEL_FILTER_ALPHA  0.8f
 
 // ----------------------------------------------------------------------------
-// Control parameters (tuned for Webots Crazyflie)
+// Waypoint navigation (mission parameters)
 // ----------------------------------------------------------------------------
 
-// Altitude control (target altitude comes from waypoint actor)
-// HAL_BASE_THRUST is defined in platform-specific hal_config.h
-
-// Altitude PID gains (position error → thrust correction)
-#define ALT_PID_KP   0.3f
-#define ALT_PID_KI   0.05f
-#define ALT_PID_KD   0.0f    // Using velocity feedback instead
-#define ALT_PID_IMAX 0.2f    // Integral limit
-// HAL_ALT_PID_OMAX defined in platform-specific hal_config.h
-
-// Vertical velocity damping (measured velocity → thrust correction)
-// Provides smoother response than differentiating position error
-#define VVEL_DAMPING_GAIN  0.15f
-
-// Waypoint navigation
 #define WAYPOINT_TOLERANCE_XY   0.15f  // meters - horizontal arrival radius
 #define WAYPOINT_TOLERANCE_Z    0.15f  // meters - altitude tolerance
 #define WAYPOINT_TOLERANCE_YAW  0.1f   // radians (~6 degrees)
 #define WAYPOINT_TOLERANCE_VEL  0.1f   // m/s - must be nearly stopped
-// HAL_WAYPOINT_HOVER_TICKS defined in platform-specific hal_config.h
 
-// Position PD gains (simple PD controller)
+// ----------------------------------------------------------------------------
+// Position control (mission parameters - no GPS on STEVAL anyway)
+// ----------------------------------------------------------------------------
+
 #define POS_KP           0.2f    // Position gain: rad per meter error
 #define POS_KD           0.1f    // Velocity damping: rad per m/s
 
 // Maximum tilt angle for position control (safety limit)
 #define MAX_TILT_ANGLE   0.35f   // ~20 degrees
 
-// Attitude PID gains (attitude angle error → rate setpoint)
-#define ATTITUDE_PID_KP   4.0f     // Typical autopilot: 4-8
-#define ATTITUDE_PID_KI   0.0f
-#define ATTITUDE_PID_KD   0.0f     // Derivative on error causes kick on setpoint change
-#define ATTITUDE_PID_IMAX 0.5f     // Integral limit
-#define ATTITUDE_PID_OMAX 3.0f     // Max rate setpoint (rad/s)
-
-// Rate PID gains (rate error → torque)
-#define RATE_PID_KP   0.02f
-#define RATE_PID_KI   0.0f
-#define RATE_PID_KD   0.001f
-#define RATE_PID_IMAX 0.5f      // Integral limit
-#define RATE_PID_OMAX_ROLL   0.1f
-#define RATE_PID_OMAX_PITCH  0.1f
-#define RATE_PID_OMAX_YAW    0.15f
+// ----------------------------------------------------------------------------
+// Platform-specific control parameters
+// ----------------------------------------------------------------------------
+// The following are defined in hal_config.h (platform-specific):
+//
+// Thrust:
+//   HAL_BASE_THRUST
+//
+// Altitude control:
+//   HAL_ALT_PID_KP, HAL_ALT_PID_KI, HAL_ALT_PID_KD
+//   HAL_ALT_PID_IMAX, HAL_ALT_PID_OMAX
+//   HAL_VVEL_DAMPING_GAIN
+//
+// Attitude control:
+//   HAL_ATTITUDE_PID_KP, HAL_ATTITUDE_PID_KI, HAL_ATTITUDE_PID_KD
+//   HAL_ATTITUDE_PID_IMAX, HAL_ATTITUDE_PID_OMAX
+//
+// Rate control:
+//   HAL_RATE_PID_KP, HAL_RATE_PID_KI, HAL_RATE_PID_KD
+//   HAL_RATE_PID_IMAX
+//   HAL_RATE_PID_OMAX_ROLL, HAL_RATE_PID_OMAX_PITCH, HAL_RATE_PID_OMAX_YAW
+//
+// Waypoint:
+//   HAL_WAYPOINT_HOVER_TICKS
 
 #endif // PILOT_CONFIG_H
