@@ -22,11 +22,12 @@ typedef struct {
 #ifdef PLATFORM_STEVAL_DRONE01
 // No GPS: altitude-only waypoints (x,y fixed at origin)
 // Position actor sees zero error, so drone hovers in place.
+// Conservative test profile: low altitudes, slow transitions
 static const waypoint_t waypoints[] = {
+    {0.0f, 0.0f, 0.5f, 0.0f},   // 0.5m - start low
     {0.0f, 0.0f, 1.0f, 0.0f},   // 1.0m
-    {0.0f, 0.0f, 1.5f, 0.0f},   // 1.5m
-    {0.0f, 0.0f, 2.0f, 0.0f},   // 2.0m
-    {0.0f, 0.0f, 1.5f, 0.0f},   // 1.5m
+    {0.0f, 0.0f, 1.5f, 0.0f},   // 1.5m - max height
+    {0.0f, 0.0f, 1.0f, 0.0f},   // 1.0m - descend
 };
 #else
 // GPS available: full 3D waypoint navigation
