@@ -12,7 +12,11 @@
 #include "hive_runtime.h"
 #include "hive_bus.h"
 #include "hive_ipc.h"
+#include "hive_timer.h"
 #include <assert.h>
+
+// Timeout for bus read - allows periodic check for STOP notification
+#define TORQUE_READ_TIMEOUT_US  (50 * 1000)  // 50ms
 
 static bus_id s_torque_bus;
 
@@ -35,17 +39,18 @@ void motor_actor(void *arg) {
             stopped = true;
         }
 
-        torque_cmd_t torque;
-
-        // Block until torque command available
-        BUS_READ_WAIT(s_torque_bus, &torque);
-
-        // If stopped, zero all output
         if (stopped) {
-            torque = (torque_cmd_t)TORQUE_CMD_ZERO;
+            // Output zero torque and sleep before checking STOP again
+            torque_cmd_t zero = TORQUE_CMD_ZERO;
+            hal_write_torque(&zero);
+            hive_sleep(TORQUE_READ_TIMEOUT_US);
+            continue;
         }
 
-        // HAL handles mixing and hardware output
-        hal_write_torque(&torque);
+        // Wait for torque with timeout (allows periodic STOP check)
+        torque_cmd_t torque;
+        if (BUS_READ_TIMEOUT(s_torque_bus, &torque, TORQUE_READ_TIMEOUT_US)) {
+            hal_write_torque(&torque);
+        }
     }
 }

@@ -50,6 +50,13 @@
     hive_bus_read_wait((bus), (dest_ptr), sizeof(*(dest_ptr)), &_len, -1); \
 } while(0)
 
+// Blocking bus read with timeout - returns true if data received
+// Usage: if (BUS_READ_TIMEOUT(bus, &var, 50000)) { /* use var */ }
+#define BUS_READ_TIMEOUT(bus, dest_ptr, timeout_us) ({ \
+    size_t _len; \
+    hive_bus_read_wait((bus), (dest_ptr), sizeof(*(dest_ptr)), &_len, (timeout_us)).code == HIVE_OK; \
+})
+
 // Subscribe to bus with assert (common pattern in actors)
 // Usage: BUS_SUBSCRIBE(s_state_bus);
 #define BUS_SUBSCRIBE(bus) \
