@@ -232,3 +232,11 @@ void hive_timer_advance_time(uint64_t delta_us) {
     // Process expired timers immediately
     hive_timer_process_pending();
 }
+
+// Get current time in microseconds
+// Resolution is limited by HIVE_TIMER_TICK_US (default 1ms).
+// For sub-millisecond precision, reduce HIVE_TIMER_TICK_US or use
+// platform-specific high-resolution timers (DWT cycle counter).
+uint64_t hive_get_time(void) {
+    return (uint64_t)g_timer.tick_count * HIVE_TIMER_TICK_US;
+}
