@@ -96,6 +96,14 @@ The following safety features are enabled for real hardware (not in Webots simul
 | Startup delay | motor_actor.c | Motors stay off for 60 seconds after boot |
 | Hard cutoff | motor_actor.c | Motors forced off 5 seconds after flight window |
 
+### Future Safety Features
+
+The following may be added after initial flight testing:
+
+- **Rate cutoff**: Motors off if angular rate exceeds threshold (e.g., >300°/s) - catches violent oscillation while within tilt limits
+- **Accelerometer sanity check**: Motors off if acceleration readings are implausible
+- **Sensor timeout**: Motors off if no sensor updates within expected interval
+
 ### Missing Safety Features (Production Requirements)
 
 - **Geofence**: No boundary limits - drone can fly away indefinitely
