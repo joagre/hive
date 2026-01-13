@@ -373,7 +373,7 @@ Each simulation step fires the sensor_actor's timer, which triggers the control 
 - `TIME_STEP = 4` ms (250 Hz control rate)
 - `MOTOR_MAX_VELOCITY = 100.0` rad/s
 - Waypoint tolerance: 0.15 m XY, 0.15 m altitude, 0.1 rad heading, 0.1 m/s velocity
-- Waypoint hover time: 200 ms before advancing
+- Waypoint hover time: 10 seconds (simulation), 5-6 seconds (hardware)
 
 ### Webots Device Names
 

@@ -204,7 +204,7 @@ to the position target bus. Both altitude and position actors read from this bus
 - Altitude within 0.15m of target
 - Heading within 0.1 rad (~6°) of target
 - Velocity below 0.1 m/s (nearly stopped)
-- Hover at waypoint for 200ms
+- Hover at waypoint for 10 seconds (simulation) / 5-6 seconds (hardware)
 
 After completing the route, the drone loops back to the first waypoint and repeats forever.
 
