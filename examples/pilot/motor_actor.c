@@ -2,7 +2,8 @@
 //
 // Subscribes to torque bus, writes to hardware via HAL.
 // The HAL handles mixing (converting torque to individual motor commands).
-// Listens for STOP notification from supervisor for emergency cutoff.
+// Checks for STOP notification from supervisor (best-effort - only checked
+// when torque commands arrive, won't interrupt blocking bus read).
 
 #include "motor_actor.h"
 #include "notifications.h"
@@ -12,11 +13,7 @@
 #include "hive_runtime.h"
 #include "hive_bus.h"
 #include "hive_ipc.h"
-#include "hive_timer.h"
 #include <assert.h>
-
-// Timeout for bus read - allows periodic check for STOP notification
-#define TORQUE_READ_TIMEOUT_US  (50 * 1000)  // 50ms
 
 static bus_id s_torque_bus;
 
@@ -32,25 +29,20 @@ void motor_actor(void *arg) {
     bool stopped = false;
 
     while (1) {
-        // Check for STOP notification from supervisor (non-blocking)
+        // Check for STOP notification (non-blocking, best-effort)
         hive_message msg;
         if (HIVE_SUCCEEDED(hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_NOTIFY,
                                                NOTIFY_FLIGHT_STOP, &msg, 0))) {
             stopped = true;
         }
 
+        torque_cmd_t torque;
+        BUS_READ_WAIT(s_torque_bus, &torque);
+
         if (stopped) {
-            // Output zero torque and sleep before checking STOP again
-            torque_cmd_t zero = TORQUE_CMD_ZERO;
-            hal_write_torque(&zero);
-            hive_sleep(TORQUE_READ_TIMEOUT_US);
-            continue;
+            torque = (torque_cmd_t)TORQUE_CMD_ZERO;
         }
 
-        // Wait for torque with timeout (allows periodic STOP check)
-        torque_cmd_t torque;
-        if (BUS_READ_TIMEOUT(s_torque_bus, &torque, TORQUE_READ_TIMEOUT_US)) {
-            hal_write_torque(&torque);
-        }
+        hal_write_torque(&torque);
     }
 }
