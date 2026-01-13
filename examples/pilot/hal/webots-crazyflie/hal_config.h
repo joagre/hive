@@ -52,14 +52,6 @@
 #define HAL_RATE_PID_OMAX_YAW    0.15f
 
 // ----------------------------------------------------------------------------
-// Waypoint Navigation
-// ----------------------------------------------------------------------------
-
-// Time to hover at each waypoint before advancing (ticks at 250Hz)
-// 50 = 200ms - fast for simulation testing
-#define HAL_WAYPOINT_HOVER_TICKS  50
-
-// ----------------------------------------------------------------------------
 // Bus Configuration
 // ----------------------------------------------------------------------------
 // Same limits as STM32 to ensure simulation matches production constraints

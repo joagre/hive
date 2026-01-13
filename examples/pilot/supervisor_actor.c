@@ -45,9 +45,10 @@ void supervisor_actor(void *arg) {
     HIVE_LOG_INFO("[SUP] Flight authorized");
 
 #ifndef SIMULATED_TIME
-    // Flight window: hard cutoff after 5 seconds
-    HIVE_LOG_INFO("[SUP] Flight window: 5 seconds");
-    hive_sleep(5 * 1000000);  // 5 seconds
+    // Flight window: hard cutoff after 12 seconds
+    // Allows for: 2s thrust ramp + climb + 6s hover + descent + margin
+    HIVE_LOG_INFO("[SUP] Flight window: 12 seconds");
+    hive_sleep(12 * 1000000);  // 12 seconds
 
     // Send STOP to motor actor
     hive_ipc_notify(s_motor_actor, NOTIFY_FLIGHT_STOP, NULL, 0);

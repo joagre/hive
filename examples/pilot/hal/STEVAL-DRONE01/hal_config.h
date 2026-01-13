@@ -63,14 +63,6 @@
 #define HAL_RATE_PID_OMAX_YAW    0.15f
 
 // ----------------------------------------------------------------------------
-// Waypoint Navigation
-// ----------------------------------------------------------------------------
-
-// Time to hover at each waypoint before advancing (ticks at 250Hz)
-// 1250 = 5 seconds - conservative for hardware testing
-#define HAL_WAYPOINT_HOVER_TICKS  1250
-
-// ----------------------------------------------------------------------------
 // Bus Configuration
 // ----------------------------------------------------------------------------
 // STM32 has smaller memory limits than simulation
