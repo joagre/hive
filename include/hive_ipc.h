@@ -9,13 +9,14 @@
 // -----------------------------------------------------------------------------
 
 // Send an async notification (HIVE_MSG_NOTIFY)
+// Tag identifies the notification type, enabling selective receive.
 // Payload is copied to receiver's mailbox, sender continues immediately.
 // Returns HIVE_ERR_NOMEM if IPC pools exhausted.
-hive_status hive_ipc_notify(actor_id to, const void *data, size_t len);
+hive_status hive_ipc_notify(actor_id to, uint32_t tag, const void *data, size_t len);
 
-// Send a message with explicit class and tag
-// Like hive_ipc_notify, but allows specifying message class and tag.
-// Useful for implementing custom protocols or for tagged notifications.
+// Send a message with explicit class
+// Like hive_ipc_notify, but allows specifying message class.
+// Useful for implementing custom protocols beyond NOTIFY.
 // The sender is automatically set to the current actor.
 // Returns HIVE_ERR_NOMEM if IPC pools exhausted.
 hive_status hive_ipc_notify_ex(actor_id to, hive_msg_class class,

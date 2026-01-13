@@ -39,7 +39,7 @@ static void switch_actor_a(void *arg) {
     while (ctx->count < ctx->max_count) {
         // Send ping to B
         int msg = 1;
-        hive_ipc_notify(ctx->partner, &msg, sizeof(msg));
+        hive_ipc_notify(ctx->partner, 0, &msg, sizeof(msg));
 
         // Wait for pong from B
         hive_message reply;
@@ -62,7 +62,7 @@ static void switch_actor_b(void *arg) {
 
         // Send pong back to A
         int reply = 2;
-        hive_ipc_notify(ctx->partner, &reply, sizeof(reply));
+        hive_ipc_notify(ctx->partner, 0, &reply, sizeof(reply));
 
         ctx->count++;
     }
@@ -146,7 +146,7 @@ static void ipc_sender(void *arg) {
     ctx->start_time = get_nanos();
 
     for (uint64_t i = 0; i < ctx->max_count; i++) {
-        hive_ipc_notify(ctx->partner, buffer, ctx->msg_size);
+        hive_ipc_notify(ctx->partner, 0, buffer, ctx->msg_size);
 
         // Wait for ack
         hive_message ack;
@@ -166,7 +166,7 @@ static void ipc_receiver(void *arg) {
         hive_ipc_recv(&msg, -1);
 
         // Send ack
-        hive_ipc_notify(ctx->partner, &ack, sizeof(ack));
+        hive_ipc_notify(ctx->partner, 0, &ack, sizeof(ack));
     }
 
     hive_exit();

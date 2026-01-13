@@ -44,6 +44,7 @@
 #include "attitude_actor.h"
 #include "rate_actor.h"
 #include "motor_actor.h"
+#include "supervisor_actor.h"
 
 #include <assert.h>
 
@@ -111,7 +112,7 @@ int main(void) {
     motor_actor_init(s_torque_bus);
 
     // Spawn all actors
-    actor_id sensor, estimator, altitude, waypoint, position, attitude, rate, motor;
+    actor_id sensor, estimator, altitude, waypoint, position, attitude, rate, motor, supervisor;
     SPAWN_CRITICAL_ACTOR(sensor_actor,    "sensor",    sensor);
     SPAWN_CRITICAL_ACTOR(estimator_actor, "estimator", estimator);
     SPAWN_CRITICAL_ACTOR(altitude_actor,  "altitude",  altitude);
@@ -120,10 +121,15 @@ int main(void) {
     SPAWN_CRITICAL_ACTOR(attitude_actor,  "attitude",  attitude);
     SPAWN_CRITICAL_ACTOR(rate_actor,      "rate",      rate);
     SPAWN_CRITICAL_ACTOR(motor_actor,     "motor",     motor);
-    (void)sensor; (void)estimator; (void)altitude; (void)waypoint;
-    (void)position; (void)attitude; (void)rate; (void)motor;
 
-    HIVE_LOG_INFO("8 actors spawned");
+    // Supervisor coordinates startup and safety cutoff
+    supervisor_actor_init(waypoint, motor);
+    SPAWN_CRITICAL_ACTOR(supervisor_actor, "supervisor", supervisor);
+
+    (void)sensor; (void)estimator; (void)altitude; (void)waypoint;
+    (void)position; (void)attitude; (void)rate; (void)motor; (void)supervisor;
+
+    HIVE_LOG_INFO("9 actors spawned");
 
     // Main loop - time control differs between real-time and simulation
 #ifdef SIMULATED_TIME

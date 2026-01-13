@@ -6,7 +6,7 @@ hive_ipc_notify, hive_ipc_notify_ex, hive_ipc_recv, hive_ipc_recv_match, hive_ip
 .nf
 .B #include <hive_ipc.h>
 .PP
-.BI "hive_status hive_ipc_notify(actor_id " to ", const void *" data ", size_t " len ");"
+.BI "hive_status hive_ipc_notify(actor_id " to ", uint32_t " tag ", const void *" data ", size_t " len ");"
 .BI "hive_status hive_ipc_notify_ex(actor_id " to ", hive_msg_class " class ", uint32_t " tag ","
 .BI "                               const void *" data ", size_t " len ");"
 .BI "hive_status hive_ipc_recv(hive_message *" msg ", int32_t " timeout_ms ");"
@@ -65,7 +65,13 @@ Actor death notification (see
 .SS Sending Messages
 .BR hive_ipc_notify ()
 sends an asynchronous message to actor
-.IR to .
+.IR to
+with the specified
+.IR tag .
+The
+.I tag
+parameter enables selective receive filtering on the receiver side (see
+.BR hive_ipc_recv_match ()).
 The payload
 .I data
 of length
@@ -231,7 +237,7 @@ immediately. They do
 block or drop messages. Implement backoff-retry:
 .PP
 .nf
-hive_status s = hive_ipc_notify(target, data, len);
+hive_status s = hive_ipc_notify(target, 0, data, len);
 if (s.code == HIVE_ERR_NOMEM) {
     hive_message msg;
     hive_ipc_recv(&msg, 10);  /* Backoff 10ms */

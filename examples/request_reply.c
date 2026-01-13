@@ -141,7 +141,7 @@ static void demo_actor(void *arg) {
     // Pattern 1: Fire-and-forget with hive_ipc_notify()
     printf("Demo: Fire-and-forget (hive_ipc_notify) - sender continues immediately\n");
     int data = 42;
-    hive_status status = hive_ipc_notify(hive_self(), &data, sizeof(data));
+    hive_status status = hive_ipc_notify(hive_self(), 0, &data, sizeof(data));
     if (HIVE_SUCCEEDED(status)) {
         hive_message msg;
         hive_ipc_recv(&msg, 0);

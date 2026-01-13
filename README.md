@@ -163,9 +163,9 @@ cfg.malloc_stack = false;     // false=arena (default), true=malloc
 actor_id worker;
 hive_spawn_ex(worker_actor, &args, &cfg, &worker);
 
-// Notify (async message)
+// Notify (async message with tag for selective receive)
 int data = 42;
-hive_status status = hive_ipc_notify(target, &data, sizeof(data));
+hive_status status = hive_ipc_notify(target, 0, &data, sizeof(data));  // tag=0
 if (HIVE_FAILED(status)) {
     // Pool exhausted: HIVE_MAILBOX_ENTRY_POOL_SIZE or HIVE_MESSAGE_DATA_POOL_SIZE
     // Notify does NOT block or drop - caller must handle HIVE_ERR_NOMEM
@@ -305,7 +305,7 @@ if (hive_is_exit_msg(&msg)) {
 
 ### IPC
 
-- `hive_ipc_notify(to, data, len)` - Fire-and-forget notification
+- `hive_ipc_notify(to, tag, data, len)` - Fire-and-forget notification with tag
 - `hive_ipc_notify_ex(to, class, tag, data, len)` - Send with explicit class and tag
 - `hive_ipc_recv(msg, timeout)` - Receive any message (pre-decoded: `msg.class`, `msg.tag`, `msg.data`)
 - `hive_ipc_recv_match(from, class, tag, msg, timeout)` - Selective receive with filtering

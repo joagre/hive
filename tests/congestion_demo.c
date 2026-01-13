@@ -56,7 +56,7 @@ void coordinator_actor(void *arg) {
         for (int w = 0; w < args->worker_count; w++) {
             int data = burst * NUM_WORKERS + w;
 
-            hive_status status = hive_ipc_notify(args->workers[w], &data, sizeof(data));
+            hive_status status = hive_ipc_notify(args->workers[w], 0, &data, sizeof(data));
 
             if (status.code == HIVE_ERR_NOMEM) {
                 retry_needed++;
@@ -70,14 +70,14 @@ void coordinator_actor(void *arg) {
                 hive_ipc_recv(&msg, 5);  // Backoff 5ms
 
                 // Retry
-                status = hive_ipc_notify(args->workers[w], &data, sizeof(data));
+                status = hive_ipc_notify(args->workers[w], 0, &data, sizeof(data));
                 if (HIVE_SUCCEEDED(status)) {
                     retry_success++;
                     total_sent++;
                 } else {
                     // Even retry failed - aggressive backoff
                     hive_ipc_recv(&msg, 20);
-                    status = hive_ipc_notify(args->workers[w], &data, sizeof(data));
+                    status = hive_ipc_notify(args->workers[w], 0, &data, sizeof(data));
                     if (HIVE_SUCCEEDED(status)) {
                         retry_success++;
                         total_sent++;

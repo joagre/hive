@@ -106,7 +106,7 @@ static void ping_actor(void *arg) {
         semihosting_printf("Ping: sending request #%d to actor %u\n", i + 1, (unsigned)g_pong_actor);
 
         /* Use notify + recv instead of request to avoid timeout dependency */
-        hive_ipc_notify(g_pong_actor, ping, 5);
+        hive_ipc_notify(g_pong_actor, 0, ping, 5);
 
         /* Yield to let pong process */
         hive_yield();

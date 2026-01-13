@@ -281,7 +281,7 @@ hive_status hive_ipc_notify_internal(actor_id to, actor_id sender, hive_msg_clas
     return HIVE_SUCCESS;
 }
 
-hive_status hive_ipc_notify(actor_id to, const void *data, size_t len) {
+hive_status hive_ipc_notify(actor_id to, uint32_t tag, const void *data, size_t len) {
     HIVE_REQUIRE_ACTOR_CONTEXT();
     actor *sender = hive_actor_current();
 
@@ -290,7 +290,7 @@ hive_status hive_ipc_notify(actor_id to, const void *data, size_t len) {
         return HIVE_ERROR(HIVE_ERR_INVALID, "NULL data with non-zero length");
     }
 
-    return hive_ipc_notify_internal(to, sender->id, HIVE_MSG_NOTIFY, HIVE_TAG_NONE, data, len);
+    return hive_ipc_notify_internal(to, sender->id, HIVE_MSG_NOTIFY, tag, data, len);
 }
 
 hive_status hive_ipc_notify_ex(actor_id to, hive_msg_class class,

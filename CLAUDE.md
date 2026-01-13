@@ -136,7 +136,7 @@ All messages have a 4-byte header prepended to payload:
 - **tag** (27 bits): Correlation identifier for request/reply
 
 ### IPC API
-- **`hive_ipc_notify(to, data, len)`**: Fire-and-forget notification (class=NOTIFY)
+- **`hive_ipc_notify(to, tag, data, len)`**: Fire-and-forget notification (class=NOTIFY) with tag for selective receive
 - **`hive_ipc_notify_ex(to, class, tag, data, len)`**: Send with explicit class and tag
 - **`hive_ipc_recv(msg, timeout)`**: Receive any message
 - **`hive_ipc_recv_match(from, class, tag, msg, timeout)`**: Selective receive with filtering

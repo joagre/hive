@@ -37,7 +37,7 @@ static void server_actor(void *arg) {
 
     // Notify client that server is ready via IPC
     coord_msg ready_msg = { .type = MSG_SERVER_READY };
-    status = hive_ipc_notify(client_id, &ready_msg, sizeof(ready_msg));
+    status = hive_ipc_notify(client_id, MSG_SERVER_READY, &ready_msg, sizeof(ready_msg));
     if (HIVE_FAILED(status)) {
         printf("Server: Failed to send ready message: %s\n", HIVE_ERR_STR(status));
         hive_net_close(listen_fd);
@@ -176,7 +176,7 @@ static void client_actor(void *arg) {
 
     // Notify server that client is done via IPC
     coord_msg done_msg = { .type = MSG_CLIENT_DONE };
-    status = hive_ipc_notify(server_id, &done_msg, sizeof(done_msg));
+    status = hive_ipc_notify(server_id, MSG_CLIENT_DONE, &done_msg, sizeof(done_msg));
     if (HIVE_FAILED(status)) {
         printf("Client: Failed to send done message: %s\n", HIVE_ERR_STR(status));
     } else {

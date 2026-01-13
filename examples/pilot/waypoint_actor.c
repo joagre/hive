@@ -4,11 +4,13 @@
 // to position target bus. Advances through waypoint list when arrival detected.
 
 #include "waypoint_actor.h"
+#include "notifications.h"
 #include "types.h"
 #include "config.h"
 #include "hal_config.h"
 #include "hive_runtime.h"
 #include "hive_bus.h"
+#include "hive_ipc.h"
 #include "hive_log.h"
 #include <assert.h>
 #include <stdbool.h>
@@ -64,7 +66,12 @@ void waypoint_actor(void *arg) {
 
     BUS_SUBSCRIBE(s_state_bus);
 
-    HIVE_LOG_INFO("[WPT] Starting flight sequence");
+    // Wait for START signal from supervisor before beginning flight
+    // Use selective receive - match specific notification tag
+    HIVE_LOG_INFO("[WPT] Waiting for supervisor START signal");
+    hive_message msg;
+    hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_NOTIFY, NOTIFY_FLIGHT_START, &msg, -1);
+    HIVE_LOG_INFO("[WPT] START received - beginning flight sequence");
 
     int waypoint_index = 0;
     int hover_ticks = 0;
