@@ -13,6 +13,7 @@
 #include "pid.h"
 #include "hive_runtime.h"
 #include "hive_bus.h"
+#include "hive_timer.h"
 #include "hive_log.h"
 #include <assert.h>
 #include <math.h>
@@ -27,8 +28,8 @@ void altitude_actor_init(bus_id state_bus, bus_id thrust_bus, bus_id position_ta
     s_position_target_bus = position_target_bus;
 }
 
-// Thrust ramp duration for gentle takeoff (seconds)
-#define THRUST_RAMP_DURATION  2.0f
+// Thrust ramp duration for gentle takeoff (microseconds)
+#define THRUST_RAMP_DURATION_US  (2 * 1000000)  // 2 seconds
 
 void altitude_actor(void *arg) {
     (void)arg;
@@ -41,7 +42,7 @@ void altitude_actor(void *arg) {
 
     // Target altitude (updated from waypoint actor)
     float target_altitude = 0.0f;  // Default to ground (safe)
-    float elapsed_time = 0.0f;     // For thrust ramp
+    uint64_t ramp_start_time = 0;  // For thrust ramp
     int count = 0;
 
     while (1) {
@@ -70,8 +71,13 @@ void altitude_actor(void *arg) {
             // Cut motors: emergency or landed
             thrust = 0.0f;
             pid_reset(&alt_pid);  // Reset integrator for next takeoff
-            elapsed_time = 0.0f;  // Reset ramp for next takeoff
+            ramp_start_time = 0;  // Reset ramp for next takeoff
         } else {
+            // Start ramp timer on first non-cutoff iteration
+            if (ramp_start_time == 0) {
+                ramp_start_time = hive_get_time();
+            }
+
             // Position control (PI)
             float pos_correction = pid_update(&alt_pid, target_altitude, state.altitude, TIME_STEP_S);
 
@@ -79,10 +85,10 @@ void altitude_actor(void *arg) {
             float vel_damping = -HAL_VVEL_DAMPING_GAIN * state.vertical_velocity;
 
             // Thrust ramp for gentle takeoff
-            float ramp = (elapsed_time < THRUST_RAMP_DURATION)
-                       ? (elapsed_time / THRUST_RAMP_DURATION)
+            uint64_t elapsed_us = hive_get_time() - ramp_start_time;
+            float ramp = (elapsed_us < THRUST_RAMP_DURATION_US)
+                       ? (float)elapsed_us / THRUST_RAMP_DURATION_US
                        : 1.0f;
-            elapsed_time += TIME_STEP_S;
 
             thrust = ramp * CLAMPF(HAL_BASE_THRUST + pos_correction + vel_damping, 0.0f, 1.0f);
         }

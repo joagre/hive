@@ -348,3 +348,14 @@ void hive_timer_advance_time(uint64_t delta_us) {
         }
     } while (fired_any);  // Repeat if we fired any (handles multiple fires for large delta)
 }
+
+// Get current time in microseconds
+uint64_t hive_get_time(void) {
+    if (g_timer.sim_mode) {
+        return g_timer.sim_time_us;
+    }
+
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (uint64_t)ts.tv_sec * 1000000 + (uint64_t)ts.tv_nsec / 1000;
+}

@@ -29,4 +29,9 @@ hive_status hive_timer_cancel(timer_id id);
 // Uses selective receive - other messages remain in mailbox
 hive_status hive_sleep(uint32_t delay_us);
 
+// Get current time in microseconds
+// Returns monotonic time suitable for measuring elapsed durations.
+// In simulation mode, returns simulated time.
+uint64_t hive_get_time(void);
+
 #endif // HIVE_TIMER_H
