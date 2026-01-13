@@ -27,6 +27,9 @@ void altitude_actor_init(bus_id state_bus, bus_id thrust_bus, bus_id position_ta
     s_position_target_bus = position_target_bus;
 }
 
+// Thrust ramp duration for gentle takeoff (seconds)
+#define THRUST_RAMP_DURATION  2.0f
+
 void altitude_actor(void *arg) {
     (void)arg;
 
@@ -38,6 +41,7 @@ void altitude_actor(void *arg) {
 
     // Target altitude (updated from waypoint actor)
     float target_altitude = 0.0f;  // Default to ground (safe)
+    float elapsed_time = 0.0f;     // For thrust ramp
     int count = 0;
 
     while (1) {
@@ -66,6 +70,7 @@ void altitude_actor(void *arg) {
             // Cut motors: emergency or landed
             thrust = 0.0f;
             pid_reset(&alt_pid);  // Reset integrator for next takeoff
+            elapsed_time = 0.0f;  // Reset ramp for next takeoff
         } else {
             // Position control (PI)
             float pos_correction = pid_update(&alt_pid, target_altitude, state.altitude, TIME_STEP_S);
@@ -73,7 +78,13 @@ void altitude_actor(void *arg) {
             // Velocity damping: reduce thrust when moving up, increase when moving down
             float vel_damping = -HAL_VVEL_DAMPING_GAIN * state.vertical_velocity;
 
-            thrust = CLAMPF(HAL_BASE_THRUST + pos_correction + vel_damping, 0.0f, 1.0f);
+            // Thrust ramp for gentle takeoff
+            float ramp = (elapsed_time < THRUST_RAMP_DURATION)
+                       ? (elapsed_time / THRUST_RAMP_DURATION)
+                       : 1.0f;
+            elapsed_time += TIME_STEP_S;
+
+            thrust = ramp * CLAMPF(HAL_BASE_THRUST + pos_correction + vel_damping, 0.0f, 1.0f);
         }
 
         thrust_cmd_t cmd = {.thrust = thrust};
