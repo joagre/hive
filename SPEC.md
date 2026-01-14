@@ -1808,12 +1808,17 @@ On Linux, these map directly to POSIX equivalents. On STM32, they're interpreted
 - All flags and functions fully supported
 
 **STM32:**
-- Virtual file paths mapped to flash sectors (e.g., `/log`, `/config`)
-- Board configuration via -D flags:
+- Virtual file paths mapped to flash sectors (e.g., `/log`)
+- Board configuration via -D flags (each virtual file is optional):
   ```makefile
+  # /log virtual file (required for flight logging)
   CFLAGS += -DHIVE_VFILE_LOG_BASE=0x08020000
   CFLAGS += -DHIVE_VFILE_LOG_SIZE=131072
   CFLAGS += -DHIVE_VFILE_LOG_SECTOR=5
+  # /config virtual file (optional, for calibration data)
+  # CFLAGS += -DHIVE_VFILE_CONFIG_BASE=0x08040000
+  # CFLAGS += -DHIVE_VFILE_CONFIG_SIZE=16384
+  # CFLAGS += -DHIVE_VFILE_CONFIG_SECTOR=6
   ```
 - Ring buffer for efficient writes (most are O(1), blocks to flush when full)
 - `HIVE_O_TRUNC` triggers flash sector erase (blocks 1-4 seconds)
@@ -1836,7 +1841,7 @@ still providing fast writes in the common case.
 
 | Feature | Linux | STM32 |
 |---------|-------|-------|
-| Arbitrary paths | Yes | No - only virtual paths (`/log`, `/config`) |
+| Arbitrary paths | Yes | No - only virtual paths (board-defined, e.g., `/log`) |
 | `hive_file_read()` | Works | **Returns error** - use `pread()` |
 | `hive_file_pread()` | Works | Works (direct flash read) |
 | `hive_file_write()` | Blocking | Ring buffer (fast, blocks when full) |

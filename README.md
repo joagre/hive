@@ -355,7 +355,7 @@ if (hive_is_exit_msg(&msg)) {
 
 **Linux:** File operations block until complete. No timeout parameter.
 
-**STM32:** Uses flash-backed virtual files (`/log`, `/config`) with a ring buffer for efficiency.
+**STM32:** Uses flash-backed virtual files (board-defined, e.g., `/log`) with a ring buffer for efficiency.
 Most writes complete immediately. When the buffer fills up, `write()` blocks to flush data to
 flash before continuing. This ensures the same no-data-loss semantics as Linux while still
 providing fast writes in the common case. See SPEC.md for full platform differences.
@@ -416,7 +416,7 @@ The runtime is **completely single-threaded** with an event loop architecture. A
 **STM32 (bare metal)**:
 - Timers: Hardware timers (SysTick or TIM peripherals)
 - Network: lwIP in NO_SYS mode (polling or interrupt-driven)
-- File: Flash-backed virtual files (`/log`, `/config`) with ring buffer
+- File: Flash-backed virtual files (board-defined, e.g., `/log`) with ring buffer
   - Board config via -D flags: `HIVE_VFILE_LOG_BASE`, `HIVE_VFILE_LOG_SIZE`, `HIVE_VFILE_LOG_SECTOR`
   - `write()` pushes to ring buffer (O(1), never blocks)
   - `sync()` drains ring buffer to flash (blocking)

@@ -137,9 +137,9 @@ Ground operations, pre-flight checks
 .SS STM32 Flash File Implementation
 On STM32, file I/O uses flash-backed virtual files with a ring buffer for efficiency:
 .IP \(bu 2
-Virtual file paths map to flash sectors (e.g.,
+Virtual file paths map to flash sectors (board-defined via -D flags, e.g.,
 .B /log
-maps to Sector 5)
+maps to Sector 5 on STEVAL-DRONE01)
 .IP \(bu 2
 .BR hive_file_write ()
 pushes to a RAM ring buffer (fast path). If the buffer is full, write blocks to flush
@@ -181,12 +181,15 @@ returns error (ring buffer doesn't support random writes)
 .IP \(bu 2
 Only one file can be opened for writing at a time
 .PP
-Board configuration via -D flags in Makefile:
+Board configuration via -D flags in Makefile (each virtual file is optional):
 .PP
 .nf
+# /log virtual file (for flight logging)
 CFLAGS += -DHIVE_VFILE_LOG_BASE=0x08020000
 CFLAGS += -DHIVE_VFILE_LOG_SIZE=131072
 CFLAGS += -DHIVE_VFILE_LOG_SECTOR=5
+# /config virtual file (optional, for calibration)
+# CFLAGS += -DHIVE_VFILE_CONFIG_BASE=...
 .fi
 .PP
 Ring buffer defaults (hive_static_config.h):
@@ -237,7 +240,7 @@ typedef struct {
 /* Load config at startup (before hive_run) */
 hive_status load_config(config_t *cfg) {
     int fd;
-    hive_status s = hive_file_open("/config/flight.bin",
+    hive_status s = hive_file_open("/var/lib/pilot/config.bin",
                                    HIVE_O_RDONLY, 0, &fd);
     if (HIVE_FAILED(s)) {
         printf("Config not found, using defaults\\n");

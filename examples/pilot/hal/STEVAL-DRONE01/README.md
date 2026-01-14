@@ -73,7 +73,7 @@ make -f Makefile.STEVAL-DRONE01
 
 | Component | Part Number | Interface | Description |
 |-----------|-------------|-----------|-------------|
-| MCU | STM32F401CEU6 | - | ARM Cortex-M4, 84 MHz, DSP+FPU |
+| MCU | STM32F401CCU6 | - | ARM Cortex-M4, 84 MHz, DSP+FPU |
 | IMU | LSM6DSL | SPI2 | 6-axis accel + gyro |
 | Magnetometer | LIS2MDL | SPI2 | 3-axis compass |
 | Barometer | LPS22HB | SPI2 | Pressure/altitude |
@@ -83,8 +83,8 @@ make -f Makefile.STEVAL-DRONE01
 ## Specifications
 
 **Flight Controller (STEVAL-FCU001V1):**
-- STM32F401CEU6 @ 84 MHz (Cortex-M4F)
-- 512 KB Flash, 96 KB RAM
+- STM32F401CCU6 @ 84 MHz (Cortex-M4F)
+- 256 KB Flash, 64 KB RAM
 - Hardware FPU for fast sensor fusion
 
 **Sensors (all on SPI2):**
@@ -170,7 +170,7 @@ make -f Makefile.STEVAL-DRONE01
 | `gpio_config.h/c` | GPIO pin configuration helpers |
 | `syscalls.c` | Newlib stubs for bare-metal (_read, _write, _sbrk) |
 | `startup_stm32f401.s` | Vector table, Reset_Handler, C runtime init |
-| `stm32f401_flash.ld` | Memory layout (512K Flash, 96K RAM) |
+| `stm32f401_flash.ld` | Memory layout (256K Flash, 64K RAM) |
 | `Makefile` | Build libhal.a static library |
 
 ### Debug Serial
