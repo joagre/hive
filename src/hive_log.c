@@ -157,8 +157,8 @@ hive_status hive_log_file_open(const char *path) {
         hive_log_file_close();
     }
 
-    // Open with truncate to erase flash sector (on STM32)
-    hive_status s = hive_file_open(path, HIVE_O_WRONLY | HIVE_O_TRUNC, 0, &g_log_fd);
+    // Open with create+truncate (TRUNC also erases flash sector on STM32)
+    hive_status s = hive_file_open(path, HIVE_O_WRONLY | HIVE_O_CREAT | HIVE_O_TRUNC, 0644, &g_log_fd);
     if (HIVE_FAILED(s)) {
         g_log_fd = -1;
         return s;
