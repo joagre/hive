@@ -45,18 +45,10 @@ def decode_entry(data: bytes, offset: int) -> tuple:
     if offset + HEADER_SIZE > len(data):
         return len(data), None
 
-    # Parse header
+    # Parse header: magic(2) + seq(2) + timestamp(4) + len(2) + level(1) + reserved(1) = 12 bytes
     magic, seq, timestamp, payload_len, level, _ = struct.unpack_from(
-        "<HHIBBBB", data, offset
+        "<HHIHBB", data, offset
     )
-
-    # Note: We read 4 bytes for the last part but only use 2 (level, reserved)
-    # Re-parse correctly:
-    magic = struct.unpack_from("<H", data, offset)[0]
-    seq = struct.unpack_from("<H", data, offset + 2)[0]
-    timestamp = struct.unpack_from("<I", data, offset + 4)[0]
-    payload_len = struct.unpack_from("<H", data, offset + 8)[0]
-    level = data[offset + 10]
 
     if magic != MAGIC:
         # Try to find next valid entry
