@@ -8,21 +8,22 @@ Supports two platforms:
 
 ## What it does
 
-Demonstrates waypoint navigation with a quadcopter using 8 actors:
+Demonstrates waypoint navigation with a quadcopter using 9 actors:
 
 1. **Sensor actor** reads raw sensors via HAL, publishes to sensor bus
 2. **Estimator actor** runs complementary filter, computes velocities, publishes to state bus
 3. **Altitude actor** reads target altitude from position target bus, runs altitude PID
-4. **Waypoint actor** manages waypoint list, publishes to position target bus
+4. **Waypoint actor** waits for START signal, manages waypoint list, publishes to position target bus
 5. **Position actor** reads target XY/yaw from position target bus, runs position PD
 6. **Attitude actor** runs attitude PIDs, publishes rate setpoints
 7. **Rate actor** runs rate PIDs, publishes torque commands
-8. **Motor actor** reads torque bus, writes to hardware via HAL (mixer is in HAL)
+8. **Motor actor** reads torque bus, writes to hardware via HAL (checks for STOP signal)
+9. **Supervisor actor** handles startup delay (60s), sends START/STOP notifications
 
 **Webots:** Flies a square pattern with altitude changes at each waypoint (full 3D navigation with GPS).
 
 **STEVAL-DRONE01:** Hovers and changes altitude only (no GPS, so XY position fixed at origin).
-Safety features enabled: 60-second startup delay, 5-second flight window, emergency cutoff
+Safety features enabled: 60-second startup delay, 12-second flight window, emergency cutoff
 on excessive tilt (>45°), excessive altitude (>2m), or landing.
 
 ## Prerequisites
@@ -83,6 +84,7 @@ Debug output via USART1 (115200 baud) on the P7 header. See
 | `attitude_actor.c/h` | Attitude PIDs → rate setpoints |
 | `rate_actor.c/h` | Rate PIDs → torque commands |
 | `motor_actor.c/h` | Output: torque → HAL → motors |
+| `supervisor_actor.c/h` | Startup delay, flight window cutoff |
 | `pid.c/h` | Reusable PID controller |
 | `fusion/complementary_filter.c/h` | Portable attitude estimation (accel+gyro fusion) |
 | `types.h` | Shared data types (sensor_data_t, state_estimate_t, etc.) |
@@ -114,7 +116,7 @@ Debug output via USART1 (115200 baud) on the P7 header. See
 
 ## Architecture
 
-Eight actors connected via buses:
+Nine actors connected via buses:
 
 ```mermaid
 graph TB
@@ -151,11 +153,12 @@ order to ensure each actor sees fresh data from upstream actors in the same step
 | 1     | sensor    | CRITICAL | Reads hardware first |
 | 2     | estimator | CRITICAL | Needs sensors, produces state estimate |
 | 3     | altitude  | CRITICAL | Needs state, produces thrust |
-| 4     | waypoint  | CRITICAL | Needs state, produces position targets |
+| 4     | waypoint  | CRITICAL | Needs state + START signal, produces position targets |
 | 5     | position  | CRITICAL | Needs target, produces attitude setpoints |
 | 6     | attitude  | CRITICAL | Needs attitude setpoints, produces rate setpoints |
 | 7     | rate      | CRITICAL | Needs state + thrust + rate setpoints |
-| 8     | motor     | CRITICAL | Needs torque, writes hardware last |
+| 8     | motor     | CRITICAL | Needs torque + STOP signal, writes hardware last |
+| 9     | supervisor| CRITICAL | Sends START to waypoint, STOP to motor after flight window |
 
 ## Control System
 
@@ -194,17 +197,21 @@ to the position target bus. Both altitude and position actors read from this bus
 5. (0, 0, 1.0m) heading 0° - return to 1m
 
 **STEVAL-DRONE01 demo route (altitude only, no GPS):**
-1. 1.0m - hover at 1m
-2. 1.5m - rise to 1.5m
-3. 2.0m - rise to 2.0m
-4. 1.5m - drop to 1.5m (loop back to 1)
+1. 0.5m - hover at 0.5m
+2. 1.0m - rise to 1.0m
+3. 1.5m - rise to 1.5m
+4. 1.0m - drop to 1.0m (loop back to 1)
+
+**First flight test route (safe tethered test):**
+1. 0.25m - hover at 0.25m for 6 seconds
+2. Land and stay landed
 
 **Arrival detection:** The drone must satisfy all conditions before advancing:
 - XY position within 0.15m of waypoint (Webots only)
 - Altitude within 0.15m of target
 - Heading within 0.1 rad (~6°) of target
 - Velocity below 0.1 m/s (nearly stopped)
-- Hover at waypoint for 10 seconds (simulation) / 5-6 seconds (hardware)
+- Hover at waypoint: 10 seconds (simulation), 5 seconds (STEVAL), 6 seconds (first flight test)
 
 After completing the route, the drone loops back to the first waypoint and repeats forever.
 
