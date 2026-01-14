@@ -432,7 +432,7 @@ Actors use the HAL directly - no function pointers needed:
 - HAL implementation: `hal/STEVAL-DRONE01/hal_stm32.c`
 - Build with: `make -f Makefile.STEVAL-DRONE01`
 - Flash with: `make -f Makefile.STEVAL-DRONE01 flash`
-- Memory: ~60 KB flash (24% of 256 KB), ~62 KB RAM (97% of 64 KB)
+- Memory: ~60 KB flash (24% of 256 KB), ~57 KB RAM (88% of 64 KB)
 
 ### Platform Differences
 
@@ -794,7 +794,7 @@ Actual memory usage from `make -f Makefile.STEVAL-DRONE01`:
 | Section | Size | Description |
 |---------|------|-------------|
 | Flash | ~60 KB | Code + constants (24% of 256 KB) |
-| RAM | ~62 KB | Static data (97% of 64 KB) |
+| RAM | ~57 KB | Static data (88% of 64 KB) |
 
 **RAM breakdown:**
 
@@ -805,7 +805,7 @@ Actual memory usage from `make -f Makefile.STEVAL-DRONE01`:
 | Message pool | 4 KB | 32 entries × 128 bytes |
 | Bus structures | 2 KB | 8 buses + subscribers + entries |
 | Other pools | 1 KB | Mailbox, timers, links, monitors |
-| Ring buffer | 8 KB | Flash file I/O buffer |
+| Ring buffer | 4 KB | Flash file I/O buffer (reduced from 8KB) |
 | Main stack | 3 KB | Heap + stack for main() |
 
 **Tightened configuration** (in Makefile.STEVAL-DRONE01):
@@ -825,7 +825,7 @@ Actual memory usage from `make -f Makefile.STEVAL-DRONE01`:
 
 **Stack safety margin:** 2x (worst-case ~1.5 KB per actor with FPU, 4096 available)
 
-Fits on STM32F401CCU6 (256 KB flash, 64 KB RAM) with minimal headroom.
+Fits on STM32F401CCU6 (256 KB flash, 64 KB RAM) with ~7 KB RAM headroom.
 
 ---
 
