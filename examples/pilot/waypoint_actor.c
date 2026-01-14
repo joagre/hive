@@ -114,7 +114,7 @@ void waypoint_actor(void *arg) {
         if (hovering) {
             hive_message timer_msg;
             if (HIVE_SUCCEEDED(hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER,
-                                                    HIVE_TAG_ANY, &timer_msg, 0))) {
+                                                    hover_timer, &timer_msg, 0))) {
                 // Timer fired - advance to next waypoint
                 hovering = false;
                 hover_timer = TIMER_ID_INVALID;

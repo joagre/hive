@@ -85,6 +85,31 @@ if (hive_msg_is_timer(&msg)) {
     /* Handle timer */
 }
 .fi
+.SS Waiting for a Specific Timer
+Use
+.BR hive_ipc_recv_match (3)
+with the timer_id to wait for a specific timer. This is the recommended
+pattern when you need to wait for a particular timer without consuming
+other messages:
+.PP
+.nf
+timer_id my_timer;
+hive_timer_after(500000, &my_timer);
+
+/* Wait specifically for this timer */
+hive_message msg;
+hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, my_timer, &msg, -1);
+.fi
+.PP
+Do NOT use HIVE_TAG_ANY when waiting for timer messages, as this could
+consume timer messages from other timers. Always use the specific timer_id
+returned by
+.BR hive_timer_after ()
+or
+.BR hive_timer_every ().
+This is how
+.BR hive_sleep ()
+is implemented internally.
 .SH RETURN VALUE
 All functions return an
 .I hive_status

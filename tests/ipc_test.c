@@ -438,7 +438,7 @@ static void delayed_sender_actor(void *arg) {
     timer_id timer;
     hive_timer_after(50000, &timer);
     hive_message msg;
-    hive_ipc_recv(&msg, -1);
+    hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
 
     int data = 123;
     hive_ipc_notify(target, 0, &data, sizeof(data));
@@ -555,7 +555,7 @@ static void test12_selective_receive(void *arg) {
     timer_id timer;
     hive_timer_after(50000, &timer);
     hive_message timer_msg;
-    hive_ipc_recv(&timer_msg, -1);
+    hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &timer_msg, -1);
 
     // Use selective receive to filter by sender
     hive_message msg;

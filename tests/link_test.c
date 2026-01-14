@@ -55,7 +55,7 @@ static void actor_b_exits_immediately(void *arg) {
     timer_id timer;
     hive_timer_after(50000, &timer);  // 50ms
     hive_message msg;
-    hive_ipc_recv(&msg, -1);
+    hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
 
     hive_exit();
 }
@@ -85,7 +85,7 @@ static void test1_basic_link(void *arg) {
     timer_id timer;
     hive_timer_after(200000, &timer);
     hive_message msg;
-    hive_ipc_recv(&msg, -1);
+    hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
 
     if (g_actor_a_notified) {
         TEST_PASS("linked actor receives exit notification");
@@ -154,7 +154,7 @@ static void test2_bidirectional(void *arg) {
     timer_id timer;
     hive_timer_after(300000, &timer);
     hive_message msg;
-    hive_ipc_recv(&msg, -1);
+    hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
 
     if (g_target_notified) {
         TEST_PASS("target notified when linker dies (bidirectional)");
@@ -195,7 +195,7 @@ static void actor_dies_after_unlink(void *arg) {
     timer_id timer;
     hive_timer_after(100000, &timer);
     hive_message msg;
-    hive_ipc_recv(&msg, -1);
+    hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
 
     hive_exit();
 }
@@ -218,7 +218,7 @@ static void test3_unlink(void *arg) {
     timer_id timer;
     hive_timer_after(500000, &timer);
     hive_message msg;
-    hive_ipc_recv(&msg, -1);
+    hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
 
     if (!g_unlinked_received_notification) {
         TEST_PASS("unlink prevents exit notification");
@@ -266,7 +266,7 @@ static void multi_link_target(void *arg) {
     timer_id timer;
     hive_timer_after(delay_ms * 1000, &timer);
     hive_message msg;
-    hive_ipc_recv(&msg, -1);
+    hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
 
     hive_exit();
 }
@@ -316,7 +316,7 @@ static void test5_multiple_links(void *arg) {
     timer_id timer;
     hive_timer_after(500000, &timer);
     hive_message msg;
-    hive_ipc_recv(&msg, -1);
+    hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
 
     if (g_multi_link_count == 3) {
         TEST_PASS("received all 3 exit notifications from linked actors");
@@ -393,7 +393,7 @@ static void test6_link_vs_monitor(void *arg) {
     timer_id timer;
     hive_timer_after(500000, &timer);
     hive_message msg;
-    hive_ipc_recv(&msg, -1);
+    hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
 
     if (g_link_target_got_notification) {
         TEST_PASS("link target notified when linker dies (bidirectional)");
@@ -437,7 +437,7 @@ static void normal_exit_actor(void *arg) {
     timer_id timer;
     hive_timer_after(50000, &timer);
     hive_message msg;
-    hive_ipc_recv(&msg, -1);
+    hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
     hive_exit();  // Normal exit
 }
 
@@ -455,7 +455,7 @@ static void test7_exit_reason(void *arg) {
     timer_id timer;
     hive_timer_after(300000, &timer);
     hive_message msg;
-    hive_ipc_recv(&msg, -1);
+    hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
 
     if (g_received_reason == HIVE_EXIT_NORMAL) {
         TEST_PASS("exit reason is HIVE_EXIT_NORMAL for normal exit");
@@ -542,7 +542,7 @@ static void unlink_target_actor(void *arg) {
     timer_id timer;
     hive_timer_after(200000, &timer);
     hive_message msg;
-    hive_ipc_recv(&msg, -1);
+    hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
     hive_exit();
 }
 
@@ -572,7 +572,7 @@ static void test10_unlink_non_linked(void *arg) {
     timer_id timer;
     hive_timer_after(300000, &timer);
     hive_message msg;
-    hive_ipc_recv(&msg, -1);
+    hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
 
     hive_exit();
 }
@@ -665,7 +665,7 @@ static void test12_link_pool_exhaustion(void *arg) {
     timer_id timer;
     hive_timer_after(200000, &timer);
     hive_message msg;
-    hive_ipc_recv(&msg, -1);
+    hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
 
     // Drain exit notifications
     while (hive_ipc_pending()) {

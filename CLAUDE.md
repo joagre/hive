@@ -291,3 +291,13 @@ Messages are identified by class (accessible directly via `msg.class`):
 - `HIVE_MSG_ANY`: Wildcard for selective receive filtering
 
 Check message type directly: `if (msg.class == HIVE_MSG_TIMER) { ... }` or use `hive_msg_is_timer(&msg)`.
+
+### Waiting for Timer Messages
+When waiting for a timer, use selective receive with the specific timer_id:
+```c
+timer_id my_timer;
+hive_timer_after(500000, &my_timer);
+hive_message msg;
+hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, my_timer, &msg, -1);
+```
+Do NOT use `HIVE_TAG_ANY` for timer messages - always use the timer_id to avoid consuming the wrong timer's message.

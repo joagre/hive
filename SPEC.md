@@ -1103,9 +1103,9 @@ void request_reply_actor(void *arg) {
     hive_ipc_request(server, &req, sizeof(req), &reply, 5000);
     // Timer tick arrived during request/reply wait - it's in mailbox
 
-    // Now process timer
+    // Now process timer using selective receive with timer_id
     hive_message timer_msg;
-    hive_ipc_recv(&timer_msg, 0);  // Gets the timer tick
+    hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, t, &timer_msg, 0);
 }
 ```
 
@@ -1997,7 +1997,8 @@ void sensor_actor(void *arg) {
     timer_id timer;
     hive_timer_every(TIME_STEP_MS * 1000, &timer);  // Timer-driven
     while (1) {
-        hive_ipc_recv_match(...);  // Wait for timer
+        hive_message msg;
+        hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
         read_sensors();
         publish_to_bus();
     }

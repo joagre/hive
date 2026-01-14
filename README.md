@@ -207,11 +207,15 @@ timer_id timer;
 hive_timer_after(500000, &timer);    // One-shot, 500ms
 hive_timer_every(200000, &periodic); // Periodic, 200ms
 
+// Wait for specific timer using selective receive (recommended)
 hive_message msg;
+hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
+// Other messages stay in mailbox, only this timer is consumed
+
+// Or receive any message and check timer_id in msg.tag
 hive_ipc_recv(&msg, -1);
-if (hive_msg_is_timer(&msg)) {
-    // Handle timer tick - msg.tag contains timer_id
-    printf("Timer %u fired\n", msg.tag);
+if (hive_msg_is_timer(&msg) && msg.tag == periodic) {
+    printf("Periodic timer %u fired\n", msg.tag);
 }
 hive_timer_cancel(periodic);
 ```

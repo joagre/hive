@@ -33,17 +33,12 @@ static void publisher_actor(void *arg) {
 
     // Publish 10 sensor readings
     for (int i = 0; i < 10; i++) {
-        // Wait for timer tick
+        // Wait for timer tick using selective receive with timer_id
         hive_message msg;
-        status = hive_ipc_recv(&msg, -1);
+        status = hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
         if (HIVE_FAILED(status)) {
             printf("Publisher: Failed to receive: %s\n", HIVE_ERR_STR(status));
             break;
-        }
-
-        if (!hive_msg_is_timer(&msg)) {
-            printf("Publisher: Unexpected message\n");
-            continue;
         }
 
         // Create sensor data

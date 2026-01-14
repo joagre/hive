@@ -20,7 +20,7 @@ static void worker_actor(void *arg) {
     hive_timer_after(work_time, &work_timer);
 
     hive_message msg;
-    hive_ipc_recv(&msg, -1);
+    hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, work_timer, &msg, -1);
 
     printf("Worker %d: Completed work, exiting normally\n", worker_id);
     hive_exit();
