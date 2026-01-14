@@ -1,23 +1,16 @@
 // STM32 Flash File I/O Implementation
 //
-// WARNING: LOSSY WRITES - This implementation uses a fixed-size ring buffer.
-// If the buffer fills up, data is SILENTLY DROPPED. Always check bytes_written
-// return value. This is by design for flight data logging where:
-// - Dropping log data is acceptable
-// - Blocking flight-critical actors is NOT acceptable
+// Provides the same API and semantics as hive_file_linux.c for STM32 flash storage.
+// Uses a ring buffer for efficiency - most writes complete immediately. When the
+// buffer fills up, write() blocks to flush data to flash before continuing.
+// This ensures no data loss while maintaining good performance for typical usage.
 //
-// This implementation is suited for LOG FILES where some data loss is tolerable,
-// NOT for critical data that must never be lost.
-//
-// Key differences from Linux (hive_file_linux.c):
-// - Linux: write() blocks until complete, guarantees delivery (or error)
-// - STM32: write() returns immediately, best-effort, may drop data
-//
-// All STM32-specific optimizations are hidden inside this implementation:
+// Key characteristics:
 // - Virtual file paths mapped to flash sectors (/log, /config)
-// - Lossy ring buffer for O(1) writes from flight-critical actors
+// - Ring buffer for efficient writes (most are O(1))
+// - Blocks to flush when buffer is full (ensures no data loss)
 // - Staged writes with flash programming from RAM
-// - Erase on TRUNC flag
+// - Erase on TRUNC flag (required before writing)
 //
 // Board-specific flash configuration via -D flags:
 // - HIVE_VFILE_LOG_BASE, HIVE_VFILE_LOG_SIZE, HIVE_VFILE_LOG_SECTOR
@@ -126,7 +119,6 @@ static vfile_t g_vfiles[] = {
 static uint8_t g_ring_buf[HIVE_FILE_RING_SIZE];
 static volatile uint32_t g_ring_head;  // Write position (producers)
 static volatile uint32_t g_ring_tail;  // Read position (sync)
-static volatile uint32_t g_dropped;    // Dropped byte count
 
 // Staging buffer for flash block commits
 static uint8_t g_staging[HIVE_FILE_BLOCK_SIZE];
@@ -159,10 +151,6 @@ static size_t ring_push(const uint8_t *data, size_t len) {
     for (size_t i = 0; i < to_write; i++) {
         g_ring_buf[g_ring_head & (HIVE_FILE_RING_SIZE - 1)] = data[i];
         g_ring_head++;
-    }
-
-    if (to_write < len) {
-        g_dropped += (len - to_write);
     }
 
     return to_write;
@@ -311,6 +299,25 @@ static bool staging_commit(vfile_t *vf) {
     return ok;
 }
 
+// Flush ring buffer contents to flash via staging buffer
+// Returns false if flash is full or write error occurs
+static bool flush_ring_to_flash(vfile_t *vf) {
+    uint8_t temp[64];
+    while (!ring_empty()) {
+        size_t n = ring_pop(temp, sizeof(temp));
+
+        for (size_t i = 0; i < n; i++) {
+            if (staging_space() == 0) {
+                if (!staging_commit(vf)) {
+                    return false;  // Flash full or write error
+                }
+            }
+            staging_append(&temp[i], 1);
+        }
+    }
+    return true;
+}
+
 // ----------------------------------------------------------------------------
 // File I/O Subsystem State
 // ----------------------------------------------------------------------------
@@ -329,7 +336,6 @@ hive_status hive_file_init(void) {
     // Reset ring buffer
     g_ring_head = 0;
     g_ring_tail = 0;
-    g_dropped = 0;
     g_ring_fd = -1;
 
     // Reset staging
@@ -433,7 +439,6 @@ hive_status hive_file_open(const char *path, int flags, int mode, int *fd_out) {
         g_ring_fd = *fd_out;
         g_ring_head = 0;
         g_ring_tail = 0;
-        g_dropped = 0;
         staging_reset();
     }
 
@@ -530,9 +535,28 @@ hive_status hive_file_write(int fd, const void *buf, size_t len, size_t *bytes_w
         return HIVE_ERROR(HIVE_ERR_INVALID, "flash not erased (use HIVE_O_TRUNC)");
     }
 
-    // Push to ring buffer - partial write if buffer is full
-    // This is O(1) and never blocks
-    *bytes_written = ring_push((const uint8_t *)buf, len);
+    // Write data to ring buffer, flushing to flash when buffer is full.
+    // Most writes complete immediately (O(1)). When buffer fills up, we flush
+    // to flash (blocking) to make room, ensuring no data loss.
+    const uint8_t *data = (const uint8_t *)buf;
+    size_t remaining = len;
+    *bytes_written = 0;
+
+    while (remaining > 0) {
+        size_t pushed = ring_push(data, remaining);
+        *bytes_written += pushed;
+        data += pushed;
+        remaining -= pushed;
+
+        if (remaining > 0) {
+            // Ring buffer is full - flush to flash to make room
+            if (!flush_ring_to_flash(vf)) {
+                // Flash is full or write error - return partial write
+                return (*bytes_written > 0) ? HIVE_SUCCESS :
+                    HIVE_ERROR(HIVE_ERR_IO, "flash region full");
+            }
+        }
+    }
 
     return HIVE_SUCCESS;
 }
@@ -564,18 +588,8 @@ hive_status hive_file_sync(int fd) {
     }
 
     // Drain ring buffer to staging buffer, then to flash
-    uint8_t temp[64];
-    while (!ring_empty()) {
-        size_t n = ring_pop(temp, sizeof(temp));
-
-        for (size_t i = 0; i < n; i++) {
-            if (staging_space() == 0) {
-                if (!staging_commit(vf)) {
-                    return HIVE_ERROR(HIVE_ERR_IO, "flash write failed");
-                }
-            }
-            staging_append(&temp[i], 1);
-        }
+    if (!flush_ring_to_flash(vf)) {
+        return HIVE_ERROR(HIVE_ERR_IO, "flash write failed");
     }
 
     // Commit any remaining data in staging (padded with 0xFF)

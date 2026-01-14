@@ -18,9 +18,9 @@ else ifeq ($(PLATFORM),stm32)
   CPPFLAGS += -DHIVE_PLATFORM_STM32
   PLATFORM_SRCS := hive_scheduler_stm32.c hive_timer_stm32.c
   PLATFORM_ASM := hive_context_arm_cm.S
-  # STM32 defaults: disable net and file
+  # STM32 defaults: disable net (no lwIP yet), enable file (flash-backed)
   ENABLE_NET ?= 0
-  ENABLE_FILE ?= 0
+  ENABLE_FILE ?= 1
 else
   $(error Unknown PLATFORM: $(PLATFORM). Use 'linux' or 'stm32')
 endif
@@ -459,7 +459,7 @@ help:
 	@echo ""
 	@echo "Feature toggles (set to 0 to disable):"
 	@echo "  ENABLE_NET=1      - Network I/O subsystem (default: 1 on linux, 0 on stm32)"
-	@echo "  ENABLE_FILE=1     - File I/O subsystem (default: 1 on linux, 0 on stm32)"
+	@echo "  ENABLE_FILE=1     - File I/O subsystem (default: 1 on both linux and stm32)"
 	@echo ""
 	@echo "QEMU testing:"
 	@echo "  Requires: arm-none-eabi-gcc, qemu-system-arm"

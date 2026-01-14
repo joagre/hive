@@ -65,9 +65,14 @@ The runtime consists of:
 6. **Network**: Non-blocking sockets registered in epoll (Linux), lwIP NO_SYS mode on STM32
 7. **File**: Platform-specific implementation
    - Linux: Synchronous POSIX I/O (stalls scheduler briefly)
-   - STM32: Flash-backed virtual files (`/log`, `/config`) with ring buffer for O(1) writes and deferred flash commits via `sync()`
+   - STM32: Flash-backed virtual files (`/log`, `/config`) with ring buffer for fast writes (blocks when buffer full)
    - Use `HIVE_O_*` flags for cross-platform compatibility
    - **Safety-critical caveat:** Restrict file I/O to initialization, shutdown, or non–time-critical phases
+8. **Logging**: Structured logging with compile-time filtering
+   - Log levels: TRACE, DEBUG, INFO, WARN, ERROR, NONE
+   - Dual output: console (stderr) + binary file
+   - Platform defaults: Linux (stdout + file), STM32 (file only, disabled by default)
+   - File logging managed by application (open/sync/close lifecycle)
 
 ## Key Concepts
 
@@ -230,7 +235,21 @@ The runtime uses **compile-time configuration** for deterministic memory allocat
 - `HIVE_STACK_ARENA_SIZE`: Stack arena size (1*1024*1024) // 1 MB default
 - `HIVE_DEFAULT_STACK_SIZE`: Default actor stack size (65536)
 
-To change these limits, edit `hive_static_config.h` and recompile.
+**Logging Configuration** (also in `hive_static_config.h`):
+- `HIVE_LOG_LEVEL`: Minimum log level to compile (default: INFO on Linux, NONE on STM32)
+- `HIVE_LOG_TO_STDOUT`: Enable console output (default: 1 on Linux, 0 on STM32)
+- `HIVE_LOG_TO_FILE`: Enable file logging code (default: 1 on both)
+- `HIVE_LOG_FILE_PATH`: Log file path (default: `/var/tmp/hive.log` on Linux, `/log` on STM32)
+- `HIVE_LOG_MAX_ENTRY_SIZE`: Maximum log message size (128)
+
+**STM32 File I/O Configuration** (via -D flags in board Makefile):
+- `HIVE_VFILE_LOG_BASE`: Flash base address for `/log`
+- `HIVE_VFILE_LOG_SIZE`: Flash size for `/log`
+- `HIVE_VFILE_LOG_SECTOR`: Flash sector number for `/log`
+- `HIVE_FILE_RING_SIZE`: Ring buffer size (8 KB default)
+- `HIVE_FILE_BLOCK_SIZE`: Flash write block size (256 bytes default)
+
+To change these limits, edit `hive_static_config.h` or pass -D flags and recompile.
 
 **Memory characteristics:**
 - All runtime structures are **statically allocated** based on compile-time limits
@@ -283,13 +302,12 @@ Platform-specific source files:
 
 **STM32 File I/O Differences:**
 
-**⚠️ CRITICAL: LOSSY WRITES** - The STM32 implementation uses a lossy ring buffer.
-If the buffer fills up, **data is silently dropped**. This is fundamentally different
-from Linux where `write()` blocks until complete. Design rationale: for flight data
-logging, dropping log entries is acceptable but blocking flight-critical actors is not.
-Always check `bytes_written < len`. Suited for **log files only**, not critical data.
+The STM32 implementation uses flash-backed virtual files with a ring buffer for efficiency.
+Most writes complete immediately (fast path). When the buffer fills up, `write()` blocks
+to flush data to flash before continuing. This ensures the same no-data-loss semantics
+as Linux while still providing fast writes in the common case.
 
-Additional STM32 restrictions:
+STM32 restrictions:
 - Only virtual paths work (`/log`, `/config`) - arbitrary paths rejected
 - `HIVE_O_RDWR` rejected - use `HIVE_O_RDONLY` or `HIVE_O_WRONLY`
 - `HIVE_O_WRONLY` requires `HIVE_O_TRUNC` (flash must be erased first)
@@ -324,3 +342,37 @@ hive_message msg;
 hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, my_timer, &msg, -1);
 ```
 Do NOT use `HIVE_TAG_ANY` for timer messages - always use the timer_id to avoid consuming the wrong timer's message.
+
+### Logging
+
+Structured logging with compile-time level filtering and dual output (console + binary file).
+
+**Log Macros** (compile out based on `HIVE_LOG_LEVEL`):
+```c
+HIVE_LOG_TRACE(fmt, ...)  // Level 0 - verbose tracing
+HIVE_LOG_DEBUG(fmt, ...)  // Level 1 - debug info
+HIVE_LOG_INFO(fmt, ...)   // Level 2 - general info (default)
+HIVE_LOG_WARN(fmt, ...)   // Level 3 - warnings
+HIVE_LOG_ERROR(fmt, ...)  // Level 4 - errors
+// HIVE_LOG_LEVEL_NONE (5) disables all logging
+```
+
+**File Logging API** (lifecycle managed by application):
+```c
+hive_log_file_open(path);   // Open log file (on STM32, erases flash sector)
+hive_log_file_sync();       // Flush to storage (call periodically)
+hive_log_file_close();      // Close log file
+```
+
+**Binary Log Format** (12-byte header + text payload):
+- Magic: `0x4C47` ("LG" little-endian)
+- Sequence number, timestamp (µs), length, level
+- Use `tools/decode_log.py` to decode
+
+**Platform Defaults:**
+| Config | Linux | STM32 |
+|--------|-------|-------|
+| `HIVE_LOG_TO_STDOUT` | 1 (enabled) | 0 (disabled) |
+| `HIVE_LOG_TO_FILE` | 1 (enabled) | 1 (enabled) |
+| `HIVE_LOG_FILE_PATH` | `/var/tmp/hive.log` | `/log` |
+| `HIVE_LOG_LEVEL` | INFO | NONE (disabled) |

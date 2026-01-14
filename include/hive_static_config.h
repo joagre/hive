@@ -168,4 +168,47 @@
 #define HIVE_FILE_BLOCK_SIZE 256
 #endif
 
+// -----------------------------------------------------------------------------
+// Logging Configuration
+// -----------------------------------------------------------------------------
+
+// Maximum log entry text payload size (bytes, excluding header)
+#ifndef HIVE_LOG_MAX_ENTRY_SIZE
+#define HIVE_LOG_MAX_ENTRY_SIZE 128
+#endif
+
+// Enable logging to stdout/stderr (for development/debugging)
+// Default: enabled on Linux, disabled on STM32
+// Override with -DHIVE_LOG_TO_STDOUT=0 or -DHIVE_LOG_TO_STDOUT=1
+#ifndef HIVE_LOG_TO_STDOUT
+#ifdef HIVE_PLATFORM_STM32
+#define HIVE_LOG_TO_STDOUT 0
+#else
+#define HIVE_LOG_TO_STDOUT 1
+#endif
+#endif
+
+// Enable logging to file (compile in file logging code)
+// Default: enabled when HIVE_ENABLE_FILE=1, disabled otherwise
+// File logging still requires hive_log_file_open() call at runtime
+// Override with -DHIVE_LOG_TO_FILE=0 or -DHIVE_LOG_TO_FILE=1
+#ifndef HIVE_LOG_TO_FILE
+#if HIVE_ENABLE_FILE
+#define HIVE_LOG_TO_FILE 1
+#else
+#define HIVE_LOG_TO_FILE 0
+#endif
+#endif
+
+// Log file path
+// Default: "/var/tmp/hive.log" on Linux, "/log" on STM32 (maps to flash sector)
+// Override with -DHIVE_LOG_FILE_PATH='"/path/to/log"'
+#ifndef HIVE_LOG_FILE_PATH
+#ifdef HIVE_PLATFORM_STM32
+#define HIVE_LOG_FILE_PATH "/log"
+#else
+#define HIVE_LOG_FILE_PATH "/var/tmp/hive.log"
+#endif
+#endif
+
 #endif // HIVE_STATIC_CONFIG_H

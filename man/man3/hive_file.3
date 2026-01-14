@@ -135,24 +135,21 @@ Ground operations, pre-flight checks
 .PP
 .B Never use file I/O in flight-critical code paths.
 .SS STM32 Flash File Implementation
-On STM32, file I/O uses flash-backed virtual files with a ring buffer for non-blocking writes:
+On STM32, file I/O uses flash-backed virtual files with a ring buffer for efficiency:
 .IP \(bu 2
 Virtual file paths map to flash sectors (e.g.,
 .B /log
 maps to Sector 5)
 .IP \(bu 2
 .BR hive_file_write ()
-pushes to a RAM ring buffer (O(1), never blocks flight-critical actors)
+pushes to a RAM ring buffer (fast path). If the buffer is full, write blocks to flush
+data to flash before continuing. This ensures no data loss.
 .IP \(bu 2
 .BR hive_file_sync ()
-drains the ring buffer to flash (blocking, call from low-priority logger actor)
+drains the ring buffer to flash (blocking, call periodically from supervisor or low-priority actor)
 .IP \(bu 2
 .B HIVE_O_TRUNC
 erases the flash sector (blocks 1-4 seconds for 128KB sectors)
-.IP \(bu 2
-Partial writes: if ring buffer is full,
-.I bytes_written
-< requested length
 .PP
 .B STM32 Flag Restrictions:
 .IP \(bu 2
@@ -334,33 +331,24 @@ hive_status read_record(int fd, size_t index, record_t *rec) {
     return HIVE_SUCCESS;
 }
 .fi
-.SH WARNINGS
-.SS STM32: Lossy Writes
+.SH NOTES ON STM32 WRITE BEHAVIOR
 On STM32, the file I/O implementation uses a
-.B lossy ring buffer.
-If the ring buffer fills up,
-.B data is silently dropped.
-This is fundamentally different from Linux where
-.BR write ()
-blocks until all data is written.
+.B buffered ring buffer
+for efficiency. Most writes complete immediately by copying to the ring buffer.
+When the buffer fills up, write blocks to flush data to flash before continuing.
 .PP
-.B Design rationale:
-This behavior is intentional for flight data logging where:
+This ensures the same no-data-loss semantics as Linux while providing fast writes
+in the common case. The behavior is:
 .IP \(bu 2
-Dropping some log entries is acceptable
+Fast path: Ring buffer has space \- write completes immediately
 .IP \(bu 2
-Blocking flight-critical actors (control loop, sensor fusion) is NOT acceptable
+Slow path: Ring buffer full \- write blocks to flush to flash
 .PP
-.B Caller responsibility:
-Always check
-.I bytes_written
-< requested length and handle accordingly.
-.PP
-.B Suitable for:
-Log files where some data loss is tolerable.
-.br
-.B NOT suitable for:
-Critical data that must never be lost.
+.B Recommendation:
+Call
+.BR hive_file_sync ()
+periodically (e.g., every 4 seconds from supervisor actor) to ensure data is
+committed to flash before unexpected power loss.
 .SH SEE ALSO
 .BR hive_net (3),
 .BR hive_spawn (3),

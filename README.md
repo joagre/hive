@@ -55,6 +55,7 @@ man man/man3/hive_ipc.3
 - Timers (one-shot and periodic with timerfd/epoll)
 - Network I/O (non-blocking TCP via event loop)
 - File I/O (synchronous, stalls scheduler)
+- Logging (compile-time filtering, dual output: console + binary file)
 - Bus (pub-sub with retention policies)
 
 ## Performance
@@ -354,10 +355,31 @@ if (hive_is_exit_msg(&msg)) {
 
 **Linux:** File operations block until complete. No timeout parameter.
 
-**⚠️ STM32 WARNING: LOSSY WRITES** - On STM32, `hive_file_write()` uses a lossy ring buffer.
-Data is **silently dropped** if the buffer fills up. This is by design for flight data logging
-where dropping log entries is acceptable but blocking flight-critical actors is not.
-Always check `bytes_written < len`. See SPEC.md for full platform differences.
+**STM32:** Uses flash-backed virtual files (`/log`, `/config`) with a ring buffer for efficiency.
+Most writes complete immediately. When the buffer fills up, `write()` blocks to flush data to
+flash before continuing. This ensures the same no-data-loss semantics as Linux while still
+providing fast writes in the common case. See SPEC.md for full platform differences.
+
+### Logging
+
+- `HIVE_LOG_TRACE(fmt, ...)` - Verbose tracing (compile out with `-DHIVE_LOG_LEVEL=HIVE_LOG_LEVEL_DEBUG`)
+- `HIVE_LOG_DEBUG(fmt, ...)` - Debug information
+- `HIVE_LOG_INFO(fmt, ...)` - General information (default level)
+- `HIVE_LOG_WARN(fmt, ...)` - Warnings
+- `HIVE_LOG_ERROR(fmt, ...)` - Errors
+
+**File logging** (managed by application, typically supervisor actor):
+- `hive_log_file_open(path)` - Open log file (on STM32, erases flash sector)
+- `hive_log_file_sync()` - Flush to storage (call periodically)
+- `hive_log_file_close()` - Close log file
+
+**Compile-time configuration** (`-D` flags or `hive_static_config.h`):
+- `HIVE_LOG_LEVEL` - Minimum level to compile (default: `HIVE_LOG_LEVEL_INFO`)
+- `HIVE_LOG_TO_STDOUT` - Console output (default: 1 on Linux, 0 on STM32)
+- `HIVE_LOG_TO_FILE` - File logging (default: 1 on both)
+- `HIVE_LOG_FILE_PATH` - Log file path (default: `/var/tmp/hive.log` on Linux, `/log` on STM32)
+
+**Binary log format:** 12-byte header + text payload. Use `tools/decode_log.py` to decode.
 
 ### Network I/O
 
@@ -449,7 +471,7 @@ make PLATFORM=stm32 CC=arm-none-eabi-gcc
 # Disable optional subsystems
 make ENABLE_NET=0 ENABLE_FILE=0
 
-# STM32 defaults to ENABLE_NET=0 ENABLE_FILE=0
+# STM32 defaults to ENABLE_NET=0 ENABLE_FILE=1
 ```
 
 ## QEMU Testing

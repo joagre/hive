@@ -67,7 +67,7 @@ PILOT_SRCS = \
 	supervisor_actor.c \
 	fusion/complementary_filter.c
 
-# Hive runtime (STM32 platform - no net, no file)
+# Hive runtime (STM32 platform - no net, with flash file support)
 HIVE_CORE_SRCS = \
 	hive_actor.c \
 	hive_bus.c \
@@ -78,7 +78,8 @@ HIVE_CORE_SRCS = \
 	hive_pool.c \
 	hive_runtime.c \
 	hive_scheduler_stm32.c \
-	hive_timer_stm32.c
+	hive_timer_stm32.c \
+	hive_file_stm32.c
 
 HIVE_ASM = hive_context_arm_cm.S
 
@@ -112,9 +113,9 @@ CFLAGS += -DHIVE_PLATFORM_STM32
 FLIGHT_PROFILE ?= FLIGHT_PROFILE_FIRST_TEST
 CFLAGS += -DFLIGHT_PROFILE=$(FLIGHT_PROFILE)
 
-# Hive feature flags (disable net/file for STM32)
+# Hive feature flags (disable net, enable file for STM32 flash logging)
 CFLAGS += -DHIVE_ENABLE_NET=0
-CFLAGS += -DHIVE_ENABLE_FILE=0
+CFLAGS += -DHIVE_ENABLE_FILE=1
 
 # Hive memory configuration for STM32F401 (96KB RAM)
 # Tightened to actual pilot usage: 8 actors, 7 buses, 1 timer

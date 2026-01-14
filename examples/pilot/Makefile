@@ -43,6 +43,9 @@ ifdef FLIGHT_PROFILE
 CFLAGS += -DFLIGHT_PROFILE=$(FLIGHT_PROFILE)
 endif
 
+# Platform identification (enables platform-specific defaults in hive_static_config.h)
+CFLAGS += -DHIVE_PLATFORM_LINUX
+
 # Log level: INFO for simulation (hides 250Hz debug spam that slows Webots)
 # Use HIVE_LOG_LEVEL_DEBUG for detailed debugging, HIVE_LOG_LEVEL_NONE to disable all
 CFLAGS += -DHIVE_LOG_LEVEL=HIVE_LOG_LEVEL_INFO

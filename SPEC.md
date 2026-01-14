@@ -1815,27 +1815,22 @@ On Linux, these map directly to POSIX equivalents. On STM32, they're interpreted
   CFLAGS += -DHIVE_VFILE_LOG_SIZE=131072
   CFLAGS += -DHIVE_VFILE_LOG_SECTOR=5
   ```
-- **LOSSY ring buffer** for O(1) `write()` calls
+- Ring buffer for efficient writes (most are O(1), blocks to flush when full)
 - `HIVE_O_TRUNC` triggers flash sector erase (blocks 1-4 seconds)
 - `hive_file_sync()` drains ring buffer to flash (blocking)
+- No data loss - writes block when buffer is full to ensure delivery
 
-> **⚠️ WARNING: LOSSY WRITES ON STM32**
->
-> The STM32 implementation uses a fixed-size ring buffer. If the buffer fills up,
-> **data is silently dropped**. This is fundamentally different from Linux:
->
-> | Platform | Behavior | Data Loss |
-> |----------|----------|-----------|
-> | Linux | Blocking, waits for completion | Never (or error) |
-> | STM32 | Non-blocking, returns immediately | Possible if buffer full |
->
-> **Design rationale:** This is intentional for flight data logging where:
-> - Dropping some log entries is acceptable
-> - Blocking flight-critical actors (control loop, sensor fusion) is NOT acceptable
->
-> **Caller responsibility:** Always check `bytes_written < len` and handle accordingly.
-> This implementation is suited for **log files** where some data loss is tolerable,
-> NOT for critical data that must never be lost.
+**STM32 Write Behavior:**
+
+The STM32 implementation uses a ring buffer for efficiency. Most writes complete
+immediately. When the buffer fills up, `write()` blocks to flush data to flash
+before continuing. This ensures the same no-data-loss semantics as Linux, while
+still providing fast writes in the common case.
+
+| Platform | Behavior | Data Loss |
+|----------|----------|-----------|
+| Linux | Blocking | Never (or error) |
+| STM32 | Fast (ring buffer), blocks when full | Never (or error) |
 
 **STM32 API Restrictions:**
 
@@ -1844,7 +1839,7 @@ On Linux, these map directly to POSIX equivalents. On STM32, they're interpreted
 | Arbitrary paths | Yes | No - only virtual paths (`/log`, `/config`) |
 | `hive_file_read()` | Works | **Returns error** - use `pread()` |
 | `hive_file_pread()` | Works | Works (direct flash read) |
-| `hive_file_write()` | Blocking | Ring buffer (O(1), partial writes if full) |
+| `hive_file_write()` | Blocking | Ring buffer (fast, blocks when full) |
 | `hive_file_pwrite()` | Works | **Returns error** |
 | Multiple writers | Yes | No - single writer at a time |
 
@@ -1871,13 +1866,117 @@ int log_fd;
 // Erase flash sector and open for writing
 hive_file_open("/log", HIVE_O_WRONLY | HIVE_O_TRUNC, 0, &log_fd);
 
-// Fast writes go to ring buffer (O(1), never blocks)
+// Fast writes go to ring buffer (rarely blocks, only when buffer full)
 hive_file_write(log_fd, &sensor_data, sizeof(sensor_data), &written);
 
 // Periodically flush to flash (call from low-priority logger actor)
 hive_file_sync(log_fd);
 
 hive_file_close(log_fd);
+```
+
+## Logging API
+
+Structured logging with compile-time level filtering and dual output (console + file).
+
+### Log Levels
+
+```c
+#define HIVE_LOG_LEVEL_TRACE 0  // Verbose tracing
+#define HIVE_LOG_LEVEL_DEBUG 1  // Debug information
+#define HIVE_LOG_LEVEL_INFO  2  // General information (default)
+#define HIVE_LOG_LEVEL_WARN  3  // Warnings
+#define HIVE_LOG_LEVEL_ERROR 4  // Errors
+#define HIVE_LOG_LEVEL_NONE  5  // Disable all logging
+```
+
+### Logging Macros
+
+```c
+HIVE_LOG_TRACE(fmt, ...)  // Compile out if HIVE_LOG_LEVEL > TRACE
+HIVE_LOG_DEBUG(fmt, ...)  // Compile out if HIVE_LOG_LEVEL > DEBUG
+HIVE_LOG_INFO(fmt, ...)   // Compile out if HIVE_LOG_LEVEL > INFO
+HIVE_LOG_WARN(fmt, ...)   // Compile out if HIVE_LOG_LEVEL > WARN
+HIVE_LOG_ERROR(fmt, ...)  // Compile out if HIVE_LOG_LEVEL > ERROR
+```
+
+### File Logging API
+
+```c
+hive_status hive_log_init(void);              // Initialize (call once at startup)
+hive_status hive_log_file_open(const char *path);  // Open log file
+hive_status hive_log_file_sync(void);         // Flush to storage
+hive_status hive_log_file_close(void);        // Close log file
+void hive_log_cleanup(void);                  // Cleanup (call at shutdown)
+```
+
+### Binary Log Format
+
+Log files use a binary format with 12-byte headers for efficient storage and crash recovery:
+
+```
+Offset  Size  Field
+0       2     magic       0x4C47 ("LG" little-endian)
+2       2     seq         Monotonic sequence number
+4       4     timestamp   Microseconds since boot
+8       2     len         Payload length
+10      1     level       Log level (0-4)
+11      1     reserved    Always 0
+12      len   payload     Log message text (no null terminator)
+```
+
+### Compile-Time Configuration (`hive_static_config.h`)
+
+```c
+// Maximum log entry size (excluding header)
+#define HIVE_LOG_MAX_ENTRY_SIZE 128
+
+// Enable console output (default: 1 on Linux, 0 on STM32)
+#define HIVE_LOG_TO_STDOUT 1
+
+// Enable file logging (default: 1 on both platforms)
+#define HIVE_LOG_TO_FILE 1
+
+// Log file path (default: "/var/tmp/hive.log" on Linux, "/log" on STM32)
+#define HIVE_LOG_FILE_PATH "/var/tmp/hive.log"
+
+// Log level (default: INFO)
+#define HIVE_LOG_LEVEL HIVE_LOG_LEVEL_INFO
+```
+
+### Platform Differences
+
+| Feature | Linux | STM32 |
+|---------|-------|-------|
+| Console output | Enabled by default | Disabled by default |
+| File logging | Regular file | Flash-backed virtual file |
+| Default log path | `/var/tmp/hive.log` | `/log` |
+| Default log level | INFO | NONE (disabled) |
+
+### Usage Pattern
+
+```c
+// Supervisor actor manages log lifecycle
+void supervisor_actor(void *arg) {
+    // ARM phase: open log file (on STM32, erases flash sector)
+    hive_log_file_open(HIVE_LOG_FILE_PATH);
+
+    // Start periodic sync timer (every 4 seconds)
+    timer_id sync_timer;
+    hive_timer_every(4000000, &sync_timer);
+
+    while (flying) {
+        hive_message msg;
+        hive_ipc_recv(&msg, -1);
+        if (msg.class == HIVE_MSG_TIMER && msg.tag == sync_timer) {
+            hive_log_file_sync();  // Flush logs to storage
+        }
+    }
+
+    // DISARM phase: close log file
+    hive_timer_cancel(sync_timer);
+    hive_log_file_close();
+}
 ```
 
 ## Memory Allocation Architecture
