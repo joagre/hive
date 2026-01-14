@@ -1,20 +1,10 @@
 // STEVAL-DRONE01 HAL Configuration
 //
 // Platform-specific constants for the STEVAL-DRONE01 hardware.
-// These values may need tuning based on actual flight behavior.
+// PID gains tuned for stability with realistic sensor noise.
 
 #ifndef HAL_CONFIG_H
 #define HAL_CONFIG_H
-
-// ----------------------------------------------------------------------------
-// First Flight Test Mode
-// ----------------------------------------------------------------------------
-// Enable for initial hardware testing. Waypoint actor will:
-//   1. Hover at 0.25m for 3 seconds
-//   2. Land (descend to 0m)
-//   3. Stay landed (no loop)
-// Comment out for normal waypoint navigation.
-#define HAL_FIRST_FLIGHT_TEST
 
 // ----------------------------------------------------------------------------
 // Thrust
@@ -29,38 +19,38 @@
 // ----------------------------------------------------------------------------
 
 // Altitude PID gains (position error -> thrust correction)
-#define HAL_ALT_PID_KP    0.5f     // Increased for faster response
-#define HAL_ALT_PID_KI    0.1f     // Increased for steady-state error
+#define HAL_ALT_PID_KP    0.25f    // Conservative for noise rejection
+#define HAL_ALT_PID_KI    0.05f
 #define HAL_ALT_PID_KD    0.0f     // Using velocity feedback instead
-#define HAL_ALT_PID_IMAX  0.3f     // Integral limit
-#define HAL_ALT_PID_OMAX  0.4f     // Allow significant climb authority
+#define HAL_ALT_PID_IMAX  0.2f     // Integral limit
+#define HAL_ALT_PID_OMAX  0.15f    // Output limit
 
 // Vertical velocity damping (measured velocity -> thrust correction)
-#define HAL_VVEL_DAMPING_GAIN  0.15f
+#define HAL_VVEL_DAMPING_GAIN  0.25f  // Increased for oscillation damping
 
 // ----------------------------------------------------------------------------
 // Attitude Control
 // ----------------------------------------------------------------------------
 
 // Attitude PID gains (attitude angle error -> rate setpoint)
-#define HAL_ATTITUDE_PID_KP    4.0f    // Typical autopilot: 4-8
+#define HAL_ATTITUDE_PID_KP    2.5f    // Reduced for noise rejection (was 4.0)
 #define HAL_ATTITUDE_PID_KI    0.0f
-#define HAL_ATTITUDE_PID_KD    0.0f    // Derivative on error causes kick on setpoint change
+#define HAL_ATTITUDE_PID_KD    0.15f   // Added damping for oscillation reduction
 #define HAL_ATTITUDE_PID_IMAX  0.5f    // Integral limit
-#define HAL_ATTITUDE_PID_OMAX  3.0f    // Max rate setpoint (rad/s)
+#define HAL_ATTITUDE_PID_OMAX  2.0f    // Reduced max rate setpoint (rad/s)
 
 // ----------------------------------------------------------------------------
 // Rate Control
 // ----------------------------------------------------------------------------
 
 // Rate PID gains (rate error -> torque)
-#define HAL_RATE_PID_KP    0.02f
+#define HAL_RATE_PID_KP    0.015f    // Slightly reduced for noise rejection
 #define HAL_RATE_PID_KI    0.0f
-#define HAL_RATE_PID_KD    0.001f
-#define HAL_RATE_PID_IMAX  0.5f       // Integral limit
-#define HAL_RATE_PID_OMAX_ROLL   0.1f
-#define HAL_RATE_PID_OMAX_PITCH  0.1f
-#define HAL_RATE_PID_OMAX_YAW    0.15f
+#define HAL_RATE_PID_KD    0.002f    // Increased damping
+#define HAL_RATE_PID_IMAX  0.5f      // Integral limit
+#define HAL_RATE_PID_OMAX_ROLL   0.08f   // Reduced for smoother control
+#define HAL_RATE_PID_OMAX_PITCH  0.08f
+#define HAL_RATE_PID_OMAX_YAW    0.12f
 
 // ----------------------------------------------------------------------------
 // Bus Configuration
