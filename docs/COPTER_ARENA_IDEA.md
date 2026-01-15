@@ -5,7 +5,7 @@ Quadcopters are **differentially flat systems**. This is the key enabler.
 
 - Outputs: position (x, y, z) and yaw
 - Inputs: total thrust + body torques
-- Result: you can plan aggressive trajectories in output space and *exactly* reconstruct required motor commands
+- Result: we can plan aggressive trajectories in output space and *exactly* reconstruct required motor commands
 
 This is why flips, rolls, knife-edge flight, and snap maneuvers are tractable in theory.
 
@@ -19,7 +19,7 @@ This is the backbone of autonomous aerobatics.
 
 ## 2. Optimal Control for Acrobatics
 
-Once you leave smooth trajectories and enter **combat-style maneuvers**, the relevant theory becomes:
+Once we leave smooth trajectories and enter **combat-style maneuvers**, the relevant theory becomes:
 
 ### Nonlinear optimal control
 - Pontryagin’s Minimum Principle
@@ -61,9 +61,9 @@ This is essential for flips, Immelmann turns, split-S maneuvers, etc.
 
 ## 4. Adversarial Control and Differential Games
 
-This is where your idea becomes genuinely interesting.
+This is where this idea becomes genuinely interesting.
 
-Your “Core Wars, but with quadcopters” analogy is **exact**.
+“Core Wars, but with quadcopters” analogy is **exact**.
 
 Relevant theory:
 - Differential games (Isaacs)
@@ -86,14 +86,14 @@ The missing step is **bringing it to agile quadrotors in close proximity**.
 
 ## 5. Multi-Agent Systems and Swarms
 
-Once you have more than two drones:
+Once we have more than two drones:
 
 - Distributed control
 - Game-theoretic equilibria
 - Decentralized MPC
 - Collision avoidance as hard constraints
 
-You now get:
+We now get:
 - Feints
 - Area denial
 - Sacrificial blocking maneuvers
@@ -121,11 +121,11 @@ This mirrors how humans fly aerobatics.
 
 ---
 
-## 7. Arena Constraints (Your Idea’s Critical Lever)
+## 7. Arena Constraints (The Idea’s Critical Lever)
 
-Your arena is not a gimmick. It is a **formal boundary condition**.
+The arena is not a gimmick. It is a **formal boundary condition**.
 
-You can define:
+We can define:
 - Energy budgets
 - Forbidden zones
 - Kill conditions (tagging, line-of-sight lock, proximity)
@@ -151,15 +151,13 @@ Three reasons:
    - Control theorists do not build arenas
    - Drone hobbyists do not formalize games
 
-You are proposing to bridge that gap.
-
 ---
 
 ## 9. What This Really Is
 
 Stripped of metaphor:
 
-- You are proposing **physical, adversarial, real-time programs**
+- **physical, adversarial, real-time programs**
 - Competing via constrained nonlinear dynamics
 - Where strategy is embodied in motion, not code execution
 
