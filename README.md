@@ -391,7 +391,7 @@ See `examples/pilot/Makefile.STEVAL-DRONE01` for a complete example and SPEC.md 
 - `HIVE_LOG_WARN(fmt, ...)` - Warnings
 - `HIVE_LOG_ERROR(fmt, ...)` - Errors
 
-**File logging** (managed by application, typically supervisor actor):
+**File logging** (managed by application):
 - `hive_log_file_open(path)` - Open log file (on STM32, erases flash sector)
 - `hive_log_file_sync()` - Flush to storage (call periodically)
 - `hive_log_file_close()` - Close log file
