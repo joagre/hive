@@ -51,12 +51,10 @@ static void test1_async_basic(void *arg) {
         hive_exit();
     }
 
-    const void *payload;
-    hive_msg_decode(&msg, NULL, NULL, &payload, NULL);
-    if (strcmp((const char *)payload, "Hello ASYNC") == 0) {
+    if (strcmp((const char *)msg.data, "Hello ASYNC") == 0) {
         TEST_PASS("ASYNC send/recv works");
     } else {
-        printf("    Received: '%s'\n", (const char *)payload);
+        printf("    Received: '%s'\n", (const char *)msg.data);
         TEST_FAIL("data mismatch");
     }
 
@@ -120,9 +118,7 @@ static void test3_message_ordering(void *arg) {
             order_correct = false;
             break;
         }
-        const void *payload;
-        hive_msg_decode(&msg, NULL, NULL, &payload, NULL);
-        int received = *(int *)payload;
+        int received = *(int *)msg.data;
         if (received != i) {
             printf("    Expected %d, got %d\n", i, received);
             order_correct = false;
@@ -177,9 +173,7 @@ static void test4_multiple_senders(void *arg) {
         if (HIVE_FAILED(status)) break;
 
         if (!hive_msg_is_timer(&msg)) {
-            const void *payload;
-            hive_msg_decode(&msg, NULL, NULL, &payload, NULL);
-            received_sum += *(int *)payload;
+            received_sum += *(int *)msg.data;
             g_messages_received++;
         }
     }
@@ -212,9 +206,7 @@ static void test5_send_to_self(void *arg) {
         hive_message msg;
         status = hive_ipc_recv(&msg, 100);
         if (HIVE_SUCCEEDED(status)) {
-            const void *payload;
-            hive_msg_decode(&msg, NULL, NULL, &payload, NULL);
-            if (*(int *)payload == 42) {
+            if (*(int *)msg.data == 42) {
                 TEST_PASS("send to self works");
             } else {
                 TEST_FAIL("wrong data received from self-send");
@@ -243,14 +235,10 @@ static void request_reply_server_actor(void *arg) {
         hive_exit();
     }
 
-    // Decode and verify it's a REQUEST message
-    hive_msg_class class;
-    const void *payload;
-    hive_msg_decode(&msg, &class, NULL, &payload, NULL);
-
-    if (class == HIVE_MSG_REQUEST) {
+    // Verify it's a REQUEST message
+    if (msg.class == HIVE_MSG_REQUEST) {
         // Send reply
-        int result = *(int *)payload * 2;  // Double the input
+        int result = *(int *)msg.data * 2;  // Double the input
         hive_ipc_reply(&msg, &result, sizeof(result));
     }
 
@@ -281,9 +269,7 @@ static void test6_request_reply(void *arg) {
     }
 
     // Verify reply
-    const void *payload;
-    hive_msg_decode(&reply, NULL, NULL, &payload, NULL);
-    int result = *(int *)payload;
+    int result = *(int *)reply.data;
 
     if (result == 42) {
         printf("    Request/reply completed in %lu ms\n", (unsigned long)elapsed);
@@ -563,9 +549,7 @@ static void test12_selective_receive(void *arg) {
 
     if (HIVE_SUCCEEDED(status)) {
         if (msg.sender == sender) {
-            const void *payload;
-            hive_msg_decode(&msg, NULL, NULL, &payload, NULL);
-            int val = *(int *)payload;
+            int val = *(int *)msg.data;
             printf("    Received value %d from sender %u\n", val, sender);
             TEST_PASS("hive_ipc_recv_match filters by sender");
         } else {
@@ -598,13 +582,10 @@ static void test13_zero_length_message(void *arg) {
 
         hive_message msg;
         status = hive_ipc_recv(&msg, 100);
-        // msg.len includes 4-byte header, so zero-payload message has len=4
-        size_t payload_len;
-        hive_msg_decode(&msg, NULL, NULL, NULL, &payload_len);
-        if (HIVE_SUCCEEDED(status) && payload_len == 0) {
+        if (HIVE_SUCCEEDED(status) && msg.len == 0) {
             TEST_PASS("received zero-length payload message");
         } else {
-            printf("    payload_len = %zu (expected 0)\n", payload_len);
+            printf("    msg.len = %zu (expected 0)\n", msg.len);
             TEST_FAIL("failed to receive zero-length payload message");
         }
     } else {

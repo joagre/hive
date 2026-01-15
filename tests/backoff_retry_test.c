@@ -46,15 +46,13 @@ void receiver_actor(void *arg) {
             break;
         }
         if (HIVE_SUCCEEDED(status)) {
-            uint32_t tag;
-            hive_msg_decode(&msg, NULL, &tag, NULL, NULL);
-            if (scanned < 5 || tag == TAG_START || tag == TAG_DONE) {
-                printf("  Message %d: tag=%u\n", scanned, tag);
+            if (scanned < 5 || msg.tag == TAG_START || msg.tag == TAG_DONE) {
+                printf("  Message %d: tag=%u\n", scanned, msg.tag);
             }
-            if (tag == TAG_START) {
+            if (msg.tag == TAG_START) {
                 found_start = 1;
             }
-            if (tag == TAG_DONE) {
+            if (msg.tag == TAG_DONE) {
                 found_done = 1;
             }
             scanned++;

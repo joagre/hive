@@ -206,7 +206,6 @@ bool hive_is_exit_msg(const hive_message *msg) {
     if (!msg) {
         return false;
     }
-    // Use pre-decoded class
     return msg->class == HIVE_MSG_EXIT;
 }
 

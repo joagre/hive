@@ -748,8 +748,8 @@ typedef enum {
 ```c
 typedef struct {
     actor_id       sender;       // Sender actor ID
-    hive_msg_class class;        // Message class (pre-decoded)
-    uint32_t       tag;          // Message tag (pre-decoded)
+    hive_msg_class class;        // Message class
+    uint32_t       tag;          // Message tag
     size_t         len;          // Payload length (excludes 4-byte header)
     const void    *data;         // Payload pointer (past header)
 } hive_message;

@@ -210,7 +210,7 @@ hive_ipc_recv(&msg, -1);   // -1=block forever
 hive_ipc_recv(&msg, 0);    // 0=non-blocking (returns HIVE_ERR_WOULDBLOCK if empty)
 hive_ipc_recv(&msg, 100);  // 100=timeout after 100ms (returns HIVE_ERR_TIMEOUT if no message)
 
-// Direct access to pre-decoded fields
+// Direct field access
 my_data *data = (my_data *)msg.data;  // Direct payload access
 if (msg.class == HIVE_MSG_REQUEST) {
     // Handle request...
@@ -328,7 +328,7 @@ if (hive_is_exit_msg(&msg)) {
 
 - `hive_ipc_notify(to, tag, data, len)` - Fire-and-forget notification with tag
 - `hive_ipc_notify_ex(to, class, tag, data, len)` - Send with explicit class and tag
-- `hive_ipc_recv(msg, timeout)` - Receive any message (pre-decoded: `msg.class`, `msg.tag`, `msg.data`)
+- `hive_ipc_recv(msg, timeout)` - Receive any message (`msg.class`, `msg.tag`, `msg.data`)
 - `hive_ipc_recv_match(from, class, tag, msg, timeout)` - Selective receive with filtering
 - `hive_ipc_request(to, req, len, reply, timeout)` - Blocking request/reply
 - `hive_ipc_reply(request, data, len)` - Reply to a REQUEST message

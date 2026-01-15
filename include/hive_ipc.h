@@ -53,12 +53,6 @@ hive_status hive_ipc_reply(const hive_message *request, const void *data, size_t
 // Message Inspection
 // -----------------------------------------------------------------------------
 
-// Decode message header fields
-// Extracts class, tag, and payload from raw message data.
-// Pass NULL for any field you don't need.
-hive_status hive_msg_decode(const hive_message *msg, hive_msg_class *class,
-                        uint32_t *tag, const void **payload, size_t *payload_len);
-
 // Check if message is a timer tick
 bool hive_msg_is_timer(const hive_message *msg);
 

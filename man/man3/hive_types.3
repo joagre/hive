@@ -90,14 +90,14 @@ I/O error (network or file).
 .nf
 typedef struct {
     actor_id       sender;  /* Sender actor ID */
-    hive_msg_class class;   /* Message class (pre-decoded) */
-    uint32_t       tag;     /* Message tag (pre-decoded) */
+    hive_msg_class class;   /* Message class */
+    uint32_t       tag;     /* Message tag */
     size_t         len;     /* Payload length in bytes */
     const void    *data;    /* Payload pointer */
 } hive_message;
 .fi
 .PP
-Messages are pre-decoded by the runtime. The
+The
 .I data
 pointer is valid until the next successful
 .BR hive_ipc_recv ().

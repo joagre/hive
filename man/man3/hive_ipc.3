@@ -25,15 +25,15 @@ mailbox. Messages are asynchronous by default (fire-and-forget).
 .SS Message Structure
 Messages received via
 .BR hive_ipc_recv ()
-are pre-decoded into the
+are stored in the
 .I hive_message
 structure:
 .PP
 .nf
 typedef struct {
     actor_id       sender;  /* Sender actor ID */
-    hive_msg_class class;   /* Message class (pre-decoded) */
-    uint32_t       tag;     /* Message tag (pre-decoded) */
+    hive_msg_class class;   /* Message class */
+    uint32_t       tag;     /* Message tag */
     size_t         len;     /* Payload length in bytes */
     const void    *data;    /* Payload pointer */
 } hive_message;

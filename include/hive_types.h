@@ -86,11 +86,11 @@ typedef struct {
     .malloc_stack = false \
 }
 
-// Message structure (pre-decoded for convenience)
+// Message structure
 typedef struct {
     actor_id       sender;       // Sender actor ID
-    hive_msg_class class;        // Message class (pre-decoded from header)
-    uint32_t       tag;          // Message tag (pre-decoded from header)
+    hive_msg_class class;        // Message class
+    uint32_t       tag;          // Message tag
     size_t         len;          // Payload length (excludes 4-byte header)
     const void    *data;         // Payload pointer (past header), valid until next recv
 } hive_message;

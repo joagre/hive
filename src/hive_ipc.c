@@ -430,7 +430,7 @@ hive_status hive_ipc_reply(const hive_message *request, const void *data, size_t
         return HIVE_ERROR(HIVE_ERR_INVALID, "Invalid request message");
     }
 
-    // Verify this is a REQUEST message (use pre-decoded class)
+    // Verify this is a REQUEST message
     if (request->class != HIVE_MSG_REQUEST) {
         return HIVE_ERROR(HIVE_ERR_INVALID, "Can only reply to HIVE_MSG_REQUEST messages");
     }
@@ -440,7 +440,7 @@ hive_status hive_ipc_reply(const hive_message *request, const void *data, size_t
         return HIVE_ERROR(HIVE_ERR_INVALID, "NULL data with non-zero length");
     }
 
-    // Send HIVE_MSG_REPLY with same tag back to caller (use pre-decoded tag)
+    // Send HIVE_MSG_REPLY with same tag back to caller
     return hive_ipc_notify_internal(request->sender, current->id, HIVE_MSG_REPLY, request->tag, data, len);
 }
 
@@ -448,26 +448,11 @@ hive_status hive_ipc_reply(const hive_message *request, const void *data, size_t
 // Message Inspection
 // -----------------------------------------------------------------------------
 
-hive_status hive_msg_decode(const hive_message *msg, hive_msg_class *class,
-                        uint32_t *tag, const void **payload, size_t *payload_len) {
-    if (!msg) {
-        return HIVE_ERROR(HIVE_ERR_INVALID, "Invalid message");
-    }
-
-    // Return pre-decoded values from message struct
-    if (class) *class = msg->class;
-    if (tag) *tag = msg->tag;
-    if (payload) *payload = msg->data;  // Already points to payload
-    if (payload_len) *payload_len = msg->len;  // Already payload length
-
-    return HIVE_SUCCESS;
-}
-
 bool hive_msg_is_timer(const hive_message *msg) {
     if (!msg) {
         return false;
     }
-    // Use pre-decoded class
+    // Check message class
     return msg->class == HIVE_MSG_TIMER;
 }
 
