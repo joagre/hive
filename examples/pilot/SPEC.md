@@ -386,6 +386,7 @@ examples/pilot/
     Makefile                 # Webots simulation build
     Makefile.crazyflie-2.1+  # Crazyflie 2.1+ build
     Makefile.STEVAL-DRONE01  # STEVAL-DRONE01 build
+    hive_config.mk           # Shared Hive memory config
     SPEC.md              # This specification
     README.md            # Usage instructions
     worlds/
@@ -672,8 +673,18 @@ Supervisor Actor ──► START notification ──► Waypoint Actor
 | Crazyflie 2.1+ | ~39 KB | ~140 KB | STM32F405 (1 MB / 192 KB) |
 | STEVAL-DRONE01 | ~60 KB | ~57 KB | STM32F401 (256 KB / 64 KB) |
 
-Resource limits are tightened per-platform in each Makefile. See `Makefile.<platform>`
-for exact configuration (actors, buses, stack sizes, pool sizes).
+### Configuration Split
+
+Hive memory settings are split between shared and platform-specific files:
+
+| File | Contents |
+|------|----------|
+| `hive_config.mk` | Shared settings: actors, buses, pools, message size |
+| `Makefile.<platform>` | Platform-specific: stack sizes, flash layout |
+
+The shared settings in `hive_config.mk` are determined by the pilot application
+(9 actors, 7 buses, etc.) and are identical across all platforms. Only stack
+sizes vary based on available RAM.
 
 ---
 

@@ -92,6 +92,19 @@ See `hal/<platform>/README.md` for hardware details, pin mapping, and flight pro
 | `Makefile` | Webots simulation build |
 | `Makefile.crazyflie-2.1+` | Crazyflie 2.1+ build (STM32F405, 168 MHz) |
 | `Makefile.STEVAL-DRONE01` | STEVAL-DRONE01 build (STM32F401, 84 MHz) |
+| `hive_config.mk` | Shared Hive memory config (included by all Makefiles) |
+
+### Configuration
+
+| File | Description |
+|------|-------------|
+| `config.h` | Shared constants (timing, limits, bus config) |
+| `hive_config.mk` | Shared Hive memory limits (actors, buses, pools) |
+| `hal/<platform>/hal_config.h` | Platform-specific PID gains and thrust |
+
+Hive memory settings (actors, buses, pool sizes) are determined by the pilot
+application and shared across all platforms via `hive_config.mk`. Only stack
+sizes differ per platform based on available RAM.
 
 ### Documentation
 

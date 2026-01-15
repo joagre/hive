@@ -153,7 +153,16 @@ make -f Makefile.STEVAL-DRONE01
 | File | Description |
 |------|-------------|
 | `hal_stm32.c` | HAL interface (hal_read_sensors, hal_write_torque) |
+| `hal_config.h` | Platform-specific PID gains and thrust |
 | `platform_stm32f4.h/c` | Platform-specific sensor reading and motor control |
+
+### Configuration
+
+| Setting | Location | Description |
+|---------|----------|-------------|
+| PID gains, thrust | `hal_config.h` | Platform-specific tuning |
+| Actors, buses, pools | `hive_config.mk` | Shared (pilot-determined) |
+| Stack sizes | `Makefile.STEVAL-DRONE01` | Platform-specific (RAM-dependent) |
 
 ### Motor Drivers
 

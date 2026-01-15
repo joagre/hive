@@ -67,7 +67,15 @@ M4 = thrust + roll + pitch - yaw  (rear-right, CW)
 | File | Description |
 |------|-------------|
 | `hal_webots.c` | HAL implementation |
-| `hal_config.h` | PID gains and constants |
+| `hal_config.h` | Platform-specific PID gains and thrust |
+
+## Configuration
+
+| Setting | Location | Description |
+|---------|----------|-------------|
+| PID gains, thrust | `hal_config.h` | Platform-specific tuning |
+| Actors, buses, pools | `hive_config.mk` | Shared (pilot-determined) |
+| Stack sizes | `Makefile` | Platform-specific (matches STEVAL for realistic testing) |
 
 ## Differences from Hardware
 

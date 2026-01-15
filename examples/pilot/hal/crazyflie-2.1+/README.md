@@ -123,8 +123,16 @@ make -f Makefile.crazyflie-2.1+
 | File | Description |
 |------|-------------|
 | `hal_crazyflie.c` | HAL interface (hal_read_sensors, hal_write_torque) |
+| `hal_config.h` | Platform-specific PID gains and thrust |
 | `platform_crazyflie.h/c` | Platform-specific sensor reading and motor control |
-| `hal_config.h` | PID gains and platform constants |
+
+### Configuration
+
+| Setting | Location | Description |
+|---------|----------|-------------|
+| PID gains, thrust | `hal_config.h` | Platform-specific tuning |
+| Actors, buses, pools | `hive_config.mk` | Shared (pilot-determined) |
+| Stack sizes | `Makefile.crazyflie-2.1+` | Platform-specific (RAM-dependent) |
 
 ### Sensor Drivers
 
