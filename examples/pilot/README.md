@@ -4,7 +4,7 @@ Quadcopter waypoint navigation using hive actor runtime.
 
 Supports two platforms:
 - **Webots simulation** (default) - Crazyflie quadcopter in Webots simulator
-- **STM32 hardware** - STEVAL-DRONE01 mini drone kit (55 KB flash, 49 KB RAM)
+- **STM32 hardware** - STEVAL-DRONE01 mini drone kit (~60 KB flash, ~57 KB RAM)
 
 ## What it does
 
@@ -51,20 +51,17 @@ Then open `worlds/hover_test.wbt` in Webots and start the simulation.
 ### STM32 Hardware (STEVAL-DRONE01)
 
 ```bash
-make -f Makefile.STEVAL-DRONE01        # Build firmware (55 KB flash, 49 KB RAM)
+make -f Makefile.STEVAL-DRONE01        # Build firmware (~60 KB flash, ~57 KB RAM)
 make -f Makefile.STEVAL-DRONE01 flash  # Flash to device via ST-Link
 make -f Makefile.STEVAL-DRONE01 clean  # Clean build artifacts
 ```
 
-**First flight test mode:** By default, `HAL_FIRST_FLIGHT_TEST` is enabled in
-`hal/STEVAL-DRONE01/hal_config.h`. This limits the flight to:
-1. 60-second startup delay (motors off)
-2. Hover at 0.25m for 3 seconds
-3. Land and stay landed
+**Flight profiles:** Select with `make FLIGHT_PROFILE=N`:
+- `1` (FIRST_TEST) - Hover at 0.5m, 10s flight, then land (default for STM32)
+- `2` (ALTITUDE) - Altitude changes only: 0.5m → 1.0m → 1.5m → repeat
+- `3` (FULL_3D) - Full 3D waypoint navigation (default for Webots)
 
-Comment out `#define HAL_FIRST_FLIGHT_TEST` for normal waypoint navigation.
-
-Memory fits STM32F401 (512 KB flash, 96 KB RAM) with room to spare.
+Memory fits STM32F401CCU6 (256 KB flash, 64 KB RAM) with ~7 KB RAM headroom.
 
 Debug output via USART1 (115200 baud) on the P7 header. See
 `hal/STEVAL-DRONE01/README.md` for hardware details and serial connection.
@@ -202,9 +199,9 @@ to the position target bus. Both altitude and position actors read from this bus
 3. 1.5m - rise to 1.5m
 4. 1.0m - drop to 1.0m (loop back to 1)
 
-**First flight test route (safe tethered test):**
-1. 0.25m - hover at 0.25m for 6 seconds
-2. Land and stay landed
+**First flight test route (FLIGHT_PROFILE=1, safe tethered test):**
+1. Hover at 0.5m for 6 seconds
+2. Land after 10 seconds total flight time
 
 **Arrival detection:** The drone must satisfy all conditions before advancing:
 - XY position within 0.15m of waypoint (Webots only)
