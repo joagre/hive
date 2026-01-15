@@ -168,7 +168,7 @@ hive_status hive_log_file_open(const char *path) {
     return HIVE_SUCCESS;
 #else
     (void)path;
-    return HIVE_ERROR(HIVE_ERR_INVALID, "file logging disabled");
+    return HIVE_SUCCESS;  // No-op when file logging disabled
 #endif
 }
 
