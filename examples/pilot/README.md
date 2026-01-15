@@ -2,9 +2,10 @@
 
 Quadcopter waypoint navigation using hive actor runtime.
 
-Supports two platforms:
+Supports three platforms:
 - **Webots simulation** (default) - Crazyflie quadcopter in Webots simulator
-- **STM32 hardware** - STEVAL-DRONE01 mini drone kit (~60 KB flash, ~57 KB RAM)
+- **Crazyflie 2.1+** - Bitcraze nano quadcopter (~39 KB flash, ~140 KB RAM)
+- **STEVAL-DRONE01** - ST mini drone kit (~60 KB flash, ~57 KB RAM)
 
 ## What it does
 
@@ -22,10 +23,13 @@ Demonstrates waypoint navigation with a quadcopter using 9 actors:
 
 **Webots:** Flies a square pattern with altitude changes at each waypoint (full 3D navigation with GPS).
 
-**STEVAL-DRONE01:** Hovers and changes altitude only (no GPS, so XY position fixed at origin).
-Additional 60-second startup delay before flight (real hardware only).
+**Crazyflie 2.1+:** With Flow deck v2, uses optical flow for XY positioning and ToF for altitude.
+Without Flow deck, hovers and changes altitude only. 60-second startup delay before flight.
 
-**Safety features (both platforms):** Emergency cutoff on excessive tilt (>45°), excessive
+**STEVAL-DRONE01:** Hovers and changes altitude only (no GPS, so XY position fixed at origin).
+60-second startup delay before flight.
+
+**Safety features (all platforms):** Emergency cutoff on excessive tilt (>45°), excessive
 altitude (>2m), or touchdown. Flight duration limited by supervisor (10s/40s/60s per profile).
 
 ## Prerequisites
@@ -33,9 +37,10 @@ altitude (>2m), or touchdown. Flight duration limited by supervisor (10s/40s/60s
 **For Webots simulation:**
 - Webots installed (https://cyberbotics.com/)
 
-**For STM32 hardware:**
+**For Crazyflie 2.1+ / STEVAL-DRONE01:**
 - ARM GCC: `apt install gcc-arm-none-eabi`
 - ST-Link: `apt install stlink-tools`
+- Debug adapter (Bitcraze debug adapter for Crazyflie, or ST-Link for STEVAL)
 
 ## Build and Run
 
@@ -49,7 +54,28 @@ make install
 
 Then open `worlds/hover_test.wbt` in Webots and start the simulation.
 
-### STM32 Hardware (STEVAL-DRONE01)
+### Crazyflie 2.1+
+
+```bash
+make -f Makefile.crazyflie-2.1+        # Build firmware (~39 KB flash)
+make -f Makefile.crazyflie-2.1+ flash  # Flash via debug adapter
+make -f Makefile.crazyflie-2.1+ clean  # Clean build artifacts
+```
+
+**Hardware:**
+- MCU: STM32F405RG (168 MHz Cortex-M4F, 1 MB flash, 192 KB RAM + 64 KB CCM)
+- IMU: BMI088 (3-axis accel + 3-axis gyro)
+- Barometer: BMP388
+- Optional: Flow deck v2 (PMW3901 optical flow + VL53L1x ToF)
+
+**Flight profiles:** Select with `make FLIGHT_PROFILE=N`:
+- `1` (FIRST_TEST) - Hover at 0.5m, 10s flight, then land (default)
+- `2` (ALTITUDE) - Altitude changes only: 0.5m → 1.0m → 1.5m → repeat
+- `3` (FULL_3D) - Full 3D navigation (requires Flow deck)
+
+Debug via SWD using Bitcraze debug adapter. Connect to 0.05" debug header on Crazyflie.
+
+### STEVAL-DRONE01
 
 ```bash
 make -f Makefile.STEVAL-DRONE01        # Build firmware (~60 KB flash, ~57 KB RAM)
@@ -58,9 +84,9 @@ make -f Makefile.STEVAL-DRONE01 clean  # Clean build artifacts
 ```
 
 **Flight profiles:** Select with `make FLIGHT_PROFILE=N`:
-- `1` (FIRST_TEST) - Hover at 0.5m, 10s flight, then land (default for STM32)
+- `1` (FIRST_TEST) - Hover at 0.5m, 10s flight, then land (default)
 - `2` (ALTITUDE) - Altitude changes only: 0.5m → 1.0m → 1.5m → repeat
-- `3` (FULL_3D) - Full 3D waypoint navigation (default for Webots)
+- `3` (FULL_3D) - Full 3D waypoint navigation (no GPS, so limited use)
 
 Memory fits STM32F401CCU6 (256 KB flash, 64 KB RAM) with ~7 KB RAM headroom.
 
@@ -93,7 +119,8 @@ Debug output via USART1 (115200 baud) on the P7 header. See
 | File | Description |
 |------|-------------|
 | `Makefile` | Webots simulation build |
-| `Makefile.STEVAL-DRONE01` | STM32 hardware build (builds libhive.a + links pilot + HAL) |
+| `Makefile.crazyflie-2.1+` | Crazyflie 2.1+ build (STM32F405, 168 MHz) |
+| `Makefile.STEVAL-DRONE01` | STEVAL-DRONE01 build (STM32F401, 84 MHz) |
 
 ### Documentation
 
@@ -108,7 +135,8 @@ Debug output via USART1 (115200 baud) on the P7 header. See
 |-----------|-------------|
 | `hal/` | Hardware abstraction layer (common interface in `hal.h`) |
 | `hal/webots-crazyflie/` | HAL implementation for Webots simulation |
-| `hal/STEVAL-DRONE01/` | HAL implementation for STM32 drone |
+| `hal/crazyflie-2.1+/` | HAL implementation for Crazyflie 2.1+ (BMI088, BMP388, Flow deck) |
+| `hal/STEVAL-DRONE01/` | HAL implementation for STEVAL-DRONE01 (LSM6DSL, LPS22HH) |
 | `controllers/pilot/` | Webots controller (symlink created by `make install`) |
 | `worlds/` | Webots world files (hover_test.wbt) |
 
@@ -135,7 +163,8 @@ Hardware Abstraction Layer (HAL) provides platform independence:
 
 HAL implementations:
 - `hal/webots-crazyflie/hal_webots.c` - Webots simulation
-- `hal/STEVAL-DRONE01/hal_stm32.c` - STM32 hardware
+- `hal/crazyflie-2.1+/hal_crazyflie.c` - Crazyflie 2.1+ hardware
+- `hal/STEVAL-DRONE01/hal_stm32.c` - STEVAL-DRONE01 hardware
 
 Actor code is identical across platforms. The only compile-time difference is
 `SIMULATED_TIME` which controls the main loop (simulation vs real-time).
@@ -194,58 +223,81 @@ to the position target bus. Both altitude and position actors read from this bus
 4. (0, 1, 1.2m) heading 180° - drop to 1.2m, face south
 5. (0, 0, 1.0m) heading 0° - return to 1m
 
-**STEVAL-DRONE01 demo route (altitude only, no GPS):**
+**Crazyflie 2.1+ / STEVAL-DRONE01 demo route (altitude only):**
 1. 0.5m - hover at 0.5m
 2. 1.0m - rise to 1.0m
 3. 1.5m - rise to 1.5m
 4. 1.0m - drop to 1.0m (loop back to 1)
+
+With Flow deck, Crazyflie can also use the Webots route for full 3D navigation.
 
 **First flight test route (FLIGHT_PROFILE=1, safe tethered test):**
 1. Hover at 0.5m for 6 seconds
 2. Land after 10 seconds total flight time
 
 **Arrival detection:** The drone must satisfy all conditions before advancing:
-- XY position within 0.15m of waypoint (Webots only)
+- XY position within 0.15m of waypoint (Webots, or Crazyflie with Flow deck)
 - Altitude within 0.15m of target
 - Heading within 0.1 rad (~6°) of target
 - Velocity below 0.1 m/s (nearly stopped)
-- Hover at waypoint: 2 seconds (simulation), 5 seconds (STEVAL), 6 seconds (first flight test)
+- Hover at waypoint: 2s (simulation), 5s (hardware), 6s (first flight test)
 
 After completing the route, the drone loops back to the first waypoint and repeats forever.
 
 ### Motor Mixer (Platform-Specific, X Configuration)
 
 The mixer converts torque commands to individual motor speeds. Each HAL
-implementation contains its own mixer. Both platforms use X-configuration:
+implementation contains its own mixer. All platforms use X-configuration.
 
+**Webots Crazyflie (hal/webots-crazyflie/):** Matches Bitcraze firmware
 ```
         Front
       M2    M3
-        \  /
-         \/
-         /\
-        /  \
+        +--+
+        |  |
+        +--+
       M1    M4
         Rear
-```
 
-**Crazyflie (hal/webots-crazyflie/):** Matches Bitcraze firmware
-```
 M1 = thrust - roll + pitch + yaw  (rear-left, CCW)
 M2 = thrust - roll - pitch - yaw  (front-left, CW)
 M3 = thrust + roll - pitch + yaw  (front-right, CCW)
 M4 = thrust + roll + pitch - yaw  (rear-right, CW)
 ```
 
+**Crazyflie 2.1+ (hal/crazyflie-2.1+/):** Brushed coreless motors on TIM2
+```
+        Front
+      M1    M2
+        +--+
+        |  |
+        +--+
+      M4    M3
+        Rear
+
+M1 = thrust - roll + pitch + yaw  (front-left, CCW)  → TIM2_CH1 (PA0)
+M2 = thrust + roll + pitch - yaw  (front-right, CW)  → TIM2_CH2 (PA1)
+M3 = thrust + roll - pitch + yaw  (rear-right, CCW)  → TIM2_CH3 (PA2)
+M4 = thrust - roll - pitch - yaw  (rear-left, CW)    → TIM2_CH4 (PA3)
+```
+
 **STEVAL-DRONE01 (hal/STEVAL-DRONE01/):** Brushed DC motors on TIM4
 ```
+        Front
+      M2    M3
+        +--+
+        |  |
+        +--+
+      M1    M4
+        Rear
+
 M1 = thrust - roll - pitch + yaw  (rear-left, CCW)   → P1 (TIM4_CH1, PB6)
 M2 = thrust - roll + pitch - yaw  (front-left, CW)   → P2 (TIM4_CH2, PB7)
 M3 = thrust + roll + pitch + yaw  (front-right, CCW) → P4 (TIM4_CH3, PB8)
 M4 = thrust + roll - pitch - yaw  (rear-right, CW)   → P5 (TIM4_CH4, PB9)
 ```
 
-Note: Board connectors are labeled P1, P2, P4, P5 (no P3).
+Note: STEVAL board connectors are labeled P1, P2, P4, P5 (no P3).
 
 The mixer is implemented in each HAL's `hal_write_torque()` function.
 

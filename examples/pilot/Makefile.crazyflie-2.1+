@@ -1,0 +1,312 @@
+# Makefile.crazyflie-2.1+ - Build pilot for Crazyflie 2.1+ (STM32F405)
+#
+# Links together:
+#   - libhive.a (built with STM32-specific hive_static_config.h)
+#   - libhal.a  (built by hal/crazyflie-2.1+/Makefile)
+#   - Pilot actor code
+#
+# Usage:
+#   make -f Makefile.crazyflie-2.1+          # Build firmware
+#   make -f Makefile.crazyflie-2.1+ flash    # Flash to device
+#   make -f Makefile.crazyflie-2.1+ clean    # Clean all build artifacts
+#
+# Prerequisites:
+#   - ARM GCC: apt install gcc-arm-none-eabi
+#   - ST-Link: apt install stlink-tools
+#   - Debug adapter from Bitcraze
+
+# ------------------------------------------------------------------------------
+# Project Configuration
+# ------------------------------------------------------------------------------
+
+TARGET = pilot_crazyflie-2.1+
+BUILD_DIR = build_crazyflie-2.1+
+
+# Paths relative to examples/pilot/
+HIVE_ROOT = ../..
+HIVE_SRC_DIR = $(HIVE_ROOT)/src
+HIVE_INC_DIR = $(HIVE_ROOT)/include
+HAL_DIR = hal/crazyflie-2.1+
+
+# ------------------------------------------------------------------------------
+# Toolchain
+# ------------------------------------------------------------------------------
+
+PREFIX = arm-none-eabi-
+CC = $(PREFIX)gcc
+AS = $(PREFIX)gcc -x assembler-with-cpp
+AR = $(PREFIX)ar
+CP = $(PREFIX)objcopy
+SZ = $(PREFIX)size
+GDB = $(PREFIX)gdb
+
+# ------------------------------------------------------------------------------
+# MCU Configuration (STM32F405RG)
+# ------------------------------------------------------------------------------
+
+CPU = -mcpu=cortex-m4
+FPU = -mfpu=fpv4-sp-d16
+FLOAT-ABI = -mfloat-abi=hard
+MCU = $(CPU) -mthumb $(FPU) $(FLOAT-ABI)
+
+# ------------------------------------------------------------------------------
+# Source Files
+# ------------------------------------------------------------------------------
+
+# Pilot application code
+PILOT_SRCS = \
+	pilot.c \
+	pid.c \
+	sensor_actor.c \
+	estimator_actor.c \
+	altitude_actor.c \
+	waypoint_actor.c \
+	position_actor.c \
+	attitude_actor.c \
+	rate_actor.c \
+	motor_actor.c \
+	supervisor_actor.c \
+	fusion/complementary_filter.c
+
+# Hive runtime (STM32 platform - no net, with flash file support)
+HIVE_CORE_SRCS = \
+	hive_actor.c \
+	hive_bus.c \
+	hive_context.c \
+	hive_ipc.c \
+	hive_link.c \
+	hive_log.c \
+	hive_pool.c \
+	hive_runtime.c \
+	hive_scheduler_stm32.c \
+	hive_timer_stm32.c \
+	hive_file_stm32.c
+
+HIVE_ASM = hive_context_arm_cm.S
+
+# HAL library (built by HAL Makefile)
+HAL_LIB = $(HAL_DIR)/build/libhal.a
+
+# ------------------------------------------------------------------------------
+# Compiler Flags
+# ------------------------------------------------------------------------------
+
+# Common flags
+CFLAGS = -std=c11 -Wall -Wextra -Wpedantic
+CFLAGS += $(MCU)
+CFLAGS += -O2
+CFLAGS += -g3 -gdwarf-2
+CFLAGS += -ffunction-sections -fdata-sections
+CFLAGS += -MMD -MP
+
+# Platform defines
+CFLAGS += -DSTM32F405xx
+CFLAGS += -DPLATFORM_CRAZYFLIE_2_1
+CFLAGS += -DARM_MATH_CM4
+CFLAGS += -DHIVE_PLATFORM_STM32
+
+# Flight profile selection (see waypoint_actor.c for details)
+#   FLIGHT_PROFILE_FIRST_TEST (1) - First flight test: hover at 0.5m, land
+#   FLIGHT_PROFILE_ALTITUDE   (2) - Altitude-only waypoints
+#   FLIGHT_PROFILE_FULL_3D    (3) - Full 3D waypoint navigation
+# Default to FIRST_TEST for safety on real hardware
+FLIGHT_PROFILE ?= FLIGHT_PROFILE_FIRST_TEST
+CFLAGS += -DFLIGHT_PROFILE=$(FLIGHT_PROFILE)
+
+# Hive feature flags (disable net, enable file for STM32 flash logging)
+CFLAGS += -DHIVE_ENABLE_NET=0
+CFLAGS += -DHIVE_ENABLE_FILE=1
+
+# Hive memory configuration for STM32F405 (192KB RAM + 64KB CCM)
+# More relaxed than STEVAL due to larger RAM
+CFLAGS += -DHIVE_MAX_ACTORS=16
+CFLAGS += -DHIVE_MAX_BUSES=12
+CFLAGS += -DHIVE_MAILBOX_ENTRY_POOL_SIZE=32
+CFLAGS += -DHIVE_MESSAGE_DATA_POOL_SIZE=64
+CFLAGS += -DHIVE_LINK_ENTRY_POOL_SIZE=16
+CFLAGS += -DHIVE_MONITOR_ENTRY_POOL_SIZE=16
+CFLAGS += -DHIVE_TIMER_ENTRY_POOL_SIZE=8
+CFLAGS += -DHIVE_MAX_BUS_SUBSCRIBERS=8
+CFLAGS += -DHIVE_MAX_BUS_ENTRIES=8
+CFLAGS += -DHIVE_MAX_MESSAGE_SIZE=256
+# Stack: 8KB per actor, Arena: 80KB (10x8KB)
+CFLAGS += -DHIVE_DEFAULT_STACK_SIZE=8192
+CFLAGS += '-DHIVE_STACK_ARENA_SIZE=(80*1024)'
+
+# Log level: NONE to minimize stack usage (sprintf is very stack-heavy)
+CFLAGS += -DHIVE_LOG_LEVEL=HIVE_LOG_LEVEL_NONE
+
+# STM32 Flash File I/O Configuration
+# STM32F405RG: 1MB flash (sectors 0-11)
+# Flash layout: Sectors 0-7 (512KB) = firmware, Sectors 8-11 (512KB) = data
+# Sector sizes: 0-3 = 16KB, 4 = 64KB, 5-7 = 128KB, 8-11 = 128KB
+# Virtual file: /log (flight data) - Sector 8 (128KB at 0x08080000)
+CFLAGS += -DHIVE_VFILE_LOG_BASE=0x08080000
+CFLAGS += -DHIVE_VFILE_LOG_SIZE=131072
+CFLAGS += -DHIVE_VFILE_LOG_SECTOR=8
+# Ring buffer: 8KB (default, we have more RAM)
+CFLAGS += '-DHIVE_FILE_RING_SIZE=(8*1024)'
+
+# Include paths
+PILOT_INCLUDES = -I. -I$(HAL_DIR) -I$(HIVE_INC_DIR)
+HIVE_INCLUDES = -I$(HAL_DIR) -I$(HIVE_INC_DIR)
+
+# Assembler flags
+ASFLAGS = $(MCU) -g3
+
+# ------------------------------------------------------------------------------
+# Linker Flags
+# ------------------------------------------------------------------------------
+
+LDSCRIPT = $(HAL_DIR)/stm32f405_flash.ld
+
+LDFLAGS = $(MCU)
+LDFLAGS += -T$(LDSCRIPT)
+LDFLAGS += -Wl,--gc-sections
+LDFLAGS += -Wl,-Map=$(BUILD_DIR)/$(TARGET).map,--cref
+LDFLAGS += --specs=nano.specs
+LDFLAGS += --specs=nosys.specs
+LDFLAGS += -lm -lc
+
+# ------------------------------------------------------------------------------
+# Object Files
+# ------------------------------------------------------------------------------
+
+# Pilot objects
+PILOT_OBJS = $(PILOT_SRCS:%.c=$(BUILD_DIR)/pilot/%.o)
+
+# Hive objects (built into libhive.a)
+HIVE_OBJS = $(HIVE_CORE_SRCS:%.c=$(BUILD_DIR)/hive/%.o)
+HIVE_ASM_OBJS = $(HIVE_ASM:%.S=$(BUILD_DIR)/hive/%.o)
+
+# Hive library
+HIVE_LIB = $(BUILD_DIR)/libhive.a
+
+# Dependencies
+DEPS = $(PILOT_OBJS:.o=.d) $(HIVE_OBJS:.o=.d)
+
+# ------------------------------------------------------------------------------
+# Build Rules
+# ------------------------------------------------------------------------------
+
+.PHONY: all clean flash debug openocd size help
+
+all: $(BUILD_DIR)/$(TARGET).elf $(BUILD_DIR)/$(TARGET).hex $(BUILD_DIR)/$(TARGET).bin size
+
+# Create build directories
+$(BUILD_DIR)/pilot $(BUILD_DIR)/pilot/fusion $(BUILD_DIR)/hive:
+	mkdir -p $@
+
+# --- Hive library ---
+
+# Compile hive C sources
+$(BUILD_DIR)/hive/%.o: $(HIVE_SRC_DIR)/%.c | $(BUILD_DIR)/hive
+	@echo "CC (hive) $<"
+	@$(CC) $(CFLAGS) $(HIVE_INCLUDES) -c $< -o $@
+
+# Compile hive assembly
+$(BUILD_DIR)/hive/%.o: $(HIVE_SRC_DIR)/%.S | $(BUILD_DIR)/hive
+	@echo "AS (hive) $<"
+	@$(CC) $(ASFLAGS) $(HIVE_INCLUDES) -c $< -o $@
+
+# Create libhive.a
+$(HIVE_LIB): $(HIVE_OBJS) $(HIVE_ASM_OBJS)
+	@echo "AR $@"
+	@$(AR) rcs $@ $^
+
+# --- Pilot application ---
+
+# Compile pilot sources
+$(BUILD_DIR)/pilot/%.o: %.c | $(BUILD_DIR)/pilot $(BUILD_DIR)/pilot/fusion
+	@echo "CC (pilot) $<"
+	@$(CC) $(CFLAGS) $(PILOT_INCLUDES) -c $< -o $@
+
+# --- HAL library (delegate to HAL Makefile) ---
+
+$(HAL_LIB):
+	@echo "Building HAL library..."
+	@$(MAKE) -C $(HAL_DIR)
+
+# --- Final link ---
+
+$(BUILD_DIR)/$(TARGET).elf: $(PILOT_OBJS) $(HIVE_LIB) $(HAL_LIB)
+	@echo "LD $@"
+	@$(CC) $(PILOT_OBJS) $(HIVE_LIB) $(HAL_LIB) $(LDFLAGS) -o $@
+
+# Generate hex
+$(BUILD_DIR)/$(TARGET).hex: $(BUILD_DIR)/$(TARGET).elf
+	@echo "HEX $@"
+	@$(CP) -O ihex $< $@
+
+# Generate binary
+$(BUILD_DIR)/$(TARGET).bin: $(BUILD_DIR)/$(TARGET).elf
+	@echo "BIN $@"
+	@$(CP) -O binary -S $< $@
+
+# ------------------------------------------------------------------------------
+# Utility Targets
+# ------------------------------------------------------------------------------
+
+size: $(BUILD_DIR)/$(TARGET).elf
+	@echo ""
+	@echo "Memory usage:"
+	@$(SZ) $<
+
+flash: $(BUILD_DIR)/$(TARGET).bin
+	@echo "Flashing $(TARGET).bin..."
+	st-flash write $< 0x8000000
+
+# Crazyflie debug adapter uses SWD
+debug: $(BUILD_DIR)/$(TARGET).elf
+	$(GDB) -ex "target extended-remote :3333" \
+	       -ex "monitor reset halt" \
+	       -ex "load" \
+	       $<
+
+openocd:
+	openocd -f interface/stlink.cfg -f target/stm32f4x.cfg
+
+clean:
+	rm -rf $(BUILD_DIR)
+	@$(MAKE) -C $(HAL_DIR) clean
+
+# Include dependencies
+-include $(DEPS)
+
+# ------------------------------------------------------------------------------
+# Help
+# ------------------------------------------------------------------------------
+
+help:
+	@echo "Pilot Crazyflie 2.1+ Build System"
+	@echo ""
+	@echo "Hardware:"
+	@echo "  MCU: STM32F405RG (168 MHz, Cortex-M4F)"
+	@echo "  RAM: 192 KB + 64 KB CCM"
+	@echo "  Flash: 1 MB"
+	@echo "  Sensors: BMI088 (IMU), BMP388 (baro)"
+	@echo "  Optional: Flow deck v2 (PMW3901 + VL53L1x)"
+	@echo ""
+	@echo "Build structure:"
+	@echo "  libhive.a  - Hive runtime (built with STM32-specific config)"
+	@echo "  libhal.a   - Hardware abstraction (built by hal/crazyflie-2.1+/)"
+	@echo "  pilot/*.o  - Flight controller actors"
+	@echo ""
+	@echo "Targets:"
+	@echo "  all     - Build firmware (default)"
+	@echo "  clean   - Remove build artifacts"
+	@echo "  flash   - Flash via ST-Link (debug adapter)"
+	@echo "  debug   - Start GDB session"
+	@echo "  openocd - Start OpenOCD server"
+	@echo "  size    - Show memory usage"
+	@echo "  help    - Show this help"
+	@echo ""
+	@echo "Flight profiles:"
+	@echo "  FLIGHT_PROFILE_FIRST_TEST (1) - Hover at 0.5m, land (default)"
+	@echo "  FLIGHT_PROFILE_ALTITUDE   (2) - Altitude-only waypoints"
+	@echo "  FLIGHT_PROFILE_FULL_3D    (3) - Full 3D navigation"
+	@echo ""
+	@echo "Usage:"
+	@echo "  make -f Makefile.crazyflie-2.1+"
+	@echo "  make -f Makefile.crazyflie-2.1+ flash"
+	@echo "  make -f Makefile.crazyflie-2.1+ FLIGHT_PROFILE=2 all"
