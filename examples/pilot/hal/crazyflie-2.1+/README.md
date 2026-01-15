@@ -1,0 +1,356 @@
+# Crazyflie 2.1+ Hardware Abstraction Layer
+
+Platform layer for the Bitcraze Crazyflie 2.1+ nano quadcopter.
+
+This HAL provides drivers for STM32F405, enabling the pilot example to run on real hardware instead of the Webots simulator.
+
+## Quick Start
+
+```bash
+# Build full firmware (from examples/pilot/)
+cd ..
+make -f Makefile.crazyflie-2.1+
+make -f Makefile.crazyflie-2.1+ flash
+
+# Or build just the HAL library (from this directory)
+make          # Build libhal.a
+make clean    # Remove build artifacts
+```
+
+## Hardware Validation Tests
+
+Before running the full pilot firmware, use the standalone test programs in
+`tests/` to verify hardware connectivity.
+
+```bash
+cd tests
+make thrust_test          # Build thrust calibration test
+make sensor_motor_test    # Build sensor/motor diagnostic
+make flash-thrust         # Flash thrust_test
+make flash-sensor         # Flash sensor_motor_test
+make clean                # Clean build
+```
+
+See `tests/README.md` for detailed LED feedback patterns.
+
+## Integration with Pilot
+
+This HAL links with `pilot.c` and the hive runtime. The platform API
+(`platform_crazyflie.h`) provides the same interface as the Webots HAL.
+
+Build the complete firmware from `examples/pilot/`:
+```bash
+make -f Makefile.crazyflie-2.1+
+```
+
+## Hardware Overview
+
+| Component | Part Number | Interface | Description |
+|-----------|-------------|-----------|-------------|
+| MCU | STM32F405RG | - | ARM Cortex-M4, 168 MHz, DSP+FPU |
+| IMU | BMI088 | SPI1 | 6-axis accel + gyro |
+| Barometer | BMP388 | I2C3 | Pressure/altitude |
+| Flow sensor | PMW3901 | SPI1 | Optical flow (Flow deck v2) |
+| ToF sensor | VL53L1x | I2C3 | Height measurement (Flow deck v2) |
+| Motors | 7x16mm | TIM2 PWM | Brushed coreless, x4 |
+| LED | Blue | PC4 | Status indicator |
+
+## Specifications
+
+**Flight Controller (Crazyflie 2.1+):**
+- STM32F405RG @ 168 MHz (Cortex-M4F)
+- 1 MB Flash, 192 KB RAM + 64 KB CCM
+- Hardware FPU for fast sensor fusion
+- 8 MHz HSE crystal
+
+**Sensors:**
+- BMI088: 16-bit accel (+/-24g) + 16-bit gyro (+/-2000 dps) on SPI1
+- BMP388: 24-bit barometer on I2C3
+
+**Optional Flow Deck v2:**
+- PMW3901: Optical flow sensor (80x80 pixels)
+- VL53L1x: Time-of-Flight ranging (up to 4m)
+
+**Motors:**
+- Type: Brushed coreless, 7x16mm
+- Voltage: 3.0V nominal (single-cell LiPo)
+- 2x CCW (M1, M3), 2x CW (M2, M4)
+- Propellers: 45mm
+
+**Battery:**
+- LiPo 3.7V / 250mAh
+- Weight: ~27g (without Flow deck)
+
+## Architecture
+
+```
++---------------------------------------------------------------+
+|                   pilot.c + hive runtime                      |
+|                (Actor-based Flight Controller)                |
+|         Sensor fusion in fusion/complementary_filter.c        |
++---------------------------------------------------------------+
+                              |
+                              v
++---------------------------------------------------------------+
+|                     hal_crazyflie.c                           |
+|         (HAL Interface: hal_read_sensors, hal_write_torque)   |
++---------------------------------------------------------------+
+                              |
+                              v
++---------------------------------------------------------------+
+|                  platform_crazyflie.c                         |
+|        (Platform layer with direct register access)           |
+|  +----------+  +----------+  +----------+  +----------+       |
+|  |  BMI088  |  |  BMP388  |  | PMW3901  |  |  motors  |       |
+|  |  (SPI1)  |  |  (I2C3)  |  |  (SPI1)  |  |  (TIM2)  |       |
+|  +----------+  +----------+  +----------+  +----------+       |
++---------------------------------------------------------------+
+                              |
+                              v
++---------------------------------------------------------------+
+|                         CMSIS                                 |
+|  +------------------+  +------------------+                   |
+|  | stm32f4xx.h      |  | core_cm4.h       |                   |
+|  | (register defs)  |  | (Cortex-M4)      |                   |
+|  +------------------+  +------------------+                   |
++---------------------------------------------------------------+
+```
+
+## File Overview
+
+### HAL Layer
+
+| File | Description |
+|------|-------------|
+| `hal_crazyflie.c` | HAL interface (hal_read_sensors, hal_write_torque) |
+| `platform_crazyflie.h/c` | Platform-specific sensor reading and motor control |
+| `hal_config.h` | PID gains and platform constants |
+
+### Sensor Drivers
+
+| File | Description |
+|------|-------------|
+| `bmi088.h/c` | BMI088 IMU driver (SPI) |
+| `bmp388.h/c` | BMP388 barometer driver (I2C) |
+| `pmw3901.h/c` | PMW3901 optical flow driver (SPI) |
+| `vl53l1x.h/c` | VL53L1x ToF ranging driver (I2C) |
+
+### Motor Driver
+
+| File | Description |
+|------|-------------|
+| `motors.h/c` | Motor control abstraction (arm, disarm, set speeds) |
+
+### System Layer
+
+| File | Description |
+|------|-------------|
+| `syscalls.c` | Newlib stubs for bare-metal (_read, _write, _sbrk) |
+| `startup_stm32f405.s` | Vector table, Reset_Handler, C runtime init |
+| `stm32f405_flash.ld` | Memory layout (1 MB Flash, 192 KB RAM) |
+| `Makefile` | Build libhal.a static library |
+
+### CMSIS Headers (cmsis/)
+
+| File | Description |
+|------|-------------|
+| `stm32f4xx.h` | STM32F4 peripheral register definitions |
+| `stm32f405xx.h` | STM32F405-specific definitions |
+| `core_cm4.h` | ARM Cortex-M4 core definitions |
+| `system_stm32f4xx.h` | System initialization |
+
+## Pin Mapping
+
+### SPI1 (BMI088 IMU)
+```
+PA5  - SPI1_SCK
+PA6  - SPI1_MISO
+PA7  - SPI1_MOSI
+PB0  - BMI088_GYRO_CS
+PB1  - BMI088_ACC_CS
+```
+
+### I2C3 (BMP388, VL53L1x)
+```
+PA8  - I2C3_SCL
+PC9  - I2C3_SDA
+```
+
+### TIM2 PWM (Motors)
+```
+PA0  - TIM2_CH1 (M1, front-left, CCW)
+PA1  - TIM2_CH2 (M2, front-right, CW)
+PA2  - TIM2_CH3 (M3, rear-right, CCW)
+PA3  - TIM2_CH4 (M4, rear-left, CW)
+```
+
+### Flow Deck v2 (optional)
+```
+PB12 - PMW3901_CS (expansion connector)
+      VL53L1x uses I2C3 (shared with BMP388)
+```
+
+### Misc
+```
+PC4  - Blue LED
+```
+
+## Differences from Webots Simulation
+
+| Feature | Webots | Crazyflie 2.1+ |
+|---------|--------|----------------|
+| Position | GPS (perfect) | Flow deck (relative) or none |
+| Attitude | Synthesized from inertial unit | Raw IMU -> complementary filter |
+| Altitude | GPS Z | Barometer or ToF (relative only) |
+| Heading | Synthesized yaw | Gyro integration (no magnetometer) |
+| Timing | Simulation step | Real-time (hive scheduler) |
+| Fusion | Same portable code (fusion/) | Same portable code (fusion/) |
+
+## Building
+
+### Requirements
+
+```bash
+# ARM GCC toolchain
+sudo apt install gcc-arm-none-eabi
+
+# ST-Link tools (for flashing)
+sudo apt install stlink-tools
+
+# OpenOCD (optional, for debugging)
+sudo apt install openocd
+```
+
+### Debug Adapter
+
+Flashing requires a debug adapter connected to the Crazyflie's 0.05" debug header:
+- Bitcraze debug adapter (recommended)
+- Generic SWD adapter (ST-Link, J-Link)
+
+### Build Commands
+
+```bash
+# Build HAL library only (from this directory)
+make          # Build libhal.a
+make clean    # Remove build artifacts
+
+# Build full firmware (from examples/pilot/)
+make -f Makefile.crazyflie-2.1+           # Build pilot_crazyflie-2.1+.elf
+make -f Makefile.crazyflie-2.1+ flash     # Flash to device
+make -f Makefile.crazyflie-2.1+ clean     # Clean build
+```
+
+## HAL API
+
+The HAL provides a platform-independent interface used by pilot actors:
+
+```c
+#include "hal/hal.h"
+
+// Initialization
+hal_init();         // Initialize hardware
+hal_calibrate();    // Calibrate sensors (keep drone still and level)
+hal_arm();          // Arm motors
+
+// Sensor reading (called by sensor_actor)
+sensor_data_t sensors;
+hal_read_sensors(&sensors);   // Raw accel, gyro, baro (+ flow if deck present)
+
+// Motor output (called by motor_actor)
+torque_cmd_t cmd = {.thrust = 0.5f, .roll = 0.0f, .pitch = 0.0f, .yaw = 0.0f};
+hal_write_torque(&cmd);       // HAL applies mixer internally
+
+// Shutdown
+hal_disarm();
+```
+
+Key differences from Webots:
+- No magnetometer - heading uses gyro integration only
+- Position requires Flow deck (otherwise unavailable)
+- Altitude is relative (barometer or ToF), not absolute
+
+## Motor Layout
+
+X-configuration quadcopter with brushed coreless motors:
+
+```
+             Front
+         M1(CCW)  M2(CW)
+             +--+
+             |  |
+             +--+
+         M4(CW)  M3(CCW)
+             Rear
+```
+
+**Motor to pin mapping:**
+
+| Motor | Position | Rotation | Pin |
+|-------|----------|----------|-----|
+| M1 | front-left | CCW | PA0 (TIM2_CH1) |
+| M2 | front-right | CW | PA1 (TIM2_CH2) |
+| M3 | rear-right | CCW | PA2 (TIM2_CH3) |
+| M4 | rear-left | CW | PA3 (TIM2_CH4) |
+
+**Motor mixing (in hal_crazyflie.c):**
+```
+M1 = thrust - roll + pitch + yaw
+M2 = thrust + roll + pitch - yaw
+M3 = thrust + roll - pitch + yaw
+M4 = thrust - roll - pitch - yaw
+```
+
+**To reverse motor direction:** Swap the two motor wires at the connector.
+
+## Calibration
+
+Before flight, `hal_calibrate()` performs:
+
+1. **Gyro bias** - Average 500 samples while stationary
+2. **Barometer reference** - Average 50 samples for ground level
+
+**Important:** Keep the drone still and level during calibration!
+
+## LED Feedback
+
+The blue LED on PC4 provides status during initialization:
+
+| Pattern | Meaning |
+|---------|---------|
+| 1 blink | Starting initialization |
+| 2 blinks | IMU initialized |
+| 3 blinks | All hardware initialized |
+| 3 fast blinks | IMU initialization failed |
+| 4 fast blinks | Barometer initialization failed |
+| 5 fast blinks | Motor initialization failed |
+| Slow continuous blink | Fatal error |
+
+## Flight Profiles
+
+Select flight profile when building:
+
+```bash
+make -f Makefile.crazyflie-2.1+ FLIGHT_PROFILE=1  # FIRST_TEST (default)
+make -f Makefile.crazyflie-2.1+ FLIGHT_PROFILE=2  # ALTITUDE
+make -f Makefile.crazyflie-2.1+ FLIGHT_PROFILE=3  # FULL_3D (requires Flow deck)
+```
+
+| Profile | Description | Duration |
+|---------|-------------|----------|
+| 1 (FIRST_TEST) | Hover at 0.5m, then land | 10s |
+| 2 (ALTITUDE) | Altitude changes: 0.5m -> 1.0m -> 1.5m | 40s |
+| 3 (FULL_3D) | 3D waypoints (requires Flow deck) | 60s |
+
+## Flashing Notes
+
+After `st-flash write`, press the reset button on the Crazyflie or run
+`st-flash reset` to start the firmware.
+
+## Resources
+
+- [Crazyflie 2.1 Product Page](https://www.bitcraze.io/products/crazyflie-2-1/)
+- [Flow deck v2](https://www.bitcraze.io/products/flow-deck-v2/)
+- [BMI088 Datasheet](https://www.bosch-sensortec.com/products/motion-sensors/imus/bmi088/)
+- [BMP388 Datasheet](https://www.bosch-sensortec.com/products/environmental-sensors/pressure-sensors/bmp388/)
+- [PMW3901 Datasheet](https://www.pixart.com/products-detail/10/PMW3901MB-TXQT)
+- [VL53L1x Datasheet](https://www.st.com/en/imaging-and-photonics-solutions/vl53l1x.html)

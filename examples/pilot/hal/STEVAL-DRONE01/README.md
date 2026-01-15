@@ -338,6 +338,33 @@ M4 = thrust + roll - pitch - yaw
 
 **To reverse motor direction:** Flip the 2-wire motor connector (reverses polarity).
 
+## LED Feedback
+
+The LED on PB5 provides status during initialization:
+
+| Pattern | Meaning |
+|---------|---------|
+| 1 blink | Starting initialization |
+| 2 blinks | Sensors initialized |
+| 3 blinks | All hardware initialized |
+| Slow continuous blink | Fatal error |
+
+## Flight Profiles
+
+Select flight profile when building:
+
+```bash
+make -f Makefile.STEVAL-DRONE01 FLIGHT_PROFILE=1  # FIRST_TEST (default)
+make -f Makefile.STEVAL-DRONE01 FLIGHT_PROFILE=2  # ALTITUDE
+make -f Makefile.STEVAL-DRONE01 FLIGHT_PROFILE=3  # FULL_3D
+```
+
+| Profile | Description | Duration |
+|---------|-------------|----------|
+| 1 (FIRST_TEST) | Hover at 0.5m, then land | 10s |
+| 2 (ALTITUDE) | Altitude changes: 0.5m -> 1.0m -> 1.5m | 40s |
+| 3 (FULL_3D) | 3D waypoints (no GPS, so altitude-only) | 60s |
+
 ## Calibration
 
 Before flight, `hal_calibrate()` performs:
