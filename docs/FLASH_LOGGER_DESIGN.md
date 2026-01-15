@@ -381,12 +381,12 @@ occasionally is tolerable (will delay one control cycle slightly).
 
 **During arming sequence**, before motors are enabled:
 
-1. Supervisor sends ARM command
+1. Main actor sends ARM command
 2. Logger actor receives ARM notification
 3. Logger erases Sector 5 (takes 1-4 seconds)
 4. Logger writes region header with `erased_ok = 1`
 5. Logger signals ready
-6. Supervisor proceeds with flight
+6. Main actor proceeds with flight
 
 ### Erase Safety
 
@@ -516,7 +516,7 @@ void log_dump_uart(void);
 
 ### Phase 3: Logger Actor
 - [ ] Actor implementation
-- [ ] Integration with supervisor (ARM/DISARM)
+- [ ] Integration with main actor (ARM/DISARM)
 - [ ] Drain and write state machine
 
 ### Phase 4: Integration
