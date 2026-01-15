@@ -514,9 +514,7 @@ This runtime makes deliberate design choices that favor **determinism, performan
 
 **Consequence:** A single bad actor can cause global `HIVE_ERR_NOMEM` failures for all IPC sends.
 
-**Supervisors are not optional.** You must design actor hierarchies with supervision and monitoring.
-
-**Mitigation:** Application-level quotas, supervisor actors, monitoring. Runtime provides primitives, not policies.
+**Mitigation:** Application-level quotas, monitoring, backpressure patterns. Runtime provides primitives, not policies.
 
 **Acceptable if:** You deploy trusted code in embedded systems, not untrusted actors in general-purpose systems.
 
@@ -952,7 +950,7 @@ Global pool limits: **Yes** - all actors share:
 
 **Important:** One slow receiver can consume all mailbox entries, starving other actors.
 
-**Fairness guarantees:** The runtime does not provide per-actor fairness guarantees; resource exhaustion caused by a misbehaving actor is considered an application-level fault. Applications requiring protection against resource starvation should implement supervisor actors or application-level quotas.
+**Fairness guarantees:** The runtime does not provide per-actor fairness guarantees; resource exhaustion caused by a misbehaving actor is considered an application-level fault. Applications requiring protection against resource starvation can implement application-level quotas or monitoring.
 
 ### Selective Receive Semantics
 
@@ -1925,8 +1923,8 @@ Offset  Size  Field
 ### Usage Pattern
 
 ```c
-// Supervisor actor manages log lifecycle
-void supervisor_actor(void *arg) {
+// Main actor manages log lifecycle
+void main_actor(void *arg) {
     // ARM phase: open log file (on STM32, erases flash sector)
     hive_log_file_open(HIVE_LOG_FILE_PATH);
 
@@ -2372,7 +2370,7 @@ Stack overflow prevention is the **application's responsibility**:
 
 For production systems:
 - **Watchdog timer:** Detect hung system, trigger reboot/failsafe
-- **Supervisor architecture:** Monitor actors, restart on anomaly
+- **Actor monitoring:** Use links/monitors to detect failures, restart actors as needed
 - **Memory isolation:** Hardware MPU (ARM Cortex-M) can provide hardware-guaranteed protection
 
 ### Future Considerations
