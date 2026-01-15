@@ -271,127 +271,38 @@ float pid_update(pid_state_t *pid, float setpoint, float measurement, float dt) 
 
 ### Tuned PID Gains
 
-PID gains are platform-specific (defined in `hal_config.h`). Values below are for Webots:
+PID gains are platform-specific, defined in each `hal/<platform>/hal_config.h`.
+The control cascade uses:
 
-| Controller | Kp   | Ki   | Kd    | Output Max | Purpose |
-|------------|------|------|-------|------------|---------|
-| Altitude   | 0.3  | 0.05 | 0     | 0.15       | Track target altitude (PI) |
-| Position   | 0.2  | -    | 0.1   | 0.35 rad   | Track target XY (PD) |
-| Attitude   | 4.0  | 0    | 0     | 3.0 rad/s  | Level attitude (roll/pitch) |
-| Yaw attitude | 4.0 | 0   | 0     | 3.0 rad/s  | Track target heading (P) |
-| Roll rate  | 0.02 | 0    | 0.001 | 0.1        | Stabilize roll |
-| Pitch rate | 0.02 | 0    | 0.001 | 0.1        | Stabilize pitch |
-| Yaw rate   | 0.02 | 0    | 0.001 | 0.15       | Stabilize yaw |
+- **Altitude:** PI + velocity damping (Kv) for smooth response
+- **Position:** PD with velocity damping, max tilt limited
+- **Attitude:** P controller for roll/pitch/yaw angles
+- **Rate:** PD controller for angular rates
 
-STEVAL-DRONE01 uses higher altitude gains (Kp=0.5, Ki=0.1) for faster response.
+### Mixer
 
-**Altitude velocity damping:** Kv = 0.15
-**Position control:** PD controller with velocity damping, max tilt 0.35 rad (~20°)
-**Heading control:** Uses `pid_update_angle()` with ±π wrap-around for shortest path
-
-Altitude control uses measured vertical velocity for damping instead of
-differentiating position error. This provides smoother response with less noise:
-```
-thrust = BASE_THRUST + PI_correction - Kv * vertical_velocity
-```
-
-Base thrust: 0.553 (Webots) / platform-specific (see `hal/*/hal_config.h`)
-
-### Mixer (Platform-Specific, X Configuration)
-
-The motor mixer converts torque commands (thrust, roll, pitch, yaw) to individual
-motor commands. Each HAL implementation contains its own mixer since different
-platforms have different motor rotation directions and sign conventions.
-
-Both platforms use X-configuration where each motor affects both roll and pitch.
-Motor layout:
-
-```
-        Front
-      M2    M3
-        \  /
-         \/
-         /\
-        /  \
-      M1    M4
-        Rear
-```
-
-**Crazyflie (hal/webots-crazyflie/):** Matches official Bitcraze firmware
-```
-M1 (rear-left, CCW):   thrust - roll + pitch + yaw
-M2 (front-left, CW):   thrust - roll - pitch - yaw
-M3 (front-right, CCW): thrust + roll - pitch + yaw
-M4 (rear-right, CW):   thrust + roll + pitch - yaw
-```
-
-**STEVAL-DRONE01 (hal/STEVAL-DRONE01/):** Brushed DC motors on TIM4
-```
-M1 (rear-left, CCW):   thrust - roll - pitch + yaw  → P1 (TIM4_CH1, PB6)
-M2 (front-left, CW):   thrust - roll + pitch - yaw  → P2 (TIM4_CH2, PB7)
-M3 (front-right, CCW): thrust + roll + pitch + yaw  → P4 (TIM4_CH3, PB8)
-M4 (rear-right, CW):   thrust + roll - pitch - yaw  → P5 (TIM4_CH4, PB9)
-```
-
-Note: Board connectors are labeled P1, P2, P4, P5 (no P3). Motor direction is
-reversed by flipping the 2-wire connector (reversing polarity on brushed DC motor).
-
-The mixer is implemented in each HAL's `hal_write_torque()` function.
-
-### Motor Velocity Signs
-
-The Webots Crazyflie model requires specific velocity signs to cancel reaction torque:
-
-- **M1, M3** (front, rear): Negative velocity
-- **M2, M4** (right, left): Positive velocity
-
-```c
-static const float signs[4] = {-1.0f, 1.0f, -1.0f, 1.0f};
-```
+Each HAL implements its own X-configuration mixer in `hal_write_torque()`.
+See `hal/<platform>/README.md` for motor layout and mixing equations.
 
 ---
 
-## Webots Integration
-
-### Simulation Loop
+## Main Loop
 
 The main loop is minimal - all logic lives in actors:
 
 ```c
+// Simulation (Webots)
 while (hal_step()) {
-    hive_advance_time(HAL_TIME_STEP_US);  // Advance simulation time, fire due timers
-    hive_run_until_blocked();              // Run actors until all blocked
+    hive_advance_time(HAL_TIME_STEP_US);
+    hive_run_until_blocked();
 }
+
+// Real-time (STM32)
+hive_run();
 ```
 
-Each simulation step fires the sensor_actor's timer, which triggers the control chain:
-1. Sensor actor reads hardware, publishes to sensor bus
-2. Estimator actor reads sensor bus, runs fusion, publishes state estimate
-3. Altitude actor reads state bus, publishes thrust
-4. Waypoint actor reads state bus, publishes position target
-5. Position actor reads position target bus, publishes attitude setpoints
-6. Attitude actor reads attitude setpoints, publishes rate setpoints
-7. Rate actor reads state + thrust + rate setpoints, publishes torque commands
-8. Motor actor writes to HAL (HAL applies mixer)
-
-### Key Parameters
-
-- `TIME_STEP = 4` ms (250 Hz control rate)
-- `MOTOR_MAX_VELOCITY = 100.0` rad/s
-- Waypoint tolerance: 0.15 m XY, 0.15 m altitude, 0.1 rad heading, 0.1 m/s velocity
-- Waypoint hover time: 2 seconds (simulation), 5-6 seconds (hardware)
-
-### Webots Device Names
-
-| Device | Name | Type |
-|--------|------|------|
-| Motor 1 (rear-left) | `m1_motor` | RotationalMotor |
-| Motor 2 (front-left) | `m2_motor` | RotationalMotor |
-| Motor 3 (front-right) | `m3_motor` | RotationalMotor |
-| Motor 4 (rear-right) | `m4_motor` | RotationalMotor |
-| Gyroscope | `gyro` | Gyro |
-| Inertial Unit | `inertial_unit` | InertialUnit |
-| GPS | `gps` | GPS |
+Control rate is 250 Hz (4ms time step). Each step triggers the control chain:
+sensor → estimator → altitude/waypoint/position → attitude → rate → motor.
 
 ---
 
@@ -426,43 +337,15 @@ Actors use the HAL directly - no function pointers needed:
 
 ### Supported Platforms
 
-**Webots simulation (default):**
-- HAL implementation: `hal/webots-crazyflie/hal_webots.c`
-- Build with: `make` (sets `-DSIMULATED_TIME`)
-- Uses `webots/robot.h` APIs
-
-**STM32 hardware:**
-- Crazyflie 2.1+: `hal/crazyflie-2.1+/` (STM32F405, ~39 KB flash)
-- STEVAL-DRONE01: `hal/STEVAL-DRONE01/` (STM32F401, ~60 KB flash)
-- Build: `make -f Makefile.<platform>`
-- See `hal/<platform>/README.md` for hardware details
-
-### Platform Differences
+| Platform | Build | Details |
+|----------|-------|---------|
+| Webots simulation | `make` | Uses `-DSIMULATED_TIME` |
+| Crazyflie 2.1+ | `make -f Makefile.crazyflie-2.1+` | See `hal/crazyflie-2.1+/README.md` |
+| STEVAL-DRONE01 | `make -f Makefile.STEVAL-DRONE01` | See `hal/STEVAL-DRONE01/README.md` |
 
 All hardware differences are encapsulated in the HAL. Actor code is identical
-across platforms.
-
-| Component | Webots | STM32 Hardware | Location |
-|-----------|--------|----------------|----------|
-| Motor mixer | Crazyflie formula | Platform-specific | HAL `hal_write_torque()` |
-| Motor output | Signed velocity | Unsigned PWM | HAL implementation |
-| Sensor reading | Webots API | STM32 drivers | HAL `hal_read_sensors()` |
-
-See `hal/<platform>/README.md` for mixer formulas and pin assignments.
-
-The only compile-time difference in pilot.c is `SIMULATED_TIME`:
-
-| Mode | Build flag | Main loop | Time control |
-|------|------------|-----------|--------------|
-| Simulation | `-DSIMULATED_TIME` | `hal_step()` + `hive_advance_time()` + `hive_run_until_blocked()` | External (Webots) |
-| Real-time | (none) | `hive_run()` | Wall clock |
-
-**Known limitations on STM32:**
-
-| Issue | Impact | Notes |
-|-------|--------|-------|
-| Position feedback | Platform-dependent | Crazyflie with Flow deck has XY; STEVAL altitude-only |
-| PID gains | Tuned per platform | See `hal/*/hal_config.h` |
+across platforms. The only compile-time difference is `SIMULATED_TIME` which
+controls the main loop (simulation vs real-time).
 
 ### Portable Code
 

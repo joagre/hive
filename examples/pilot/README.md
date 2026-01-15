@@ -54,44 +54,15 @@ make install
 
 Then open `worlds/hover_test.wbt` in Webots and start the simulation.
 
-### Crazyflie 2.1+
+### STM32 Hardware (Crazyflie 2.1+, STEVAL-DRONE01)
 
 ```bash
-make -f Makefile.crazyflie-2.1+        # Build firmware (~39 KB flash)
-make -f Makefile.crazyflie-2.1+ flash  # Flash via debug adapter
-make -f Makefile.crazyflie-2.1+ clean  # Clean build artifacts
+make -f Makefile.<platform>        # Build firmware
+make -f Makefile.<platform> flash  # Flash via debug adapter
+make -f Makefile.<platform> clean  # Clean build artifacts
 ```
 
-**Hardware:**
-- MCU: STM32F405RG (168 MHz Cortex-M4F, 1 MB flash, 192 KB RAM + 64 KB CCM)
-- IMU: BMI088 (3-axis accel + 3-axis gyro)
-- Barometer: BMP388
-- Optional: Flow deck v2 (PMW3901 optical flow + VL53L1x ToF)
-
-**Flight profiles:** Select with `make FLIGHT_PROFILE=N`:
-- `1` (FIRST_TEST) - Hover at 0.5m, 10s flight, then land (default)
-- `2` (ALTITUDE) - Altitude changes only: 0.5m → 1.0m → 1.5m → repeat
-- `3` (FULL_3D) - Full 3D navigation (requires Flow deck)
-
-Debug via SWD using Bitcraze debug adapter. Connect to 0.05" debug header on Crazyflie.
-
-### STEVAL-DRONE01
-
-```bash
-make -f Makefile.STEVAL-DRONE01        # Build firmware (~60 KB flash, ~57 KB RAM)
-make -f Makefile.STEVAL-DRONE01 flash  # Flash to device via ST-Link
-make -f Makefile.STEVAL-DRONE01 clean  # Clean build artifacts
-```
-
-**Flight profiles:** Select with `make FLIGHT_PROFILE=N`:
-- `1` (FIRST_TEST) - Hover at 0.5m, 10s flight, then land (default)
-- `2` (ALTITUDE) - Altitude changes only: 0.5m → 1.0m → 1.5m → repeat
-- `3` (FULL_3D) - Full 3D waypoint navigation (no GPS, so limited use)
-
-Memory fits STM32F401CCU6 (256 KB flash, 64 KB RAM) with ~7 KB RAM headroom.
-
-Debug output via USART1 (115200 baud) on the P7 header. See
-`hal/STEVAL-DRONE01/README.md` for hardware details and serial connection.
+See `hal/<platform>/README.md` for hardware details, pin mapping, and flight profiles.
 
 ## Files
 
@@ -133,12 +104,9 @@ Debug output via USART1 (115200 baud) on the P7 header. See
 
 | Directory | Description |
 |-----------|-------------|
-| `hal/` | Hardware abstraction layer (common interface in `hal.h`) |
-| `hal/webots-crazyflie/` | HAL implementation for Webots simulation |
-| `hal/crazyflie-2.1+/` | HAL implementation for Crazyflie 2.1+ (BMI088, BMP388, Flow deck) |
-| `hal/STEVAL-DRONE01/` | HAL implementation for STEVAL-DRONE01 (LSM6DSL, LPS22HH) |
+| `hal/` | Hardware abstraction layer (see `hal/<platform>/README.md`) |
 | `controllers/pilot/` | Webots controller (symlink created by `make install`) |
-| `worlds/` | Webots world files (hover_test.wbt) |
+| `worlds/` | Webots world files |
 
 ## Architecture
 
@@ -161,13 +129,8 @@ Hardware Abstraction Layer (HAL) provides platform independence:
 - `hal_read_sensors()` - reads sensors (called by sensor_actor)
 - `hal_write_torque()` - writes motors with mixing (called by motor_actor)
 
-HAL implementations:
-- `hal/webots-crazyflie/hal_webots.c` - Webots simulation
-- `hal/crazyflie-2.1+/hal_crazyflie.c` - Crazyflie 2.1+ hardware
-- `hal/STEVAL-DRONE01/hal_stm32.c` - STEVAL-DRONE01 hardware
-
-Actor code is identical across platforms. The only compile-time difference is
-`SIMULATED_TIME` which controls the main loop (simulation vs real-time).
+Actor code is identical across platforms. See `hal/<platform>/README.md` for
+hardware-specific details.
 
 ## Actor Priorities and Spawn Order
 
@@ -189,117 +152,31 @@ order to ensure each actor sees fresh data from upstream actors in the same step
 
 ## Control System
 
-### PID Controllers (tuned in hal_config.h per platform)
+### PID Controllers
 
-Webots gains shown below; STEVAL-DRONE01 uses higher altitude gains (Kp=0.5, Ki=0.1).
+Gains are tuned per platform in `hal/<platform>/hal_config.h`. The control
+cascade is: altitude → position → attitude → rate → motors.
 
-| Controller | Kp   | Ki   | Kd    | Purpose |
-|------------|------|------|-------|---------|
-| Altitude   | 0.3  | 0.05 | 0     | Track target altitude (PI + velocity damping) |
-| Position   | 0.2  | -    | 0.1   | Track target XY (PD, max tilt 0.35 rad) |
-| Attitude   | 4.0  | 0    | 0     | Level attitude (roll/pitch) |
-| Yaw attitude | 4.0 | 0   | 0     | Track target heading (uses pid_update_angle for wrap-around) |
-| Roll rate  | 0.02 | 0    | 0.001 | Stabilize roll |
-| Pitch rate | 0.02 | 0    | 0.001 | Stabilize pitch |
-| Yaw rate   | 0.02 | 0    | 0.001 | Stabilize yaw |
-
-Altitude control uses measured vertical velocity for damping (Kv=0.15) instead
-of differentiating position error. This provides smoother response with less noise.
-
-Position control uses simple PD with velocity damping. Commands are transformed
-from world frame to body frame based on current yaw. Heading hold is achieved
-via yaw attitude setpoint published to the attitude actor, which uses `pid_update_angle()`
-to handle the ±π wrap-around correctly.
+- **Altitude:** PI with velocity damping (tracks target altitude)
+- **Position:** PD with velocity damping (tracks target XY, max tilt limited)
+- **Attitude:** P controller for roll/pitch/yaw angles
+- **Rate:** PD controller for angular rates
 
 ### Waypoint Navigation
 
 The waypoint actor manages a list of waypoints and publishes the current target
 to the position target bus. Both altitude and position actors read from this bus.
 
-**Webots demo route (square pattern with altitude changes):**
-1. (0, 0, 1.0m) heading 0° - start at 1m
-2. (1, 0, 1.2m) heading 0° - rise to 1.2m
-3. (1, 1, 1.4m) heading 90° - rise to 1.4m, face east
-4. (0, 1, 1.2m) heading 180° - drop to 1.2m, face south
-5. (0, 0, 1.0m) heading 0° - return to 1m
+Routes depend on flight profile (`FLIGHT_PROFILE=N` at build time) and platform
+capabilities. See `hal/<platform>/README.md` for available flight profiles.
 
-**Crazyflie 2.1+ / STEVAL-DRONE01 demo route (altitude only):**
-1. 0.5m - hover at 0.5m
-2. 1.0m - rise to 1.0m
-3. 1.5m - rise to 1.5m
-4. 1.0m - drop to 1.0m (loop back to 1)
+**Arrival detection:** Position within 0.15m, heading within 0.1 rad, velocity below 0.1 m/s.
+After completing the route, the drone loops back to the first waypoint.
 
-With Flow deck, Crazyflie can also use the Webots route for full 3D navigation.
+### Motor Mixer
 
-**First flight test route (FLIGHT_PROFILE=1, safe tethered test):**
-1. Hover at 0.5m for 6 seconds
-2. Land after 10 seconds total flight time
-
-**Arrival detection:** The drone must satisfy all conditions before advancing:
-- XY position within 0.15m of waypoint (Webots, or Crazyflie with Flow deck)
-- Altitude within 0.15m of target
-- Heading within 0.1 rad (~6°) of target
-- Velocity below 0.1 m/s (nearly stopped)
-- Hover at waypoint: 2s (simulation), 5s (hardware), 6s (first flight test)
-
-After completing the route, the drone loops back to the first waypoint and repeats forever.
-
-### Motor Mixer (Platform-Specific, X Configuration)
-
-The mixer converts torque commands to individual motor speeds. Each HAL
-implementation contains its own mixer. All platforms use X-configuration.
-
-**Webots Crazyflie (hal/webots-crazyflie/):** Matches Bitcraze firmware
-```
-        Front
-      M2    M3
-        +--+
-        |  |
-        +--+
-      M1    M4
-        Rear
-
-M1 = thrust - roll + pitch + yaw  (rear-left, CCW)
-M2 = thrust - roll - pitch - yaw  (front-left, CW)
-M3 = thrust + roll - pitch + yaw  (front-right, CCW)
-M4 = thrust + roll + pitch - yaw  (rear-right, CW)
-```
-
-**Crazyflie 2.1+ (hal/crazyflie-2.1+/):** Brushed coreless motors on TIM2
-```
-        Front
-      M1    M2
-        +--+
-        |  |
-        +--+
-      M4    M3
-        Rear
-
-M1 = thrust - roll + pitch + yaw  (front-left, CCW)  → TIM2_CH1 (PA0)
-M2 = thrust + roll + pitch - yaw  (front-right, CW)  → TIM2_CH2 (PA1)
-M3 = thrust + roll - pitch + yaw  (rear-right, CCW)  → TIM2_CH3 (PA2)
-M4 = thrust - roll - pitch - yaw  (rear-left, CW)    → TIM2_CH4 (PA3)
-```
-
-**STEVAL-DRONE01 (hal/STEVAL-DRONE01/):** Brushed DC motors on TIM4
-```
-        Front
-      M2    M3
-        +--+
-        |  |
-        +--+
-      M1    M4
-        Rear
-
-M1 = thrust - roll - pitch + yaw  (rear-left, CCW)   → P1 (TIM4_CH1, PB6)
-M2 = thrust - roll + pitch - yaw  (front-left, CW)   → P2 (TIM4_CH2, PB7)
-M3 = thrust + roll + pitch + yaw  (front-right, CCW) → P4 (TIM4_CH3, PB8)
-M4 = thrust + roll - pitch - yaw  (rear-right, CW)   → P5 (TIM4_CH4, PB9)
-```
-
-Note: STEVAL board connectors are labeled P1, P2, P4, P5 (no P3).
-
-The mixer is implemented in each HAL's `hal_write_torque()` function.
+Each HAL implements its own X-configuration mixer in `hal_write_torque()`.
+See `hal/<platform>/README.md` for motor layout and mixing equations.
 
 ## Main Loop
 
@@ -319,14 +196,3 @@ Webots controls time via `hal_step()` (which wraps `wb_robot_step()`). Each call
 4. Actors read sensors, compute, publish results
 5. Loop repeats
 
-## Webots Device Names
-
-| Device | Name | Type |
-|--------|------|------|
-| Motor 1 (rear-left) | `m1_motor` | RotationalMotor |
-| Motor 2 (front-left) | `m2_motor` | RotationalMotor |
-| Motor 3 (front-right) | `m3_motor` | RotationalMotor |
-| Motor 4 (rear-right) | `m4_motor` | RotationalMotor |
-| Gyroscope | `gyro` | Gyro |
-| Inertial Unit | `inertial_unit` | InertialUnit |
-| GPS | `gps` | GPS |
