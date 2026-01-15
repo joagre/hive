@@ -62,7 +62,7 @@ The runtime consists of:
 3. **IPC**: Inter-process communication via mailboxes with selective receive and request/reply support
 4. **Bus**: Publish-subscribe system with configurable retention policies (consume_after_reads, max_age_ms)
 5. **Timers**: timerfd registered in epoll (Linux), hardware timers on STM32 (SysTick/TIM)
-6. **Network**: Non-blocking sockets registered in epoll (Linux), lwIP NO_SYS mode on STM32
+6. **Network**: Non-blocking sockets registered in epoll (Linux only; STM32 not yet implemented)
 7. **File**: Platform-specific implementation
    - Linux: Synchronous POSIX I/O (stalls scheduler briefly)
    - STM32: Flash-backed virtual files (`/log`, `/config`) with ring buffer for fast writes (blocks when buffer full)
@@ -291,7 +291,7 @@ Different implementations for Linux (dev) vs STM32 bare metal (prod):
 - Context switch: x86-64 asm vs ARM Cortex-M asm
 - Event notification: epoll vs WFI + interrupt flags
 - Timer: timerfd + epoll vs software timer wheel (SysTick/TIM)
-- Network: Non-blocking BSD sockets + epoll vs lwIP NO_SYS mode
+- Network: Non-blocking BSD sockets + epoll (Linux only; STM32 not yet implemented)
 - File: Synchronous POSIX (`hive_file_linux.c`) vs flash-backed ring buffer (`hive_file_stm32.c`)
 
 Platform-specific source files:
