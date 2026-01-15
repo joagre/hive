@@ -438,6 +438,31 @@ The runtime uses static allocation for deterministic behavior and suitability fo
 - Suitable for safety-critical certification
 - Predictable timing: O(1) pool allocation for hot paths, bounded arena allocation for cold paths (spawn/exit)
 
+## Architectural Limits
+
+The following limits are **hardcoded** and cannot be changed without modifying the runtime source code. They differ from compile-time configurable limits (like `HIVE_MAX_ACTORS`) which can be adjusted via preprocessor defines.
+
+| Limit | Value | Reason | Location |
+|-------|-------|--------|----------|
+| Bus subscribers | 32 max | `uint32_t` bitmask tracks which subscribers read each entry | `hive_bus.c` |
+| Priority levels | 4 (0-3) | Enum: CRITICAL=0, HIGH=1, NORMAL=2, LOW=3 | `hive_types.h` |
+| Message header | 4 bytes | Wire format: class (4 bits) + gen (1 bit) + tag (27 bits) | `hive_ipc.c` |
+| Tag values | 27 bits | 134M unique values before wrap; bit 27 marks generated tags | `hive_ipc.c` |
+| Message classes | 6 | NOTIFY, REQUEST, REPLY, TIMER, EXIT, ANY (4-bit field) | `hive_types.h` |
+
+**Bus subscriber limit (32):** Each bus entry has a `uint32_t readers_mask` bitmask where bit N indicates subscriber N has read the entry. This enables O(1) read tracking per entry. Enforced by `_Static_assert` in `hive_bus.c`.
+
+**Configurable limits** (via `hive_static_config.h`, recompile required):
+- `HIVE_MAX_ACTORS` (64) - maximum concurrent actors
+- `HIVE_MAX_BUSES` (32) - maximum concurrent buses
+- `HIVE_MAX_BUS_ENTRIES` (64) - entries per bus ring buffer
+- `HIVE_MAX_BUS_SUBSCRIBERS` (32) - subscribers per bus (capped by architectural limit)
+- `HIVE_MAILBOX_ENTRY_POOL_SIZE` (256) - global mailbox entry pool
+- `HIVE_MESSAGE_DATA_POOL_SIZE` (256) - global message data pool
+- `HIVE_MAX_MESSAGE_SIZE` (256) - maximum message size including header
+- `HIVE_STACK_ARENA_SIZE` (1 MB) - actor stack arena
+- `HIVE_DEFAULT_STACK_SIZE` (64 KB) - default actor stack size
+
 ## Error Handling
 
 All runtime functions return `hive_status`:
