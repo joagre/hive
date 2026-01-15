@@ -438,8 +438,8 @@ The runtime is **completely single-threaded** with an event loop architecture. A
 
 **STM32 (bare metal)**:
 - Timers: Hardware timers (SysTick or TIM peripherals)
-- Network: lwIP in NO_SYS mode (polling or interrupt-driven)
-- File: Flash-backed virtual files (board-defined, e.g., `/log`) with ring buffer
+- Network: Not yet implemented (planned: lwIP in NO_SYS mode)
+- File: Flash-backed virtual files (e.g., `/log`) with ring buffer
   - Board config via -D flags: `HIVE_VFILE_LOG_BASE`, `HIVE_VFILE_LOG_SIZE`, `HIVE_VFILE_LOG_SECTOR`
   - `write()` pushes to ring buffer (O(1), never blocks)
   - `sync()` drains ring buffer to flash (blocking)
