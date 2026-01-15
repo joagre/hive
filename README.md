@@ -58,6 +58,22 @@ man man/man3/hive_ipc.3
 - Logging (compile-time filtering, dual output: console + binary file)
 - Bus (pub-sub with retention policies)
 
+## Cooperative Scheduling
+
+Actors run until they **yield** - there is no preemption. Operations that yield:
+
+| Yields (other actors run) | Never yields |
+|---------------------------|--------------|
+| `hive_yield()` | `hive_ipc_recv(..., 0)` (timeout=0) |
+| `hive_ipc_recv()` (timeout ≠ 0) | `hive_bus_read()` |
+| `hive_ipc_recv_match()` | `hive_ipc_notify()` |
+| `hive_ipc_request()` | `hive_bus_publish()` |
+| `hive_bus_read_wait()` | |
+| `hive_net_*()` | |
+| `hive_exit()` | |
+
+**File I/O** (`hive_file_*`) is different - it stalls the entire scheduler (no actors run). See [SPEC.md](SPEC.md#scheduler-stalling-calls) for details.
+
 ## Performance
 
 Benchmarks measured on a vanilla Dell XPS 13 (Intel Core i7, x86-64 Linux):

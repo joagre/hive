@@ -116,12 +116,24 @@ When an actor calls a blocking API, the following contract applies:
 - Actor is removed from run queue (not schedulable until unblocked)
 - Scheduler saves actor context and switches to next runnable actor
 
-**Operations that block (actor yields, other actors run):**
-- `hive_ipc_recv()` with timeout > 0 or timeout < 0 (block until message or timeout)
-- `hive_ipc_recv_match()` (block until matching message or timeout)
-- `hive_ipc_request()` (block until reply or timeout)
-- `hive_net_send()`, `hive_net_recv()` (block until at least 1 byte transferred or timeout)
-- `hive_bus_read_wait()` (block until data available or timeout)
+**Operations that yield (actor gives up CPU, other actors run):**
+
+| Function | Blocks until |
+|----------|--------------|
+| `hive_yield()` | Immediately reschedules (no wait condition) |
+| `hive_ipc_recv()` | Message arrives or timeout (if timeout ≠ 0) |
+| `hive_ipc_recv_match()` | Matching message arrives or timeout |
+| `hive_ipc_request()` | Reply arrives or timeout |
+| `hive_bus_read_wait()` | Bus data available or timeout |
+| `hive_net_connect()` | Connection established or timeout |
+| `hive_net_accept()` | Incoming connection or timeout |
+| `hive_net_send()` | At least 1 byte sent or timeout |
+| `hive_net_recv()` | At least 1 byte received or timeout |
+| `hive_exit()` | Never returns (actor terminates) |
+
+**Non-blocking variants** (return immediately, never yield):
+- `hive_ipc_recv()` with timeout = 0 → returns `HIVE_ERR_WOULDBLOCK` if empty
+- `hive_bus_read()` → returns `HIVE_ERR_WOULDBLOCK` if no data
 
 **Note:** File I/O (`hive_file_*`) is NOT in this list. See "Scheduler-Stalling Calls" below.
 
