@@ -460,7 +460,6 @@ The only compile-time difference in pilot.c is `SIMULATED_TIME`:
 | No GPS/position feedback | x,y return 0.0 | Waypoints are altitude-only (x=0, y=0); drone hovers in place and cycles through altitudes |
 | Motor pin conflict | Only 2 of 4 motors on default pins | Use port D pins (PD12-PD15) via `motors_init_full()` |
 | PID gains | Tuned for Webots Crazyflie | May need retuning for hardware |
-| TIME_STEP_S mismatch | PIDs use 4ms but STM32 runs at 2.5ms | Gains absorb difference; retune if needed |
 
 ### Portable Code
 

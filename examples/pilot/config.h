@@ -91,7 +91,7 @@
 // ----------------------------------------------------------------------------
 
 #define TIME_STEP_MS  4        // Control loop period (milliseconds)
-#define TIME_STEP_S   0.004f   // Control loop period (seconds)
+// Note: Actors measure actual dt using hive_get_time(), not a fixed timestep
 
 #define DEBUG_PRINT_INTERVAL  250  // Print every N iterations (250 = 1 second at 250Hz)
 
