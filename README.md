@@ -210,7 +210,7 @@ hive_ipc_recv(&msg, -1);   // -1=block forever
 hive_ipc_recv(&msg, 0);    // 0=non-blocking (returns HIVE_ERR_WOULDBLOCK if empty)
 hive_ipc_recv(&msg, 100);  // 100=timeout after 100ms (returns HIVE_ERR_TIMEOUT if no message)
 
-// Direct access to pre-decoded fields - no hive_msg_decode() needed
+// Direct access to pre-decoded fields
 my_data *data = (my_data *)msg.data;  // Direct payload access
 if (msg.class == HIVE_MSG_REQUEST) {
     // Handle request...

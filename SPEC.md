@@ -755,7 +755,7 @@ typedef struct {
 } hive_message;
 ```
 
-The message struct provides **direct access to all fields** - no `hive_msg_decode()` call required:
+The message struct provides **direct access to all fields**:
 
 ```c
 hive_message msg;
