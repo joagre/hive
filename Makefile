@@ -2,34 +2,21 @@
 CC := gcc
 CFLAGS := -std=c11 -Wall -Wextra -Wpedantic -Werror -O2 -g
 CPPFLAGS := -Iinclude -D_POSIX_C_SOURCE=200809L
-DEPFLAGS = -MMD -MP
-LDFLAGS :=
-LDLIBS :=
 
 # Platform selection (linux or stm32)
 PLATFORM ?= linux
 
-# Platform-specific settings
-ifeq ($(PLATFORM),linux)
-  CPPFLAGS += -DHIVE_PLATFORM_LINUX
-  PLATFORM_SRCS := hive_scheduler_linux.c hive_timer_linux.c
-  PLATFORM_ASM := hive_context_x86_64.S
-else ifeq ($(PLATFORM),stm32)
-  CPPFLAGS += -DHIVE_PLATFORM_STM32
-  PLATFORM_SRCS := hive_scheduler_stm32.c hive_timer_stm32.c
-  PLATFORM_ASM := hive_context_arm_cm.S
-  # STM32 defaults: disable net (no lwIP yet), enable file (flash-backed)
+# STM32 defaults: disable net (no lwIP yet), enable file (flash-backed)
+ifeq ($(PLATFORM),stm32)
   ENABLE_NET ?= 0
   ENABLE_FILE ?= 1
-else
-  $(error Unknown PLATFORM: $(PLATFORM). Use 'linux' or 'stm32')
 endif
 
 # Feature toggles (set to 0 to disable)
 ENABLE_NET ?= 1
 ENABLE_FILE ?= 1
 
-# Add feature flags to compiler
+# Add feature flags to compiler (for benchmarks)
 ifeq ($(ENABLE_NET),1)
   CPPFLAGS += -DHIVE_ENABLE_NET=1
 else
@@ -43,8 +30,6 @@ else
 endif
 
 # Directories
-SRC_DIR := src
-INC_DIR := include
 BUILD_DIR := build
 MAN_DIR := man
 
@@ -52,31 +37,7 @@ MAN_DIR := man
 PREFIX ?= /usr/local
 MANPREFIX ?= $(PREFIX)/share/man
 
-# Core source files (platform-independent)
-CORE_SRCS := hive_actor.c hive_bus.c hive_context.c hive_ipc.c \
-             hive_link.c hive_log.c hive_pool.c hive_runtime.c
-
-# Feature-specific source files
-FEATURE_SRCS :=
-ifeq ($(ENABLE_NET),1)
-  FEATURE_SRCS += hive_net.c
-endif
-ifeq ($(ENABLE_FILE),1)
-  ifeq ($(PLATFORM),stm32)
-    FEATURE_SRCS += hive_file_stm32.c
-  else
-    FEATURE_SRCS += hive_file_linux.c
-  endif
-endif
-
-# Combine all source files
-SRCS := $(addprefix $(SRC_DIR)/,$(CORE_SRCS) $(PLATFORM_SRCS) $(FEATURE_SRCS))
-ASM_SRCS := $(addprefix $(SRC_DIR)/,$(PLATFORM_ASM))
-
-OBJS := $(SRCS:$(SRC_DIR)/%.c=$(BUILD_DIR)/%.o) $(ASM_SRCS:$(SRC_DIR)/%.S=$(BUILD_DIR)/%.o)
-DEPS := $(SRCS:$(SRC_DIR)/%.c=$(BUILD_DIR)/%.d)
-
-# Library
+# Library (built by src/Makefile)
 LIB := $(BUILD_DIR)/libhive.a
 
 # Benchmarks
@@ -85,7 +46,7 @@ BENCHMARK_SRCS := $(wildcard $(BENCHMARKS_DIR)/*.c)
 BENCHMARKS := $(BENCHMARK_SRCS:$(BENCHMARKS_DIR)/%.c=$(BUILD_DIR)/%)
 
 # Variables to export to sub-Makefiles
-export CC CFLAGS ENABLE_NET ENABLE_FILE
+export CC CFLAGS PLATFORM ENABLE_NET ENABLE_FILE
 
 # ============================================================================
 # Primary Targets
@@ -94,25 +55,16 @@ export CC CFLAGS ENABLE_NET ENABLE_FILE
 .PHONY: all
 all: $(LIB) examples benchmarks
 
-# Create build directory
-$(BUILD_DIR):
-	mkdir -p $(BUILD_DIR)
+# Build the library (delegate to src/Makefile)
+.PHONY: lib
+lib: $(LIB)
 
-# Compile source files with dependency generation
-$(BUILD_DIR)/%.o: $(SRC_DIR)/%.c | $(BUILD_DIR)
-	$(CC) $(CFLAGS) $(CPPFLAGS) $(DEPFLAGS) -c $< -o $@
-
-# Compile assembly files
-$(BUILD_DIR)/%.o: $(SRC_DIR)/%.S | $(BUILD_DIR)
-	$(CC) $(CPPFLAGS) -c $< -o $@
-
-# Create static library
-$(LIB): $(OBJS)
-	ar rcs $@ $^
+$(LIB):
+	$(MAKE) -C src
 
 # Build benchmarks
 $(BUILD_DIR)/%: $(BENCHMARKS_DIR)/%.c $(LIB)
-	$(CC) $(CFLAGS) $(CPPFLAGS) $< -o $@ -L$(BUILD_DIR) -lhive $(LDLIBS)
+	$(CC) $(CFLAGS) $(CPPFLAGS) $< -o $@ -L$(BUILD_DIR) -lhive
 
 .PHONY: benchmarks
 benchmarks: $(BENCHMARKS)
@@ -242,6 +194,7 @@ help:
 	@echo "  ENABLE_FILE=1     - File I/O (default: 1)"
 	@echo ""
 	@echo "Sub-Makefiles:"
+	@echo "  make -C src       - Build library directly"
 	@echo "  make -C tests     - Build/run tests directly"
 	@echo "  make -C examples  - Build/run examples directly"
 	@echo "  make -C qemu      - QEMU cross-compile directly"
@@ -255,6 +208,3 @@ deps:
 .PHONY: print-%
 print-%:
 	@echo '$*=$($*)'
-
-# Include automatically generated dependencies
--include $(DEPS)
