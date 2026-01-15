@@ -42,7 +42,7 @@ man man/man3/hive_ipc.3
 ## Features
 
 - Statically bounded memory - Deterministic footprint, zero fragmentation, heap optional only for actor stacks
-- Cooperative multitasking with manual x86-64 context switching
+- Cooperative multitasking with manual assembly context switching (x86-64 and ARM Cortex-M)
 - Priority-based round-robin scheduler (4 priority levels)
 - Configurable per-actor stack sizes with arena allocator
 - Actor lifecycle management (spawn, exit)
