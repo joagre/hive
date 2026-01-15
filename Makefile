@@ -46,7 +46,6 @@ endif
 SRC_DIR := src
 INC_DIR := include
 BUILD_DIR := build
-EXAMPLES_DIR := examples
 MAN_DIR := man
 
 # Installation directories
@@ -63,7 +62,6 @@ ifeq ($(ENABLE_NET),1)
   FEATURE_SRCS += hive_net.c
 endif
 ifeq ($(ENABLE_FILE),1)
-  # Platform-specific file I/O implementation
   ifeq ($(PLATFORM),stm32)
     FEATURE_SRCS += hive_file_stm32.c
   else
@@ -81,41 +79,20 @@ DEPS := $(SRCS:$(SRC_DIR)/%.c=$(BUILD_DIR)/%.d)
 # Library
 LIB := $(BUILD_DIR)/libhive.a
 
-# Examples
-EXAMPLE_SRCS := $(wildcard $(EXAMPLES_DIR)/*.c)
-
-# Exclude examples that depend on disabled features
-ifneq ($(ENABLE_NET),1)
-  EXAMPLE_SRCS := $(filter-out $(EXAMPLES_DIR)/echo.c,$(EXAMPLE_SRCS))
-endif
-ifneq ($(ENABLE_FILE),1)
-  EXAMPLE_SRCS := $(filter-out $(EXAMPLES_DIR)/fileio.c,$(EXAMPLE_SRCS))
-endif
-
-EXAMPLES := $(EXAMPLE_SRCS:$(EXAMPLES_DIR)/%.c=$(BUILD_DIR)/%)
-
 # Benchmarks
 BENCHMARKS_DIR := benchmarks
 BENCHMARK_SRCS := $(wildcard $(BENCHMARKS_DIR)/*.c)
 BENCHMARKS := $(BENCHMARK_SRCS:$(BENCHMARKS_DIR)/%.c=$(BUILD_DIR)/%)
 
-# Tests
-TESTS_DIR := tests
-TEST_SRCS := $(wildcard $(TESTS_DIR)/*.c)
+# Variables to export to sub-Makefiles
+export CC CFLAGS ENABLE_NET ENABLE_FILE
 
-# Exclude tests that depend on disabled features
-ifneq ($(ENABLE_NET),1)
-  TEST_SRCS := $(filter-out $(TESTS_DIR)/net_test.c,$(TEST_SRCS))
-endif
-ifneq ($(ENABLE_FILE),1)
-  TEST_SRCS := $(filter-out $(TESTS_DIR)/file_test.c,$(TEST_SRCS))
-endif
+# ============================================================================
+# Primary Targets
+# ============================================================================
 
-TESTS := $(TEST_SRCS:$(TESTS_DIR)/%.c=$(BUILD_DIR)/%)
-
-# Default target
 .PHONY: all
-all: $(LIB) $(EXAMPLES) $(BENCHMARKS)
+all: $(LIB) examples benchmarks
 
 # Create build directory
 $(BUILD_DIR):
@@ -133,34 +110,75 @@ $(BUILD_DIR)/%.o: $(SRC_DIR)/%.S | $(BUILD_DIR)
 $(LIB): $(OBJS)
 	ar rcs $@ $^
 
-# Build examples
-$(BUILD_DIR)/%: $(EXAMPLES_DIR)/%.c $(LIB)
-	$(CC) $(CFLAGS) $(CPPFLAGS) $< -o $@ -L$(BUILD_DIR) -lhive $(LDLIBS)
-
 # Build benchmarks
 $(BUILD_DIR)/%: $(BENCHMARKS_DIR)/%.c $(LIB)
 	$(CC) $(CFLAGS) $(CPPFLAGS) $< -o $@ -L$(BUILD_DIR) -lhive $(LDLIBS)
 
-# Build tests
-$(BUILD_DIR)/%: $(TESTS_DIR)/%.c $(LIB)
-	$(CC) $(CFLAGS) $(CPPFLAGS) $< -o $@ -L$(BUILD_DIR) -lhive $(LDLIBS)
+.PHONY: benchmarks
+benchmarks: $(BENCHMARKS)
+
+# ============================================================================
+# Delegated Targets
+# ============================================================================
+
+.PHONY: examples
+examples: $(LIB)
+	$(MAKE) -C examples
+
+.PHONY: test
+test: $(LIB)
+	$(MAKE) -C tests test
+
+.PHONY: tests
+tests: $(LIB)
+	$(MAKE) -C tests
+
+# Run targets (delegate to examples/)
+.PHONY: run-pingpong run-fileio run-echo
+run-pingpong run-fileio run-echo: $(LIB)
+	$(MAKE) -C examples $@
+
+# ============================================================================
+# QEMU Targets (delegate to qemu/)
+# ============================================================================
+
+.PHONY: qemu-build
+qemu-build:
+	$(MAKE) -C qemu build
+
+.PHONY: qemu-test
+qemu-test:
+	$(MAKE) -C qemu test
+
+.PHONY: qemu-test-ci
+qemu-test-ci:
+	$(MAKE) -C qemu test-ci
+
+.PHONY: qemu-test-suite
+qemu-test-suite:
+	$(MAKE) -C qemu test-suite
+
+.PHONY: qemu-example-suite
+qemu-example-suite:
+	$(MAKE) -C qemu example-suite
+
+# Pattern rules for QEMU targets
+.PHONY: qemu-run-%
+qemu-run-%:
+	$(MAKE) -C qemu run-$*
+
+.PHONY: qemu-example-%
+qemu-example-%:
+	$(MAKE) -C qemu example-$*
+
+# ============================================================================
+# Utility Targets
+# ============================================================================
 
 # Run benchmarks
 .PHONY: bench
 bench: $(BUILD_DIR)/bench
 	./$(BUILD_DIR)/bench
-
-# Run tests
-.PHONY: test
-test: $(TESTS)
-	@echo "Running tests..."
-	@for test in $(TESTS); do \
-		echo ""; \
-		echo "=== Running $$test ==="; \
-		timeout 5 $$test || exit 1; \
-	done
-	@echo ""
-	@echo "All tests passed!"
 
 # Clean
 .PHONY: clean
@@ -174,21 +192,6 @@ clean-emacs:
 	find . -name '*~' -delete
 	find . -name '#*#' -delete
 	find . -name '.#*' -delete
-
-# Run ping-pong example
-.PHONY: run-pingpong
-run-pingpong: $(BUILD_DIR)/pingpong
-	./$(BUILD_DIR)/pingpong
-
-# Run file I/O example
-.PHONY: run-fileio
-run-fileio: $(BUILD_DIR)/fileio
-	./$(BUILD_DIR)/fileio
-
-# Run echo server/client example
-.PHONY: run-echo
-run-echo: $(BUILD_DIR)/echo
-	./$(BUILD_DIR)/echo
 
 # Install man pages
 .PHONY: install-man
@@ -204,233 +207,9 @@ uninstall-man:
 	rm -f $(MANPREFIX)/man3/hive_*.3
 
 # ============================================================================
-# QEMU Testing (Cross-compile for Cortex-M3 and run in QEMU)
-# ============================================================================
-
-QEMU_DIR := qemu
-QEMU_BUILD_DIR := $(BUILD_DIR)/qemu
-
-# ARM cross-compiler
-ARM_CC := arm-none-eabi-gcc
-ARM_OBJCOPY := arm-none-eabi-objcopy
-ARM_SIZE := arm-none-eabi-size
-
-# ARM compiler flags for Cortex-M3
-ARM_CFLAGS := -std=c11 -Wall -Wextra -Wpedantic -O2 -g \
-              -mcpu=cortex-m3 -mthumb -mfloat-abi=soft \
-              -ffunction-sections -fdata-sections -fno-common \
-              -ffreestanding -nostdlib
-
-# QEMU test uses smaller config values suitable for 64KB RAM
-# Override static config via -D flags (all values use #ifndef in hive_static_config.h)
-ARM_CPPFLAGS := -Iinclude -I$(QEMU_DIR) \
-                -DHIVE_PLATFORM_STM32 -DHIVE_ENABLE_NET=0 -DHIVE_ENABLE_FILE=0 \
-                -DHIVE_MAX_ACTORS=8 \
-                -DHIVE_MAX_BUSES=4 \
-                -DHIVE_MAILBOX_ENTRY_POOL_SIZE=32 \
-                -DHIVE_MESSAGE_DATA_POOL_SIZE=32 \
-                -DHIVE_LINK_ENTRY_POOL_SIZE=16 \
-                -DHIVE_MONITOR_ENTRY_POOL_SIZE=16 \
-                -DHIVE_TIMER_ENTRY_POOL_SIZE=16 \
-                -DHIVE_MAX_BUS_SUBSCRIBERS=4 \
-                -DHIVE_MAX_BUS_ENTRIES=8 \
-                -DHIVE_MAX_MESSAGE_SIZE=128 \
-                -DHIVE_DEFAULT_STACK_SIZE=2048 \
-                '-DHIVE_STACK_ARENA_SIZE=(16*1024)'
-
-ARM_LDFLAGS := -T$(QEMU_DIR)/lm3s6965.ld \
-               -mcpu=cortex-m3 -mthumb \
-               -Wl,--gc-sections \
-               -nostartfiles -specs=nosys.specs
-
-# QEMU source files
-QEMU_CORE_SRCS := hive_actor.c hive_bus.c hive_context.c hive_ipc.c \
-                  hive_link.c hive_log.c hive_pool.c hive_runtime.c \
-                  hive_scheduler_stm32.c hive_timer_stm32.c
-
-QEMU_SRCS := $(addprefix $(SRC_DIR)/,$(QEMU_CORE_SRCS))
-QEMU_ASM := $(SRC_DIR)/hive_context_arm_cm.S
-QEMU_TEST_SRCS := $(QEMU_DIR)/startup.S $(QEMU_DIR)/semihosting.c $(QEMU_DIR)/test_main.c
-
-QEMU_OBJS := $(QEMU_SRCS:$(SRC_DIR)/%.c=$(QEMU_BUILD_DIR)/%.o) \
-             $(QEMU_ASM:$(SRC_DIR)/%.S=$(QEMU_BUILD_DIR)/%.o) \
-             $(QEMU_BUILD_DIR)/startup.o \
-             $(QEMU_BUILD_DIR)/semihosting.o \
-             $(QEMU_BUILD_DIR)/test_main.o
-
-# QEMU test binary
-QEMU_ELF := $(QEMU_BUILD_DIR)/test.elf
-QEMU_BIN := $(QEMU_BUILD_DIR)/test.bin
-
-# Create QEMU build directory
-$(QEMU_BUILD_DIR):
-	mkdir -p $(QEMU_BUILD_DIR)
-
-# Compile runtime sources for ARM
-$(QEMU_BUILD_DIR)/%.o: $(SRC_DIR)/%.c | $(QEMU_BUILD_DIR)
-	$(ARM_CC) $(ARM_CFLAGS) $(ARM_CPPFLAGS) -c $< -o $@
-
-# Compile ARM assembly
-$(QEMU_BUILD_DIR)/%.o: $(SRC_DIR)/%.S | $(QEMU_BUILD_DIR)
-	$(ARM_CC) $(ARM_CFLAGS) $(ARM_CPPFLAGS) -c $< -o $@
-
-# Compile QEMU test sources
-$(QEMU_BUILD_DIR)/startup.o: $(QEMU_DIR)/startup.S | $(QEMU_BUILD_DIR)
-	$(ARM_CC) $(ARM_CFLAGS) $(ARM_CPPFLAGS) -c $< -o $@
-
-$(QEMU_BUILD_DIR)/semihosting.o: $(QEMU_DIR)/semihosting.c | $(QEMU_BUILD_DIR)
-	$(ARM_CC) $(ARM_CFLAGS) $(ARM_CPPFLAGS) -c $< -o $@
-
-$(QEMU_BUILD_DIR)/test_main.o: $(QEMU_DIR)/test_main.c | $(QEMU_BUILD_DIR)
-	$(ARM_CC) $(ARM_CFLAGS) $(ARM_CPPFLAGS) -c $< -o $@
-
-# Link QEMU test binary
-$(QEMU_ELF): $(QEMU_OBJS)
-	$(ARM_CC) $(ARM_LDFLAGS) $^ -o $@
-	$(ARM_SIZE) $@
-
-# Create binary image
-$(QEMU_BIN): $(QEMU_ELF)
-	$(ARM_OBJCOPY) -O binary $< $@
-
-# Build QEMU test
-.PHONY: qemu-build
-qemu-build: $(QEMU_ELF)
-	@echo "QEMU test binary built: $(QEMU_ELF)"
-
-# Run QEMU test
-# Note: Filter out "Timer with period zero" warning from unused LM3S6965 hardware timers
-.PHONY: qemu-test
-qemu-test: $(QEMU_ELF)
-	@echo "Running QEMU test..."
-	@qemu-system-arm -M lm3s6965evb -nographic \
-		-semihosting-config enable=on,target=native \
-		-kernel $(QEMU_ELF) 2>&1 | grep -v "Timer with period zero" \
-		|| true
-	@echo "QEMU test completed"
-
-# Run QEMU test with timeout
-.PHONY: qemu-test-ci
-qemu-test-ci: $(QEMU_ELF)
-	@echo "Running QEMU test with timeout..."
-	@timeout 10 qemu-system-arm -M lm3s6965evb -nographic \
-		-semihosting-config enable=on,target=native \
-		-kernel $(QEMU_ELF) 2>&1 | grep -v "Timer with period zero" \
-		|| ([ $$? -eq 124 ] && echo "Test timed out" && exit 1)
-
-# ============================================================================
-# QEMU Test Suite (run tests/*.c on ARM/QEMU)
-# ============================================================================
-
-# Compatible tests (exclude net_test.c and file_test.c which require disabled features)
-QEMU_COMPAT_TESTS := actor_test ipc_test timer_test link_test \
-                     monitor_test bus_test priority_test runtime_test \
-                     timeout_test arena_test pool_exhaustion_test \
-                     backoff_retry_test simple_backoff_test congestion_demo
-
-# Runtime objects for test linking (exclude test_main.o which has its own main)
-QEMU_RUNTIME_OBJS := $(filter-out $(QEMU_BUILD_DIR)/test_main.o,$(QEMU_OBJS))
-
-# Test runner object (provides main with SysTick init)
-$(QEMU_BUILD_DIR)/test_runner.o: $(QEMU_DIR)/test_runner.c | $(QEMU_BUILD_DIR)
-	$(ARM_CC) $(ARM_CFLAGS) $(ARM_CPPFLAGS) -c $< -o $@
-
-# Pattern rule: compile test source for ARM
-# -Dmain=test_main renames the test's main() so our runner provides main()
-# -include qemu/qemu_compat.h adds printf/clock_gettime overrides
-$(QEMU_BUILD_DIR)/qemu_%.o: $(TESTS_DIR)/%.c | $(QEMU_BUILD_DIR)
-	$(ARM_CC) $(ARM_CFLAGS) $(ARM_CPPFLAGS) \
-		-include $(QEMU_DIR)/qemu_compat.h \
-		-Dmain=test_main \
-		-c $< -o $@
-
-# Pattern rule: link test ELF
-$(QEMU_BUILD_DIR)/test_%.elf: $(QEMU_BUILD_DIR)/qemu_%.o $(QEMU_BUILD_DIR)/test_runner.o $(QEMU_RUNTIME_OBJS)
-	$(ARM_CC) $(ARM_LDFLAGS) $^ -o $@
-	$(ARM_SIZE) $@
-
-# Preserve test ELF files (prevent make from deleting intermediates)
-.PRECIOUS: $(QEMU_BUILD_DIR)/test_%.elf $(QEMU_BUILD_DIR)/qemu_%.o
-
-# Run a single test: make qemu-run-actor_test
-.PHONY: qemu-run-%
-qemu-run-%: $(QEMU_BUILD_DIR)/test_%.elf
-	@echo "=== Running $* on QEMU ==="
-	@qemu-system-arm -M lm3s6965evb -nographic \
-		-semihosting-config enable=on,target=native \
-		-kernel $< 2>&1 | grep -v "Timer with period zero" || true
-	@echo "=== $* completed ==="
-
-# Run all compatible tests
-.PHONY: qemu-test-suite
-qemu-test-suite:
-	@echo "Running QEMU test suite ($(words $(QEMU_COMPAT_TESTS)) tests)..."
-	@failed=0; \
-	for test in $(QEMU_COMPAT_TESTS); do \
-		echo ""; \
-		$(MAKE) --no-print-directory qemu-run-$$test || failed=1; \
-	done; \
-	echo ""; \
-	if [ $$failed -eq 0 ]; then \
-		echo "All QEMU tests completed!"; \
-	else \
-		echo "Some QEMU tests failed!"; \
-		exit 1; \
-	fi
-
-# ============================================================================
-# QEMU Examples (run examples/*.c on ARM/QEMU)
-# ============================================================================
-
-# Compatible examples (exclude echo.c and fileio.c which require net/file features)
-QEMU_COMPAT_EXAMPLES := timer pingpong priority link_demo supervisor bus request_reply
-
-# Pattern rule: compile example source for ARM
-$(QEMU_BUILD_DIR)/qemu_example_%.o: $(EXAMPLES_DIR)/%.c | $(QEMU_BUILD_DIR)
-	$(ARM_CC) $(ARM_CFLAGS) $(ARM_CPPFLAGS) \
-		-include $(QEMU_DIR)/qemu_compat.h \
-		-Dmain=test_main \
-		-c $< -o $@
-
-# Pattern rule: link example ELF
-$(QEMU_BUILD_DIR)/example_%.elf: $(QEMU_BUILD_DIR)/qemu_example_%.o $(QEMU_BUILD_DIR)/test_runner.o $(QEMU_RUNTIME_OBJS)
-	$(ARM_CC) $(ARM_LDFLAGS) $^ -o $@
-	$(ARM_SIZE) $@
-
-# Preserve example ELF files
-.PRECIOUS: $(QEMU_BUILD_DIR)/example_%.elf $(QEMU_BUILD_DIR)/qemu_example_%.o
-
-# Run a single example: make qemu-example-pingpong
-.PHONY: qemu-example-%
-qemu-example-%: $(QEMU_BUILD_DIR)/example_%.elf
-	@echo "=== Running $* example on QEMU ==="
-	@qemu-system-arm -M lm3s6965evb -nographic \
-		-semihosting-config enable=on,target=native \
-		-kernel $< 2>&1 | grep -v "Timer with period zero" || true
-	@echo "=== $* example completed ==="
-
-# Run all compatible examples
-.PHONY: qemu-example-suite
-qemu-example-suite:
-	@echo "Running QEMU example suite ($(words $(QEMU_COMPAT_EXAMPLES)) examples)..."
-	@failed=0; \
-	for example in $(QEMU_COMPAT_EXAMPLES); do \
-		echo ""; \
-		$(MAKE) --no-print-directory qemu-example-$$example || failed=1; \
-	done; \
-	echo ""; \
-	if [ $$failed -eq 0 ]; then \
-		echo "All QEMU examples completed!"; \
-	else \
-		echo "Some QEMU examples failed!"; \
-		exit 1; \
-	fi
-
-# ============================================================================
 # Help
 # ============================================================================
 
-# Help
 .PHONY: help
 help:
 	@echo "Available targets:"
@@ -444,32 +223,28 @@ help:
 	@echo "  run-pingpong      - Build and run ping-pong example"
 	@echo "  run-fileio        - Build and run file I/O example"
 	@echo "  run-echo          - Build and run echo server/client example"
-	@echo "  qemu-build        - Cross-compile for Cortex-M3 (QEMU target)"
-	@echo "  qemu-test         - Run runtime tests in QEMU emulator"
-	@echo "  qemu-test-ci      - Run QEMU tests with timeout (for CI)"
-	@echo "  qemu-run-<test>   - Run specific test on QEMU (e.g., qemu-run-actor_test)"
-	@echo "  qemu-test-suite   - Run all compatible tests on QEMU"
-	@echo "  qemu-example-<ex> - Run specific example on QEMU (e.g., qemu-example-pingpong)"
-	@echo "  qemu-example-suite - Run all compatible examples on QEMU"
-	@echo "  help              - Show this help message"
+	@echo ""
+	@echo "QEMU targets (cross-compile for Cortex-M3):"
+	@echo "  qemu-build        - Build runtime for QEMU"
+	@echo "  qemu-test         - Run basic test in QEMU"
+	@echo "  qemu-test-ci      - Run with timeout (for CI)"
+	@echo "  qemu-test-suite   - Run all compatible tests"
+	@echo "  qemu-run-<test>   - Run specific test (e.g., qemu-run-actor_test)"
+	@echo "  qemu-example-suite - Run all compatible examples"
+	@echo "  qemu-example-<ex> - Run specific example (e.g., qemu-example-pingpong)"
 	@echo ""
 	@echo "Platform selection:"
 	@echo "  PLATFORM=linux    - Linux x86-64 (default)"
 	@echo "  PLATFORM=stm32    - STM32 ARM Cortex-M (requires cross-compiler)"
 	@echo ""
 	@echo "Feature toggles (set to 0 to disable):"
-	@echo "  ENABLE_NET=1      - Network I/O subsystem (default: 1 on linux, 0 on stm32)"
-	@echo "  ENABLE_FILE=1     - File I/O subsystem (default: 1 on both linux and stm32)"
+	@echo "  ENABLE_NET=1      - Network I/O (default: 1 on linux, 0 on stm32)"
+	@echo "  ENABLE_FILE=1     - File I/O (default: 1)"
 	@echo ""
-	@echo "QEMU testing:"
-	@echo "  Requires: arm-none-eabi-gcc, qemu-system-arm"
-	@echo "  Install: sudo apt install gcc-arm-none-eabi qemu-system-arm"
-	@echo ""
-	@echo "Examples:"
-	@echo "  make                              - Build for Linux with all features"
-	@echo "  make ENABLE_NET=0 ENABLE_FILE=0   - Build for Linux without net/file"
-	@echo "  make PLATFORM=stm32               - Build for STM32 (placeholder)"
-	@echo "  make qemu-test                    - Test ARM code in QEMU emulator"
+	@echo "Sub-Makefiles:"
+	@echo "  make -C tests     - Build/run tests directly"
+	@echo "  make -C examples  - Build/run examples directly"
+	@echo "  make -C qemu      - QEMU cross-compile directly"
 
 # Dependencies
 .PHONY: deps
