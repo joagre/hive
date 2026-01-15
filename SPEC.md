@@ -1566,6 +1566,14 @@ bool hive_msg_is_timer(const hive_message *msg);
 
 Timer wake-ups are delivered as messages with `class == HIVE_MSG_TIMER`. The tag contains the `timer_id`. The actor receives these in its normal `hive_ipc_recv()` loop and can use `hive_msg_is_timer()` or `hive_msg_decode()` to identify timer messages.
 
+**Important:** When waiting for a specific timer, use selective receive with the timer_id as the tag filter:
+```c
+timer_id my_timer;
+hive_timer_after(500000, &my_timer);
+hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, my_timer, &msg, -1);
+```
+Do **not** use `HIVE_TAG_ANY` for timer messages—this could consume the wrong timer's message if multiple timers are active.
+
 ### Timer Tick Coalescing (Periodic Timers)
 
 **Behavior:** When the scheduler reads a timerfd, it obtains an expiration count (how many intervals elapsed since last read). The runtime sends **exactly one tick message** regardless of the expiration count.
