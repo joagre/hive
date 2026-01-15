@@ -15,7 +15,7 @@ A minimalistic actor-based runtime designed for **embedded and safety-critical s
 3. **Modern C11**: Clean, safe, standards-compliant code
 4. **Statically bounded memory**: All runtime memory is statically bounded and deterministic. Heap allocation is forbidden in hot paths and optional only for actor stacks (`malloc_stack = true`)
 5. **Pool-based allocation**: O(1) pools for hot paths; stack arena allocation is bounded and occurs only on spawn/exit
-6. **Explicit control**: Actors yield explicitly, no preemption
+6. **No preemption**: Actors run until they block (IPC, I/O, timers) or yield
 
 ### Heap Usage Policy
 
