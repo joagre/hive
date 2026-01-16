@@ -83,7 +83,9 @@ See `hal/<platform>/README.md` for hardware details, pin mapping, and flight pro
 | `pid.c/h` | Reusable PID controller |
 | `fusion/complementary_filter.c/h` | Portable attitude estimation (accel+gyro fusion) |
 | `types.h` | Shared data types (sensor_data_t, state_estimate_t, etc.) |
-| `config.h` | Shared constants (PID gains, timing, limits) |
+| `config.h` | Configuration constants (timing, thresholds, bus config) |
+| `math_utils.h` | Math macros (CLAMPF, LPF, NORMALIZE_ANGLE) |
+| `flight_profiles.h` | Waypoint definitions per flight profile |
 
 ### Build System
 
@@ -98,7 +100,9 @@ See `hal/<platform>/README.md` for hardware details, pin mapping, and flight pro
 
 | File | Description |
 |------|-------------|
-| `config.h` | Shared constants (timing, limits, bus config) |
+| `config.h` | Configuration constants (timing, thresholds, bus config) |
+| `math_utils.h` | Math macros (CLAMPF, LPF, NORMALIZE_ANGLE) |
+| `flight_profiles.h` | Waypoint definitions per flight profile |
 | `hive_config.mk` | Shared Hive memory limits (actors, buses, pools) |
 | `hal/<platform>/hal_config.h` | Platform-specific PID gains and thrust |
 
