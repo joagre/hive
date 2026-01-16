@@ -45,7 +45,8 @@ endif
 
 # Core source files (platform-independent)
 CORE_SRCS := hive_actor.c hive_bus.c hive_context.c hive_ipc.c \
-             hive_link.c hive_log.c hive_pool.c hive_runtime.c
+             hive_link.c hive_log.c hive_pool.c hive_runtime.c \
+             hive_supervisor.c
 
 # Feature-specific source files
 FEATURE_SRCS :=

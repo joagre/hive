@@ -52,4 +52,11 @@ void hive_yield(void);
 // Check if actor is alive
 bool hive_actor_alive(actor_id id);
 
+// Kill an actor externally
+// Terminates the target actor and notifies linked/monitoring actors.
+// The target's exit reason will be HIVE_EXIT_KILLED.
+// Cannot kill the currently running actor (use hive_exit instead).
+// Returns HIVE_ERR_INVALID if target is self or invalid.
+hive_status hive_kill(actor_id target);
+
 #endif // HIVE_RUNTIME_H

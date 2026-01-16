@@ -1,0 +1,223 @@
+\" Man page for supervisor functions
+.TH HIVE_SUPERVISOR 3 "January 2025" "Hive 1.0" "Actor Runtime Manual"
+.SH NAME
+hive_supervisor_start, hive_supervisor_stop, hive_restart_strategy_str, hive_child_restart_str \- Erlang-style supervisor for actor management
+.SH SYNOPSIS
+.nf
+.B #include <hive_supervisor.h>
+.PP
+.BI "hive_status hive_supervisor_start(const hive_supervisor_config *" config ","
+.BI "                                  const actor_config *" sup_actor_cfg ","
+.BI "                                  actor_id *" out_supervisor ");"
+.BI "hive_status hive_supervisor_stop(actor_id " supervisor ");"
+.BI "const char *hive_restart_strategy_str(hive_restart_strategy " strategy ");"
+.BI "const char *hive_child_restart_str(hive_child_restart " restart ");"
+.fi
+.SH DESCRIPTION
+These functions implement an Erlang-style supervisor for managing child actors.
+A supervisor monitors its children and automatically restarts them according to
+configurable policies when they crash.
+.SS Child Restart Types
+.TP
+.B HIVE_CHILD_PERMANENT
+Always restart the child, regardless of exit reason.
+.TP
+.B HIVE_CHILD_TRANSIENT
+Restart only on abnormal exit (crash). Normal exits are not restarted.
+.TP
+.B HIVE_CHILD_TEMPORARY
+Never restart. Once the child exits, it stays dead.
+.SS Restart Strategies
+.TP
+.B HIVE_STRATEGY_ONE_FOR_ONE
+When a child crashes, only that child is restarted. Other children continue
+running undisturbed. Use for independent workers.
+.TP
+.B HIVE_STRATEGY_ONE_FOR_ALL
+When any child crashes, all children are stopped and restarted. Use when
+children have strong interdependencies.
+.TP
+.B HIVE_STRATEGY_REST_FOR_ONE
+When a child crashes, that child and all children started after it are
+restarted. Children started before continue running. Use for pipelines
+or sequential dependencies.
+.SS Child Specification
+.PP
+.nf
+typedef struct {
+    const char *id;              /* Identifier for logging */
+    actor_fn fn;                 /* Actor entry point */
+    void *arg;                   /* Argument to pass */
+    size_t arg_size;             /* Size to copy (0 = pointer) */
+    hive_child_restart restart;  /* Restart policy */
+    actor_config actor_cfg;      /* Actor config */
+} hive_child_spec;
+.fi
+.PP
+If
+.I arg_size
+is non-zero, the argument is copied to supervisor-managed storage
+(up to HIVE_MAX_MESSAGE_SIZE bytes). If zero, the pointer is passed directly.
+.SS Supervisor Configuration
+.PP
+.nf
+typedef struct {
+    hive_restart_strategy strategy;  /* How to handle failures */
+    uint32_t max_restarts;           /* Max restarts in period */
+    uint32_t restart_period_ms;      /* Time window (ms) */
+    const hive_child_spec *children; /* Child specifications */
+    size_t num_children;             /* Number of children */
+    void (*on_shutdown)(void *ctx);  /* Shutdown callback */
+    void *shutdown_ctx;              /* Callback context */
+} hive_supervisor_config;
+
+#define HIVE_SUPERVISOR_CONFIG_DEFAULT { \\
+    .strategy = HIVE_STRATEGY_ONE_FOR_ONE, \\
+    .max_restarts = 3, \\
+    .restart_period_ms = 5000, \\
+    .children = NULL, \\
+    .num_children = 0, \\
+    .on_shutdown = NULL, \\
+    .shutdown_ctx = NULL \\
+}
+.fi
+.SS Starting a Supervisor
+.BR hive_supervisor_start ()
+creates a new supervisor actor that immediately spawns and monitors all
+specified children. The supervisor runs until stopped or until restart
+intensity is exceeded.
+.PP
+The
+.I sup_actor_cfg
+parameter configures the supervisor actor itself (stack size, priority, etc.).
+Pass NULL for defaults.
+.SS Stopping a Supervisor
+.BR hive_supervisor_stop ()
+sends an asynchronous stop request to the supervisor. The supervisor will
+stop all children and then exit. Use
+.BR hive_monitor (3)
+to be notified when shutdown completes.
+.SS Restart Intensity
+The supervisor tracks restart attempts within a sliding time window. If
+.I max_restarts
+is exceeded within
+.I restart_period_ms
+milliseconds, the supervisor gives up and shuts down. Set
+.I max_restarts
+to 0 for unlimited restarts.
+.SS Utility Functions
+.BR hive_restart_strategy_str ()
+returns a string representation of a restart strategy
+("one_for_one", "one_for_all", "rest_for_one").
+.PP
+.BR hive_child_restart_str ()
+returns a string representation of a child restart type
+("permanent", "transient", "temporary").
+.SH RETURN VALUE
+Functions returning
+.I hive_status
+indicate success when
+.I status.code
+is
+.BR HIVE_OK .
+.PP
+.BR hive_restart_strategy_str ()
+and
+.BR hive_child_restart_str ()
+return static string pointers that should not be freed.
+.SH ERRORS
+.TP
+.B HIVE_ERR_INVALID
+NULL config or out_supervisor, too many children, NULL children array with
+non-zero count, NULL child function, or invalid supervisor ID.
+.TP
+.B HIVE_ERR_NOMEM
+No supervisor slots available (see HIVE_MAX_SUPERVISORS), failed to spawn
+supervisor actor, or failed to send stop message.
+.SH CONFIGURATION
+Supervisor limits are defined in
+.IR hive_static_config.h :
+.TP
+.B HIVE_MAX_SUPERVISOR_CHILDREN
+Maximum children per supervisor (default: 16).
+.TP
+.B HIVE_MAX_SUPERVISORS
+Maximum concurrent supervisors (default: 8).
+.SH NOTES
+.SS Implementation
+The supervisor is implemented as a regular actor that uses
+.BR hive_monitor (3)
+to watch child actors. When a monitored child dies, the supervisor receives
+an EXIT message and applies the configured restart strategy.
+.SS Memory
+Supervisor state is allocated from a static pool (no malloc). Child arguments
+are copied to fixed-size storage within the supervisor state.
+.SS One Monitor Per Child
+Each child consumes one entry from the global monitor pool
+(HIVE_MONITOR_ENTRY_POOL_SIZE). Plan pool sizes accordingly.
+.SS Shutdown Callback
+The
+.I on_shutdown
+callback is called from the supervisor actor context just before it exits.
+This can be used for cleanup or logging. The supervisor has already stopped
+all children when this callback runs.
+.SH EXAMPLE
+.nf
+#include <hive_runtime.h>
+#include <hive_supervisor.h>
+#include <stdio.h>
+
+void worker(void *arg) {
+    int id = *(int *)arg;
+    printf("Worker %d started\\n", id);
+
+    /* Do work... */
+
+    hive_exit();
+}
+
+void on_shutdown(void *ctx) {
+    printf("Supervisor shutting down\\n");
+}
+
+int main(void) {
+    hive_init();
+
+    /* Define children */
+    static int ids[3] = {0, 1, 2};
+    hive_child_spec children[3] = {
+        {.id = "worker-0", .fn = worker, .arg = &ids[0],
+         .arg_size = sizeof(int), .restart = HIVE_CHILD_PERMANENT,
+         .actor_cfg = HIVE_ACTOR_CONFIG_DEFAULT},
+        {.id = "worker-1", .fn = worker, .arg = &ids[1],
+         .arg_size = sizeof(int), .restart = HIVE_CHILD_PERMANENT,
+         .actor_cfg = HIVE_ACTOR_CONFIG_DEFAULT},
+        {.id = "worker-2", .fn = worker, .arg = &ids[2],
+         .arg_size = sizeof(int), .restart = HIVE_CHILD_TRANSIENT,
+         .actor_cfg = HIVE_ACTOR_CONFIG_DEFAULT},
+    };
+
+    /* Configure supervisor */
+    hive_supervisor_config cfg = {
+        .strategy = HIVE_STRATEGY_ONE_FOR_ONE,
+        .max_restarts = 5,
+        .restart_period_ms = 10000,
+        .children = children,
+        .num_children = 3,
+        .on_shutdown = on_shutdown,
+    };
+
+    /* Start supervisor */
+    actor_id sup;
+    hive_supervisor_start(&cfg, NULL, &sup);
+
+    hive_run();
+    hive_cleanup();
+    return 0;
+}
+.fi
+.SH SEE ALSO
+.BR hive_spawn (3),
+.BR hive_link (3),
+.BR hive_ipc (3),
+.BR hive_types (3)

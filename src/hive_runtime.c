@@ -215,3 +215,28 @@ bool hive_actor_alive(actor_id id) {
     actor *a = hive_actor_get(id);
     return a != NULL && a->state != ACTOR_STATE_DEAD;
 }
+
+hive_status hive_kill(actor_id target) {
+    // Cannot kill self
+    actor *current = hive_actor_current();
+    if (current && current->id == target) {
+        return HIVE_ERROR(HIVE_ERR_INVALID, "Cannot kill self (use hive_exit)");
+    }
+
+    // Get target actor
+    actor *a = hive_actor_get(target);
+    if (!a || a->state == ACTOR_STATE_DEAD) {
+        return HIVE_ERROR(HIVE_ERR_INVALID, "Invalid or dead actor");
+    }
+
+    HIVE_LOG_DEBUG("Killing actor %u (%s)", a->id,
+                   a->name ? a->name : "unnamed");
+
+    // Set exit reason before cleanup (so notifications report correct reason)
+    a->exit_reason = HIVE_EXIT_KILLED;
+
+    // Free actor resources and send death notifications
+    hive_actor_free(a);
+
+    return HIVE_SUCCESS;
+}

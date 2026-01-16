@@ -167,6 +167,20 @@
 #endif
 
 // -----------------------------------------------------------------------------
+// Supervisor Configuration
+// -----------------------------------------------------------------------------
+
+// Maximum number of children per supervisor
+#ifndef HIVE_MAX_SUPERVISOR_CHILDREN
+#define HIVE_MAX_SUPERVISOR_CHILDREN 16
+#endif
+
+// Maximum number of concurrent supervisors
+#ifndef HIVE_MAX_SUPERVISORS
+#define HIVE_MAX_SUPERVISORS 8
+#endif
+
+// -----------------------------------------------------------------------------
 // Logging Configuration
 // -----------------------------------------------------------------------------
 
