@@ -1,6 +1,6 @@
 #!/bin/bash
 # Pre-commit hook for C/H files:
-#   1. Check clang-format compliance
+#   1. Auto-format with clang-format
 #   2. Check Unicode policy (ASCII only, except box-drawing for diagrams)
 #
 # Install: git config core.hooksPath scripts
@@ -21,24 +21,11 @@ if ! command -v clang-format &> /dev/null; then
     exit 0
 fi
 
-# Check each file
-UNFORMATTED=""
+# Auto-format each file and re-stage
 for FILE in $STAGED_FILES; do
-    if ! clang-format --dry-run --Werror "$FILE" 2>/dev/null; then
-        UNFORMATTED="$UNFORMATTED $FILE"
-    fi
+    clang-format -i "$FILE"
+    git add "$FILE"
 done
-
-if [ -n "$UNFORMATTED" ]; then
-    echo "Error: The following files need formatting:"
-    for FILE in $UNFORMATTED; do
-        echo "  $FILE"
-    done
-    echo ""
-    echo "Run: clang-format -i$UNFORMATTED"
-    echo "Or bypass with: git commit --no-verify"
-    exit 1
-fi
 
 # Check for forbidden Unicode in comments (allow box-drawing U+2500-U+257F for diagrams)
 # Policy: ASCII only in prose comments, Unicode box-drawing allowed for diagrams
