@@ -73,7 +73,7 @@ A production flight controller would need error handling and failsafes that this
 
 | Scenario | Current Behavior | Production Requirement |
 |----------|------------------|------------------------|
-| Sensor read fails | `BUS_READ()` returns false, actor skips iteration | Watchdog timeout, switch to backup sensor or land |
+| Sensor read fails | `hive_bus_read()` returns error, actor skips iteration | Watchdog timeout, switch to backup sensor or land |
 | Bus publish fails | Error ignored | Log error, trigger failsafe |
 | Actor crashes | Runtime notifies linked actors | Auto-restart or emergency landing |
 | GPS signal lost | Position control uses stale data | Hold last position, descend slowly, or return-to-home |
@@ -197,7 +197,9 @@ Code is split into focused modules:
 | `supervisor_actor.c/h` | Startup delay, flight window cutoff |
 | `pid.c/h` | Reusable PID controller |
 | `types.h` | Portable data types |
-| `config.h` | All tuning parameters and constants |
+| `config.h` | Configuration constants (timing, thresholds) |
+| `math_utils.h` | Math macros (CLAMPF, LPF, NORMALIZE_ANGLE) |
+| `flight_profiles.h` | Waypoint definitions per flight profile |
 
 ### Data Flow
 
@@ -380,7 +382,9 @@ examples/pilot/
     supervisor_actor.c/h # Startup delay, flight window cutoff
     pid.c/h              # Reusable PID controller
     types.h              # Portable data types
-    config.h             # Shared constants
+    config.h             # Configuration constants
+    math_utils.h         # Math macros
+    flight_profiles.h    # Waypoint definitions
     fusion/
         complementary_filter.c/h  # Portable attitude estimation
     Makefile                 # Webots simulation build
