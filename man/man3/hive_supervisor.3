@@ -161,6 +161,28 @@ The
 callback is called from the supervisor actor context just before it exits.
 This can be used for cleanup or logging. The supervisor has already stopped
 all children when this callback runs.
+.SS Restart Semantics
+.B A restarted child starts with a clean slate.
+It MUST NOT assume:
+.IP \(bu 2
+Preserved mailbox state (mailbox is empty)
+.IP \(bu 2
+Preserved bus cursor position (must re-subscribe)
+.IP \(bu 2
+Preserved timer IDs (old timers cancelled, must create new ones)
+.IP \(bu 2
+Preserved actor_id (new ID assigned on restart)
+.IP \(bu 2
+Preserved monitor/link state (must re-establish)
+.PP
+The only state preserved across restarts is the argument passed to the child
+function (copied by the supervisor at configuration time).
+.PP
+.B Implication for IPC:
+Actors that communicate with supervised children should use the name registry
+.RB ( hive_whereis (3))
+to look up actor IDs dynamically rather than caching IDs at startup.
+This ensures they get the current ID even after restarts.
 .SH EXAMPLE
 .nf
 #include <hive_runtime.h>

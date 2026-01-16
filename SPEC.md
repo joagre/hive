@@ -1882,6 +1882,20 @@ Returns:
 
 **hive_kill()**: Supervisors use `hive_kill(target)` to terminate children during shutdown or when applying `one_for_all`/`rest_for_one` strategies.
 
+### Restart Semantics
+
+**A restarted child starts with a clean slate.** It MUST NOT assume:
+
+- Preserved mailbox state (mailbox is empty)
+- Preserved bus cursor position (must re-subscribe)
+- Preserved timer IDs (old timers cancelled, must create new ones)
+- Preserved actor_id (new ID assigned on restart)
+- Preserved monitor/link state (must re-establish)
+
+The only state preserved across restarts is the argument passed to the child function (copied by the supervisor at configuration time).
+
+**Implication for IPC:** Actors that communicate with supervised children should use the name registry (`hive_whereis()`) to look up actor IDs dynamically rather than caching IDs at startup. This ensures they get the current ID even after restarts.
+
 ### Example
 
 ```c
