@@ -2326,7 +2326,7 @@ The runtime abstracts platform-specific functionality:
 | Context switch | x86-64 asm | ARM Cortex-M asm |
 | Event notification | epoll | WFI + interrupt flags |
 | Timer | timerfd + epoll | Software timer wheel (SysTick/TIM) |
-| Network | Non-blocking BSD sockets + epoll | lwIP NO_SYS mode |
+| Network | Non-blocking BSD sockets + epoll | lwIP NO_SYS mode (not yet implemented) |
 | File | Synchronous POSIX | Synchronous FATFS or littlefs |
 
 ### Platform-Specific Source Files
