@@ -85,6 +85,7 @@ See `hal/<platform>/README.md` for hardware details, pin mapping, and flight pro
 | `types.h` | Shared data types (sensor_data_t, state_estimate_t, etc.) |
 | `config.h` | Configuration constants (timing, thresholds, bus config) |
 | `math_utils.h` | Math macros (CLAMPF, LPF, NORMALIZE_ANGLE) |
+| `notifications.h` | IPC notification tags (NOTIFY_FLIGHT_START, etc.) |
 | `flight_profiles.h` | Waypoint definitions per flight profile |
 
 ### Build System
@@ -102,6 +103,7 @@ See `hal/<platform>/README.md` for hardware details, pin mapping, and flight pro
 |------|-------------|
 | `config.h` | Configuration constants (timing, thresholds, bus config) |
 | `math_utils.h` | Math macros (CLAMPF, LPF, NORMALIZE_ANGLE) |
+| `notifications.h` | IPC notification tags (NOTIFY_FLIGHT_START, etc.) |
 | `flight_profiles.h` | Waypoint definitions per flight profile |
 | `hive_config.mk` | Shared Hive memory limits (actors, buses, pools) |
 | `hal/<platform>/hal_config.h` | Platform-specific PID gains and thrust |
@@ -187,7 +189,7 @@ to the position target bus. Both altitude and position actors read from this bus
 Routes depend on flight profile (`FLIGHT_PROFILE=N` at build time) and platform
 capabilities. See `hal/<platform>/README.md` for available flight profiles.
 
-**Arrival detection:** Position within 0.15m, heading within 0.1 rad, velocity below 0.1 m/s.
+**Arrival detection:** Position within 0.15m, heading within 0.1 rad, velocity below 0.05 m/s.
 After completing the route, the drone loops back to the first waypoint.
 
 ### Motor Mixer

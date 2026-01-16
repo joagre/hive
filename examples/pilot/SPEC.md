@@ -88,7 +88,7 @@ The following safety features are enabled for real hardware (not in Webots simul
 | Attitude cutoff | altitude_actor.c | Motors off if roll or pitch >45° |
 | Altitude cutoff | altitude_actor.c | Motors off if altitude >2m |
 | Landed detection | altitude_actor.c | Motors off when target <5cm and altitude <15cm |
-| Thrust ramp | altitude_actor.c | Gradual thrust increase over 2 seconds on takeoff |
+| Thrust ramp | altitude_actor.c | Gradual thrust increase over 0.5 seconds on takeoff |
 | Startup delay | supervisor_actor.c | Flight blocked for 60 seconds after boot |
 | Hard cutoff | supervisor_actor.c | Motors forced off 12 seconds after flight starts |
 
@@ -199,6 +199,7 @@ Code is split into focused modules:
 | `types.h` | Portable data types |
 | `config.h` | Configuration constants (timing, thresholds) |
 | `math_utils.h` | Math macros (CLAMPF, LPF, NORMALIZE_ANGLE) |
+| `notifications.h` | IPC notification tags (NOTIFY_FLIGHT_START, etc.) |
 | `flight_profiles.h` | Waypoint definitions per flight profile |
 
 ### Data Flow
@@ -384,6 +385,7 @@ examples/pilot/
     types.h              # Portable data types
     config.h             # Configuration constants
     math_utils.h         # Math macros
+    notifications.h      # IPC notification tags
     flight_profiles.h    # Waypoint definitions
     fusion/
         complementary_filter.c/h  # Portable attitude estimation
@@ -419,7 +421,7 @@ examples/pilot/
 ### Console Output
 
 ```
-8 actors spawned
+9 actors spawned
 [ALT] tgt=1.00 alt=0.01 vvel=0.00 thrust=0.750
 [ALT] tgt=1.00 alt=0.05 vvel=0.12 thrust=0.720
 ...
