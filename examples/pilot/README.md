@@ -9,7 +9,7 @@ Supports three platforms:
 
 ## What it does
 
-Demonstrates waypoint navigation with a quadcopter using 9 actors:
+Demonstrates waypoint navigation with a quadcopter using 10 actors (9 workers + 1 supervisor):
 
 1. **Sensor actor** reads raw sensors via HAL, publishes to sensor bus
 2. **Estimator actor** runs complementary filter, computes velocities, publishes to state bus
@@ -20,6 +20,10 @@ Demonstrates waypoint navigation with a quadcopter using 9 actors:
 7. **Rate actor** runs rate PIDs, publishes torque commands
 8. **Motor actor** reads torque bus, writes to hardware via HAL (checks for STOP signal)
 9. **Flight manager actor** handles startup delay (60s), sends START/STOP notifications
+10. **Supervisor actor** monitors all 9 workers, restarts all on crash (ONE_FOR_ALL)
+
+Workers use the **name registry** (`hive_register`/`hive_whereis`) for IPC coordination
+instead of passing actor IDs at spawn time.
 
 **Webots:** Flies a square pattern with altitude changes at each waypoint (full 3D navigation with GPS).
 
@@ -70,7 +74,7 @@ See `hal/<platform>/README.md` for hardware details, pin mapping, and flight pro
 
 | File | Description |
 |------|-------------|
-| `pilot.c` | Main entry point, bus setup, actor spawn |
+| `pilot.c` | Main entry point, bus setup, supervisor config |
 | `sensor_actor.c/h` | Reads sensors via HAL → sensor bus |
 | `estimator_actor.c/h` | Sensor fusion → state bus |
 | `altitude_actor.c/h` | Altitude PID → thrust |
@@ -129,7 +133,7 @@ sizes differ per platform based on available RAM.
 
 ## Architecture
 
-Nine actors connected via buses:
+Ten actors: nine workers connected via buses, one supervisor monitoring all workers:
 
 ```mermaid
 graph TB
@@ -151,23 +155,30 @@ Hardware Abstraction Layer (HAL) provides platform independence:
 Actor code is identical across platforms. See `hal/<platform>/README.md` for
 hardware-specific details.
 
-## Actor Priorities and Spawn Order
+## Supervision and Spawn Order
 
-All actors run at CRITICAL priority. Spawn order determines execution order
-within the same priority level (round-robin). Actors are spawned in data-flow
-order to ensure each actor sees fresh data from upstream actors in the same step:
+All 9 worker actors are supervised with **ONE_FOR_ALL** strategy: if any worker
+crashes, all are killed and restarted together to ensure consistent pipeline state.
+
+Workers run at CRITICAL priority. Spawn order determines execution order within
+the same priority level (round-robin). Workers are spawned in data-flow order,
+with flight_manager last so its `hive_whereis()` targets are already registered:
 
 | Order | Actor     | Priority | Rationale |
 |-------|-----------|----------|-----------|
 | 1     | sensor    | CRITICAL | Reads hardware first |
 | 2     | estimator | CRITICAL | Needs sensors, produces state estimate |
-| 3     | altitude  | CRITICAL | Needs state, produces thrust |
-| 4     | waypoint  | CRITICAL | Needs state + START signal, produces position targets |
+| 3     | waypoint  | CRITICAL | Needs state + START signal, produces position targets |
+| 4     | altitude  | CRITICAL | Needs state, produces thrust |
 | 5     | position  | CRITICAL | Needs target, produces attitude setpoints |
 | 6     | attitude  | CRITICAL | Needs attitude setpoints, produces rate setpoints |
 | 7     | rate      | CRITICAL | Needs state + thrust + rate setpoints |
 | 8     | motor     | CRITICAL | Needs torque + STOP signal, writes hardware last |
-| 9     | flight_mgr| CRITICAL | Sends START to waypoint, STOP to motor after flight window |
+| 9     | flight_mgr| CRITICAL | Spawns last; uses whereis() to find waypoint, altitude, motor |
+
+Workers use the **name registry** for IPC coordination:
+- `flight_manager`, `waypoint`, `altitude`, `motor` register themselves
+- `flight_manager` uses `hive_whereis()` to look up targets for notifications
 
 ## Control System
 

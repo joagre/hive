@@ -56,22 +56,26 @@ All buses use `max_entries=1` (single entry, latest value only):
 - Larger buffers would cause processing of outdated sensor readings
 - This matches how real flight controllers handle sensor data
 
-### Startup Ordering
+### Startup Ordering and Supervision
 
-Actors must be spawned in dependency order for correct initialization:
+All 9 workers are spawned by the supervisor in dependency order:
 
 1. **Sensor → Estimator** - Estimator subscribes to sensor bus
 2. **Controllers** - Subscribe to state bus (created by estimator)
 3. **Motor** - Subscribes to torque bus (created by rate actor)
-4. **Flight manager** - Needs actor IDs for IPC notifications
+4. **Flight manager** - Spawns last; uses `hive_whereis()` to find targets
+
+**Name Registry:** Workers register themselves (`hive_register()`) and use
+`hive_whereis()` to look up IPC targets. This works with supervision: after
+a restart, `whereis()` returns the new actor ID.
 
 **Important:** Bus subscriptions see nothing until first publish *after* subscription.
 A subscriber spawned before the first publish will get valid data on first read.
 A subscriber spawned *after* a publish sees nothing until the next publish.
 
-The current spawn order in `pilot.c` ensures all subscribers are ready before
-their data sources begin publishing. If spawn order is changed, verify that
-subscribers don't miss initial data.
+The spawn order in `pilot.c` ensures:
+1. All subscribers are ready before their data sources begin publishing
+2. `flight_manager` spawns last so its `whereis()` targets are registered
 
 ### Pipeline Model
 
@@ -180,7 +184,13 @@ maintain code clarity. A production system would add these as first priorities.
 
 ## Architecture Overview
 
-Nine actors connected via buses:
+Ten actors: nine workers connected via buses, plus one supervisor:
+
+**Supervision:** All 9 workers are supervised with ONE_FOR_ALL strategy. If any
+worker crashes, all are killed and restarted together to ensure consistent state.
+
+**Name Registry:** Workers use `hive_register()`/`hive_whereis()` for IPC coordination
+instead of passing actor IDs. This allows `whereis()` to return fresh IDs after restart.
 
 ```mermaid
 graph TB
@@ -428,7 +438,7 @@ All actor code is platform-independent. Actors use:
 
 ```
 examples/pilot/
-    pilot.c              # Main loop, bus setup, actor spawn
+    pilot.c              # Main loop, bus setup, supervisor config
     sensor_actor.c/h     # Reads sensors via HAL → sensor bus
     estimator_actor.c/h  # Sensor fusion → state bus
     altitude_actor.c/h   # Altitude PID → thrust
@@ -478,7 +488,7 @@ examples/pilot/
 ### Console Output
 
 ```
-9 actors spawned
+10 actors spawned (9 children + 1 supervisor)
 [ALT] tgt=1.00 alt=0.01 vvel=0.00 thrust=0.750
 [ALT] tgt=1.00 alt=0.05 vvel=0.12 thrust=0.720
 ...
@@ -524,19 +534,20 @@ graph LR
 
 | Actor | Input | Output | Priority | Responsibility |
 |-------|-------|--------|----------|----------------|
+| **Supervisor** | Child exit notifications | (internal) | CRITICAL | Monitors 9 workers, ONE_FOR_ALL restart |
 | **Sensor** | Hardware | Sensor Bus | CRITICAL | Read raw sensors, publish |
 | **Estimator** | Sensor Bus | State Bus | CRITICAL | Complementary filter fusion, state estimate |
-| **Flight Manager** | (none) | START/STOP notifications | CRITICAL | Startup delay, flight window cutoff |
 | **Waypoint** | State Bus + START notification | Position Target Bus | CRITICAL | Waypoint navigation (3D on Webots, altitude-only on STM32) |
 | **Altitude** | State + Position Target Bus | Thrust Bus | CRITICAL | Altitude PID (250Hz) |
 | **Position** | Position Target + State Bus | Attitude Setpoint Bus | CRITICAL | Position PD (250Hz) |
 | **Attitude** | Attitude Setpoint + State | Rate Setpoint Bus | CRITICAL | Attitude PIDs (250Hz) |
 | **Rate** | State + Thrust + Rate SP | Torque Bus | CRITICAL | Rate PIDs (250Hz) |
 | **Motor** | Torque Bus + STOP notification | Hardware | CRITICAL | Output to hardware via HAL |
+| **Flight Manager** | (none) | START/STOP notifications | CRITICAL | Startup delay, flight window cutoff |
 
-**Why all CRITICAL?** All actors use the same priority so execution order follows spawn order
+**Why all CRITICAL?** All workers use the same priority so execution order follows spawn order
 (round-robin within priority level). This ensures the data pipeline executes correctly:
-sensor → estimator → waypoint → altitude → position → attitude → rate → motor.
+sensor → estimator → waypoint → altitude → position → attitude → rate → motor → flight_manager.
 Differentiated priorities would break this—higher priority actors run first regardless of
 spawn order, causing motor to output before controllers have computed new values.
 
@@ -752,8 +763,8 @@ Hive memory settings are split between shared and platform-specific files:
 | `Makefile.<platform>` | Platform-specific: stack sizes, flash layout |
 
 The shared settings in `hive_config.mk` are determined by the pilot application
-(9 actors, 7 buses, etc.) and are identical across all platforms. Only stack
-sizes vary based on available RAM.
+(10 actors, 7 buses, pool sizes for supervision) and are identical across all
+platforms. Only stack sizes vary based on available RAM.
 
 ---
 
