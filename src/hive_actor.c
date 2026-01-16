@@ -239,10 +239,9 @@ actor *hive_actor_alloc(actor_fn fn, void *arg, const actor_config *cfg) {
     a->stack_size = stack_size;
     a->stack_is_malloced = is_malloced; // Track allocation method
 
-    // Initialize receive filters to wildcards (accept any message)
-    a->recv_filter_sender = HIVE_SENDER_ANY;
-    a->recv_filter_class = HIVE_MSG_ANY;
-    a->recv_filter_tag = HIVE_TAG_ANY;
+    // Initialize receive filters (NULL = no active filter)
+    a->recv_filters = NULL;
+    a->recv_filter_count = 0;
 
     // Initialize context with full stack area
     hive_context_init(&a->ctx, stack, stack_size, fn, arg);

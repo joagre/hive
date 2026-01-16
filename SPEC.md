@@ -26,7 +26,7 @@ A minimalistic actor-based runtime designed for **embedded and safety-critical s
 
 **Forbidden heap use** (exhaustive):
 - Scheduler loop (`hive_run()`, `hive_yield()`, context switching)
-- IPC (`hive_ipc_notify()`, `hive_ipc_notify_ex()`, `hive_ipc_recv()`, `hive_ipc_recv_match()`, `hive_ipc_request()`, `hive_ipc_reply()`)
+- IPC (`hive_ipc_notify()`, `hive_ipc_notify_ex()`, `hive_ipc_recv()`, `hive_ipc_recv_match()`, `hive_ipc_recv_match_any()`, `hive_ipc_request()`, `hive_ipc_reply()`)
 - Timers (`hive_timer_after()`, `hive_timer_every()`, timer delivery)
 - Bus (`hive_bus_publish()`, `hive_bus_read()`, `hive_bus_read_wait()`)
 - Network I/O (`hive_net_*()` functions, event loop dispatch)
@@ -121,6 +121,7 @@ When an actor calls a blocking API, the following contract applies:
 | `hive_yield()` | Immediately reschedules (no wait condition) |
 | `hive_ipc_recv()` | Message arrives or timeout (if timeout ≠ 0) |
 | `hive_ipc_recv_match()` | Matching message arrives or timeout |
+| `hive_ipc_recv_match_any()` | Message matching any filter arrives or timeout |
 | `hive_ipc_request()` | Reply arrives or timeout |
 | `hive_bus_read_wait()` | Bus data available or timeout |
 | `hive_net_connect()` | Connection established or timeout |
@@ -143,7 +144,7 @@ When an actor calls a blocking API, the following contract applies:
 **Unblock conditions:**
 - I/O readiness signaled (network socket becomes readable/writable)
 - Timer expires (for APIs with timeout)
-- Message arrives in mailbox (for `hive_ipc_recv()`, `hive_ipc_recv_match()`, `hive_ipc_request()`)
+- Message arrives in mailbox (for `hive_ipc_recv()`, `hive_ipc_recv_match()`, `hive_ipc_recv_match_any()`, `hive_ipc_request()`)
 - Bus data published (for `hive_bus_read_wait()`)
 - **Important**: Mailbox arrival only unblocks actors blocked in IPC receive operations, not actors blocked on network I/O or bus read
 
@@ -861,7 +862,7 @@ if (msg.class == HIVE_MSG_REQUEST) {
 }
 ```
 
-**Lifetime rule:** Data is valid until the next successful `hive_ipc_recv()` or `hive_ipc_recv_match()` call. Copy immediately if needed beyond current iteration.
+**Lifetime rule:** Data is valid until the next successful `hive_ipc_recv()`, `hive_ipc_recv_match()`, or `hive_ipc_recv_match_any()` call. Copy immediately if needed beyond current iteration.
 
 ### Functions
 
@@ -912,6 +913,45 @@ hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_REQUEST, HIVE_TAG_ANY, &msg, -1);
 
 // Match REPLY with specific tag (used internally by hive_ipc_request)
 hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_REPLY, expected_tag, &msg, 5000);
+```
+
+#### Multi-Pattern Selective Receive
+
+```c
+// Filter structure for multi-pattern matching
+typedef struct {
+    actor_id sender;      // HIVE_SENDER_ANY for any sender
+    hive_msg_class class; // HIVE_MSG_ANY for any class
+    uint32_t tag;         // HIVE_TAG_ANY for any tag
+} hive_recv_filter;
+
+// Receive message matching ANY of the provided filters
+// matched_index (optional): which filter matched (0-based)
+hive_status hive_ipc_recv_match_any(const hive_recv_filter *filters,
+                            size_t num_filters, hive_message *msg,
+                            int32_t timeout_ms, size_t *matched_index);
+```
+
+**Use cases:**
+- Waiting for REPLY or EXIT (used internally by `hive_ipc_request()`)
+- Waiting for multiple timer types (sync timer OR flight timer)
+- State machines waiting for multiple event types
+
+**Usage example:**
+```c
+// Wait for either a sync timer or a landed notification
+hive_recv_filter filters[] = {
+    {HIVE_SENDER_ANY, HIVE_MSG_TIMER, sync_timer},
+    {HIVE_SENDER_ANY, HIVE_MSG_NOTIFY, NOTIFY_LANDED},
+};
+hive_message msg;
+size_t matched;
+hive_ipc_recv_match_any(filters, 2, &msg, -1, &matched);
+if (matched == 0) {
+    // Handle sync timer
+} else {
+    // Handle landed notification
+}
 ```
 
 #### Request/Reply
@@ -1009,7 +1049,7 @@ if (status.code == HIVE_ERR_NOMEM) {
 ### Message Data Lifetime
 
 **CRITICAL LIFETIME RULE:**
-- **Data is ONLY valid until the next successful `hive_ipc_recv()` or `hive_ipc_recv_match()` call**
+- **Data is ONLY valid until the next successful `hive_ipc_recv()`, `hive_ipc_recv_match()`, or `hive_ipc_recv_match_any()` call**
 - **Per actor: only ONE message payload pointer is valid at a time**
 - **Storing `msg.data` across receive iterations causes use-after-free**
 - **If you need the data later, COPY IT IMMEDIATELY**
@@ -1050,7 +1090,7 @@ Global pool limits: **Yes** - all actors share:
 
 ### Selective Receive Semantics
 
-`hive_ipc_recv_match()` implements selective receive. This is the key mechanism for building complex protocols like request/reply.
+`hive_ipc_recv_match()` and `hive_ipc_recv_match_any()` implement selective receive. This is the key mechanism for building complex protocols like request/reply.
 
 **Blocking behavior:**
 

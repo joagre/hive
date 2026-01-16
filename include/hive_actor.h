@@ -60,10 +60,9 @@ typedef struct {
     // Active message (for proper cleanup)
     mailbox_entry *active_msg;
 
-    // For selective receive: filters to match against
-    actor_id recv_filter_sender;
-    hive_msg_class recv_filter_class;
-    uint32_t recv_filter_tag;
+    // For selective receive: filter array to match against (multi-pattern)
+    const hive_recv_filter *recv_filters; // NULL = no filter active
+    size_t recv_filter_count;             // Number of filters in array
 
     // For I/O completion results
     hive_status io_status;

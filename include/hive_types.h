@@ -94,6 +94,14 @@ typedef struct {
     const void *data; // Payload pointer (past header), valid until next recv
 } hive_message;
 
+// Filter for selective receive (used by hive_ipc_recv_match_any)
+// Use HIVE_SENDER_ANY, HIVE_MSG_ANY, HIVE_TAG_ANY for wildcards
+typedef struct {
+    actor_id sender;      // HIVE_SENDER_ANY for any sender
+    hive_msg_class class; // HIVE_MSG_ANY for any class
+    uint32_t tag;         // HIVE_TAG_ANY for any tag
+} hive_recv_filter;
+
 // Exit reason codes
 typedef enum {
     HIVE_EXIT_NORMAL, // Actor called hive_exit()

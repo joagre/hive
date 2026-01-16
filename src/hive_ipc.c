@@ -85,6 +85,37 @@ void hive_ipc_free_entry(mailbox_entry *entry) {
     hive_pool_free(&g_mailbox_pool_mgr, entry);
 }
 
+// Check if a mailbox entry matches a single filter
+static bool entry_matches_filter(mailbox_entry *entry,
+                                 const hive_recv_filter *filter) {
+    // Check sender filter
+    if (filter->sender != HIVE_SENDER_ANY && entry->sender != filter->sender) {
+        return false;
+    }
+
+    // Need valid header to check class/tag
+    if (entry->len < HIVE_MSG_HEADER_SIZE) {
+        return false;
+    }
+
+    uint32_t header = *(uint32_t *)entry->data;
+    hive_msg_class msg_class;
+    uint32_t msg_tag;
+    decode_header(header, &msg_class, &msg_tag);
+
+    // Check class filter
+    if (filter->class != HIVE_MSG_ANY && msg_class != filter->class) {
+        return false;
+    }
+
+    // Check tag filter
+    if (filter->tag != HIVE_TAG_ANY && msg_tag != filter->tag) {
+        return false;
+    }
+
+    return true;
+}
+
 // Add mailbox entry to actor's mailbox (doubly-linked list) and wake if blocked
 void hive_mailbox_add_entry(actor *recipient, mailbox_entry *entry) {
     entry->next = NULL;
@@ -98,48 +129,33 @@ void hive_mailbox_add_entry(actor *recipient, mailbox_entry *entry) {
     recipient->mailbox.tail = entry;
     recipient->mailbox.count++;
 
-    // Wake actor if blocked and message matches its filter
+    // Wake actor if blocked
     if (recipient->state == ACTOR_STATE_WAITING) {
-        // Check if message matches receive filter
-        bool matches = true;
-
-        // Check sender filter
-        if (recipient->recv_filter_sender != HIVE_SENDER_ANY) {
-            if (entry->sender != recipient->recv_filter_sender) {
-                matches = false;
-            }
-        }
-
-        // Check class filter (need to decode header)
-        if (matches && recipient->recv_filter_class != HIVE_MSG_ANY) {
-            if (entry->len >= HIVE_MSG_HEADER_SIZE) {
-                uint32_t header = *(uint32_t *)entry->data;
-                hive_msg_class msg_class;
-                decode_header(header, &msg_class, NULL);
-                if (msg_class != recipient->recv_filter_class) {
-                    matches = false;
-                }
-            } else {
-                matches = false;
-            }
-        }
-
-        // Check tag filter
-        if (matches && recipient->recv_filter_tag != HIVE_TAG_ANY) {
-            if (entry->len >= HIVE_MSG_HEADER_SIZE) {
-                uint32_t header = *(uint32_t *)entry->data;
-                uint32_t msg_tag;
-                decode_header(header, NULL, &msg_tag);
-                if (msg_tag != recipient->recv_filter_tag) {
-                    matches = false;
-                }
-            } else {
-                matches = false;
-            }
-        }
-
-        if (matches) {
+        if (recipient->recv_filters == NULL) {
+            // No filter active - wake on any message
             recipient->state = ACTOR_STATE_READY;
+        } else {
+            // Filter active - check if message matches one of the filters
+            bool should_wake = false;
+            for (size_t i = 0; i < recipient->recv_filter_count; i++) {
+                if (entry_matches_filter(entry, &recipient->recv_filters[i])) {
+                    should_wake = true;
+                    break;
+                }
+            }
+
+            // Also wake on TIMER messages (could be timeout timer)
+            if (!should_wake && entry->len >= HIVE_MSG_HEADER_SIZE) {
+                uint32_t header = *(uint32_t *)entry->data;
+                hive_msg_class msg_class = (hive_msg_class)(header >> 28);
+                if (msg_class == HIVE_MSG_TIMER) {
+                    should_wake = true;
+                }
+            }
+
+            if (should_wake) {
+                recipient->state = ACTOR_STATE_READY;
+            }
         }
     }
 }
@@ -163,74 +179,18 @@ static void mailbox_unlink(mailbox *mbox, mailbox_entry *entry) {
     mbox->count--;
 }
 
-// Scan mailbox for matching message
-static mailbox_entry *mailbox_find_match(mailbox *mbox, actor_id from,
-                                         hive_msg_class class, uint32_t tag) {
+// Scan mailbox for message matching any of the filters
+// Returns the matching entry and sets *matched_index to which filter matched
+static mailbox_entry *mailbox_find_match_any(mailbox *mbox,
+                                             const hive_recv_filter *filters,
+                                             size_t num_filters,
+                                             size_t *matched_index) {
     for (mailbox_entry *entry = mbox->head; entry; entry = entry->next) {
-        // Check sender filter
-        if (from != HIVE_SENDER_ANY && entry->sender != from) {
-            continue;
-        }
-
-        // Need valid header to check class/tag
-        if (entry->len < HIVE_MSG_HEADER_SIZE) {
-            continue; // Skip malformed messages
-        }
-
-        uint32_t header = *(uint32_t *)entry->data;
-        hive_msg_class msg_class;
-        uint32_t msg_tag;
-        decode_header(header, &msg_class, &msg_tag);
-
-        // Check class filter
-        if (class != HIVE_MSG_ANY && msg_class != class) {
-            continue;
-        }
-
-        // Check tag filter
-        if (tag != HIVE_TAG_ANY && msg_tag != tag) {
-            continue;
-        }
-
-        // Found a match
-        return entry;
-    }
-    return NULL;
-}
-
-// Find EXIT message from specific actor with specific monitor reference
-// If mon_ref is 0, matches any EXIT from the actor (link or any monitor)
-// If mon_ref is non-zero, matches only EXIT with that specific monitor reference
-static mailbox_entry *mailbox_find_exit_from(mailbox *mbox, actor_id from,
-                                             uint32_t mon_ref) {
-    for (mailbox_entry *entry = mbox->head; entry; entry = entry->next) {
-        // Must be from the target actor
-        if (entry->sender != from) {
-            continue;
-        }
-
-        // Need valid header to check class
-        if (entry->len < HIVE_MSG_HEADER_SIZE) {
-            continue;
-        }
-
-        uint32_t header = *(uint32_t *)entry->data;
-        hive_msg_class msg_class;
-        decode_header(header, &msg_class, NULL);
-
-        if (msg_class != HIVE_MSG_EXIT) {
-            continue;
-        }
-
-        // Decode EXIT payload to check mon_ref
-        if (entry->len >= HIVE_MSG_HEADER_SIZE + sizeof(hive_exit_msg)) {
-            hive_exit_msg exit_info;
-            memcpy(&exit_info, (char *)entry->data + HIVE_MSG_HEADER_SIZE,
-                   sizeof(exit_info));
-
-            // If mon_ref filter is 0, match any EXIT from this actor
-            // If mon_ref filter is non-zero, match only that specific reference
-            if (mon_ref == 0 || exit_info.monitor_id == mon_ref) {
+        for (size_t i = 0; i < num_filters; i++) {
+            if (entry_matches_filter(entry, &filters[i])) {
+                if (matched_index) {
+                    *matched_index = i;
+                }
                 return entry;
             }
         }
@@ -361,19 +321,31 @@ hive_status hive_ipc_notify_ex(actor_id to, hive_msg_class class, uint32_t tag,
 }
 
 hive_status hive_ipc_recv(hive_message *msg, int32_t timeout_ms) {
-    // Use recv_match with wildcards for all filters
-    return hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_ANY, HIVE_TAG_ANY, msg,
-                               timeout_ms);
+    // Use recv_match_any with single wildcard filter
+    hive_recv_filter filter = {HIVE_SENDER_ANY, HIVE_MSG_ANY, HIVE_TAG_ANY};
+    return hive_ipc_recv_match_any(&filter, 1, msg, timeout_ms, NULL);
 }
 
 hive_status hive_ipc_recv_match(actor_id from, hive_msg_class class,
                                 uint32_t tag, hive_message *msg,
                                 int32_t timeout_ms) {
+    // Thin wrapper around recv_match_any with single filter
+    hive_recv_filter filter = {from, class, tag};
+    return hive_ipc_recv_match_any(&filter, 1, msg, timeout_ms, NULL);
+}
+
+hive_status hive_ipc_recv_match_any(const hive_recv_filter *filters,
+                                    size_t num_filters, hive_message *msg,
+                                    int32_t timeout_ms, size_t *matched_index) {
     HIVE_REQUIRE_ACTOR_CONTEXT();
     actor *current = hive_actor_current();
 
-    HIVE_LOG_TRACE("IPC recv_match: actor %u (from=%u, class=%d, tag=%u)",
-                   current->id, from, class, tag);
+    if (!filters || num_filters == 0) {
+        return HIVE_ERROR(HIVE_ERR_INVALID, "No filters provided");
+    }
+
+    HIVE_LOG_TRACE("IPC recv_match_any: actor %u with %zu filters", current->id,
+                   num_filters);
 
     // Auto-release previous active message if any
     if (current->active_msg) {
@@ -382,10 +354,11 @@ hive_status hive_ipc_recv_match(actor_id from, hive_msg_class class,
     }
 
     timer_id timeout_timer = TIMER_ID_INVALID;
+    size_t match_idx = 0;
 
     // Search mailbox for matching message
-    mailbox_entry *entry =
-        mailbox_find_match(&current->mailbox, from, class, tag);
+    mailbox_entry *entry = mailbox_find_match_any(&current->mailbox, filters,
+                                                  num_filters, &match_idx);
 
     if (!entry) {
         if (timeout_ms == 0) {
@@ -395,18 +368,19 @@ hive_status hive_ipc_recv_match(actor_id from, hive_msg_class class,
         }
 
         // Set up filters for wake-on-match
-        current->recv_filter_sender = from;
-        current->recv_filter_class = class;
-        current->recv_filter_tag = tag;
+        current->recv_filters = filters;
+        current->recv_filter_count = num_filters;
 
         if (timeout_ms > 0) {
             // Blocking with timeout - create a timer
             HIVE_LOG_TRACE(
-                "IPC recv_match: actor %u blocking with %d ms timeout",
+                "IPC recv_match_any: actor %u blocking with %d ms timeout",
                 current->id, timeout_ms);
             hive_status status =
                 hive_timer_after((uint32_t)timeout_ms * 1000, &timeout_timer);
             if (HIVE_FAILED(status)) {
+                current->recv_filters = NULL;
+                current->recv_filter_count = 0;
                 return status;
             }
         }
@@ -416,9 +390,8 @@ hive_status hive_ipc_recv_match(actor_id from, hive_msg_class class,
         hive_scheduler_yield();
 
         // Clear filters after waking
-        current->recv_filter_sender = HIVE_SENDER_ANY;
-        current->recv_filter_class = HIVE_MSG_ANY;
-        current->recv_filter_tag = HIVE_TAG_ANY;
+        current->recv_filters = NULL;
+        current->recv_filter_count = 0;
 
         // Check for timeout
         if (timeout_timer != TIMER_ID_INVALID) {
@@ -430,7 +403,8 @@ hive_status hive_ipc_recv_match(actor_id from, hive_msg_class class,
         }
 
         // Re-scan mailbox for match
-        entry = mailbox_find_match(&current->mailbox, from, class, tag);
+        entry = mailbox_find_match_any(&current->mailbox, filters, num_filters,
+                                       &match_idx);
         if (!entry) {
             return HIVE_ERROR(HIVE_ERR_WOULDBLOCK,
                               "No matching messages available after wakeup");
@@ -455,6 +429,11 @@ hive_status hive_ipc_recv_match(actor_id from, hive_msg_class class,
 
     // Store entry as active message for later cleanup
     current->active_msg = entry;
+
+    // Return which filter matched
+    if (matched_index) {
+        *matched_index = match_idx;
+    }
 
     return HIVE_SUCCESS;
 }
@@ -493,102 +472,29 @@ hive_status hive_ipc_request(actor_id to, const void *request, size_t req_len,
         return status;
     }
 
-    // Auto-release previous active message if any
-    if (current->active_msg) {
-        hive_ipc_free_entry(current->active_msg);
-        current->active_msg = NULL;
+    // Wait for REPLY or EXIT from target
+    hive_recv_filter filters[] = {
+        {to, HIVE_MSG_REPLY, call_tag},
+        {to, HIVE_MSG_EXIT, HIVE_TAG_ANY},
+    };
+
+    hive_message msg;
+    size_t matched;
+    status = hive_ipc_recv_match_any(filters, 2, &msg, timeout_ms, &matched);
+    hive_monitor_cancel(mon_ref);
+
+    if (HIVE_FAILED(status)) {
+        return status;
     }
 
-    timer_id timeout_timer = TIMER_ID_INVALID;
-
-    // Main receive loop - wait for REPLY or EXIT
-    while (1) {
-        // Check for REPLY with matching tag
-        mailbox_entry *entry =
-            mailbox_find_match(&current->mailbox, to, HIVE_MSG_REPLY, call_tag);
-        if (entry) {
-            // Found reply - success
-            if (timeout_timer != TIMER_ID_INVALID) {
-                hive_timer_cancel(timeout_timer);
-            }
-            hive_monitor_cancel(mon_ref);
-
-            mailbox_unlink(&current->mailbox, entry);
-
-            // Decode header and fill message structure
-            uint32_t header = *(uint32_t *)entry->data;
-            hive_msg_class msg_class;
-            uint32_t msg_tag;
-            decode_header(header, &msg_class, &msg_tag);
-
-            reply->sender = entry->sender;
-            reply->class = msg_class;
-            reply->tag = msg_tag;
-            reply->data = (char *)entry->data + HIVE_MSG_HEADER_SIZE;
-            reply->len = entry->len - HIVE_MSG_HEADER_SIZE;
-
-            current->active_msg = entry;
-            return HIVE_SUCCESS;
-        }
-
-        // Check for EXIT from target with our monitor reference
-        entry = mailbox_find_exit_from(&current->mailbox, to, mon_ref);
-        if (entry) {
-            // Target died
-            if (timeout_timer != TIMER_ID_INVALID) {
-                hive_timer_cancel(timeout_timer);
-            }
-            hive_monitor_cancel(mon_ref);
-
-            mailbox_unlink(&current->mailbox, entry);
-            hive_ipc_free_entry(entry);
-
-            return HIVE_ERROR(HIVE_ERR_CLOSED, "Target actor died");
-        }
-
-        // Neither found - need to block
-        if (timeout_ms == 0) {
-            hive_monitor_cancel(mon_ref);
-            return HIVE_ERROR(HIVE_ERR_WOULDBLOCK, "No reply available");
-        }
-
-        // Set up timeout timer if not already done
-        if (timeout_ms > 0 && timeout_timer == TIMER_ID_INVALID) {
-            status =
-                hive_timer_after((uint32_t)timeout_ms * 1000, &timeout_timer);
-            if (HIVE_FAILED(status)) {
-                hive_monitor_cancel(mon_ref);
-                return status;
-            }
-        }
-
-        // Set filter to wake on any message from target
-        // This will catch both REPLY and EXIT messages
-        current->recv_filter_sender = to;
-        current->recv_filter_class = HIVE_MSG_ANY;
-        current->recv_filter_tag = HIVE_TAG_ANY;
-
-        // Block and wait
-        current->state = ACTOR_STATE_WAITING;
-        hive_scheduler_yield();
-
-        // Clear filters after waking
-        current->recv_filter_sender = HIVE_SENDER_ANY;
-        current->recv_filter_class = HIVE_MSG_ANY;
-        current->recv_filter_tag = HIVE_TAG_ANY;
-
-        // Check for timeout
-        if (timeout_timer != TIMER_ID_INVALID) {
-            status = hive_mailbox_handle_timeout(current, timeout_timer,
-                                                 "Request timeout");
-            if (HIVE_FAILED(status)) {
-                hive_monitor_cancel(mon_ref);
-                return status;
-            }
-        }
-
-        // Loop back and check for REPLY or EXIT again
+    if (matched == 1) {
+        // EXIT - target died
+        return HIVE_ERROR(HIVE_ERR_CLOSED, "Target actor died");
     }
+
+    // REPLY received - return to caller
+    *reply = msg;
+    return HIVE_SUCCESS;
 }
 
 hive_status hive_ipc_reply(const hive_message *request, const void *data,
