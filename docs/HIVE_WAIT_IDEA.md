@@ -10,6 +10,60 @@ Currently, actors must choose one blocking primitive at a time:
 
 This forces awkward patterns when an actor needs to respond to multiple event sources (e.g., timer ticks AND sensor bus data AND commands). A unified select would enable clean event loops.
 
+## Real-World Example: Pilot Altitude Actor
+
+The current `altitude_actor.c` shows the problem. It needs to:
+1. Process state updates from the state bus (100 Hz)
+2. Respond to LANDING commands immediately
+
+**Current code (problematic):**
+```c
+while (1) {
+    // Block until state available - LANDING command delayed while blocked!
+    hive_bus_read_wait(s_state_bus, &state, sizeof(state), &len, -1);
+
+    // ... process state ...
+
+    // Check for landing command (non-blocking poll - may miss if blocked above)
+    if (HIVE_SUCCEEDED(hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_NOTIFY,
+                                           NOTIFY_LANDING, &msg, 0))) {
+        landing_mode = true;
+    }
+}
+```
+
+**Problem:** If LANDING command arrives while blocked on bus, response is delayed until next state update (up to 10ms at 100 Hz).
+
+**With `hive_select()`:**
+```c
+enum { SEL_STATE, SEL_LANDING };
+hive_select_cond conds[] = {
+    [SEL_STATE] = {HIVE_SEL_BUS, .bus = s_state_bus},
+    [SEL_LANDING] = {HIVE_SEL_IPC, .ipc = {HIVE_SENDER_ANY, HIVE_MSG_NOTIFY, NOTIFY_LANDING}},
+};
+
+while (1) {
+    hive_select_result result;
+    hive_select(conds, 2, &result, -1);
+
+    if (result.index == SEL_LANDING) {
+        landing_mode = true;
+        continue;  // Respond immediately, don't wait for state
+    }
+
+    // Process state from result.bus.data
+    state_estimate_t *state = (state_estimate_t *)result.bus.data;
+    // ...
+}
+```
+
+**Benefits:**
+- Immediate response to LANDING command (no 10ms delay)
+- Clean event loop structure
+- No non-blocking polling
+
+Similar patterns exist in `waypoint_actor.c`, `motor_actor.c`, and others.
+
 ## Naming
 
 | Name | Rationale |
