@@ -1,7 +1,14 @@
-// Supervisor actor - Startup coordination and safety monitoring
+// Supervisor actor - Flight authority and safety monitoring
 //
-// Handles startup delay and coordinates flight start.
-// Sends START notification to waypoint actor after delay.
+// Controls flight lifecycle:
+// 1. Startup delay (real hardware only)
+// 2. Open log file (ARM phase)
+// 3. Send START to waypoint actor
+// 4. Periodic log sync (every 4 seconds)
+// 5. Flight duration timer
+// 6. Send LANDING to altitude actor
+// 7. Wait for LANDED, then send STOP to motor actor
+// 8. Close log file (DISARM phase)
 
 #ifndef SUPERVISOR_ACTOR_H
 #define SUPERVISOR_ACTOR_H
