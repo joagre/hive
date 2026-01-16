@@ -5,6 +5,7 @@
 // - Binary log file with explicit little-endian serialization (HIVE_LOG_TO_FILE)
 
 #include "hive_log.h"
+#include "hive_internal.h"
 #include "hive_static_config.h"
 #include <stdarg.h>
 #include <string.h>
@@ -135,9 +136,7 @@ static void log_to_file(hive_log_level_t level, const char *text, size_t text_le
 // -----------------------------------------------------------------------------
 
 hive_status hive_log_init(void) {
-    if (g_initialized) {
-        return HIVE_SUCCESS;
-    }
+    HIVE_INIT_GUARD(g_initialized);
     g_initialized = true;
 #if HIVE_LOG_TO_FILE
     g_log_fd = -1;
