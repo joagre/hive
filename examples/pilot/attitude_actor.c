@@ -26,8 +26,7 @@ void attitude_actor_init(bus_id state_bus, bus_id attitude_setpoint_bus, bus_id 
 void attitude_actor(void *arg) {
     (void)arg;
 
-    hive_status status;
-    status = hive_bus_subscribe(s_state_bus);
+    hive_status status = hive_bus_subscribe(s_state_bus);
     assert(HIVE_SUCCEEDED(status));
     status = hive_bus_subscribe(s_attitude_setpoint_bus);
     assert(HIVE_SUCCEEDED(status));

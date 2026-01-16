@@ -44,8 +44,7 @@ void altitude_actor_init(bus_id state_bus, bus_id thrust_bus, bus_id position_ta
 void altitude_actor(void *arg) {
     (void)arg;
 
-    hive_status status;
-    status = hive_bus_subscribe(s_state_bus);
+    hive_status status = hive_bus_subscribe(s_state_bus);
     assert(HIVE_SUCCEEDED(status));
     status = hive_bus_subscribe(s_position_target_bus);
     assert(HIVE_SUCCEEDED(status));

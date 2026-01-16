@@ -29,8 +29,7 @@ void rate_actor_init(bus_id state_bus, bus_id thrust_bus,
 void rate_actor(void *arg) {
     (void)arg;
 
-    hive_status status;
-    status = hive_bus_subscribe(s_state_bus);
+    hive_status status = hive_bus_subscribe(s_state_bus);
     assert(HIVE_SUCCEEDED(status));
     status = hive_bus_subscribe(s_thrust_bus);
     assert(HIVE_SUCCEEDED(status));
