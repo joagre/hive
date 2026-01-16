@@ -58,9 +58,9 @@ void estimator_actor(void *arg) {
 
     while (1) {
         sensor_data_t sensors;
+        size_t len;
 
         // Block until sensor data available
-        size_t len;
         hive_bus_read_wait(s_sensor_bus, &sensors, sizeof(sensors), &len, -1);
 
         // Measure actual dt

@@ -48,9 +48,9 @@ void attitude_actor(void *arg) {
     while (1) {
         state_estimate_t state;
         attitude_setpoint_t new_attitude_sp;
+        size_t len;
 
         // Block until state available
-        size_t len;
         hive_bus_read_wait(s_state_bus, &state, sizeof(state), &len, -1);
 
         // Measure actual dt

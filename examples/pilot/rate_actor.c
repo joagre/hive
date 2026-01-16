@@ -52,9 +52,9 @@ void rate_actor(void *arg) {
         state_estimate_t state;
         thrust_cmd_t thrust_cmd;
         rate_setpoint_t new_rate_sp;
+        size_t len;
 
         // Block until state available
-        size_t len;
         hive_bus_read_wait(s_state_bus, &state, sizeof(state), &len, -1);
 
         // Measure actual dt

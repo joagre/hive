@@ -66,9 +66,9 @@ void altitude_actor(void *arg) {
     while (1) {
         state_estimate_t state;
         position_target_t target;
+        size_t len;
 
         // Block until state available
-        size_t len;
         hive_bus_read_wait(s_state_bus, &state, sizeof(state), &len, -1);
 
         // Measure dt
