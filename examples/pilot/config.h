@@ -3,7 +3,6 @@
 // Shared constants used across multiple actors.
 // Platform-specific tuning parameters are in hal_config.h.
 // Math utilities are in math_utils.h.
-// Debug utilities are in debug.h.
 
 #ifndef PILOT_CONFIG_H
 #define PILOT_CONFIG_H

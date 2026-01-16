@@ -1,7 +1,7 @@
 // Pilot example - Quadcopter waypoint navigation using actor runtime
 //
 // Demonstrates waypoint navigation for a quadcopter using the hive actor
-// runtime. Eight actors work together in a pipeline:
+// runtime. Nine actors work together in a pipeline:
 //
 //   sensor_actor    - Reads raw sensors via HAL → sensor bus
 //   estimator_actor - Complementary filter fusion → state bus
@@ -32,7 +32,7 @@
 #include "hive_runtime.h"
 #include "hive_bus.h"
 #include "hive_log.h"
-#include "hive_actor.h"  // For actor state debug
+#include "hive_actor.h"  // For HIVE_ACTOR_CONFIG_DEFAULT
 
 #include "types.h"
 #include "config.h"
