@@ -1,0 +1,41 @@
+#!/bin/bash
+# Pre-commit hook: check C/H files are formatted with clang-format
+#
+# Install: cp scripts/pre-commit .git/hooks/ && chmod +x .git/hooks/pre-commit
+# Or:      ln -sf ../../scripts/pre-commit .git/hooks/pre-commit
+#
+# To bypass: git commit --no-verify
+
+# Get staged C and H files (excluding deleted files and vendor directories)
+STAGED_FILES=$(git diff --cached --name-only --diff-filter=d | grep -E '\.(c|h)$' | grep -v vendor/)
+
+if [ -z "$STAGED_FILES" ]; then
+    exit 0
+fi
+
+# Check if clang-format is installed
+if ! command -v clang-format &> /dev/null; then
+    echo "Warning: clang-format not found, skipping format check"
+    exit 0
+fi
+
+# Check each file
+UNFORMATTED=""
+for FILE in $STAGED_FILES; do
+    if ! clang-format --dry-run --Werror "$FILE" 2>/dev/null; then
+        UNFORMATTED="$UNFORMATTED $FILE"
+    fi
+done
+
+if [ -n "$UNFORMATTED" ]; then
+    echo "Error: The following files need formatting:"
+    for FILE in $UNFORMATTED; do
+        echo "  $FILE"
+    done
+    echo ""
+    echo "Run: clang-format -i$UNFORMATTED"
+    echo "Or bypass with: git commit --no-verify"
+    exit 1
+fi
+
+exit 0
