@@ -1,4 +1,4 @@
-# Actor Runtime for Embedded Systems
+# Hive - Actor Runtime for Embedded Systems
 
 > **Lightweight actors for embedded systems. Deterministic memory, no GC.**
 
