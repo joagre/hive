@@ -526,13 +526,19 @@ graph LR
 |-------|-------|--------|----------|----------------|
 | **Sensor** | Hardware | Sensor Bus | CRITICAL | Read raw sensors, publish |
 | **Estimator** | Sensor Bus | State Bus | CRITICAL | Complementary filter fusion, state estimate |
-| **Altitude** | State + Position Target Bus | Thrust Bus | HIGH | Altitude PID (250Hz) |
-| **Waypoint** | State Bus + START notification | Position Target Bus | NORMAL | Waypoint navigation (3D on Webots, altitude-only on STM32) |
-| **Position** | Position Target + State Bus | Attitude Setpoint Bus | HIGH | Position PD (250Hz) |
+| **Supervisor** | (none) | START/STOP notifications | CRITICAL | Startup delay, flight window cutoff |
+| **Waypoint** | State Bus + START notification | Position Target Bus | CRITICAL | Waypoint navigation (3D on Webots, altitude-only on STM32) |
+| **Altitude** | State + Position Target Bus | Thrust Bus | CRITICAL | Altitude PID (250Hz) |
+| **Position** | Position Target + State Bus | Attitude Setpoint Bus | CRITICAL | Position PD (250Hz) |
 | **Attitude** | Attitude Setpoint + State | Rate Setpoint Bus | CRITICAL | Attitude PIDs (250Hz) |
 | **Rate** | State + Thrust + Rate SP | Torque Bus | CRITICAL | Rate PIDs (250Hz) |
 | **Motor** | Torque Bus + STOP notification | Hardware | CRITICAL | Output to hardware via HAL |
-| **Supervisor** | (none) | START/STOP notifications | NORMAL | Startup delay, flight window cutoff |
+
+**Why all CRITICAL?** All actors use the same priority so execution order follows spawn order
+(round-robin within priority level). This ensures the data pipeline executes correctly:
+sensor → estimator → waypoint → altitude → position → attitude → rate → motor.
+Differentiated priorities would break this—higher priority actors run first regardless of
+spawn order, causing motor to output before controllers have computed new values.
 
 ### Step 1: Motor Actor ✓
 
