@@ -15,6 +15,7 @@ LIB := $(BUILD_DIR)/libhive.a
 
 # Include path - always relative to this directory
 CPPFLAGS := -I../include -D_POSIX_C_SOURCE=200809L -DHIVE_PLATFORM_LINUX
+DEPFLAGS := -MMD -MP
 
 # Feature flags
 ifeq ($(ENABLE_NET),1)
@@ -32,6 +33,7 @@ endif
 # Benchmark sources
 BENCHMARK_SRCS := $(wildcard *.c)
 BENCHMARKS := $(BENCHMARK_SRCS:%.c=$(BUILD_DIR)/%)
+DEPS := $(BENCHMARK_SRCS:%.c=$(BUILD_DIR)/%.d)
 
 # Default target
 .PHONY: all
@@ -43,17 +45,17 @@ $(BUILD_DIR):
 
 # Build benchmarks
 $(BUILD_DIR)/%: %.c $(LIB) | $(BUILD_DIR)
-	$(CC) $(CFLAGS) $(CPPFLAGS) $< -o $@ -L$(BUILD_DIR) -lhive
+	$(CC) $(CFLAGS) $(CPPFLAGS) $(DEPFLAGS) $< -o $@ -L$(BUILD_DIR) -lhive
 
 # Run the main benchmark
 .PHONY: run
 run: $(BUILD_DIR)/bench
 	./$(BUILD_DIR)/bench
 
-# Clean benchmark binaries only
+# Clean benchmark binaries and deps
 .PHONY: clean
 clean:
-	rm -f $(BENCHMARKS)
+	rm -f $(BENCHMARKS) $(DEPS)
 
 .PHONY: help
 help:
@@ -61,3 +63,6 @@ help:
 	@echo "  all   - Build all benchmarks"
 	@echo "  run   - Build and run main benchmark"
 	@echo "  clean - Remove benchmark binaries"
+
+# Auto-generated dependencies
+-include $(DEPS)

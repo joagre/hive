@@ -18,6 +18,7 @@ LIB := $(BUILD_DIR)/libhive.a
 
 # Include path - always relative to this directory
 CPPFLAGS := -I../include -D_POSIX_C_SOURCE=200809L -DHIVE_PLATFORM_LINUX
+DEPFLAGS := -MMD -MP
 
 # Feature flags
 ifeq ($(ENABLE_NET),1)
@@ -44,6 +45,7 @@ ifneq ($(ENABLE_FILE),1)
 endif
 
 EXAMPLES := $(EXAMPLE_SRCS:%.c=$(BUILD_DIR)/%)
+DEPS := $(EXAMPLE_SRCS:%.c=$(BUILD_DIR)/%.d)
 
 # Default target
 .PHONY: all
@@ -55,7 +57,7 @@ $(BUILD_DIR):
 
 # Build examples
 $(BUILD_DIR)/%: %.c $(LIB) | $(BUILD_DIR)
-	$(CC) $(CFLAGS) $(CPPFLAGS) $< -o $@ -L$(BUILD_DIR) -lhive
+	$(CC) $(CFLAGS) $(CPPFLAGS) $(DEPFLAGS) $< -o $@ -L$(BUILD_DIR) -lhive
 
 # Run targets
 .PHONY: run-pingpong
@@ -70,10 +72,10 @@ run-fileio: $(BUILD_DIR)/fileio
 run-echo: $(BUILD_DIR)/echo
 	./$(BUILD_DIR)/echo
 
-# Clean example binaries only
+# Clean example binaries and deps
 .PHONY: clean
 clean:
-	rm -f $(EXAMPLES)
+	rm -f $(EXAMPLES) $(DEPS)
 
 .PHONY: help
 help:
@@ -83,3 +85,6 @@ help:
 	@echo "  run-fileio   - Run file I/O example"
 	@echo "  run-echo     - Run echo server/client example"
 	@echo "  clean        - Remove example binaries"
+
+# Auto-generated dependencies
+-include $(DEPS)

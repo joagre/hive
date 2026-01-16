@@ -15,6 +15,7 @@ LIB := $(BUILD_DIR)/libhive.a
 
 # Include path - always relative to this directory
 CPPFLAGS := -I../include -D_POSIX_C_SOURCE=200809L -DHIVE_PLATFORM_LINUX
+DEPFLAGS := -MMD -MP
 
 # Feature flags
 ifeq ($(ENABLE_NET),1)
@@ -41,6 +42,7 @@ ifneq ($(ENABLE_FILE),1)
 endif
 
 TESTS := $(TEST_SRCS:%.c=$(BUILD_DIR)/%)
+DEPS := $(TEST_SRCS:%.c=$(BUILD_DIR)/%.d)
 
 # Default target
 .PHONY: all
@@ -52,7 +54,7 @@ $(BUILD_DIR):
 
 # Build tests
 $(BUILD_DIR)/%: %.c $(LIB) | $(BUILD_DIR)
-	$(CC) $(CFLAGS) $(CPPFLAGS) $< -o $@ -L$(BUILD_DIR) -lhive
+	$(CC) $(CFLAGS) $(CPPFLAGS) $(DEPFLAGS) $< -o $@ -L$(BUILD_DIR) -lhive
 
 # Run all tests
 .PHONY: test
@@ -66,10 +68,10 @@ test: $(TESTS)
 	@echo ""
 	@echo "All tests passed!"
 
-# Clean test binaries only
+# Clean test binaries and deps
 .PHONY: clean
 clean:
-	rm -f $(TESTS)
+	rm -f $(TESTS) $(DEPS)
 
 .PHONY: help
 help:
@@ -77,3 +79,6 @@ help:
 	@echo "  all   - Build all tests"
 	@echo "  test  - Build and run all tests"
 	@echo "  clean - Remove test binaries"
+
+# Auto-generated dependencies
+-include $(DEPS)
