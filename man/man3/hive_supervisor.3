@@ -177,12 +177,30 @@ Preserved monitor/link state (must re-establish)
 .PP
 The only state preserved across restarts is the argument passed to the child
 function (copied by the supervisor at configuration time).
+.SS External Resources
+A restarted child MUST treat all external handles as invalid and reacquire them.
+This includes file descriptors, sockets, HAL handles, device state, and any
+shared-memory pointers not owned by the runtime.
 .PP
-.B Implication for IPC:
-Actors that communicate with supervised children should use the name registry
+Failure to do so causes "works in simulation, dies on hardware" bugs because
+resource lifetime is not actor lifetime.
+.SS Name Registration
+A supervised child intended to be discoverable MUST:
+.IP \(bu 2
+Register its name during startup (call
+.BR hive_register ()
+early)
+.IP \(bu 2
+Tolerate name lookup from other actors at any time
+.SS Client Rule
+Actors communicating with supervised children MUST NOT cache
+.I actor_id
+across awaits, timeouts, or receive calls. They MUST re-resolve by name
 .RB ( hive_whereis (3))
-to look up actor IDs dynamically rather than caching IDs at startup.
-This ensures they get the current ID even after restarts.
+on each interaction or after any failure signal (timeout, EXIT message).
+.PP
+This prevents the classic bug: client caches ID, server restarts, client sends
+to dead ID, silent failure or mysterious behavior.
 .SH EXAMPLE
 .nf
 #include <hive_runtime.h>

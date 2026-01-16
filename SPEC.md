@@ -1894,7 +1894,24 @@ Returns:
 
 The only state preserved across restarts is the argument passed to the child function (copied by the supervisor at configuration time).
 
-**Implication for IPC:** Actors that communicate with supervised children should use the name registry (`hive_whereis()`) to look up actor IDs dynamically rather than caching IDs at startup. This ensures they get the current ID even after restarts.
+**External Resources:** A restarted child MUST treat all external handles as invalid and reacquire them. This includes:
+
+- File descriptors
+- Sockets
+- HAL handles
+- Device state
+- Shared-memory pointers not owned by the runtime
+
+Failure to do so causes "works in simulation, dies on hardware" bugs because resource lifetime is not actor lifetime.
+
+**Name Registration:** A supervised child intended to be discoverable MUST:
+
+- Register its name during startup (call `hive_register()` early)
+- Tolerate name lookup from other actors at any time
+
+**Client Rule:** Actors communicating with supervised children MUST NOT cache `actor_id` across awaits, timeouts, or receive calls. They MUST re-resolve by name (`hive_whereis()`) on each interaction or after any failure signal (timeout, EXIT message).
+
+This prevents the classic bug: client caches ID → server restarts → client sends to dead ID → silent failure or mysterious behavior.
 
 ### Example
 
