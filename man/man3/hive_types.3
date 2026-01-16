@@ -277,6 +277,13 @@ Maximum entries per bus ring buffer.
 .TP
 .B HIVE_MAX_BUS_SUBSCRIBERS (32)
 Maximum subscribers per bus.
+.SS Supervisor Configuration
+.TP
+.B HIVE_MAX_SUPERVISORS (8)
+Maximum concurrent supervisors.
+.TP
+.B HIVE_MAX_SUPERVISOR_CHILDREN (16)
+Maximum children per supervisor.
 .SS Scheduler Configuration
 .TP
 .B HIVE_EPOLL_MAX_EVENTS (64)
@@ -352,5 +359,6 @@ gcc -DHIVE_MAX_ACTORS=128 \\
 .BR hive_spawn (3),
 .BR hive_ipc (3),
 .BR hive_link (3),
+.BR hive_supervisor (3),
 .BR hive_timer (3),
 .BR hive_bus (3)
