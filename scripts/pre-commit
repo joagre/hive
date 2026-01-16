@@ -1,7 +1,9 @@
 #!/bin/bash
-# Pre-commit hook: check C/H files are formatted with clang-format
+# Pre-commit hook for C/H files:
+#   1. Check clang-format compliance
+#   2. Check Unicode policy (ASCII only, except box-drawing for diagrams)
 #
-# Install: cp scripts/pre-commit .git/hooks/ && chmod +x .git/hooks/pre-commit
+# Install: git config core.hooksPath scripts
 # Or:      ln -sf ../../scripts/pre-commit .git/hooks/pre-commit
 #
 # To bypass: git commit --no-verify
@@ -34,6 +36,29 @@ if [ -n "$UNFORMATTED" ]; then
     done
     echo ""
     echo "Run: clang-format -i$UNFORMATTED"
+    echo "Or bypass with: git commit --no-verify"
+    exit 1
+fi
+
+# Check for forbidden Unicode in comments (allow box-drawing U+2500-U+257F for diagrams)
+# Policy: ASCII only in prose comments, Unicode box-drawing allowed for diagrams
+UNICODE_VIOLATIONS=""
+for FILE in $STAGED_FILES; do
+    # Find non-ASCII chars, exclude box-drawing range (─│┌┐└┘├┤┬┴┼ etc.)
+    if grep -P '[^\x00-\x7F]' "$FILE" | grep -vP '[\x{2500}-\x{257F}]' > /dev/null 2>&1; then
+        UNICODE_VIOLATIONS="$UNICODE_VIOLATIONS $FILE"
+    fi
+done
+
+if [ -n "$UNICODE_VIOLATIONS" ]; then
+    echo "Error: Forbidden Unicode characters in comments (use ASCII):"
+    for FILE in $UNICODE_VIOLATIONS; do
+        echo "  $FILE:"
+        grep -nP '[^\x00-\x7F]' "$FILE" | grep -vP '[\x{2500}-\x{257F}]' | head -5
+    done
+    echo ""
+    echo "Allowed: Box-drawing chars (─│┌┐└┘├┤┬┴┼) for diagrams"
+    echo "Replace: -> for arrows, ^2 for superscripts, deg for degrees, etc."
     echo "Or bypass with: git commit --no-verify"
     exit 1
 fi
