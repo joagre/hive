@@ -155,6 +155,7 @@ make -f Makefile.STEVAL-DRONE01
 | `hal_stm32.c` | HAL interface (hal_read_sensors, hal_write_torque) |
 | `hal_config.h` | Platform-specific PID gains and thrust |
 | `platform_stm32f4.h/c` | Platform-specific sensor reading and motor control |
+| `platform_types.h` | Platform-specific type definitions |
 
 ### Configuration
 
@@ -206,6 +207,9 @@ Makefiles from `HIVE_LOG_LEVEL_INFO` to `HIVE_LOG_LEVEL_NONE`.
 | `Drivers/BSP/lps22hb/` | LPS22HB barometer driver |
 | `sensor_motor_test.c` | Hardware validation test |
 | `main.c` | WHO_AM_I register test |
+| `led_test.c` | LED blink test |
+| `motor_only_test.c` | Motor-only test (no sensors) |
+| `thrust_test.c` | Thrust calibration test |
 | `Makefile` | Build hardware tests |
 
 ## Pin Mapping

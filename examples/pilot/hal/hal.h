@@ -10,7 +10,8 @@
 //   Torque: positive command produces positive rotation
 //
 // Implementations:
-//   hal/STEVAL-DRONE01/  - STM32F4 real hardware
+//   hal/crazyflie-2.1+/   - Crazyflie 2.1+ real hardware
+//   hal/STEVAL-DRONE01/   - STEVAL-DRONE01 real hardware
 //   hal/webots-crazyflie/ - Webots simulation
 
 #ifndef HAL_H

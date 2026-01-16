@@ -158,14 +158,12 @@ make -f Makefile.crazyflie-2.1+
 | `stm32f405_flash.ld` | Memory layout (1 MB Flash, 192 KB RAM) |
 | `Makefile` | Build libhal.a static library |
 
-### CMSIS Headers (cmsis/)
+### CMSIS Headers (vendor/CMSIS/)
 
 | File | Description |
 |------|-------------|
-| `stm32f4xx.h` | STM32F4 peripheral register definitions |
-| `stm32f405xx.h` | STM32F405-specific definitions |
-| `core_cm4.h` | ARM Cortex-M4 core definitions |
-| `system_stm32f4xx.h` | System initialization |
+| `Device/ST/STM32F4xx/Include/stm32f4xx.h` | STM32F4 peripheral register definitions |
+| `Include/core_cm4.h` | ARM Cortex-M4 core definitions |
 
 ## Pin Mapping
 
