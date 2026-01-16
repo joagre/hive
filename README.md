@@ -499,6 +499,54 @@ make ENABLE_NET=0 ENABLE_FILE=0
 # STM32 defaults to ENABLE_NET=0 ENABLE_FILE=1
 ```
 
+## Code Style
+
+The project uses **One True Style (1TBS)** enforced by clang-format.
+
+### Style Summary
+
+- 4-space indent, no tabs
+- 80 column limit
+- K&R braces (opening brace on same line)
+- Pointer on variable: `int *ptr` not `int* ptr`
+- No single-line control bodies (always use braces)
+
+### Formatting Code
+
+```bash
+# Format specific files
+clang-format -i src/*.c include/*.h
+
+# Check without modifying (dry run)
+clang-format --dry-run --Werror src/hive_actor.c
+
+# Do NOT run on assembly files (*.S) - will corrupt them
+```
+
+### Pre-commit Hook
+
+A pre-commit hook checks formatting before each commit:
+
+```bash
+# Install (symlink to tracked script)
+ln -sf ../../scripts/pre-commit .git/hooks/pre-commit
+
+# Bypass if needed
+git commit --no-verify
+```
+
+### Protecting ASCII Diagrams
+
+Use `// clang-format off` / `// clang-format on` around ASCII art:
+
+```c
+// clang-format off
+//   Sensor → Bus → Motor
+//      ↓
+//   Logger
+// clang-format on
+```
+
 ## QEMU Testing
 
 The runtime can be tested on ARM Cortex-M via QEMU emulation:
