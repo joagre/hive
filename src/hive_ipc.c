@@ -66,7 +66,8 @@ hive_status hive_ipc_init(void) {
 // This is the single point for freeing message pool entries (DRY principle)
 void hive_msg_pool_free(void *data) {
     if (data) {
-        message_data_entry *msg_data = DATA_TO_MSG_ENTRY(data);
+        message_data_entry *msg_data =
+            (message_data_entry *)((char *)data - offsetof(message_data_entry, data));
         hive_pool_free(&g_message_pool_mgr, msg_data);
     }
 }

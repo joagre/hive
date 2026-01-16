@@ -40,11 +40,6 @@ typedef struct {
     uint8_t data[HIVE_MAX_MESSAGE_SIZE];
 } message_data_entry;
 
-// Macro to extract message_data_entry pointer from data pointer
-// Used when freeing message data back to the pool
-#define DATA_TO_MSG_ENTRY(data_ptr) \
-    ((message_data_entry*)((char*)(data_ptr) - offsetof(message_data_entry, data)))
-
 // -----------------------------------------------------------------------------
 // Shared Linked List Macros
 // -----------------------------------------------------------------------------
