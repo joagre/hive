@@ -5,8 +5,8 @@
 
 // Exit message structure (exit reason is defined in hive_types.h)
 typedef struct {
-    actor_id       actor;    // ID of the actor that died
-    hive_exit_reason reason;   // Why the actor exited
+    actor_id actor;          // ID of the actor that died
+    hive_exit_reason reason; // Why the actor exited
 } hive_exit_msg;
 
 // Bidirectional linking - both actors notified when either dies

@@ -4,13 +4,14 @@
 #include <stdint.h>
 #include "hive_types.h"
 
-// Log level constants for compile-time filtering (preprocessor needs numeric values)
+// Log level constants for compile-time filtering (preprocessor needs numeric
+// values)
 #define HIVE_LOG_LEVEL_TRACE 0
 #define HIVE_LOG_LEVEL_DEBUG 1
-#define HIVE_LOG_LEVEL_INFO  2
-#define HIVE_LOG_LEVEL_WARN  3
+#define HIVE_LOG_LEVEL_INFO 2
+#define HIVE_LOG_LEVEL_WARN 3
 #define HIVE_LOG_LEVEL_ERROR 4
-#define HIVE_LOG_LEVEL_NONE  5
+#define HIVE_LOG_LEVEL_NONE 5
 
 // Log level type for runtime use
 typedef int hive_log_level_t;
@@ -18,8 +19,8 @@ typedef int hive_log_level_t;
 // -----------------------------------------------------------------------------
 // Log File Entry Format (for binary log files)
 // -----------------------------------------------------------------------------
-// Each log entry in a file is prefixed with a 12-byte header, followed by text payload.
-// Magic bytes allow recovery of entries from corrupted flash.
+// Each log entry in a file is prefixed with a 12-byte header, followed by text
+// payload. Magic bytes allow recovery of entries from corrupted flash.
 //
 // Wire format (little-endian, explicit byte serialization for portability):
 //   Offset  Size  Field
@@ -27,11 +28,11 @@ typedef int hive_log_level_t;
 //   2       2     seq         Monotonic sequence number (detects drops)
 //   4       4     timestamp   Microseconds since boot
 //   8       2     len         Payload length (text, excluding null terminator)
-//   10      1     level       Log level (TRACE=0, DEBUG=1, INFO=2, WARN=3, ERROR=4)
-//   11      1     reserved    Padding (always 0)
-//   12      len   payload     Log message text (no null terminator)
+//   10      1     level       Log level (TRACE=0, DEBUG=1, INFO=2, WARN=3,
+//   ERROR=4) 11      1     reserved    Padding (always 0) 12      len   payload
+//   Log message text (no null terminator)
 
-#define HIVE_LOG_MAGIC 0x4C47  // "LG" - Log entry marker
+#define HIVE_LOG_MAGIC 0x4C47 // "LG" - Log entry marker
 #define HIVE_LOG_HEADER_SIZE 12
 
 // -----------------------------------------------------------------------------
@@ -63,35 +64,40 @@ void hive_log_cleanup(void);
 
 // Core logging function (not typically called directly)
 void hive_log_write(hive_log_level_t level, const char *file, int line,
-                  const char *fmt, ...) __attribute__((format(printf, 4, 5)));
+                    const char *fmt, ...) __attribute__((format(printf, 4, 5)));
 
 // Logging macros that compile out based on HIVE_LOG_LEVEL
 #if HIVE_LOG_LEVEL <= HIVE_LOG_LEVEL_TRACE
-#define HIVE_LOG_TRACE(...) hive_log_write(HIVE_LOG_LEVEL_TRACE, __FILE__, __LINE__, __VA_ARGS__)
+#define HIVE_LOG_TRACE(...) \
+    hive_log_write(HIVE_LOG_LEVEL_TRACE, __FILE__, __LINE__, __VA_ARGS__)
 #else
 #define HIVE_LOG_TRACE(...) ((void)0)
 #endif
 
 #if HIVE_LOG_LEVEL <= HIVE_LOG_LEVEL_DEBUG
-#define HIVE_LOG_DEBUG(...) hive_log_write(HIVE_LOG_LEVEL_DEBUG, __FILE__, __LINE__, __VA_ARGS__)
+#define HIVE_LOG_DEBUG(...) \
+    hive_log_write(HIVE_LOG_LEVEL_DEBUG, __FILE__, __LINE__, __VA_ARGS__)
 #else
 #define HIVE_LOG_DEBUG(...) ((void)0)
 #endif
 
 #if HIVE_LOG_LEVEL <= HIVE_LOG_LEVEL_INFO
-#define HIVE_LOG_INFO(...) hive_log_write(HIVE_LOG_LEVEL_INFO, __FILE__, __LINE__, __VA_ARGS__)
+#define HIVE_LOG_INFO(...) \
+    hive_log_write(HIVE_LOG_LEVEL_INFO, __FILE__, __LINE__, __VA_ARGS__)
 #else
 #define HIVE_LOG_INFO(...) ((void)0)
 #endif
 
 #if HIVE_LOG_LEVEL <= HIVE_LOG_LEVEL_WARN
-#define HIVE_LOG_WARN(...) hive_log_write(HIVE_LOG_LEVEL_WARN, __FILE__, __LINE__, __VA_ARGS__)
+#define HIVE_LOG_WARN(...) \
+    hive_log_write(HIVE_LOG_LEVEL_WARN, __FILE__, __LINE__, __VA_ARGS__)
 #else
 #define HIVE_LOG_WARN(...) ((void)0)
 #endif
 
 #if HIVE_LOG_LEVEL <= HIVE_LOG_LEVEL_ERROR
-#define HIVE_LOG_ERROR(...) hive_log_write(HIVE_LOG_LEVEL_ERROR, __FILE__, __LINE__, __VA_ARGS__)
+#define HIVE_LOG_ERROR(...) \
+    hive_log_write(HIVE_LOG_LEVEL_ERROR, __FILE__, __LINE__, __VA_ARGS__)
 #else
 #define HIVE_LOG_ERROR(...) ((void)0)
 #endif

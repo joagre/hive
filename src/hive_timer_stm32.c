@@ -11,20 +11,20 @@
 #include <stdbool.h>
 
 // STM32-specific timer implementation using a software timer wheel
-// Hardware timer (SysTick or TIMx) drives the tick at HIVE_TIMER_TICK_US interval
-// Default: 1000us (1ms) tick resolution
+// Hardware timer (SysTick or TIMx) drives the tick at HIVE_TIMER_TICK_US
+// interval Default: 1000us (1ms) tick resolution
 
 #ifndef HIVE_TIMER_TICK_US
-#define HIVE_TIMER_TICK_US 1000  // 1ms tick
+#define HIVE_TIMER_TICK_US 1000 // 1ms tick
 #endif
 
 // Active timer entry
 typedef struct timer_entry {
-    timer_id            id;
-    actor_id            owner;
-    uint32_t            expiry_ticks;  // When timer expires (absolute tick count)
-    uint32_t            interval_ticks; // For periodic timers (0 = one-shot)
-    bool                periodic;
+    timer_id id;
+    actor_id owner;
+    uint32_t expiry_ticks;   // When timer expires (absolute tick count)
+    uint32_t interval_ticks; // For periodic timers (0 = one-shot)
+    bool periodic;
     struct timer_entry *next;
 } timer_entry;
 
@@ -35,11 +35,11 @@ static hive_pool g_timer_pool_mgr;
 
 // Timer subsystem state
 static struct {
-    bool        initialized;
-    timer_entry *timers;       // Active timers list (sorted by expiry)
-    timer_id    next_id;
-    volatile uint32_t tick_count;  // Current tick count (updated by ISR)
-    volatile bool tick_pending;    // Set by ISR, cleared by scheduler
+    bool initialized;
+    timer_entry *timers; // Active timers list (sorted by expiry)
+    timer_id next_id;
+    volatile uint32_t tick_count; // Current tick count (updated by ISR)
+    volatile bool tick_pending;   // Set by ISR, cleared by scheduler
 } g_timer = {0};
 
 // Convert microseconds to ticks (rounding up)
@@ -80,7 +80,7 @@ void hive_timer_process_pending(void) {
             actor *a = hive_actor_get(entry->owner);
             if (a) {
                 hive_ipc_notify_internal(entry->owner, entry->owner,
-                                        HIVE_MSG_TIMER, entry->id, NULL, 0);
+                                         HIVE_MSG_TIMER, entry->id, NULL, 0);
             }
 
             if (entry->periodic && a) {
@@ -111,7 +111,7 @@ hive_status hive_timer_init(void) {
 
     // Initialize timer entry pool
     hive_pool_init(&g_timer_pool_mgr, g_timer_pool, g_timer_used,
-                 sizeof(timer_entry), HIVE_TIMER_ENTRY_POOL_SIZE);
+                   sizeof(timer_entry), HIVE_TIMER_ENTRY_POOL_SIZE);
 
     // Initialize timer state
     g_timer.timers = NULL;
@@ -120,7 +120,8 @@ hive_status hive_timer_init(void) {
     g_timer.tick_pending = false;
 
     // Hardware timer initialization should be done by the application
-    // (e.g., configure SysTick to call hive_timer_tick_isr every HIVE_TIMER_TICK_US)
+    // (e.g., configure SysTick to call hive_timer_tick_isr every
+    // HIVE_TIMER_TICK_US)
 
     g_timer.initialized = true;
     return HIVE_SUCCESS;
@@ -143,7 +144,8 @@ void hive_timer_cleanup(void) {
 }
 
 // Create a timer (one-shot or periodic)
-static hive_status create_timer(uint32_t interval_us, bool periodic, timer_id *out) {
+static hive_status create_timer(uint32_t interval_us, bool periodic,
+                                timer_id *out) {
     if (!out) {
         return HIVE_ERROR(HIVE_ERR_INVALID, "NULL out pointer");
     }
@@ -161,7 +163,8 @@ static hive_status create_timer(uint32_t interval_us, bool periodic, timer_id *o
 
     // Calculate expiry
     uint32_t ticks = us_to_ticks(interval_us);
-    if (ticks == 0) ticks = 1;  // Minimum 1 tick
+    if (ticks == 0)
+        ticks = 1; // Minimum 1 tick
 
     // Initialize timer entry
     entry->id = g_timer.next_id++;
@@ -212,7 +215,8 @@ hive_status hive_sleep(uint32_t delay_us) {
     // Wait specifically for THIS timer message
     // Other messages remain in mailbox (selective receive)
     hive_message msg;
-    return hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
+    return hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg,
+                               -1);
 }
 
 // Advance simulation time (microseconds) and process expired timers

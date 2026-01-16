@@ -1,9 +1,10 @@
 // STM32 Flash File I/O Implementation
 //
-// Provides the same API and semantics as hive_file_linux.c for STM32 flash storage.
-// Uses a ring buffer for efficiency - most writes complete immediately. When the
-// buffer fills up, write() blocks to flush data to flash before continuing.
-// This ensures no data loss while maintaining good performance for typical usage.
+// Provides the same API and semantics as hive_file_linux.c for STM32 flash
+// storage. Uses a ring buffer for efficiency - most writes complete
+// immediately. When the buffer fills up, write() blocks to flush data to flash
+// before continuing. This ensures no data loss while maintaining good
+// performance for typical usage.
 //
 // Key characteristics:
 // - Virtual file paths mapped to flash sectors (/log, /config)
@@ -26,45 +27,47 @@
 // STM32 Flash register definitions
 // These are standard for STM32F4xx - included via CMSIS headers in real builds
 #ifndef FLASH_BASE
-#define FLASH_BASE            0x40023C00UL
+#define FLASH_BASE 0x40023C00UL
 #endif
 
 typedef struct {
-    volatile uint32_t ACR;      // Access control register
-    volatile uint32_t KEYR;     // Key register
-    volatile uint32_t OPTKEYR;  // Option key register
-    volatile uint32_t SR;       // Status register
-    volatile uint32_t CR;       // Control register
-    volatile uint32_t OPTCR;    // Option control register
+    volatile uint32_t ACR;     // Access control register
+    volatile uint32_t KEYR;    // Key register
+    volatile uint32_t OPTKEYR; // Option key register
+    volatile uint32_t SR;      // Status register
+    volatile uint32_t CR;      // Control register
+    volatile uint32_t OPTCR;   // Option control register
 } FLASH_TypeDef;
 
-#define FLASH               ((FLASH_TypeDef *) FLASH_BASE)
+#define FLASH ((FLASH_TypeDef *)FLASH_BASE)
 
 // Flash key values for unlock sequence
-#define FLASH_KEY1          0x45670123UL
-#define FLASH_KEY2          0xCDEF89ABUL
+#define FLASH_KEY1 0x45670123UL
+#define FLASH_KEY2 0xCDEF89ABUL
 
 // Flash status register bits
-#define FLASH_SR_BSY        (1UL << 16)
-#define FLASH_SR_PGSERR     (1UL << 7)
-#define FLASH_SR_PGPERR     (1UL << 6)
-#define FLASH_SR_PGAERR     (1UL << 5)
-#define FLASH_SR_WRPERR     (1UL << 4)
-#define FLASH_SR_OPERR      (1UL << 1)
-#define FLASH_SR_EOP        (1UL << 0)
-#define FLASH_SR_ERRORS     (FLASH_SR_PGSERR | FLASH_SR_PGPERR | FLASH_SR_PGAERR | FLASH_SR_WRPERR | FLASH_SR_OPERR)
+#define FLASH_SR_BSY (1UL << 16)
+#define FLASH_SR_PGSERR (1UL << 7)
+#define FLASH_SR_PGPERR (1UL << 6)
+#define FLASH_SR_PGAERR (1UL << 5)
+#define FLASH_SR_WRPERR (1UL << 4)
+#define FLASH_SR_OPERR (1UL << 1)
+#define FLASH_SR_EOP (1UL << 0)
+#define FLASH_SR_ERRORS                                                      \
+    (FLASH_SR_PGSERR | FLASH_SR_PGPERR | FLASH_SR_PGAERR | FLASH_SR_WRPERR | \
+     FLASH_SR_OPERR)
 
 // Flash control register bits
-#define FLASH_CR_PG         (1UL << 0)   // Programming
-#define FLASH_CR_SER        (1UL << 1)   // Sector erase
-#define FLASH_CR_MER        (1UL << 2)   // Mass erase
-#define FLASH_CR_SNB_Pos    3            // Sector number position
-#define FLASH_CR_SNB_Msk    (0x1FUL << FLASH_CR_SNB_Pos)
-#define FLASH_CR_PSIZE_Pos  8            // Program size position
-#define FLASH_CR_PSIZE_0    (1UL << 8)   // 8-bit
-#define FLASH_CR_PSIZE_1    (1UL << 9)   // 32-bit
-#define FLASH_CR_STRT       (1UL << 16)  // Start
-#define FLASH_CR_LOCK       (1UL << 31)  // Lock
+#define FLASH_CR_PG (1UL << 0)  // Programming
+#define FLASH_CR_SER (1UL << 1) // Sector erase
+#define FLASH_CR_MER (1UL << 2) // Mass erase
+#define FLASH_CR_SNB_Pos 3      // Sector number position
+#define FLASH_CR_SNB_Msk (0x1FUL << FLASH_CR_SNB_Pos)
+#define FLASH_CR_PSIZE_Pos 8        // Program size position
+#define FLASH_CR_PSIZE_0 (1UL << 8) // 8-bit
+#define FLASH_CR_PSIZE_1 (1UL << 9) // 32-bit
+#define FLASH_CR_STRT (1UL << 16)   // Start
+#define FLASH_CR_LOCK (1UL << 31)   // Lock
 
 // ----------------------------------------------------------------------------
 // Virtual File Table
@@ -74,37 +77,37 @@ typedef struct {
     const char *path;
     uint32_t flash_base;
     uint32_t flash_size;
-    uint8_t  sector;
+    uint8_t sector;
     // Runtime state
     uint32_t write_pos;
-    bool     opened;
-    bool     erased_ok;
-    bool     write_mode;
+    bool opened;
+    bool erased_ok;
+    bool write_mode;
 } vfile_t;
 
 // Build virtual file table from -D flags
 static vfile_t g_vfiles[] = {
 #ifdef HIVE_VFILE_LOG_BASE
     {
-        .path       = "/log",
+        .path = "/log",
         .flash_base = HIVE_VFILE_LOG_BASE,
         .flash_size = HIVE_VFILE_LOG_SIZE,
-        .sector     = HIVE_VFILE_LOG_SECTOR,
-        .write_pos  = 0,
-        .opened     = false,
-        .erased_ok  = false,
+        .sector = HIVE_VFILE_LOG_SECTOR,
+        .write_pos = 0,
+        .opened = false,
+        .erased_ok = false,
         .write_mode = false,
     },
 #endif
 #ifdef HIVE_VFILE_CONFIG_BASE
     {
-        .path       = "/config",
+        .path = "/config",
         .flash_base = HIVE_VFILE_CONFIG_BASE,
         .flash_size = HIVE_VFILE_CONFIG_SIZE,
-        .sector     = HIVE_VFILE_CONFIG_SECTOR,
-        .write_pos  = 0,
-        .opened     = false,
-        .erased_ok  = false,
+        .sector = HIVE_VFILE_CONFIG_SECTOR,
+        .write_pos = 0,
+        .opened = false,
+        .erased_ok = false,
         .write_mode = false,
     },
 #endif
@@ -117,8 +120,8 @@ static vfile_t g_vfiles[] = {
 // ----------------------------------------------------------------------------
 
 static uint8_t g_ring_buf[HIVE_FILE_RING_SIZE];
-static volatile uint32_t g_ring_head;  // Write position (producers)
-static volatile uint32_t g_ring_tail;  // Read position (sync)
+static volatile uint32_t g_ring_head; // Write position (producers)
+static volatile uint32_t g_ring_tail; // Read position (sync)
 
 // Staging buffer for flash block commits
 static uint8_t g_staging[HIVE_FILE_BLOCK_SIZE];
@@ -184,7 +187,8 @@ static void flash_lock(void) {
 }
 
 static void flash_wait_bsy(void) {
-    while (FLASH->SR & FLASH_SR_BSY);
+    while (FLASH->SR & FLASH_SR_BSY)
+        ;
 }
 
 static void flash_clear_errors(void) {
@@ -213,8 +217,8 @@ static bool flash_erase_sector(uint8_t sector) {
 
 // Program words to flash - MUST execute from RAM during write
 // This function is placed in .RamFunc section (copied to RAM at startup)
-__attribute__((section(".RamFunc"), noinline))
-static void flash_program_words_ram(uint32_t addr, const uint32_t *data, uint32_t words) {
+__attribute__((section(".RamFunc"), noinline)) static void
+flash_program_words_ram(uint32_t addr, const uint32_t *data, uint32_t words) {
     // Enable programming mode with 32-bit parallelism
     FLASH->CR = FLASH_CR_PG | FLASH_CR_PSIZE_1;
 
@@ -222,7 +226,8 @@ static void flash_program_words_ram(uint32_t addr, const uint32_t *data, uint32_
         // Write word
         *(volatile uint32_t *)(addr + i * 4) = data[i];
         // Wait for completion
-        while (FLASH->SR & FLASH_SR_BSY);
+        while (FLASH->SR & FLASH_SR_BSY)
+            ;
     }
 
     // Disable programming mode
@@ -232,7 +237,7 @@ static void flash_program_words_ram(uint32_t addr, const uint32_t *data, uint32_
 // Write a block to flash (with IRQ masking)
 static bool flash_write_block(uint32_t addr, const void *data, uint32_t len) {
     if (len == 0 || (len & 3) != 0) {
-        return false;  // Must be word-aligned
+        return false; // Must be word-aligned
     }
 
     flash_unlock();
@@ -241,11 +246,11 @@ static bool flash_write_block(uint32_t addr, const void *data, uint32_t len) {
 
     // Disable interrupts during flash programming
     // This keeps the critical section short (~1ms for 256 bytes)
-    __asm volatile ("cpsid i" ::: "memory");
+    __asm volatile("cpsid i" ::: "memory");
 
     flash_program_words_ram(addr, (const uint32_t *)data, len / 4);
 
-    __asm volatile ("cpsie i" ::: "memory");
+    __asm volatile("cpsie i" ::: "memory");
 
     // Check for errors
     bool ok = (FLASH->SR & FLASH_SR_ERRORS) == 0;
@@ -279,12 +284,12 @@ static void staging_append(const uint8_t *data, size_t len) {
 // Commit staging buffer to flash
 static bool staging_commit(vfile_t *vf) {
     if (g_staging_len == 0) {
-        return true;  // Nothing to commit
+        return true; // Nothing to commit
     }
 
     // Check if we have space in flash
     if (vf->write_pos + HIVE_FILE_BLOCK_SIZE > vf->flash_size) {
-        return false;  // Flash region full
+        return false; // Flash region full
     }
 
     // Write block to flash
@@ -309,7 +314,7 @@ static bool flush_ring_to_flash(vfile_t *vf) {
         for (size_t i = 0; i < n; i++) {
             if (staging_space() == 0) {
                 if (!staging_commit(vf)) {
-                    return false;  // Flash full or write error
+                    return false; // Flash full or write error
                 }
             }
             staging_append(&temp[i], 1);
@@ -383,7 +388,7 @@ static vfile_t *get_vfile(int fd) {
 }
 
 hive_status hive_file_open(const char *path, int flags, int mode, int *fd_out) {
-    (void)mode;  // Not used for flash files
+    (void)mode; // Not used for flash files
 
     if (!path || !fd_out) {
         return HIVE_ERROR(HIVE_ERR_INVALID, "NULL path or fd_out pointer");
@@ -409,13 +414,15 @@ hive_status hive_file_open(const char *path, int flags, int mode, int *fd_out) {
     // - HIVE_O_CREAT and HIVE_O_APPEND are silently ignored
     if (access == HIVE_O_RDWR) {
         return HIVE_ERROR(HIVE_ERR_INVALID,
-            "HIVE_O_RDWR not supported on STM32; use HIVE_O_RDONLY or HIVE_O_WRONLY");
+                          "HIVE_O_RDWR not supported on STM32; use "
+                          "HIVE_O_RDONLY or HIVE_O_WRONLY");
     }
 
     bool write_mode = (access == HIVE_O_WRONLY);
 
     if (write_mode && !(flags & HIVE_O_TRUNC)) {
-        return HIVE_ERROR(HIVE_ERR_INVALID,
+        return HIVE_ERROR(
+            HIVE_ERR_INVALID,
             "HIVE_O_TRUNC required for flash writes (must erase sector first)");
     }
 
@@ -466,10 +473,11 @@ hive_status hive_file_close(int fd) {
 }
 
 hive_status hive_file_read(int fd, void *buf, size_t len, size_t *bytes_read) {
-    (void)len;  // Read position tracking not implemented
+    (void)len; // Read position tracking not implemented
 
     if (!buf || !bytes_read) {
-        return HIVE_ERROR(HIVE_ERR_INVALID, "NULL buffer or bytes_read pointer");
+        return HIVE_ERROR(HIVE_ERR_INVALID,
+                          "NULL buffer or bytes_read pointer");
     }
 
     HIVE_REQUIRE_INIT(g_file.initialized, "File I/O");
@@ -485,9 +493,11 @@ hive_status hive_file_read(int fd, void *buf, size_t len, size_t *bytes_read) {
     return HIVE_ERROR(HIVE_ERR_INVALID, "read not implemented for flash files");
 }
 
-hive_status hive_file_pread(int fd, void *buf, size_t len, size_t offset, size_t *bytes_read) {
+hive_status hive_file_pread(int fd, void *buf, size_t len, size_t offset,
+                            size_t *bytes_read) {
     if (!buf || !bytes_read) {
-        return HIVE_ERROR(HIVE_ERR_INVALID, "NULL buffer or bytes_read pointer");
+        return HIVE_ERROR(HIVE_ERR_INVALID,
+                          "NULL buffer or bytes_read pointer");
     }
 
     HIVE_REQUIRE_INIT(g_file.initialized, "File I/O");
@@ -515,9 +525,11 @@ hive_status hive_file_pread(int fd, void *buf, size_t len, size_t offset, size_t
     return HIVE_SUCCESS;
 }
 
-hive_status hive_file_write(int fd, const void *buf, size_t len, size_t *bytes_written) {
+hive_status hive_file_write(int fd, const void *buf, size_t len,
+                            size_t *bytes_written) {
     if (!buf || !bytes_written) {
-        return HIVE_ERROR(HIVE_ERR_INVALID, "NULL buffer or bytes_written pointer");
+        return HIVE_ERROR(HIVE_ERR_INVALID,
+                          "NULL buffer or bytes_written pointer");
     }
 
     HIVE_REQUIRE_INIT(g_file.initialized, "File I/O");
@@ -532,7 +544,8 @@ hive_status hive_file_write(int fd, const void *buf, size_t len, size_t *bytes_w
     }
 
     if (!vf->erased_ok) {
-        return HIVE_ERROR(HIVE_ERR_INVALID, "flash not erased (use HIVE_O_TRUNC)");
+        return HIVE_ERROR(HIVE_ERR_INVALID,
+                          "flash not erased (use HIVE_O_TRUNC)");
     }
 
     // Write data to ring buffer, flushing to flash when buffer is full.
@@ -552,8 +565,9 @@ hive_status hive_file_write(int fd, const void *buf, size_t len, size_t *bytes_w
             // Ring buffer is full - flush to flash to make room
             if (!flush_ring_to_flash(vf)) {
                 // Flash is full or write error - return partial write
-                return (*bytes_written > 0) ? HIVE_SUCCESS :
-                    HIVE_ERROR(HIVE_ERR_IO, "flash region full");
+                return (*bytes_written > 0)
+                           ? HIVE_SUCCESS
+                           : HIVE_ERROR(HIVE_ERR_IO, "flash region full");
             }
         }
     }
@@ -561,7 +575,8 @@ hive_status hive_file_write(int fd, const void *buf, size_t len, size_t *bytes_w
     return HIVE_SUCCESS;
 }
 
-hive_status hive_file_pwrite(int fd, const void *buf, size_t len, size_t offset, size_t *bytes_written) {
+hive_status hive_file_pwrite(int fd, const void *buf, size_t len, size_t offset,
+                             size_t *bytes_written) {
     // pwrite not supported for ring-buffered flash writes
     (void)fd;
     (void)buf;
@@ -580,7 +595,7 @@ hive_status hive_file_sync(int fd) {
     }
 
     if (!vf->write_mode || g_ring_fd != fd) {
-        return HIVE_SUCCESS;  // Nothing to sync
+        return HIVE_SUCCESS; // Nothing to sync
     }
 
     if (!vf->erased_ok) {

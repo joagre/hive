@@ -10,7 +10,8 @@ typedef uint32_t timer_id;
 #define TIMER_ID_INVALID ((timer_id)0)
 
 // Timer operations
-// All timers are owned by the calling actor and are automatically cancelled when the actor dies
+// All timers are owned by the calling actor and are automatically cancelled
+// when the actor dies
 
 // One-shot: wake current actor after delay
 // Timer message: class=HIVE_MSG_TIMER, tag=timer_id, no payload

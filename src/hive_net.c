@@ -64,70 +64,73 @@ void hive_net_handle_event(io_source *source) {
     ssize_t n = 0;
 
     switch (net->operation) {
-        case NET_OP_ACCEPT: {
-            struct sockaddr_in client_addr;
-            socklen_t client_len = sizeof(client_addr);
-            int conn_fd = accept(net->fd, (struct sockaddr *)&client_addr, &client_len);
-            if (conn_fd < 0) {
-                if (errno == EAGAIN || errno == EWOULDBLOCK) {
-                    // Still not ready - this shouldn't happen with epoll, but handle it
-                    return;  // Keep waiting
-                } else {
-                    status = HIVE_ERROR(HIVE_ERR_IO, "accept failed");
-                }
+    case NET_OP_ACCEPT: {
+        struct sockaddr_in client_addr;
+        socklen_t client_len = sizeof(client_addr);
+        int conn_fd =
+            accept(net->fd, (struct sockaddr *)&client_addr, &client_len);
+        if (conn_fd < 0) {
+            if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                // Still not ready - this shouldn't happen with epoll, but
+                // handle it
+                return; // Keep waiting
             } else {
-                set_nonblocking(conn_fd);
-                a->io_result_fd = conn_fd;
+                status = HIVE_ERROR(HIVE_ERR_IO, "accept failed");
             }
-            break;
+        } else {
+            set_nonblocking(conn_fd);
+            a->io_result_fd = conn_fd;
         }
+        break;
+    }
 
-        case NET_OP_CONNECT: {
-            // Check if connection succeeded
-            int error = 0;
-            socklen_t len = sizeof(error);
-            if (getsockopt(net->fd, SOL_SOCKET, SO_ERROR, &error, &len) < 0 || error != 0) {
-                status = HIVE_ERROR(HIVE_ERR_IO, "connect failed");
-                close(net->fd);
+    case NET_OP_CONNECT: {
+        // Check if connection succeeded
+        int error = 0;
+        socklen_t len = sizeof(error);
+        if (getsockopt(net->fd, SOL_SOCKET, SO_ERROR, &error, &len) < 0 ||
+            error != 0) {
+            status = HIVE_ERROR(HIVE_ERR_IO, "connect failed");
+            close(net->fd);
+        } else {
+            a->io_result_fd = net->fd;
+        }
+        break;
+    }
+
+    case NET_OP_RECV: {
+        n = recv(net->fd, net->buf, net->len, 0);
+        if (n < 0) {
+            if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                // Still not ready - shouldn't happen with epoll
+                return; // Keep waiting
             } else {
-                a->io_result_fd = net->fd;
+                status = HIVE_ERROR(HIVE_ERR_IO, "recv failed");
             }
-            break;
+        } else {
+            a->io_result_bytes = (size_t)n;
         }
+        break;
+    }
 
-        case NET_OP_RECV: {
-            n = recv(net->fd, net->buf, net->len, 0);
-            if (n < 0) {
-                if (errno == EAGAIN || errno == EWOULDBLOCK) {
-                    // Still not ready - shouldn't happen with epoll
-                    return;  // Keep waiting
-                } else {
-                    status = HIVE_ERROR(HIVE_ERR_IO, "recv failed");
-                }
+    case NET_OP_SEND: {
+        n = send(net->fd, net->buf, net->len, 0);
+        if (n < 0) {
+            if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                // Still not ready - shouldn't happen with epoll
+                return; // Keep waiting
             } else {
-                a->io_result_bytes = (size_t)n;
+                status = HIVE_ERROR(HIVE_ERR_IO, "send failed");
             }
-            break;
+        } else {
+            a->io_result_bytes = (size_t)n;
         }
+        break;
+    }
 
-        case NET_OP_SEND: {
-            n = send(net->fd, net->buf, net->len, 0);
-            if (n < 0) {
-                if (errno == EAGAIN || errno == EWOULDBLOCK) {
-                    // Still not ready - shouldn't happen with epoll
-                    return;  // Keep waiting
-                } else {
-                    status = HIVE_ERROR(HIVE_ERR_IO, "send failed");
-                }
-            } else {
-                a->io_result_bytes = (size_t)n;
-            }
-            break;
-        }
-
-        default:
-            status = HIVE_ERROR(HIVE_ERR_INVALID, "Unknown network operation");
-            break;
+    default:
+        status = HIVE_ERROR(HIVE_ERR_INVALID, "Unknown network operation");
+        break;
     }
 
     // Remove from epoll (one-shot operation)
@@ -150,7 +153,7 @@ hive_status hive_net_init(void) {
 
     // Initialize io_source pool
     hive_pool_init(&g_io_source_pool_mgr, g_io_source_pool, g_io_source_used,
-                 sizeof(io_source), HIVE_IO_SOURCE_POOL_SIZE);
+                   sizeof(io_source), HIVE_IO_SOURCE_POOL_SIZE);
 
     g_net.initialized = true;
     return HIVE_SUCCESS;
@@ -177,9 +180,10 @@ static hive_status try_or_epoll(int fd, uint32_t epoll_events, int operation,
     // Note: timeout < 0 means "wait forever" (no timer)
     timer_id timeout_timer = TIMER_ID_INVALID;
     if (timeout_ms > 0) {
-        hive_status status = hive_timer_after((uint32_t)timeout_ms * 1000, &timeout_timer);
+        hive_status status =
+            hive_timer_after((uint32_t)timeout_ms * 1000, &timeout_timer);
         if (HIVE_FAILED(status)) {
-            return status;  // Timer pool exhausted
+            return status; // Timer pool exhausted
         }
     }
 
@@ -219,7 +223,8 @@ static hive_status try_or_epoll(int fd, uint32_t epoll_events, int operation,
     hive_yield();
 
     // When we resume, check for timeout
-    hive_status timeout_status = hive_mailbox_handle_timeout(current, timeout_timer, "Network I/O operation timed out");
+    hive_status timeout_status = hive_mailbox_handle_timeout(
+        current, timeout_timer, "Network I/O operation timed out");
     if (HIVE_FAILED(timeout_status)) {
         // Timeout occurred - cleanup epoll registration
         epoll_ctl(epoll_fd, EPOLL_CTL_DEL, fd, NULL);
@@ -268,7 +273,8 @@ hive_status hive_net_listen(uint16_t port, int *fd_out) {
     return HIVE_SUCCESS;
 }
 
-hive_status hive_net_accept(int listen_fd, int *conn_fd_out, int32_t timeout_ms) {
+hive_status hive_net_accept(int listen_fd, int *conn_fd_out,
+                            int32_t timeout_ms) {
     if (!conn_fd_out) {
         return HIVE_ERROR(HIVE_ERR_INVALID, "NULL conn_fd_out pointer");
     }
@@ -281,7 +287,8 @@ hive_status hive_net_accept(int listen_fd, int *conn_fd_out, int32_t timeout_ms)
     // Try immediate accept with non-blocking
     struct sockaddr_in client_addr;
     socklen_t client_len = sizeof(client_addr);
-    int conn_fd = accept(listen_fd, (struct sockaddr *)&client_addr, &client_len);
+    int conn_fd =
+        accept(listen_fd, (struct sockaddr *)&client_addr, &client_len);
 
     if (conn_fd >= 0) {
         // Success immediately!
@@ -296,7 +303,8 @@ hive_status hive_net_accept(int listen_fd, int *conn_fd_out, int32_t timeout_ms)
     }
 
     // Would block - register interest in epoll and yield
-    hive_status status = try_or_epoll(listen_fd, EPOLLIN, NET_OP_ACCEPT, NULL, 0, timeout_ms);
+    hive_status status =
+        try_or_epoll(listen_fd, EPOLLIN, NET_OP_ACCEPT, NULL, 0, timeout_ms);
     if (HIVE_FAILED(status)) {
         return status;
     }
@@ -306,7 +314,8 @@ hive_status hive_net_accept(int listen_fd, int *conn_fd_out, int32_t timeout_ms)
     return HIVE_SUCCESS;
 }
 
-hive_status hive_net_connect(const char *ip, uint16_t port, int *fd_out, int32_t timeout_ms) {
+hive_status hive_net_connect(const char *ip, uint16_t port, int *fd_out,
+                             int32_t timeout_ms) {
     if (!ip || !fd_out) {
         return HIVE_ERROR(HIVE_ERR_INVALID, "NULL ip or fd_out pointer");
     }
@@ -316,12 +325,14 @@ hive_status hive_net_connect(const char *ip, uint16_t port, int *fd_out, int32_t
     HIVE_REQUIRE_ACTOR_CONTEXT();
     actor *current = hive_actor_current();
 
-    // Parse numeric IPv4 address (DNS resolution not supported - would block scheduler)
+    // Parse numeric IPv4 address (DNS resolution not supported - would block
+    // scheduler)
     struct sockaddr_in serv_addr = {0};
     serv_addr.sin_family = AF_INET;
     serv_addr.sin_port = htons(port);
     if (inet_pton(AF_INET, ip, &serv_addr.sin_addr) != 1) {
-        return HIVE_ERROR(HIVE_ERR_INVALID, "Invalid IPv4 address (hostnames not supported)");
+        return HIVE_ERROR(HIVE_ERR_INVALID,
+                          "Invalid IPv4 address (hostnames not supported)");
     }
 
     // Create non-blocking socket
@@ -340,7 +351,8 @@ hive_status hive_net_connect(const char *ip, uint16_t port, int *fd_out, int32_t
         }
 
         // Connection in progress - add to epoll and wait for writable
-        hive_status status = try_or_epoll(fd, EPOLLOUT, NET_OP_CONNECT, NULL, 0, timeout_ms);
+        hive_status status =
+            try_or_epoll(fd, EPOLLOUT, NET_OP_CONNECT, NULL, 0, timeout_ms);
         if (HIVE_FAILED(status)) {
             close(fd);
             return status;
@@ -364,7 +376,8 @@ hive_status hive_net_close(int fd) {
     return HIVE_SUCCESS;
 }
 
-hive_status hive_net_recv(int fd, void *buf, size_t len, size_t *received, int32_t timeout_ms) {
+hive_status hive_net_recv(int fd, void *buf, size_t len, size_t *received,
+                          int32_t timeout_ms) {
     if (!buf || !received) {
         return HIVE_ERROR(HIVE_ERR_INVALID, "NULL buffer or received pointer");
     }
@@ -388,7 +401,8 @@ hive_status hive_net_recv(int fd, void *buf, size_t len, size_t *received, int32
     }
 
     // Would block - register interest in epoll and yield
-    hive_status status = try_or_epoll(fd, EPOLLIN, NET_OP_RECV, buf, len, timeout_ms);
+    hive_status status =
+        try_or_epoll(fd, EPOLLIN, NET_OP_RECV, buf, len, timeout_ms);
     if (HIVE_FAILED(status)) {
         return status;
     }
@@ -398,7 +412,8 @@ hive_status hive_net_recv(int fd, void *buf, size_t len, size_t *received, int32
     return HIVE_SUCCESS;
 }
 
-hive_status hive_net_send(int fd, const void *buf, size_t len, size_t *sent, int32_t timeout_ms) {
+hive_status hive_net_send(int fd, const void *buf, size_t len, size_t *sent,
+                          int32_t timeout_ms) {
     if (!buf || !sent) {
         return HIVE_ERROR(HIVE_ERR_INVALID, "NULL buffer or sent pointer");
     }
@@ -422,7 +437,8 @@ hive_status hive_net_send(int fd, const void *buf, size_t len, size_t *sent, int
     }
 
     // Would block - register interest in epoll and yield
-    hive_status status = try_or_epoll(fd, EPOLLOUT, NET_OP_SEND, (void *)buf, len, timeout_ms);
+    hive_status status =
+        try_or_epoll(fd, EPOLLOUT, NET_OP_SEND, (void *)buf, len, timeout_ms);
     if (HIVE_FAILED(status)) {
         return status;
     }

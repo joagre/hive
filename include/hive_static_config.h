@@ -40,7 +40,7 @@
 // Should be sized for peak actor count × average stack size
 // Example: 20 actors × 64KB = 1.3 MB (with overhead)
 #ifndef HIVE_STACK_ARENA_SIZE
-#define HIVE_STACK_ARENA_SIZE (1 * 1024 * 1024)  // 1 MB default
+#define HIVE_STACK_ARENA_SIZE (1 * 1024 * 1024) // 1 MB default
 #endif
 
 // -----------------------------------------------------------------------------
@@ -156,7 +156,7 @@
 // Ring buffer size for deferred writes (bytes)
 // Larger buffer = more tolerance for flash write delays
 #ifndef HIVE_FILE_RING_SIZE
-#define HIVE_FILE_RING_SIZE (8 * 1024)  // 8 KB default
+#define HIVE_FILE_RING_SIZE (8 * 1024) // 8 KB default
 #endif
 
 // Flash write block size (bytes)

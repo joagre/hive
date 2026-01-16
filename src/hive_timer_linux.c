@@ -15,17 +15,16 @@
 #include <sys/timerfd.h>
 #include <sys/epoll.h>
 
-
 // Active timer entry
 typedef struct timer_entry {
-    timer_id            id;
-    actor_id            owner;
-    int                 fd;        // timerfd (only used in real-time mode)
-    bool                periodic;
-    uint64_t            expiry_us;   // Expiry time in microseconds (simulation mode)
-    uint64_t            interval_us; // Interval for periodic timers (simulation mode)
+    timer_id id;
+    actor_id owner;
+    int fd; // timerfd (only used in real-time mode)
+    bool periodic;
+    uint64_t expiry_us;   // Expiry time in microseconds (simulation mode)
+    uint64_t interval_us; // Interval for periodic timers (simulation mode)
     struct timer_entry *next;
-    io_source           source;    // For epoll registration
+    io_source source; // For epoll registration
 } timer_entry;
 
 // Static pool for timer entries
@@ -35,11 +34,11 @@ static hive_pool g_timer_pool_mgr;
 
 // Timer subsystem state
 static struct {
-    bool        initialized;
-    timer_entry *timers;      // Active timers list
-    timer_id    next_id;
-    bool        sim_mode;     // Simulation time mode (enabled by hive_advance_time)
-    uint64_t    sim_time_us;  // Current simulation time in microseconds
+    bool initialized;
+    timer_entry *timers; // Active timers list
+    timer_id next_id;
+    bool sim_mode;        // Simulation time mode (enabled by hive_advance_time)
+    uint64_t sim_time_us; // Current simulation time in microseconds
 } g_timer = {0};
 
 // Helper: Close timer fd and remove from epoll (only in real-time mode)
@@ -59,7 +58,7 @@ void hive_timer_handle_event(io_source *source) {
     // Read timerfd to acknowledge
     uint64_t expirations;
     ssize_t n = read(entry->fd, &expirations, sizeof(expirations));
-    (void)n;  // Suppress unused result warning
+    (void)n; // Suppress unused result warning
 
     // Get the actor
     actor *a = hive_actor_get(entry->owner);
@@ -74,8 +73,8 @@ void hive_timer_handle_event(io_source *source) {
     // Send timer tick message to actor
     // Use HIVE_MSG_TIMER class with timer_id as tag, sender is the owning actor
     // No payload needed - timer_id is encoded in the tag
-    hive_status status = hive_ipc_notify_internal(entry->owner, entry->owner, HIVE_MSG_TIMER,
-                                                entry->id, NULL, 0);
+    hive_status status = hive_ipc_notify_internal(
+        entry->owner, entry->owner, HIVE_MSG_TIMER, entry->id, NULL, 0);
     if (HIVE_FAILED(status)) {
         HIVE_LOG_ERROR("Failed to send timer tick: %s", status.msg);
         // Don't cleanup timer - try again next tick
@@ -96,7 +95,7 @@ hive_status hive_timer_init(void) {
 
     // Initialize timer entry pool
     hive_pool_init(&g_timer_pool_mgr, g_timer_pool, g_timer_used,
-                 sizeof(timer_entry), HIVE_TIMER_ENTRY_POOL_SIZE);
+                   sizeof(timer_entry), HIVE_TIMER_ENTRY_POOL_SIZE);
 
     // Initialize timer state
     g_timer.timers = NULL;
@@ -124,7 +123,8 @@ void hive_timer_cleanup(void) {
 }
 
 // Create a timer (one-shot or periodic)
-static hive_status create_timer(uint32_t interval_us, bool periodic, timer_id *out) {
+static hive_status create_timer(uint32_t interval_us, bool periodic,
+                                timer_id *out) {
     if (!out) {
         return HIVE_ERROR(HIVE_ERR_INVALID, "NULL out pointer");
     }
@@ -144,16 +144,18 @@ static hive_status create_timer(uint32_t interval_us, bool periodic, timer_id *o
     entry->id = g_timer.next_id++;
     entry->owner = current->id;
     entry->periodic = periodic;
-    entry->interval_us = interval_us;  // Always store for potential sim mode conversion
+    entry->interval_us =
+        interval_us; // Always store for potential sim mode conversion
     entry->next = g_timer.timers;
 
     if (g_timer.sim_mode) {
         // Simulation mode: store expiry time, no timerfd
         entry->fd = -1;
         entry->expiry_us = g_timer.sim_time_us + interval_us;
-        HIVE_LOG_DEBUG("Timer %u created in sim mode (expiry=%lu, sim_time=%lu)",
-                     entry->id, (unsigned long)entry->expiry_us,
-                     (unsigned long)g_timer.sim_time_us);
+        HIVE_LOG_DEBUG(
+            "Timer %u created in sim mode (expiry=%lu, sim_time=%lu)",
+            entry->id, (unsigned long)entry->expiry_us,
+            (unsigned long)g_timer.sim_time_us);
     } else {
         // Real-time mode: use timerfd
         int tfd = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK);
@@ -163,11 +165,12 @@ static hive_status create_timer(uint32_t interval_us, bool periodic, timer_id *o
         }
 
         // Set timer
-        // Note: timerfd treats (0, 0) as "disarm timer", so we use minimum 1ns for zero delay
+        // Note: timerfd treats (0, 0) as "disarm timer", so we use minimum 1ns
+        // for zero delay
         struct itimerspec its;
         if (interval_us == 0) {
             its.it_value.tv_sec = 0;
-            its.it_value.tv_nsec = 1;  // Minimum 1 nanosecond to avoid disarming
+            its.it_value.tv_nsec = 1; // Minimum 1 nanosecond to avoid disarming
         } else {
             its.it_value.tv_sec = interval_us / HIVE_USEC_PER_SEC;
             its.it_value.tv_nsec = (interval_us % HIVE_USEC_PER_SEC) * 1000;
@@ -191,7 +194,7 @@ static hive_status create_timer(uint32_t interval_us, bool periodic, timer_id *o
 
         entry->fd = tfd;
         entry->interval_us = interval_us;
-        entry->expiry_us = 0;  // Not used in real-time mode
+        entry->expiry_us = 0; // Not used in real-time mode
 
         // Setup io_source for epoll
         entry->source.type = IO_SOURCE_TIMER;
@@ -250,7 +253,8 @@ hive_status hive_sleep(uint32_t delay_us) {
     // Wait specifically for THIS timer message
     // Other messages remain in mailbox (selective receive)
     hive_message msg;
-    return hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
+    return hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg,
+                               -1);
 }
 
 // Advance simulation time and fire due timers
@@ -270,7 +274,8 @@ void hive_timer_advance_time(uint64_t delta_us) {
             if (entry->fd >= 0) {
                 // Close timerfd and unregister from epoll
                 timer_close_fd(entry);
-                // Set expiry based on interval (fires on first advance after interval)
+                // Set expiry based on interval (fires on first advance after
+                // interval)
                 entry->expiry_us = entry->interval_us;
             }
         }
@@ -280,7 +285,8 @@ void hive_timer_advance_time(uint64_t delta_us) {
     g_timer.sim_time_us += delta_us;
 
     // Fire all due timers
-    // We need to iterate carefully since firing a timer may cause actor to create/cancel timers
+    // We need to iterate carefully since firing a timer may cause actor to
+    // create/cancel timers
     bool fired_any;
     do {
         fired_any = false;
@@ -307,14 +313,14 @@ void hive_timer_advance_time(uint64_t delta_us) {
                 }
 
                 // Send timer tick message to actor
-                HIVE_LOG_DEBUG("Timer %u fired for actor %u (sim_time=%lu, expiry=%lu)",
-                             entry->id, entry->owner,
-                             (unsigned long)g_timer.sim_time_us,
-                             (unsigned long)entry->expiry_us);
+                HIVE_LOG_DEBUG(
+                    "Timer %u fired for actor %u (sim_time=%lu, expiry=%lu)",
+                    entry->id, entry->owner, (unsigned long)g_timer.sim_time_us,
+                    (unsigned long)entry->expiry_us);
 
                 hive_status status = hive_ipc_notify_internal(
-                    entry->owner, entry->owner, HIVE_MSG_TIMER,
-                    entry->id, NULL, 0);
+                    entry->owner, entry->owner, HIVE_MSG_TIMER, entry->id, NULL,
+                    0);
 
                 if (HIVE_FAILED(status)) {
                     HIVE_LOG_ERROR("Failed to send timer tick: %s", status.msg);
@@ -344,7 +350,8 @@ void hive_timer_advance_time(uint64_t delta_us) {
 
             entry = next;
         }
-    } while (fired_any);  // Repeat if we fired any (handles multiple fires for large delta)
+    } while (fired_any); // Repeat if we fired any (handles multiple fires for
+                         // large delta)
 }
 
 // Get current time in microseconds

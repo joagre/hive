@@ -9,15 +9,16 @@ hive_status hive_init(void);
 // Run scheduler (blocks until all actors exit or hive_shutdown called)
 void hive_run(void);
 
-// Run actors until all are blocked (for external event loop integration, e.g., Webots)
-// Runs actors in priority order until no actor is READY (all are WAITING or DEAD).
-// Use with hive_advance_time() for simulation integration.
+// Run actors until all are blocked (for external event loop integration, e.g.,
+// Webots) Runs actors in priority order until no actor is READY (all are
+// WAITING or DEAD). Use with hive_advance_time() for simulation integration.
 // Returns: HIVE_OK on success
 hive_status hive_run_until_blocked(void);
 
 // Advance simulation time (microseconds) and fire due timers
-// Calling this function enables simulation mode (timers use simulation time, not wall-clock).
-// Use with hive_run_until_blocked() for simulation integration:
+// Calling this function enables simulation mode (timers use simulation time,
+// not wall-clock). Use with hive_run_until_blocked() for simulation
+// integration:
 //   while (simulation_running) {
 //       hive_advance_time(time_step_us);
 //       hive_run_until_blocked();
@@ -36,7 +37,8 @@ void hive_cleanup(void);
 hive_status hive_spawn(actor_fn fn, void *arg, actor_id *out);
 
 // Spawn with explicit configuration
-hive_status hive_spawn_ex(actor_fn fn, void *arg, const actor_config *cfg, actor_id *out);
+hive_status hive_spawn_ex(actor_fn fn, void *arg, const actor_config *cfg,
+                          actor_id *out);
 
 // Terminate current actor
 _Noreturn void hive_exit(void);

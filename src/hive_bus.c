@@ -10,8 +10,9 @@
 #include <sys/time.h>
 
 // Compile-time check: readers_mask is uint32_t, so max 32 subscribers
-_Static_assert(HIVE_MAX_BUS_SUBSCRIBERS <= 32,
-               "HIVE_MAX_BUS_SUBSCRIBERS exceeds readers_mask capacity (32 bits)");
+_Static_assert(
+    HIVE_MAX_BUS_SUBSCRIBERS <= 32,
+    "HIVE_MAX_BUS_SUBSCRIBERS exceeds readers_mask capacity (32 bits)");
 
 // External IPC pools (defined in hive_ipc.c)
 extern hive_pool g_message_pool_mgr;
@@ -21,46 +22,48 @@ void hive_bus_cleanup_actor(actor_id id);
 
 // Bus entry in ring buffer
 typedef struct {
-    void     *data;           // Payload
-    size_t    len;            // Payload length
-    uint64_t  timestamp_ms;   // When entry was published
-    uint8_t   read_count;     // How many actors have read this
-    bool      valid;          // Is this entry valid?
-    uint32_t  readers_mask;   // Bitmask of which subscribers have read (max 32 subscribers)
+    void *data;            // Payload
+    size_t len;            // Payload length
+    uint64_t timestamp_ms; // When entry was published
+    uint8_t read_count;    // How many actors have read this
+    bool valid;            // Is this entry valid?
+    uint32_t readers_mask; // Bitmask of which subscribers have read (max 32
+                           // subscribers)
 } bus_entry;
 
 // Subscriber info
 typedef struct {
     actor_id id;
-    size_t   next_read_idx;   // Next entry index to read
-    bool     active;
-    bool     blocked;         // Is actor blocked waiting for data?
+    size_t next_read_idx; // Next entry index to read
+    bool active;
+    bool blocked; // Is actor blocked waiting for data?
 } bus_subscriber;
 
 // Bus structure
 typedef struct {
-    bus_id           id;
-    hive_bus_config    config;
-    bus_entry       *entries;         // Ring buffer (dynamically allocated)
-    size_t           head;             // Write position
-    size_t           tail;             // Oldest entry position
-    size_t           count;            // Number of valid entries
-    bus_subscriber  *subscribers;     // Dynamically allocated array
-    size_t           num_subscribers;
-    bool             active;
+    bus_id id;
+    hive_bus_config config;
+    bus_entry *entries;          // Ring buffer (dynamically allocated)
+    size_t head;                 // Write position
+    size_t tail;                 // Oldest entry position
+    size_t count;                // Number of valid entries
+    bus_subscriber *subscribers; // Dynamically allocated array
+    size_t num_subscribers;
+    bool active;
 } bus_t;
 
 // Static bus storage
 static bus_t g_buses[HIVE_MAX_BUSES];
 static bus_entry g_bus_entries[HIVE_MAX_BUSES][HIVE_MAX_BUS_ENTRIES];
-static bus_subscriber g_bus_subscribers[HIVE_MAX_BUSES][HIVE_MAX_BUS_SUBSCRIBERS];
+static bus_subscriber g_bus_subscribers[HIVE_MAX_BUSES]
+                                       [HIVE_MAX_BUS_SUBSCRIBERS];
 
 // Bus table
 static struct {
-    bus_t    *buses;        // Points to static g_buses array
-    size_t    max_buses;    // Maximum number of buses
-    bus_id    next_id;
-    bool      initialized;
+    bus_t *buses;     // Points to static g_buses array
+    size_t max_buses; // Maximum number of buses
+    bus_id next_id;
+    bool initialized;
 } g_bus_table = {0};
 
 // Get current time in milliseconds
@@ -115,7 +118,7 @@ static void free_bus_entries(bus_t *bus) {
 // Expire old entries based on max_age_ms
 static void expire_old_entries(bus_t *bus) {
     if (bus->config.max_age_ms == 0) {
-        return;  // No time-based expiry
+        return; // No time-based expiry
     }
 
     uint64_t now = get_time_ms();
@@ -126,13 +129,14 @@ static void expire_old_entries(bus_t *bus) {
             break;
         }
 
-        // Handle clock adjustment (timestamp in future means clock went backward)
+        // Handle clock adjustment (timestamp in future means clock went
+        // backward)
         if (entry->timestamp_ms > now) {
-            break;  // Skip expiry check when clock adjusted backward
+            break; // Skip expiry check when clock adjusted backward
         }
         uint64_t age = now - entry->timestamp_ms;
         if (age < bus->config.max_age_ms) {
-            break;  // This entry and all newer ones are still fresh
+            break; // This entry and all newer ones are still fresh
         }
 
         // Expire this entry
@@ -167,7 +171,8 @@ void hive_bus_cleanup(void) {
         bus_t *bus = &g_bus_table.buses[i];
         if (bus->active) {
             free_bus_entries(bus);
-            // Note: bus->entries and bus->subscribers point to static arrays, no free needed
+            // Note: bus->entries and bus->subscribers point to static arrays,
+            // no free needed
             bus->active = false;
         }
     }
@@ -195,7 +200,8 @@ void hive_bus_cleanup_actor(actor_id id) {
             if (bus->subscribers[j].active && bus->subscribers[j].id == id) {
                 bus->subscribers[j].active = false;
                 bus->num_subscribers--;
-                HIVE_LOG_DEBUG("Actor %u unsubscribed from bus %u (cleanup)", id, bus->id);
+                HIVE_LOG_DEBUG("Actor %u unsubscribed from bus %u (cleanup)",
+                               id, bus->id);
             }
         }
     }
@@ -211,21 +217,25 @@ hive_status hive_bus_create(const hive_bus_config *cfg, bus_id *out) {
         return HIVE_ERROR(HIVE_ERR_INVALID, "Bus subsystem not initialized");
     }
 
-    if (cfg->max_entries == 0 || cfg->max_entry_size == 0 || cfg->max_subscribers == 0) {
+    if (cfg->max_entries == 0 || cfg->max_entry_size == 0 ||
+        cfg->max_subscribers == 0) {
         return HIVE_ERROR(HIVE_ERR_INVALID, "Invalid bus configuration");
     }
 
     // Validate against compile-time limits
     if (cfg->max_entries > HIVE_MAX_BUS_ENTRIES) {
-        return HIVE_ERROR(HIVE_ERR_INVALID, "max_entries exceeds HIVE_MAX_BUS_ENTRIES");
+        return HIVE_ERROR(HIVE_ERR_INVALID,
+                          "max_entries exceeds HIVE_MAX_BUS_ENTRIES");
     }
 
     if (cfg->max_subscribers > HIVE_MAX_BUS_SUBSCRIBERS) {
-        return HIVE_ERROR(HIVE_ERR_INVALID, "max_subscribers exceeds HIVE_MAX_BUS_SUBSCRIBERS");
+        return HIVE_ERROR(HIVE_ERR_INVALID,
+                          "max_subscribers exceeds HIVE_MAX_BUS_SUBSCRIBERS");
     }
 
     if (cfg->max_entry_size > HIVE_MAX_MESSAGE_SIZE) {
-        return HIVE_ERROR(HIVE_ERR_INVALID, "max_entry_size exceeds HIVE_MAX_MESSAGE_SIZE");
+        return HIVE_ERROR(HIVE_ERR_INVALID,
+                          "max_entry_size exceeds HIVE_MAX_MESSAGE_SIZE");
     }
 
     // Find free slot
@@ -256,8 +266,10 @@ hive_status hive_bus_create(const hive_bus_config *cfg, bus_id *out) {
     bus->active = true;
 
     *out = bus->id;
-    HIVE_LOG_DEBUG("Created bus %u (max_entries=%zu, max_entry_size=%zu, max_subscribers=%zu)",
-                 bus->id, cfg->max_entries, cfg->max_entry_size, cfg->max_subscribers);
+    HIVE_LOG_DEBUG("Created bus %u (max_entries=%zu, max_entry_size=%zu, "
+                   "max_subscribers=%zu)",
+                   bus->id, cfg->max_entries, cfg->max_entry_size,
+                   cfg->max_subscribers);
 
     return HIVE_SUCCESS;
 }
@@ -270,11 +282,13 @@ hive_status hive_bus_destroy(bus_id id) {
     }
 
     if (bus->num_subscribers > 0) {
-        return HIVE_ERROR(HIVE_ERR_INVALID, "Cannot destroy bus with active subscribers");
+        return HIVE_ERROR(HIVE_ERR_INVALID,
+                          "Cannot destroy bus with active subscribers");
     }
 
     free_bus_entries(bus);
-    // Note: bus->entries and bus->subscribers point to static arrays, no free needed
+    // Note: bus->entries and bus->subscribers point to static arrays, no free
+    // needed
     bus->active = false;
 
     HIVE_LOG_DEBUG("Destroyed bus %u", id);
@@ -301,7 +315,8 @@ hive_status hive_bus_publish(bus_id id, const void *data, size_t len) {
 
     // Validate message size against pool limit
     if (len > HIVE_MAX_MESSAGE_SIZE) {
-        return HIVE_ERROR(HIVE_ERR_INVALID, "Message exceeds HIVE_MAX_MESSAGE_SIZE");
+        return HIVE_ERROR(HIVE_ERR_INVALID,
+                          "Message exceeds HIVE_MAX_MESSAGE_SIZE");
     }
 
     // If buffer is full, evict oldest entry
@@ -335,7 +350,8 @@ hive_status hive_bus_publish(bus_id id, const void *data, size_t len) {
     bus->head = (bus->head + 1) % bus->config.max_entries;
     bus->count++;
 
-    HIVE_LOG_TRACE("Published %zu bytes to bus %u (count=%zu)", len, id, bus->count);
+    HIVE_LOG_TRACE("Published %zu bytes to bus %u (count=%zu)", len, id,
+                   bus->count);
 
     // Wake up any blocked subscribers
     for (size_t i = 0; i < bus->config.max_subscribers; i++) {
@@ -344,7 +360,8 @@ hive_status hive_bus_publish(bus_id id, const void *data, size_t len) {
             actor *a = hive_actor_get(sub->id);
             if (a && a->state == ACTOR_STATE_WAITING) {
                 a->state = ACTOR_STATE_READY;
-                HIVE_LOG_TRACE("Woke blocked subscriber %u on bus %u", sub->id, id);
+                HIVE_LOG_TRACE("Woke blocked subscriber %u on bus %u", sub->id,
+                               id);
             }
         }
     }
@@ -382,7 +399,7 @@ hive_status hive_bus_subscribe(bus_id id) {
 
     // Initialize subscriber
     sub->id = current->id;
-    sub->next_read_idx = bus->head;  // Start reading from newest entry
+    sub->next_read_idx = bus->head; // Start reading from newest entry
     sub->active = true;
     sub->blocked = false;
     bus->num_subscribers++;
@@ -416,9 +433,11 @@ hive_status hive_bus_unsubscribe(bus_id id) {
 }
 
 // Read entry (non-blocking)
-hive_status hive_bus_read(bus_id id, void *buf, size_t max_len, size_t *actual_len) {
+hive_status hive_bus_read(bus_id id, void *buf, size_t max_len,
+                          size_t *actual_len) {
     if (!buf || !actual_len) {
-        return HIVE_ERROR(HIVE_ERR_INVALID, "NULL buffer or actual_len pointer");
+        return HIVE_ERROR(HIVE_ERR_INVALID,
+                          "NULL buffer or actual_len pointer");
     }
 
     bus_t *bus = find_bus(id);
@@ -454,7 +473,7 @@ hive_status hive_bus_read(bus_id id, void *buf, size_t max_len, size_t *actual_l
 
         // Check if this subscriber has already read this entry
         if (e->readers_mask & (1u << sub_idx)) {
-            continue;  // Already read
+            continue; // Already read
         }
 
         entry = e;
@@ -469,7 +488,7 @@ hive_status hive_bus_read(bus_id id, void *buf, size_t max_len, size_t *actual_l
     // Copy data (truncate to buffer size to prevent overflow)
     size_t copy_len = entry->len < max_len ? entry->len : max_len;
     memcpy(buf, entry->data, copy_len);
-    *actual_len = copy_len;  // Return actual bytes copied, not original length
+    *actual_len = copy_len; // Return actual bytes copied, not original length
 
     // Mark as read by this subscriber
     entry->readers_mask |= (1u << sub_idx);
@@ -478,10 +497,12 @@ hive_status hive_bus_read(bus_id id, void *buf, size_t max_len, size_t *actual_l
     // Update subscriber's next read position
     sub->next_read_idx = (idx + 1) % bus->config.max_entries;
 
-    HIVE_LOG_TRACE("Actor %u read %zu bytes from bus %u", current->id, copy_len, id);
+    HIVE_LOG_TRACE("Actor %u read %zu bytes from bus %u", current->id, copy_len,
+                   id);
 
     // Check if entry should be removed (max_readers)
-    if (bus->config.consume_after_reads > 0 && entry->read_count >= bus->config.consume_after_reads) {
+    if (bus->config.consume_after_reads > 0 &&
+        entry->read_count >= bus->config.consume_after_reads) {
         hive_msg_pool_free(entry->data);
         entry->valid = false;
         entry->data = NULL;
@@ -494,7 +515,8 @@ hive_status hive_bus_read(bus_id id, void *buf, size_t max_len, size_t *actual_l
             }
         }
 
-        HIVE_LOG_TRACE("Bus %u entry consumed by %u readers", id, entry->read_count);
+        HIVE_LOG_TRACE("Bus %u entry consumed by %u readers", id,
+                       entry->read_count);
     }
 
     return HIVE_SUCCESS;
@@ -502,9 +524,10 @@ hive_status hive_bus_read(bus_id id, void *buf, size_t max_len, size_t *actual_l
 
 // Read with blocking
 hive_status hive_bus_read_wait(bus_id id, void *buf, size_t max_len,
-                           size_t *actual_len, int32_t timeout_ms) {
+                               size_t *actual_len, int32_t timeout_ms) {
     if (!buf || !actual_len) {
-        return HIVE_ERROR(HIVE_ERR_INVALID, "NULL buffer or actual_len pointer");
+        return HIVE_ERROR(HIVE_ERR_INVALID,
+                          "NULL buffer or actual_len pointer");
     }
 
     bus_t *bus = find_bus(id);
@@ -529,12 +552,12 @@ hive_status hive_bus_read_wait(bus_id id, void *buf, size_t max_len,
     }
 
     if (status.code != HIVE_ERR_WOULDBLOCK) {
-        return status;  // Real error, not just no data
+        return status; // Real error, not just no data
     }
 
     // No data available
     if (timeout_ms == 0) {
-        return status;  // Non-blocking
+        return status; // Non-blocking
     }
 
     // Block until data is available or timeout expires
@@ -545,7 +568,8 @@ hive_status hive_bus_read_wait(bus_id id, void *buf, size_t max_len,
     // Create timeout timer if needed
     timer_id timeout_timer = TIMER_ID_INVALID;
     if (timeout_ms > 0) {
-        hive_status timer_status = hive_timer_after((uint32_t)timeout_ms * 1000, &timeout_timer);
+        hive_status timer_status =
+            hive_timer_after((uint32_t)timeout_ms * 1000, &timeout_timer);
         if (HIVE_FAILED(timer_status)) {
             sub->blocked = false;
             current->state = ACTOR_STATE_READY;
@@ -561,7 +585,8 @@ hive_status hive_bus_read_wait(bus_id id, void *buf, size_t max_len,
 
     // Check for timeout
     if (timeout_timer != TIMER_ID_INVALID) {
-        hive_status timeout_status = hive_mailbox_handle_timeout(current, timeout_timer, "Bus read timeout");
+        hive_status timeout_status = hive_mailbox_handle_timeout(
+            current, timeout_timer, "Bus read timeout");
         if (HIVE_FAILED(timeout_status)) {
             return timeout_status;
         }

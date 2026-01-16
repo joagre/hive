@@ -12,21 +12,21 @@ typedef uint32_t bus_id;
 
 // Bus configuration
 typedef struct {
-    uint8_t  max_subscribers;     // max concurrent subscribers (1..HIVE_MAX_BUS_SUBSCRIBERS)
-    uint8_t  consume_after_reads; // remove entry after N reads, 0 = keep until aged out
-    uint32_t max_age_ms;          // expire entries after ms, 0 = no expiry
-    size_t   max_entries;         // ring buffer capacity
-    size_t   max_entry_size;      // max payload bytes per entry
+    uint8_t max_subscribers;     // max concurrent subscribers
+                                 // (1..HIVE_MAX_BUS_SUBSCRIBERS)
+    uint8_t consume_after_reads; // remove entry after N reads, 0 = keep until
+                                 // aged out
+    uint32_t max_age_ms;         // expire entries after ms, 0 = no expiry
+    size_t max_entries;          // ring buffer capacity
+    size_t max_entry_size;       // max payload bytes per entry
 } hive_bus_config;
 
 // Default bus configuration
-#define HIVE_BUS_CONFIG_DEFAULT { \
-    .max_subscribers = 32, \
-    .consume_after_reads = 0, \
-    .max_age_ms = 0, \
-    .max_entries = 16, \
-    .max_entry_size = 256 \
-}
+#define HIVE_BUS_CONFIG_DEFAULT                                           \
+    {                                                                     \
+        .max_subscribers = 32, .consume_after_reads = 0, .max_age_ms = 0, \
+        .max_entries = 16, .max_entry_size = 256                          \
+    }
 
 // Bus operations
 
@@ -45,7 +45,8 @@ hive_status hive_bus_unsubscribe(bus_id bus);
 
 // Read entry (non-blocking)
 // Returns HIVE_ERR_WOULDBLOCK if no data available
-hive_status hive_bus_read(bus_id bus, void *buf, size_t max_len, size_t *bytes_read);
+hive_status hive_bus_read(bus_id bus, void *buf, size_t max_len,
+                          size_t *bytes_read);
 
 // Read with blocking
 hive_status hive_bus_read_wait(bus_id bus, void *buf, size_t max_len,

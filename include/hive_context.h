@@ -8,7 +8,7 @@
 // Context for x86-64
 // Stores callee-saved registers: rbx, rbp, r12-r15, and rsp
 typedef struct {
-    void *rsp;  // Stack pointer
+    void *rsp; // Stack pointer
     void *rbx;
     void *rbp;
     void *r12;
@@ -23,7 +23,7 @@ typedef struct {
 // Also stores FPU callee-saved registers: s16-s31
 // Note: lr (r14) is saved on stack by context switch
 typedef struct {
-    void *sp;   // Stack pointer (r13)
+    void *sp; // Stack pointer (r13)
     void *r4;
     void *r5;
     void *r6;
@@ -51,6 +51,6 @@ void hive_context_switch(hive_context *from, hive_context *to);
 // fn: function to execute
 // arg: argument to pass to function
 void hive_context_init(hive_context *ctx, void *stack, size_t stack_size,
-                     void (*fn)(void *), void *arg);
+                       void (*fn)(void *), void *arg);
 
 #endif // HIVE_CONTEXT_H

@@ -1,0 +1,76 @@
+# One True Style (1TBS/OTS) configuration
+# https://en.wikipedia.org/wiki/Indentation_style#Variant:_1TBS_(OTBS)
+#
+# Usage: clang-format -i src/*.c include/*.h
+# Do NOT run on assembly files (*.S) - clang-format will corrupt them.
+
+Language: Cpp
+BasedOnStyle: LLVM
+
+# Indentation
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+IndentCaseLabels: false
+IndentGotoLabels: true
+NamespaceIndentation: None
+
+# Braces - K&R/1TBS style (opening brace on same line)
+BreakBeforeBraces: Attach
+BraceWrapping:
+  AfterFunction: false
+  AfterControlStatement: false
+  AfterStruct: false
+  AfterEnum: false
+  AfterUnion: false
+  BeforeElse: false
+  BeforeWhile: false
+
+# Line width
+ColumnLimit: 80
+
+# Alignment
+# Note: AlignConsecutive* options are disabled because they aggressively
+# align code that wasn't aligned, causing churn. Vertical alignment in
+# structs must be maintained manually.
+AlignAfterOpenBracket: Align
+AlignConsecutiveAssignments: false
+AlignConsecutiveDeclarations: false
+AlignConsecutiveMacros: false
+AlignEscapedNewlines: Left
+AlignOperands: true
+AlignTrailingComments: true
+
+# Pointers and references - attach to variable name
+PointerAlignment: Right
+DerivePointerAlignment: false
+
+# Spaces
+SpaceAfterCStyleCast: false
+SpaceBeforeAssignmentOperators: true
+SpaceBeforeParens: ControlStatements
+SpaceInEmptyParentheses: false
+SpacesInCStyleCastParentheses: false
+SpacesInParentheses: false
+SpacesInSquareBrackets: false
+
+# Single-line control statements
+AllowShortBlocksOnASingleLine: false
+AllowShortCaseLabelsOnASingleLine: false
+AllowShortFunctionsOnASingleLine: None
+AllowShortIfStatementsOnASingleLine: false
+AllowShortLoopsOnASingleLine: false
+
+# Includes
+IncludeBlocks: Preserve
+SortIncludes: false
+
+# Other
+AlwaysBreakAfterReturnType: None
+BinPackArguments: true
+BinPackParameters: true
+BreakBeforeBinaryOperators: None
+BreakBeforeTernaryOperators: true
+BreakStringLiterals: true
+MaxEmptyLinesToKeep: 1
+ReflowComments: true

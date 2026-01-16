@@ -9,7 +9,8 @@
 #include <stdint.h>
 
 // STM32-specific scheduler using WFI (Wait For Interrupt) for idle sleep
-// Timer processing is driven by hive_timer_process_pending() called from main loop
+// Timer processing is driven by hive_timer_process_pending() called from main
+// loop
 
 // External function to get actor table
 extern actor_table *hive_actor_get_table(void);
@@ -20,9 +21,10 @@ extern void hive_timer_process_pending(void);
 // Scheduler state
 static struct {
     hive_context scheduler_ctx;
-    bool       shutdown_requested;
-    bool       initialized;
-    size_t     last_run_idx[HIVE_PRIORITY_COUNT];  // Last run actor index for each priority
+    bool shutdown_requested;
+    bool initialized;
+    size_t last_run_idx[HIVE_PRIORITY_COUNT]; // Last run actor index for each
+                                              // priority
 } g_scheduler = {0};
 
 // Process pending events (timers on STM32)
@@ -35,7 +37,7 @@ static void dispatch_events(void) {
 static void wait_for_events(void) {
     // On ARM Cortex-M, WFI sleeps until an interrupt occurs
     // This is the low-power idle state
-    __asm__ volatile ("wfi");
+    __asm__ volatile("wfi");
 }
 
 // Run a single actor: context switch, check stack, handle exit/yield
@@ -85,9 +87,11 @@ static actor *find_next_runnable(void) {
     }
 
     // Search by priority level
-    for (hive_priority_level prio = HIVE_PRIORITY_CRITICAL; prio < HIVE_PRIORITY_COUNT; prio++) {
+    for (hive_priority_level prio = HIVE_PRIORITY_CRITICAL;
+         prio < HIVE_PRIORITY_COUNT; prio++) {
         // Round-robin within priority level - start from after last run actor
-        size_t start_idx = (g_scheduler.last_run_idx[prio] + 1) % table->max_actors;
+        size_t start_idx =
+            (g_scheduler.last_run_idx[prio] + 1) % table->max_actors;
 
         for (size_t i = 0; i < table->max_actors; i++) {
             size_t idx = (start_idx + i) % table->max_actors;
@@ -95,7 +99,8 @@ static actor *find_next_runnable(void) {
 
             if (a->state == ACTOR_STATE_READY && a->priority == prio) {
                 g_scheduler.last_run_idx[prio] = idx;
-                HIVE_LOG_TRACE("Scheduler: Found runnable actor %u (prio=%d)", a->id, prio);
+                HIVE_LOG_TRACE("Scheduler: Found runnable actor %u (prio=%d)",
+                               a->id, prio);
                 return a;
             }
         }

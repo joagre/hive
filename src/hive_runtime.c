@@ -132,7 +132,8 @@ hive_status hive_spawn(actor_fn fn, void *arg, actor_id *out) {
     return hive_spawn_ex(fn, arg, &cfg, out);
 }
 
-hive_status hive_spawn_ex(actor_fn fn, void *arg, const actor_config *cfg, actor_id *out) {
+hive_status hive_spawn_ex(actor_fn fn, void *arg, const actor_config *cfg,
+                          actor_id *out) {
     if (!fn) {
         return HIVE_ERROR(HIVE_ERR_INVALID, "NULL function pointer");
     }
@@ -140,8 +141,9 @@ hive_status hive_spawn_ex(actor_fn fn, void *arg, const actor_config *cfg, actor
         return HIVE_ERROR(HIVE_ERR_INVALID, "NULL output pointer");
     }
 
-    // Copy config field by field instead of struct copy to avoid alignment issues
-    // (struct copy may use SIMD instructions requiring 16-byte alignment)
+    // Copy config field by field instead of struct copy to avoid alignment
+    // issues (struct copy may use SIMD instructions requiring 16-byte
+    // alignment)
     actor_config actual_cfg;
     actual_cfg.stack_size = cfg->stack_size;
     actual_cfg.priority = cfg->priority;
@@ -153,7 +155,8 @@ hive_status hive_spawn_ex(actor_fn fn, void *arg, const actor_config *cfg, actor
 
     actor *a = hive_actor_alloc(fn, arg, &actual_cfg);
     if (!a) {
-        return HIVE_ERROR(HIVE_ERR_NOMEM, "Actor table or stack arena exhausted");
+        return HIVE_ERROR(HIVE_ERR_NOMEM,
+                          "Actor table or stack arena exhausted");
     }
 
     *out = a->id;
@@ -164,7 +167,7 @@ _Noreturn void hive_exit(void) {
     actor *current = hive_actor_current();
     if (current) {
         HIVE_LOG_DEBUG("Actor %u (%s) exiting", current->id,
-                     current->name ? current->name : "unnamed");
+                       current->name ? current->name : "unnamed");
 
         // Mark exit reason and actor state
         // Scheduler will clean up resources - don't free stack here!
@@ -184,7 +187,7 @@ _Noreturn void hive_exit_crash(void) {
     actor *current = hive_actor_current();
     if (current) {
         HIVE_LOG_ERROR("Actor %u (%s) returned without calling hive_exit()",
-                     current->id, current->name ? current->name : "unnamed");
+                       current->id, current->name ? current->name : "unnamed");
 
         // Mark as crashed - linked/monitoring actors will be notified
         current->exit_reason = HIVE_EXIT_CRASH;

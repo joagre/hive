@@ -13,7 +13,8 @@
 
 // Forward declarations for internal functions
 void hive_link_cleanup_actor(actor_id id);
-static bool send_exit_notification(actor *recipient, actor_id dying_id, hive_exit_reason reason);
+static bool send_exit_notification(actor *recipient, actor_id dying_id,
+                                   hive_exit_reason reason);
 
 // External function to get actor table
 extern actor_table *hive_actor_get_table(void);
@@ -30,7 +31,7 @@ static hive_pool g_monitor_pool_mgr;
 // Global state
 static struct {
     uint32_t next_monitor_id;
-    bool     initialized;
+    bool initialized;
 } g_link_state = {0};
 
 // Initialize link subsystem
@@ -39,10 +40,10 @@ hive_status hive_link_init(void) {
 
     // Initialize link and monitor pools
     hive_pool_init(&g_link_pool_mgr, g_link_pool, g_link_used,
-                 sizeof(link_entry), HIVE_LINK_ENTRY_POOL_SIZE);
+                   sizeof(link_entry), HIVE_LINK_ENTRY_POOL_SIZE);
 
     hive_pool_init(&g_monitor_pool_mgr, g_monitor_pool, g_monitor_used,
-                 sizeof(monitor_entry), HIVE_MONITOR_ENTRY_POOL_SIZE);
+                   sizeof(monitor_entry), HIVE_MONITOR_ENTRY_POOL_SIZE);
 
     g_link_state.next_monitor_id = 1;
     g_link_state.initialized = true;
@@ -134,7 +135,8 @@ hive_status hive_link_remove(actor_id target_id) {
     actor *target = hive_actor_get(target_id);
     if (target && target->state != ACTOR_STATE_DEAD) {
         link_entry *reciprocal = NULL;
-        SLIST_FIND_REMOVE(target->links, entry->target == current->id, reciprocal);
+        SLIST_FIND_REMOVE(target->links, entry->target == current->id,
+                          reciprocal);
         if (reciprocal) {
             hive_pool_free(&g_link_pool_mgr, reciprocal);
         }
@@ -179,7 +181,8 @@ hive_status hive_monitor(actor_id target_id, uint32_t *monitor_id) {
     SLIST_APPEND(current->monitors, entry);
 
     *monitor_id = entry->ref;
-    HIVE_LOG_DEBUG("Actor %u monitoring actor %u (ref=%u)", current->id, target_id, entry->ref);
+    HIVE_LOG_DEBUG("Actor %u monitoring actor %u (ref=%u)", current->id,
+                   target_id, entry->ref);
     return HIVE_SUCCESS;
 }
 
@@ -192,7 +195,8 @@ hive_status hive_monitor_cancel(uint32_t monitor_id) {
     monitor_entry *found = NULL;
     SLIST_FIND_REMOVE(current->monitors, entry->ref == monitor_id, found);
     if (found) {
-        HIVE_LOG_DEBUG("Actor %u cancelled monitor (id=%u)", current->id, monitor_id);
+        HIVE_LOG_DEBUG("Actor %u cancelled monitor (id=%u)", current->id,
+                       monitor_id);
         hive_pool_free(&g_monitor_pool_mgr, found);
         return HIVE_SUCCESS;
     }
@@ -230,26 +234,30 @@ hive_status hive_decode_exit(const hive_message *msg, hive_exit_msg *out) {
 // Convert exit reason to string
 const char *hive_exit_reason_str(hive_exit_reason reason) {
     switch (reason) {
-        case HIVE_EXIT_NORMAL:      return "NORMAL";
-        case HIVE_EXIT_CRASH:       return "CRASH";
-        case HIVE_EXIT_CRASH_STACK: return "STACK_OVERFLOW";
-        case HIVE_EXIT_KILLED:      return "KILLED";
-        default:                    return "UNKNOWN";
+    case HIVE_EXIT_NORMAL:
+        return "NORMAL";
+    case HIVE_EXIT_CRASH:
+        return "CRASH";
+    case HIVE_EXIT_CRASH_STACK:
+        return "STACK_OVERFLOW";
+    case HIVE_EXIT_KILLED:
+        return "KILLED";
+    default:
+        return "UNKNOWN";
     }
 }
 
 // Helper: Send exit notification to an actor
-static bool send_exit_notification(actor *recipient, actor_id dying_id, hive_exit_reason reason) {
+static bool send_exit_notification(actor *recipient, actor_id dying_id,
+                                   hive_exit_reason reason) {
     // Build exit message payload
-    hive_exit_msg exit_data = {
-        .actor = dying_id,
-        .reason = reason
-    };
+    hive_exit_msg exit_data = {.actor = dying_id, .reason = reason};
 
     // Send using hive_ipc_notify_internal with HIVE_MSG_EXIT class
     // Sender is the dying actor so recipient knows who died
-    hive_status status = hive_ipc_notify_internal(recipient->id, dying_id, HIVE_MSG_EXIT,
-                                                HIVE_TAG_NONE, &exit_data, sizeof(exit_data));
+    hive_status status =
+        hive_ipc_notify_internal(recipient->id, dying_id, HIVE_MSG_EXIT,
+                                 HIVE_TAG_NONE, &exit_data, sizeof(exit_data));
     if (HIVE_FAILED(status)) {
         HIVE_LOG_ERROR("Failed to send exit notification: %s", status.msg);
         return false;
@@ -285,7 +293,7 @@ void hive_link_cleanup_actor(actor_id dying_actor_id) {
     }
 
     HIVE_LOG_DEBUG("Cleaning up links/monitors for actor %u (reason=%d)",
-                 dying_actor_id, dying->exit_reason);
+                   dying_actor_id, dying->exit_reason);
 
     // Collect all actors that need notification
     // We'll process in two passes to avoid iterator invalidation
@@ -296,13 +304,16 @@ void hive_link_cleanup_actor(actor_id dying_actor_id) {
         actor *linked_actor = hive_actor_get(link->target);
         if (linked_actor && linked_actor->state != ACTOR_STATE_DEAD) {
             // Send exit notification to linked actor
-            if (send_exit_notification(linked_actor, dying_actor_id, dying->exit_reason)) {
-                HIVE_LOG_TRACE("Sent link exit notification to actor %u", link->target);
+            if (send_exit_notification(linked_actor, dying_actor_id,
+                                       dying->exit_reason)) {
+                HIVE_LOG_TRACE("Sent link exit notification to actor %u",
+                               link->target);
             }
 
             // Remove reciprocal link from linked actor's list
             link_entry *reciprocal = NULL;
-            SLIST_FIND_REMOVE(linked_actor->links, entry->target == dying_actor_id, reciprocal);
+            SLIST_FIND_REMOVE(linked_actor->links,
+                              entry->target == dying_actor_id, reciprocal);
             if (reciprocal) {
                 hive_pool_free(&g_link_pool_mgr, reciprocal);
             }
@@ -314,10 +325,10 @@ void hive_link_cleanup_actor(actor_id dying_actor_id) {
     }
     dying->links = NULL;
 
-    // Pass 2: Send notifications for monitors (actors monitoring the dying actor)
-    // We need to find all actors that are monitoring this one
-    // This requires scanning all actors' monitor lists
-    // (We already have table from above)
+    // Pass 2: Send notifications for monitors (actors monitoring the dying
+    // actor) We need to find all actors that are monitoring this one This
+    // requires scanning all actors' monitor lists (We already have table from
+    // above)
     {
         for (size_t i = 0; i < table->max_actors; i++) {
             actor *a = &table->actors[i];
@@ -331,9 +342,11 @@ void hive_link_cleanup_actor(actor_id dying_actor_id) {
             while (mon) {
                 if (mon->target == dying_actor_id) {
                     // Send exit notification using helper
-                    if (send_exit_notification(a, dying_actor_id, dying->exit_reason)) {
-                        HIVE_LOG_TRACE("Sent monitor exit notification to actor %u (ref=%u)",
-                                     a->id, mon->ref);
+                    if (send_exit_notification(a, dying_actor_id,
+                                               dying->exit_reason)) {
+                        HIVE_LOG_TRACE("Sent monitor exit notification to "
+                                       "actor %u (ref=%u)",
+                                       a->id, mon->ref);
                     }
 
                     // Remove this monitor entry

@@ -17,20 +17,20 @@ typedef struct timer_entry timer_entry;
 
 // Network I/O request data
 typedef struct {
-    int         fd;
-    void       *buf;
-    size_t      len;
-    actor_id    actor;
-    int         operation;  // NET_OP_RECV, NET_OP_SEND, etc.
+    int fd;
+    void *buf;
+    size_t len;
+    actor_id actor;
+    int operation; // NET_OP_RECV, NET_OP_SEND, etc.
 } net_io_data;
 
 // I/O source - tagged union for epoll events
 typedef struct io_source {
     io_source_type type;
     union {
-        timer_entry *timer;    // Timer event
-        net_io_data  net;      // Network I/O event
-        int          wakeup;   // Wakeup signal
+        timer_entry *timer; // Timer event
+        net_io_data net;    // Network I/O event
+        int wakeup;         // Wakeup signal
     } data;
 } io_source;
 

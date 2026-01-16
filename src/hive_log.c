@@ -2,7 +2,8 @@
 //
 // Supports dual output (controlled by compile-time flags):
 // - Console (stderr) with optional ANSI colors (HIVE_LOG_TO_STDOUT)
-// - Binary log file with explicit little-endian serialization (HIVE_LOG_TO_FILE)
+// - Binary log file with explicit little-endian serialization
+// (HIVE_LOG_TO_FILE)
 
 #include "hive_log.h"
 #include "hive_internal.h"
@@ -28,8 +29,8 @@
 static bool g_initialized = false;
 
 #if HIVE_LOG_TO_FILE
-static int g_log_fd = -1;           // File descriptor for log file (-1 = not open)
-static uint16_t g_seq = 0;          // Monotonic sequence number
+static int g_log_fd = -1;  // File descriptor for log file (-1 = not open)
+static uint16_t g_seq = 0; // Monotonic sequence number
 #endif
 
 // -----------------------------------------------------------------------------
@@ -39,17 +40,15 @@ static uint16_t g_seq = 0;          // Monotonic sequence number
 #if HIVE_LOG_TO_STDOUT
 
 // Level names for output
-static const char *level_names[] = {
-    "TRACE", "DEBUG", "INFO", "WARN", "ERROR"
-};
+static const char *level_names[] = {"TRACE", "DEBUG", "INFO", "WARN", "ERROR"};
 
 // Level colors for terminal output (ANSI escape codes)
 static const char *level_colors[] = {
-    "\x1b[36m",  // TRACE: Cyan
-    "\x1b[35m",  // DEBUG: Magenta
-    "\x1b[32m",  // INFO: Green
-    "\x1b[33m",  // WARN: Yellow
-    "\x1b[31m"   // ERROR: Red
+    "\x1b[36m", // TRACE: Cyan
+    "\x1b[35m", // DEBUG: Magenta
+    "\x1b[32m", // INFO: Green
+    "\x1b[33m", // WARN: Yellow
+    "\x1b[31m"  // ERROR: Red
 };
 
 #define COLOR_RESET "\x1b[0m"
@@ -61,7 +60,7 @@ static const char *basename_simple(const char *path) {
 }
 
 static void log_to_console(hive_log_level_t level, const char *file, int line,
-                          const char *text) {
+                           const char *text) {
     // Check if stderr is a terminal for colored output
     static int use_colors = -1;
     if (use_colors == -1) {
@@ -70,7 +69,8 @@ static void log_to_console(hive_log_level_t level, const char *file, int line,
 
     // Print log level with optional color
     if (use_colors) {
-        fprintf(stderr, "%s%-5s%s ", level_colors[level], level_names[level], COLOR_RESET);
+        fprintf(stderr, "%s%-5s%s ", level_colors[level], level_names[level],
+                COLOR_RESET);
     } else {
         fprintf(stderr, "%-5s ", level_names[level]);
     }
@@ -106,20 +106,22 @@ static void write_u32_le(uint8_t *buf, uint32_t val) {
     buf[3] = (uint8_t)((val >> 24) & 0xFF);
 }
 
-static void log_to_file(hive_log_level_t level, const char *text, size_t text_len) {
-    if (g_log_fd < 0) return;
+static void log_to_file(hive_log_level_t level, const char *text,
+                        size_t text_len) {
+    if (g_log_fd < 0)
+        return;
 
     // Build header with explicit byte serialization
     uint8_t header[HIVE_LOG_HEADER_SIZE];
-    uint32_t timestamp = (uint32_t)hive_get_time();  // Truncate to 32 bits
+    uint32_t timestamp = (uint32_t)hive_get_time(); // Truncate to 32 bits
     uint16_t len = (uint16_t)(text_len > 0xFFFF ? 0xFFFF : text_len);
 
-    write_u16_le(&header[0], HIVE_LOG_MAGIC);     // magic
-    write_u16_le(&header[2], g_seq++);            // seq
-    write_u32_le(&header[4], timestamp);          // timestamp
-    write_u16_le(&header[8], len);                // len
-    header[10] = (uint8_t)level;                  // level
-    header[11] = 0;                               // reserved
+    write_u16_le(&header[0], HIVE_LOG_MAGIC); // magic
+    write_u16_le(&header[2], g_seq++);        // seq
+    write_u32_le(&header[4], timestamp);      // timestamp
+    write_u16_le(&header[8], len);            // len
+    header[10] = (uint8_t)level;              // level
+    header[11] = 0;                           // reserved
 
     // Write header and payload
     size_t written;
@@ -157,24 +159,25 @@ hive_status hive_log_file_open(const char *path) {
     }
 
     // Open with create+truncate (TRUNC also erases flash sector on STM32)
-    hive_status s = hive_file_open(path, HIVE_O_WRONLY | HIVE_O_CREAT | HIVE_O_TRUNC, 0644, &g_log_fd);
+    hive_status s = hive_file_open(
+        path, HIVE_O_WRONLY | HIVE_O_CREAT | HIVE_O_TRUNC, 0644, &g_log_fd);
     if (HIVE_FAILED(s)) {
         g_log_fd = -1;
         return s;
     }
 
-    g_seq = 0;  // Reset sequence number for new file
+    g_seq = 0; // Reset sequence number for new file
     return HIVE_SUCCESS;
 #else
     (void)path;
-    return HIVE_SUCCESS;  // No-op when file logging disabled
+    return HIVE_SUCCESS; // No-op when file logging disabled
 #endif
 }
 
 hive_status hive_log_file_sync(void) {
 #if HIVE_LOG_TO_FILE
     if (g_log_fd < 0) {
-        return HIVE_SUCCESS;  // No file open, nothing to sync
+        return HIVE_SUCCESS; // No file open, nothing to sync
     }
     return hive_file_sync(g_log_fd);
 #else
@@ -185,7 +188,7 @@ hive_status hive_log_file_sync(void) {
 hive_status hive_log_file_close(void) {
 #if HIVE_LOG_TO_FILE
     if (g_log_fd < 0) {
-        return HIVE_SUCCESS;  // No file open
+        return HIVE_SUCCESS; // No file open
     }
 
     // Final sync before close
@@ -208,7 +211,7 @@ void hive_log_cleanup(void) {
 }
 
 void hive_log_write(hive_log_level_t level, const char *file, int line,
-                  const char *fmt, ...) {
+                    const char *fmt, ...) {
     // Format the message into a buffer
     char buf[HIVE_LOG_MAX_ENTRY_SIZE];
     va_list args;
@@ -217,8 +220,10 @@ void hive_log_write(hive_log_level_t level, const char *file, int line,
     va_end(args);
 
     // Clamp length to buffer size
-    if (len < 0) len = 0;
-    if ((size_t)len >= sizeof(buf)) len = sizeof(buf) - 1;
+    if (len < 0)
+        len = 0;
+    if ((size_t)len >= sizeof(buf))
+        len = sizeof(buf) - 1;
 
 #if HIVE_LOG_TO_STDOUT
     log_to_console(level, file, line, buf);

@@ -16,16 +16,18 @@ extern actor_table *hive_actor_get_table(void);
 // Scheduler state
 static struct {
     hive_context scheduler_ctx;
-    bool       shutdown_requested;
-    bool       initialized;
-    size_t     last_run_idx[HIVE_PRIORITY_COUNT];  // Last run actor index for each priority
-    int        epoll_fd;                      // Event loop file descriptor
+    bool shutdown_requested;
+    bool initialized;
+    size_t last_run_idx[HIVE_PRIORITY_COUNT]; // Last run actor index for each
+                                              // priority
+    int epoll_fd;                             // Event loop file descriptor
 } g_scheduler = {0};
 
 // Dispatch pending epoll events (timeout_ms: -1=block, 0=poll, >0=wait)
 static void dispatch_epoll_events(int timeout_ms) {
     struct epoll_event events[HIVE_EPOLL_MAX_EVENTS];
-    int n = epoll_wait(g_scheduler.epoll_fd, events, HIVE_EPOLL_MAX_EVENTS, timeout_ms);
+    int n = epoll_wait(g_scheduler.epoll_fd, events, HIVE_EPOLL_MAX_EVENTS,
+                       timeout_ms);
 
     for (int i = 0; i < n; i++) {
         io_source *source = events[i].data.ptr;
@@ -94,9 +96,11 @@ static actor *find_next_runnable(void) {
     }
 
     // Search by priority level
-    for (hive_priority_level prio = HIVE_PRIORITY_CRITICAL; prio < HIVE_PRIORITY_COUNT; prio++) {
+    for (hive_priority_level prio = HIVE_PRIORITY_CRITICAL;
+         prio < HIVE_PRIORITY_COUNT; prio++) {
         // Round-robin within priority level - start from after last run actor
-        size_t start_idx = (g_scheduler.last_run_idx[prio] + 1) % table->max_actors;
+        size_t start_idx =
+            (g_scheduler.last_run_idx[prio] + 1) % table->max_actors;
 
         for (size_t i = 0; i < table->max_actors; i++) {
             size_t idx = (start_idx + i) % table->max_actors;
@@ -104,7 +108,8 @@ static actor *find_next_runnable(void) {
 
             if (a->state == ACTOR_STATE_READY && a->priority == prio) {
                 g_scheduler.last_run_idx[prio] = idx;
-                HIVE_LOG_TRACE("Scheduler: Found runnable actor %u (prio=%d)", a->id, prio);
+                HIVE_LOG_TRACE("Scheduler: Found runnable actor %u (prio=%d)",
+                               a->id, prio);
                 return a;
             }
         }
@@ -155,7 +160,8 @@ hive_status hive_scheduler_run_until_blocked(void) {
 
     // Run actors until all are blocked (WAITING) or dead
     while (!g_scheduler.shutdown_requested && table->num_actors > 0) {
-        // Poll for I/O events (non-blocking) - handles timerfd events in real-time mode
+        // Poll for I/O events (non-blocking) - handles timerfd events in
+        // real-time mode
         dispatch_epoll_events(0);
 
         // Find next ready actor

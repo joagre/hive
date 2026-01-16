@@ -14,7 +14,7 @@ typedef struct arena_block {
 
 typedef struct {
     uint8_t *base;
-    size_t   total_size;
+    size_t total_size;
     arena_block *free_list;
 } stack_arena;
 
@@ -23,7 +23,8 @@ typedef struct {
 #define MIN_BLOCK_SIZE 64
 
 // Static arena storage (16-byte aligned)
-static uint8_t g_stack_arena_memory[HIVE_STACK_ARENA_SIZE] __attribute__((aligned(16)));
+static uint8_t g_stack_arena_memory[HIVE_STACK_ARENA_SIZE]
+    __attribute__((aligned(16)));
 static stack_arena g_stack_arena = {0};
 
 // Static actor storage
@@ -64,7 +65,9 @@ static void *arena_alloc(size_t size) {
             // Check if we should split the block
             if (remaining >= sizeof(arena_block) + MIN_BLOCK_SIZE) {
                 // Split: allocate from beginning, create new free block
-                arena_block *new_block = (arena_block *)((uint8_t *)curr + sizeof(arena_block) + size);
+                arena_block *new_block =
+                    (arena_block *)((uint8_t *)curr + sizeof(arena_block) +
+                                    size);
                 new_block->size = remaining - sizeof(arena_block);
                 new_block->next = curr->next;
                 *prev_ptr = new_block;
@@ -113,7 +116,8 @@ static void arena_free(void *ptr) {
 
     // Coalesce with previous block if adjacent
     if (prev_block != NULL) {
-        uint8_t *prev_end = (uint8_t *)prev_block + sizeof(arena_block) + prev_block->size;
+        uint8_t *prev_end =
+            (uint8_t *)prev_block + sizeof(arena_block) + prev_block->size;
         if (prev_end == (uint8_t *)block) {
             // Merge with previous
             prev_block->size += sizeof(arena_block) + block->size;
@@ -124,7 +128,8 @@ static void arena_free(void *ptr) {
 
     // Coalesce with next block if adjacent
     if (block->next != NULL) {
-        uint8_t *block_end = (uint8_t *)block + sizeof(arena_block) + block->size;
+        uint8_t *block_end =
+            (uint8_t *)block + sizeof(arena_block) + block->size;
         if (block_end == (uint8_t *)block->next) {
             // Merge with next
             arena_block *next = block->next;
@@ -161,7 +166,8 @@ void hive_actor_cleanup(void) {
                 hive_ipc_mailbox_clear(&a->mailbox);
             }
         }
-        // Note: g_actor_table.actors points to static g_actors array, so no free() needed
+        // Note: g_actor_table.actors points to static g_actors array, so no
+        // free() needed
         g_actor_table.actors = NULL;
     }
 }
@@ -201,7 +207,8 @@ actor *hive_actor_alloc(actor_fn fn, void *arg, const actor_config *cfg) {
     }
 
     // Determine stack size
-    size_t stack_size = cfg->stack_size > 0 ? cfg->stack_size : HIVE_DEFAULT_STACK_SIZE;
+    size_t stack_size =
+        cfg->stack_size > 0 ? cfg->stack_size : HIVE_DEFAULT_STACK_SIZE;
 
     // Allocate stack (arena or malloc based on config)
     void *stack;
@@ -230,7 +237,7 @@ actor *hive_actor_alloc(actor_fn fn, void *arg, const actor_config *cfg) {
     a->name = cfg->name;
     a->stack = stack;
     a->stack_size = stack_size;
-    a->stack_is_malloced = is_malloced;  // Track allocation method
+    a->stack_is_malloced = is_malloced; // Track allocation method
 
     // Initialize receive filters to wildcards (accept any message)
     a->recv_filter_sender = HIVE_SENDER_ANY;
