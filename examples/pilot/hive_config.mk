@@ -9,16 +9,16 @@
 # Platform-specific settings (stack sizes, flash layout) remain
 # in the individual Makefiles.
 
-# Pilot uses 9 actors, 7 buses - add small headroom
-HIVE_CFLAGS += -DHIVE_MAX_ACTORS=10
+# Pilot uses 10 actors (9 children + 1 supervisor), 7 buses - add small headroom
+HIVE_CFLAGS += -DHIVE_MAX_ACTORS=12
 HIVE_CFLAGS += -DHIVE_MAX_BUSES=8
 
 # IPC pool sizes - sized for pilot's messaging patterns
 HIVE_CFLAGS += -DHIVE_MAILBOX_ENTRY_POOL_SIZE=16
 HIVE_CFLAGS += -DHIVE_MESSAGE_DATA_POOL_SIZE=32
 HIVE_CFLAGS += -DHIVE_LINK_ENTRY_POOL_SIZE=8
-HIVE_CFLAGS += -DHIVE_MONITOR_ENTRY_POOL_SIZE=8
-HIVE_CFLAGS += -DHIVE_TIMER_ENTRY_POOL_SIZE=4
+HIVE_CFLAGS += -DHIVE_MONITOR_ENTRY_POOL_SIZE=12  # Supervisor monitors 9 children
+HIVE_CFLAGS += -DHIVE_TIMER_ENTRY_POOL_SIZE=8     # flight_manager uses 3 timers
 
 # Bus configuration
 HIVE_CFLAGS += -DHIVE_MAX_BUS_SUBSCRIBERS=6

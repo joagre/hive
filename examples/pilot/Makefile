@@ -54,7 +54,7 @@ CFLAGS += -DHIVE_LOG_LEVEL=HIVE_LOG_LEVEL_INFO
 include hive_config.mk
 CFLAGS += $(HIVE_CFLAGS)
 CFLAGS += -DHIVE_DEFAULT_STACK_SIZE=4096
-CFLAGS += '-DHIVE_STACK_ARENA_SIZE=(40*1024)'
+CFLAGS += '-DHIVE_STACK_ARENA_SIZE=(48*1024)'  # 10 actors × 4KB + block headers
 
 LDFLAGS = -L$(WEBOTS_LIB) -L$(BUILD_DIR)
 LDLIBS = -lController -lm
@@ -76,7 +76,7 @@ PILOT_SRCS = pilot.c pid.c $(ACTOR_SRCS) $(HAL_SRCS) $(FUSION_SRCS)
 
 # Hive runtime (Linux x86-64 platform)
 HIVE_CORE_SRCS = hive_actor.c hive_bus.c hive_context.c hive_ipc.c \
-                 hive_link.c hive_log.c hive_pool.c hive_runtime.c \
+                 hive_link.c hive_log.c hive_pool.c hive_runtime.c hive_supervisor.c \
                  hive_scheduler_linux.c hive_timer_linux.c hive_net.c hive_file_linux.c
 HIVE_ASM = hive_context_x86_64.S
 

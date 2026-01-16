@@ -23,7 +23,7 @@ Man pages available:
 - `hive_spawn(3)` - Actor lifecycle, priority, stack allocation
 - `hive_ipc(3)` - Message passing, request/reply, selective receive
 - `hive_link(3)` - Linking and monitoring for death notifications
-- `hive_supervisor(3)` - Erlang-style supervision (restart strategies, child specs)
+- `hive_supervisor(3)` - Supervision (restart strategies, child specs)
 - `hive_timer(3)` - One-shot and periodic timers
 - `hive_bus(3)` - Publish-subscribe bus
 - `hive_net(3)` - Non-blocking TCP network I/O
@@ -79,10 +79,14 @@ The runtime consists of:
    - Dual output: console (stderr) + binary file
    - Platform defaults: Linux (stdout + file), STM32 (file only, disabled by default)
    - File logging managed by application (open/sync/close lifecycle)
-9. **Supervisor**: Erlang-style supervision for automatic child restart
+9. **Supervisor**: Supervision for automatic child restart
    - Restart strategies: one_for_one, one_for_all, rest_for_one
    - Child restart types: permanent, transient, temporary
    - Restart intensity limiting (max restarts within time period)
+10. **Name Registry**: Actor naming (`hive_register`, `hive_whereis`, `hive_unregister`)
+    - Actors register with symbolic names, others look up by name
+    - Names auto-cleaned on actor exit
+    - Use with supervisors: `whereis()` returns fresh actor ID after restart
 
 ## Key Concepts
 
@@ -246,6 +250,7 @@ The runtime uses **compile-time configuration** for deterministic memory allocat
 - `HIVE_DEFAULT_STACK_SIZE`: Default actor stack size (65536)
 - `HIVE_MAX_SUPERVISORS`: Maximum concurrent supervisors (8)
 - `HIVE_MAX_SUPERVISOR_CHILDREN`: Maximum children per supervisor (16)
+- `HIVE_MAX_REGISTERED_NAMES`: Maximum registered actor names (32)
 
 **Logging Configuration** (also in `hive_static_config.h`):
 - `HIVE_LOG_LEVEL`: Minimum log level to compile (default: INFO on Linux, NONE on STM32)

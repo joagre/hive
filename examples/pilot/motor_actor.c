@@ -4,6 +4,9 @@
 // The HAL handles mixing (converting torque to individual motor commands).
 // Checks for STOP notification from flight manager (best-effort - only checked
 // when torque commands arrive, won't interrupt blocking bus read).
+//
+// Uses name registry:
+// - Registers self as "motor"
 
 #include "motor_actor.h"
 #include "notifications.h"
@@ -24,7 +27,11 @@ void motor_actor_init(bus_id torque_bus) {
 void motor_actor(void *arg) {
     (void)arg;
 
-    hive_status status = hive_bus_subscribe(s_torque_bus);
+    // Register self with name registry
+    hive_status status = hive_register("motor");
+    assert(HIVE_SUCCEEDED(status));
+
+    status = hive_bus_subscribe(s_torque_bus);
     assert(HIVE_SUCCEEDED(status));
 
     bool stopped = false;

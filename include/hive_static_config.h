@@ -181,6 +181,16 @@
 #endif
 
 // -----------------------------------------------------------------------------
+// Name Registry Configuration
+// -----------------------------------------------------------------------------
+
+// Maximum number of registered actor names
+// Used by hive_register(), hive_whereis(), hive_unregister()
+#ifndef HIVE_MAX_REGISTERED_NAMES
+#define HIVE_MAX_REGISTERED_NAMES 32
+#endif
+
+// -----------------------------------------------------------------------------
 // Logging Configuration
 // -----------------------------------------------------------------------------
 

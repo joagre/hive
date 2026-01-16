@@ -717,6 +717,60 @@ if (hive_is_exit_msg(&msg)) {
 }
 ```
 
+### Name Registry
+
+Actor naming. Actors can register themselves with a symbolic name, and other actors can look up actor IDs by name. Names are automatically unregistered when the actor exits.
+
+```c
+// Register calling actor with a name (must be unique)
+hive_status hive_register(const char *name);
+
+// Look up actor ID by name
+hive_status hive_whereis(const char *name, actor_id *out);
+
+// Unregister a name (also automatic on actor exit)
+hive_status hive_unregister(const char *name);
+```
+
+**Behavior:**
+
+- `hive_register(name)`: Associates the calling actor with `name`. The name must be unique. The name string must remain valid for the lifetime of the registration (typically a string literal). Returns `HIVE_ERR_INVALID` if name is NULL or already registered. Returns `HIVE_ERR_NOMEM` if registry is full (`HIVE_MAX_REGISTERED_NAMES`).
+
+- `hive_whereis(name, out)`: Looks up an actor ID by name. Returns `HIVE_ERR_INVALID` if name is NULL or not found. If the named actor has exited and re-registered (e.g., after supervisor restart), returns the new actor ID.
+
+- `hive_unregister(name)`: Removes a name registration. Only the owning actor can unregister its own names. Returns `HIVE_ERR_INVALID` if name is NULL, not found, or not owned by caller. Rarely needed since names are automatically unregistered on actor exit.
+
+**Implementation:**
+
+- Static table of `(name, actor_id)` pairs (`HIVE_MAX_REGISTERED_NAMES` = 32 default)
+- Linear scan for lookups (O(n), suitable for small registries)
+- Names are pointers to user-provided strings (not copied)
+- Auto-cleanup in `hive_actor_free()` removes all entries for the exiting actor
+
+**Use with supervisors:**
+
+When actors are restarted by a supervisor, they should call `hive_register()` with the same name. Actors that need to communicate with them should call `hive_whereis()` each time they need to send a message, rather than caching the actor ID at startup. This ensures they get the current actor ID even after restarts.
+
+```c
+// Service actor that registers itself
+void database_service(void *arg) {
+    hive_register("database");
+    while (1) {
+        hive_message msg;
+        hive_ipc_recv(&msg, -1);
+        // Handle database requests...
+    }
+}
+
+// Client actor that uses whereis (called on each send)
+void send_query(const char *query) {
+    actor_id db;
+    if (HIVE_SUCCEEDED(hive_whereis("database", &db))) {
+        hive_ipc_notify(db, 0, query, strlen(query) + 1);
+    }
+}
+```
+
 ## IPC API
 
 Inter-process communication via mailboxes. Each actor has one mailbox. All messages are asynchronous (sender doesn't wait for response). Request/reply is built on top using message tags for correlation.
@@ -1679,7 +1733,7 @@ Feature | Timer API | IPC/File/Network API
 
 ## Supervisor API
 
-Erlang-style supervision for automatic child actor restart. A supervisor is an actor that monitors children and restarts them according to configurable policies.
+Supervision for automatic child actor restart. A supervisor is an actor that monitors children and restarts them according to configurable policies.
 
 ```c
 #include "hive_supervisor.h"

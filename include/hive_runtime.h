@@ -59,4 +59,27 @@ bool hive_actor_alive(actor_id id);
 // Returns HIVE_ERR_INVALID if target is self or invalid.
 hive_status hive_kill(actor_id target);
 
+// ============================================================================
+// Name Registry API
+// ============================================================================
+// Actor naming. Actors can register themselves with a name, and other actors
+// can look up the actor ID by name using whereis(). Names are automatically
+// unregistered when the actor exits.
+
+// Register the calling actor with a name (must be unique)
+// The name string must remain valid for the lifetime of the registration
+// (typically a string literal or static buffer).
+// Returns HIVE_ERR_INVALID if name is NULL or already registered.
+// Returns HIVE_ERR_NOMEM if registry is full.
+hive_status hive_register(const char *name);
+
+// Look up an actor ID by name
+// Returns HIVE_ERR_INVALID if name is NULL or not found.
+hive_status hive_whereis(const char *name, actor_id *out);
+
+// Unregister a name (also happens automatically on actor exit)
+// Only the owning actor can unregister its own name.
+// Returns HIVE_ERR_INVALID if name is NULL, not found, or not owned by caller.
+hive_status hive_unregister(const char *name);
+
 #endif // HIVE_RUNTIME_H

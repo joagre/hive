@@ -5,6 +5,10 @@
 //
 // Landing is triggered by NOTIFY_LANDING message. When complete,
 // sends NOTIFY_FLIGHT_LANDED to flight manager.
+//
+// Uses name registry:
+// - Registers self as "altitude"
+// - Uses whereis() to find "flight_manager"
 
 #include "altitude_actor.h"
 #include "notifications.h"
@@ -24,15 +28,12 @@
 static bus_id s_state_bus;
 static bus_id s_thrust_bus;
 static bus_id s_position_target_bus;
-static actor_id s_flight_manager;
 
 void altitude_actor_init(bus_id state_bus, bus_id thrust_bus,
-                         bus_id position_target_bus,
-                         actor_id flight_manager_actor) {
+                         bus_id position_target_bus) {
     s_state_bus = state_bus;
     s_thrust_bus = thrust_bus;
     s_position_target_bus = position_target_bus;
-    s_flight_manager = flight_manager_actor;
 }
 
 // Thrust ramp duration for gentle takeoff (microseconds)
@@ -45,7 +46,11 @@ void altitude_actor_init(bus_id state_bus, bus_id thrust_bus,
 void altitude_actor(void *arg) {
     (void)arg;
 
-    hive_status status = hive_bus_subscribe(s_state_bus);
+    // Register self with name registry
+    hive_status status = hive_register("altitude");
+    assert(HIVE_SUCCEEDED(status));
+
+    status = hive_bus_subscribe(s_state_bus);
     assert(HIVE_SUCCEEDED(status));
     status = hive_bus_subscribe(s_position_target_bus);
     assert(HIVE_SUCCEEDED(status));
@@ -116,8 +121,12 @@ void altitude_actor(void *arg) {
             if (touchdown && !landed) {
                 landed = true;
                 HIVE_LOG_INFO("[ALT] Touchdown - notifying flight manager");
-                hive_ipc_notify(s_flight_manager, NOTIFY_FLIGHT_LANDED, NULL,
-                                0);
+
+                // Look up flight manager and notify
+                actor_id fm;
+                status = hive_whereis("flight_manager", &fm);
+                assert(HIVE_SUCCEEDED(status));
+                hive_ipc_notify(fm, NOTIFY_FLIGHT_LANDED, NULL, 0);
             }
         } else if (landing_mode) {
             // Landing mode: control descent rate, not altitude

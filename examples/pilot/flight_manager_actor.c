@@ -9,6 +9,10 @@
 // 6. Send LANDING to altitude actor
 // 7. Wait for LANDED, then send STOP to motor actor
 // 8. Close log file (DISARM phase)
+//
+// Uses name registry:
+// - Registers self as "flight_manager"
+// - Uses whereis() to find "waypoint", "altitude", "motor"
 
 #include "flight_manager_actor.h"
 #include "notifications.h"
@@ -18,6 +22,7 @@
 #include "hive_timer.h"
 #include "hive_log.h"
 #include "hive_static_config.h"
+#include <assert.h>
 
 // Flight duration per profile (flight manager decides when to land)
 #if FLIGHT_PROFILE == FLIGHT_PROFILE_FIRST_TEST
@@ -33,19 +38,16 @@
 // Log sync interval (4 seconds)
 #define LOG_SYNC_INTERVAL_US (4 * 1000000)
 
-static actor_id s_waypoint_actor;
-static actor_id s_altitude_actor;
-static actor_id s_motor_actor;
-
-void flight_manager_actor_init(actor_id waypoint_actor, actor_id altitude_actor,
-                               actor_id motor_actor) {
-    s_waypoint_actor = waypoint_actor;
-    s_altitude_actor = altitude_actor;
-    s_motor_actor = motor_actor;
+void flight_manager_actor_init(void) {
+    // No initialization needed - targets looked up via whereis()
 }
 
 void flight_manager_actor(void *arg) {
     (void)arg;
+
+    // Register self with name registry
+    hive_status status = hive_register("flight_manager");
+    assert(HIVE_SUCCEEDED(status));
 
 #ifndef SIMULATED_TIME
     // Real hardware: wait for startup delay before allowing flight
@@ -62,7 +64,7 @@ void flight_manager_actor(void *arg) {
 
     HIVE_LOG_INFO("[FLM] Startup delay complete");
 #else
-    // Simulation: no delay needed
+    // Simulation: flight_manager spawns last, so all targets already registered
     HIVE_LOG_INFO("[FLM] Simulation mode");
 #endif
 
@@ -82,9 +84,13 @@ void flight_manager_actor(void *arg) {
     hive_timer_every(LOG_SYNC_INTERVAL_US, &sync_timer);
 
     // === FLIGHT PHASE ===
-    // Notify waypoint actor to begin flight sequence
+    // Look up waypoint actor and notify to begin flight sequence
+    actor_id waypoint;
+    status = hive_whereis("waypoint", &waypoint);
+    assert(HIVE_SUCCEEDED(status));
+
     HIVE_LOG_INFO("[FLM] Sending START - flight authorized");
-    hive_ipc_notify(s_waypoint_actor, NOTIFY_FLIGHT_START, NULL, 0);
+    hive_ipc_notify(waypoint, NOTIFY_FLIGHT_START, NULL, 0);
 
     // Flight duration timer, then initiate controlled landing
     HIVE_LOG_INFO("[FLM] Flight duration: %.0f seconds",
@@ -110,7 +116,12 @@ void flight_manager_actor(void *arg) {
     }
 
     HIVE_LOG_INFO("[FLM] Flight duration complete - initiating landing");
-    hive_ipc_notify(s_altitude_actor, NOTIFY_LANDING, NULL, 0);
+
+    // Look up altitude actor and notify to begin landing
+    actor_id altitude;
+    status = hive_whereis("altitude", &altitude);
+    assert(HIVE_SUCCEEDED(status));
+    hive_ipc_notify(altitude, NOTIFY_LANDING, NULL, 0);
 
     // Wait for LANDED notification (keep syncing logs while waiting)
     bool landed = false;
@@ -128,8 +139,11 @@ void flight_manager_actor(void *arg) {
 
     HIVE_LOG_INFO("[FLM] Landing confirmed - stopping motors");
 
-    // Send STOP to motor actor
-    hive_ipc_notify(s_motor_actor, NOTIFY_FLIGHT_STOP, NULL, 0);
+    // Look up motor actor and send STOP
+    actor_id motor;
+    status = hive_whereis("motor", &motor);
+    assert(HIVE_SUCCEEDED(status));
+    hive_ipc_notify(motor, NOTIFY_FLIGHT_STOP, NULL, 0);
 
     // === DISARM PHASE: Close log file ===
     hive_timer_cancel(sync_timer);

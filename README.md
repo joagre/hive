@@ -33,7 +33,7 @@ man hive_timer     # Timers
 man hive_bus       # Pub-sub bus
 man hive_net       # Network I/O
 man hive_file       # File I/O
-man hive_supervisor # Erlang-style supervision
+man hive_supervisor # Supervision
 man hive_types      # Types and compile-time configuration
 
 # View without installing
@@ -50,7 +50,7 @@ man man/man3/hive_ipc.3
 - IPC with selective receive and request/reply
 - Message classes: NOTIFY (async), REQUEST/REPLY, TIMER, EXIT
 - Actor linking and monitoring (bidirectional links, unidirectional monitors)
-- Erlang-style supervision (restart strategies, intensity limiting, child specs)
+- Supervision (restart strategies, intensity limiting, child specs)
 - Exit notifications with exit reasons (normal, crash, stack overflow, killed)
 - Timers (one-shot and periodic with timerfd/epoll)
 - Network I/O (non-blocking TCP via event loop)
@@ -64,17 +64,16 @@ man man/man3/hive_ipc.3
 
 | Aspect | Hive | QP/C |
 |--------|------|------|
-| **Core Model** | Erlang-style actors with mailboxes | Active Objects + Hierarchical State Machines |
+| **Core Model** | Actors with mailboxes | Active Objects + Hierarchical State Machines |
 | **State Management** | Implicit (actor code) | Explicit UML statecharts |
-| **Inspiration** | Erlang/OTP | UML/ROOM methodology |
 | **Message Handling** | Selective receive with pattern matching | Event dispatch to state handlers |
 | **Blocking** | Actors can block on receive with timeout | Run-to-completion (no blocking in handlers) |
-| **Supervision** | Erlang-style supervisors (restart strategies, intensity) | Less emphasis on fault supervision |
+| **Supervision** | Supervisors (restart strategies, intensity) | Less emphasis on fault supervision |
 | **Error Philosophy** | "Let it crash" + restart | Defensive, state machine guards |
 | **API Style** | Minimalist C functions | Object-oriented C macros |
-| **Learning Curve** | Lower (if familiar with actors/Erlang) | Steeper (requires statechart knowledge) |
+| **Learning Curve** | Lower (if familiar with actors) | Steeper (requires statechart knowledge) |
 
-**Choose Hive if:** You prefer message-passing with blocking receive, want Erlang-style supervision, or find state machines overkill for your use case.
+**Choose Hive if:** You prefer message-passing with blocking receive, want fault-tolerant supervision, or find state machines overkill for your use case.
 
 **Choose QP/C if:** You need formal state machine modeling, want UML tooling integration, or require safety certification with established track record.
 
@@ -142,7 +141,7 @@ All structures are statically allocated. Actor stacks use a static arena allocat
 # Actor linking example (bidirectional links)
 ./build/link_demo
 
-# Erlang-style supervisor (auto-restart workers)
+# Supervisor (auto-restart workers)
 ./build/supervisor
 
 # File I/O example
@@ -326,7 +325,7 @@ if (hive_is_exit_msg(&msg)) {
 }
 ```
 
-### Supervision (Erlang-style)
+### Supervision
 
 ```c
 #include "hive_supervisor.h"
@@ -404,6 +403,12 @@ hive_supervisor_stop(supervisor);
 - `hive_exit()` - Terminate current actor
 - `hive_self()` - Get current actor's ID
 - `hive_yield()` - Voluntarily yield to scheduler
+
+### Name Registry
+
+- `hive_register(name)` - Register calling actor with a name (must be unique)
+- `hive_whereis(name, out)` - Look up actor ID by name
+- `hive_unregister(name)` - Unregister a name (auto on actor exit)
 
 ### IPC
 

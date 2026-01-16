@@ -9,15 +9,18 @@
 // 6. Send LANDING to altitude actor
 // 7. Wait for LANDED, then send STOP to motor actor
 // 8. Close log file (DISARM phase)
+//
+// Uses name registry:
+// - Registers self as "flight_manager"
+// - Uses whereis() to find "waypoint", "altitude", "motor"
 
 #ifndef FLIGHT_MANAGER_ACTOR_H
 #define FLIGHT_MANAGER_ACTOR_H
 
 #include "hive_actor.h"
 
-// Initialize flight manager with actor IDs to coordinate
-void flight_manager_actor_init(actor_id waypoint_actor, actor_id altitude_actor,
-                               actor_id motor_actor);
+// Initialize flight manager (no parameters - uses whereis for targets)
+void flight_manager_actor_init(void);
 
 // Flight manager actor entry point
 void flight_manager_actor(void *arg);

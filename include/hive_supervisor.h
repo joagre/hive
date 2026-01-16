@@ -5,11 +5,11 @@
 #include "hive_static_config.h"
 
 // =============================================================================
-// Erlang-Style Supervisor for Hive
+// Supervisor for Hive
 // =============================================================================
 //
 // A supervisor is an actor that monitors child actors and restarts them
-// according to configurable policies. Inspired by Erlang/OTP supervisors.
+// according to configurable policies.
 //
 // Key concepts:
 // - Restart strategies: one_for_one, one_for_all, rest_for_one

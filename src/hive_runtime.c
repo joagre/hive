@@ -6,6 +6,19 @@
 #include "hive_log.h"
 #include "hive_static_config.h"
 #include <stdlib.h>
+#include <string.h>
+
+// =============================================================================
+// Name Registry
+// =============================================================================
+
+typedef struct {
+    const char *name; // Points to user-provided string (must remain valid)
+    actor_id actor;
+} registry_entry_t;
+
+static registry_entry_t s_registry[HIVE_MAX_REGISTERED_NAMES];
+static size_t s_registry_count = 0;
 
 hive_status hive_init(void) {
     // Initialize actor subsystem
@@ -239,4 +252,103 @@ hive_status hive_kill(actor_id target) {
     hive_actor_free(a);
 
     return HIVE_SUCCESS;
+}
+
+// =============================================================================
+// Name Registry Implementation
+// =============================================================================
+
+hive_status hive_register(const char *name) {
+    if (!name) {
+        return HIVE_ERROR(HIVE_ERR_INVALID, "NULL name");
+    }
+
+    actor *current = hive_actor_current();
+    if (!current) {
+        return HIVE_ERROR(HIVE_ERR_INVALID, "Not called from actor context");
+    }
+
+    // Check for duplicate name
+    for (size_t i = 0; i < s_registry_count; i++) {
+        if (strcmp(s_registry[i].name, name) == 0) {
+            return HIVE_ERROR(HIVE_ERR_INVALID, "Name already registered");
+        }
+    }
+
+    // Check for space
+    if (s_registry_count >= HIVE_MAX_REGISTERED_NAMES) {
+        return HIVE_ERROR(HIVE_ERR_NOMEM, "Registry full");
+    }
+
+    // Add entry
+    s_registry[s_registry_count].name = name;
+    s_registry[s_registry_count].actor = current->id;
+    s_registry_count++;
+
+    HIVE_LOG_DEBUG("Registered actor %u as '%s'", current->id, name);
+
+    return HIVE_SUCCESS;
+}
+
+hive_status hive_whereis(const char *name, actor_id *out) {
+    if (!name) {
+        return HIVE_ERROR(HIVE_ERR_INVALID, "NULL name");
+    }
+    if (!out) {
+        return HIVE_ERROR(HIVE_ERR_INVALID, "NULL output pointer");
+    }
+
+    for (size_t i = 0; i < s_registry_count; i++) {
+        if (strcmp(s_registry[i].name, name) == 0) {
+            *out = s_registry[i].actor;
+            return HIVE_SUCCESS;
+        }
+    }
+
+    return HIVE_ERROR(HIVE_ERR_INVALID, "Name not found");
+}
+
+hive_status hive_unregister(const char *name) {
+    if (!name) {
+        return HIVE_ERROR(HIVE_ERR_INVALID, "NULL name");
+    }
+
+    actor *current = hive_actor_current();
+    if (!current) {
+        return HIVE_ERROR(HIVE_ERR_INVALID, "Not called from actor context");
+    }
+
+    for (size_t i = 0; i < s_registry_count; i++) {
+        if (strcmp(s_registry[i].name, name) == 0) {
+            // Check ownership
+            if (s_registry[i].actor != current->id) {
+                return HIVE_ERROR(HIVE_ERR_INVALID,
+                                  "Name not owned by calling actor");
+            }
+
+            HIVE_LOG_DEBUG("Unregistered '%s' (was actor %u)", name,
+                           current->id);
+
+            // Remove by swapping with last entry
+            s_registry[i] = s_registry[s_registry_count - 1];
+            s_registry_count--;
+            return HIVE_SUCCESS;
+        }
+    }
+
+    return HIVE_ERROR(HIVE_ERR_INVALID, "Name not found");
+}
+
+// Called by hive_actor_free() to clean up registry entries for dying actor
+void hive_registry_cleanup_actor(actor_id id) {
+    // Remove all entries for this actor (scan backwards to allow removal)
+    for (size_t i = s_registry_count; i > 0; i--) {
+        if (s_registry[i - 1].actor == id) {
+            HIVE_LOG_DEBUG("Auto-unregistered '%s' (actor %u exiting)",
+                           s_registry[i - 1].name, id);
+            // Remove by swapping with last entry
+            s_registry[i - 1] = s_registry[s_registry_count - 1];
+            s_registry_count--;
+        }
+    }
 }

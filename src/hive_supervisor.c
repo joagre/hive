@@ -159,6 +159,8 @@ static hive_status spawn_child(supervisor_state *sup, size_t index) {
     hive_status status =
         hive_spawn_ex(spec->fn, arg, &spec->actor_cfg, &state->id);
     if (HIVE_FAILED(status)) {
+        HIVE_LOG_ERROR("[SUP] Failed to spawn child \"%s\": %s", spec->id,
+                       HIVE_ERR_STR(status));
         return status;
     }
 
@@ -166,10 +168,14 @@ static hive_status spawn_child(supervisor_state *sup, size_t index) {
     status = hive_monitor(state->id, &state->monitor_ref);
     if (HIVE_FAILED(status)) {
         // Child spawned but monitor failed - child will run but we won't track it
+        HIVE_LOG_ERROR("[SUP] Failed to monitor child \"%s\": %s", spec->id,
+                       HIVE_ERR_STR(status));
         state->running = true;
         return status;
     }
 
+    HIVE_LOG_DEBUG("[SUP] Child \"%s\" spawned (actor %u)", spec->id,
+                   state->id);
     state->running = true;
     return HIVE_SUCCESS;
 }
@@ -315,6 +321,9 @@ static hive_status handle_child_exit(supervisor_state *sup, actor_id child,
         return HIVE_SUCCESS;
     }
 
+    HIVE_LOG_WARN("[SUP] Child \"%s\" exited (%s)", sup->children[index].id,
+                  hive_exit_reason_str(reason));
+
     switch (sup->strategy) {
     case HIVE_STRATEGY_ONE_FOR_ONE:
         return restart_one_for_one(sup, index, reason);
@@ -334,11 +343,15 @@ static hive_status handle_child_exit(supervisor_state *sup, actor_id child,
 static void supervisor_actor_fn(void *arg) {
     supervisor_state *sup = (supervisor_state *)arg;
 
+    HIVE_LOG_INFO("[SUP] Starting with %zu children (strategy: %s)",
+                  sup->num_children, hive_restart_strategy_str(sup->strategy));
+
     // Spawn all children
     for (size_t i = 0; i < sup->num_children; i++) {
         hive_status status = spawn_child(sup, i);
         if (HIVE_FAILED(status)) {
             // Failed to spawn initial child - shut down
+            HIVE_LOG_ERROR("[SUP] Startup failed - shutting down");
             if (sup->on_shutdown) {
                 sup->on_shutdown(sup->shutdown_ctx);
             }
@@ -346,6 +359,8 @@ static void supervisor_actor_fn(void *arg) {
             hive_exit();
         }
     }
+
+    HIVE_LOG_INFO("[SUP] All %zu children started", sup->num_children);
 
     // Main loop - handle messages
     bool shutdown_requested = false;
@@ -366,10 +381,12 @@ static void supervisor_actor_fn(void *arg) {
             status = handle_child_exit(sup, exit_info.actor, exit_info.reason);
             if (HIVE_FAILED(status)) {
                 // Restart intensity exceeded - shut down
+                HIVE_LOG_ERROR("[SUP] Max restarts exceeded - shutting down");
                 shutdown_requested = true;
             }
         } else if (msg.class == HIVE_MSG_NOTIFY && msg.tag == SUP_TAG_STOP) {
             // Stop request
+            HIVE_LOG_INFO("[SUP] Stop requested");
             shutdown_requested = true;
         }
     }

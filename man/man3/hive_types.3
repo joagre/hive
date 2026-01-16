@@ -284,6 +284,14 @@ Maximum concurrent supervisors.
 .TP
 .B HIVE_MAX_SUPERVISOR_CHILDREN (16)
 Maximum children per supervisor.
+.SS Name Registry Configuration
+.TP
+.B HIVE_MAX_REGISTERED_NAMES (32)
+Maximum registered actor names. Used by
+.BR hive_register (),
+.BR hive_whereis (),
+and
+.BR hive_unregister ().
 .SS Scheduler Configuration
 .TP
 .B HIVE_EPOLL_MAX_EVENTS (64)

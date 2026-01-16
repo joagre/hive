@@ -1,6 +1,6 @@
 // Supervisor Example - Using the hive_supervisor library
 //
-// Demonstrates Erlang-style supervision with automatic restart policies.
+// Demonstrates supervision with automatic restart policies.
 // Spawns worker actors that periodically crash, showing how the supervisor
 // automatically restarts them according to the configured strategy.
 

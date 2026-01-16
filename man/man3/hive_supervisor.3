@@ -1,7 +1,7 @@
 \" Man page for supervisor functions
 .TH HIVE_SUPERVISOR 3 "January 2025" "Hive 1.0" "Actor Runtime Manual"
 .SH NAME
-hive_supervisor_start, hive_supervisor_stop, hive_restart_strategy_str, hive_child_restart_str \- Erlang-style supervisor for actor management
+hive_supervisor_start, hive_supervisor_stop, hive_restart_strategy_str, hive_child_restart_str \- supervisor for actor management
 .SH SYNOPSIS
 .nf
 .B #include <hive_supervisor.h>
@@ -14,7 +14,7 @@ hive_supervisor_start, hive_supervisor_stop, hive_restart_strategy_str, hive_chi
 .BI "const char *hive_child_restart_str(hive_child_restart " restart ");"
 .fi
 .SH DESCRIPTION
-These functions implement an Erlang-style supervisor for managing child actors.
+These functions implement a supervisor for managing child actors.
 A supervisor monitors its children and automatically restarts them according to
 configurable policies when they crash.
 .SS Child Restart Types

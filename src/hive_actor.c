@@ -255,6 +255,7 @@ actor *hive_actor_alloc(actor_fn fn, void *arg, const actor_config *cfg) {
 // External cleanup functions
 extern void hive_bus_cleanup_actor(actor_id id);
 extern void hive_link_cleanup_actor(actor_id id);
+extern void hive_registry_cleanup_actor(actor_id id);
 
 void hive_actor_free(actor *a) {
     if (!a) {
@@ -266,6 +267,9 @@ void hive_actor_free(actor *a) {
 
     // Cleanup bus subscriptions
     hive_bus_cleanup_actor(a->id);
+
+    // Cleanup registry entries
+    hive_registry_cleanup_actor(a->id);
 
     // Free stack
     if (a->stack) {

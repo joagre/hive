@@ -2,8 +2,10 @@
 // Pilot example - Quadcopter waypoint navigation using actor runtime
 //
 // Demonstrates waypoint navigation for a quadcopter using the hive actor
-// runtime. Nine actors work together in a pipeline:
+// runtime. Nine actors work together in a pipeline, supervised by one
+// supervisor actor (10 actors total):
 //
+//   flight_manager  - Flight authority and safety monitoring
 //   sensor_actor    - Reads raw sensors via HAL -> sensor bus
 //   estimator_actor - Complementary filter fusion -> state bus
 //   altitude_actor  - Altitude PID -> thrust command
@@ -22,6 +24,14 @@
 //                                                         v                                     │
 //                                                   Torque Bus -> Motor <- Thrust Bus <─────────┘
 //
+// IPC coordination via name registry:
+//   flight_manager, waypoint, altitude, motor register themselves
+//   Uses hive_whereis() to look up actor IDs for IPC
+//
+// Supervision:
+//   All 9 actors are supervised with ONE_FOR_ALL strategy.
+//   If any actor crashes, all are restarted together.
+//
 // Hardware abstraction:
 //   All hardware access goes through the HAL (hal/hal.h).
 //   Supported platforms:
@@ -34,7 +44,8 @@
 #include "hive_runtime.h"
 #include "hive_bus.h"
 #include "hive_log.h"
-#include "hive_actor.h" // For HIVE_ACTOR_CONFIG_DEFAULT
+#include "hive_actor.h"
+#include "hive_supervisor.h"
 
 #include "types.h"
 #include "config.h"
@@ -50,20 +61,6 @@
 
 #include <assert.h>
 
-// ============================================================================
-// HELPER MACROS
-// ============================================================================
-
-// Spawn an actor at specified priority. Assigns result to 'id'.
-#define SPAWN_ACTOR(func, name_str, prio, id)                        \
-    do {                                                             \
-        actor_config _cfg = HIVE_ACTOR_CONFIG_DEFAULT;               \
-        _cfg.priority = (prio);                                      \
-        _cfg.name = name_str;                                        \
-        hive_status _status = hive_spawn_ex(func, NULL, &_cfg, &id); \
-        assert(HIVE_SUCCEEDED(_status));                             \
-    } while (0)
-
 // Bus configuration from HAL (platform-specific)
 #define PILOT_BUS_CONFIG HAL_BUS_CONFIG
 
@@ -78,6 +75,16 @@ static bus_id s_position_target_bus;
 static bus_id s_attitude_setpoint_bus;
 static bus_id s_rate_setpoint_bus;
 static bus_id s_torque_bus;
+
+// ============================================================================
+// SUPERVISOR CALLBACK
+// ============================================================================
+
+static void on_pipeline_shutdown(void *ctx) {
+    (void)ctx;
+    HIVE_LOG_WARN(
+        "[PILOT] Pipeline supervisor shut down - max restarts exceeded");
+}
 
 // ============================================================================
 // MAIN
@@ -104,9 +111,12 @@ int main(void) {
     assert(HIVE_SUCCEEDED(hive_bus_create(&cfg, &s_rate_setpoint_bus)));
     assert(HIVE_SUCCEEDED(hive_bus_create(&cfg, &s_torque_bus)));
 
-    // Initialize actors with bus connections
+    // Initialize actors with bus connections (no actor IDs - use name registry)
+    flight_manager_actor_init();
     sensor_actor_init(s_sensor_bus);
     estimator_actor_init(s_sensor_bus, s_state_bus);
+    waypoint_actor_init(s_state_bus, s_position_target_bus);
+    altitude_actor_init(s_state_bus, s_thrust_bus, s_position_target_bus);
     position_actor_init(s_state_bus, s_attitude_setpoint_bus,
                         s_position_target_bus);
     attitude_actor_init(s_state_bus, s_attitude_setpoint_bus,
@@ -115,60 +125,52 @@ int main(void) {
                     s_torque_bus);
     motor_actor_init(s_torque_bus);
 
-    // Spawn order matters for IPC dependencies:
-    // - Flight manager needs waypoint, altitude, and motor IDs (for START,
-    // LANDING, STOP)
-    // - Altitude needs flight manager ID (for landing complete notification)
-    //
-    // All actors use CRITICAL priority. Execution order within a tick follows
-    // spawn order (round-robin), which must match the data flow:
-    // sensor -> estimator -> waypoint -> altitude -> position -> attitude -> rate ->
-    // motor
-    //
-    // Note: Differentiated priorities (CRITICAL/HIGH/NORMAL) don't work here
-    // because priority determines execution order, not importance. Higher
-    // priority actors run first, which would break the pipeline (motor would
-    // run before controllers).
-    actor_id sensor, estimator, altitude, waypoint, position, attitude, rate,
-        motor, flight_manager;
-    SPAWN_ACTOR(sensor_actor, "sensor", HIVE_PRIORITY_CRITICAL, sensor);
-    SPAWN_ACTOR(estimator_actor, "estimator", HIVE_PRIORITY_CRITICAL,
-                estimator);
+    // clang-format off
+    // Define child specs for supervisor (9 actors)
+    // Spawn order matters: flight_manager last so its whereis() targets are registered.
+    // Control loop order: sensor -> estimator -> waypoint -> altitude ->
+    //                     position -> attitude -> rate -> motor -> flight_manager
+    hive_child_spec children[] = {
+        {.id = "sensor",        .fn = sensor_actor,         .restart = HIVE_CHILD_PERMANENT,
+         .actor_cfg = {.priority = HIVE_PRIORITY_CRITICAL, .name = "sensor"}},
+        {.id = "estimator",     .fn = estimator_actor,      .restart = HIVE_CHILD_PERMANENT,
+         .actor_cfg = {.priority = HIVE_PRIORITY_CRITICAL, .name = "estimator"}},
+        {.id = "waypoint",      .fn = waypoint_actor,       .restart = HIVE_CHILD_PERMANENT,
+         .actor_cfg = {.priority = HIVE_PRIORITY_CRITICAL, .name = "waypoint"}},
+        {.id = "altitude",      .fn = altitude_actor,       .restart = HIVE_CHILD_PERMANENT,
+         .actor_cfg = {.priority = HIVE_PRIORITY_CRITICAL, .name = "altitude"}},
+        {.id = "position",      .fn = position_actor,       .restart = HIVE_CHILD_PERMANENT,
+         .actor_cfg = {.priority = HIVE_PRIORITY_CRITICAL, .name = "position"}},
+        {.id = "attitude",      .fn = attitude_actor,       .restart = HIVE_CHILD_PERMANENT,
+         .actor_cfg = {.priority = HIVE_PRIORITY_CRITICAL, .name = "attitude"}},
+        {.id = "rate",          .fn = rate_actor,           .restart = HIVE_CHILD_PERMANENT,
+         .actor_cfg = {.priority = HIVE_PRIORITY_CRITICAL, .name = "rate"}},
+        {.id = "motor",         .fn = motor_actor,          .restart = HIVE_CHILD_PERMANENT,
+         .actor_cfg = {.priority = HIVE_PRIORITY_CRITICAL, .name = "motor"}},
+        {.id = "flight_manager",.fn = flight_manager_actor, .restart = HIVE_CHILD_PERMANENT,
+         .actor_cfg = {.priority = HIVE_PRIORITY_CRITICAL, .name = "flight_mgr"}},
+    };
+    // clang-format on
 
-    // Spawn flight manager early (waypoint and altitude IDs filled in after)
-    flight_manager_actor_init(0, 0, motor);
-    SPAWN_ACTOR(flight_manager_actor, "flight_mgr", HIVE_PRIORITY_CRITICAL,
-                flight_manager);
+    // Configure supervisor with ONE_FOR_ALL strategy:
+    // If any actor crashes, all are killed and restarted together.
+    // This ensures consistent pipeline state after recovery.
+    hive_supervisor_config sup_cfg = {
+        .strategy = HIVE_STRATEGY_ONE_FOR_ALL,
+        .max_restarts = 3,
+        .restart_period_ms = 10000,
+        .children = children,
+        .num_children = 9,
+        .on_shutdown = on_pipeline_shutdown,
+        .shutdown_ctx = NULL,
+    };
 
-    // Spawn waypoint before altitude/position (publishes position target they
-    // read)
-    waypoint_actor_init(s_state_bus, s_position_target_bus);
-    SPAWN_ACTOR(waypoint_actor, "waypoint", HIVE_PRIORITY_CRITICAL, waypoint);
+    actor_id supervisor;
+    hive_status status = hive_supervisor_start(&sup_cfg, NULL, &supervisor);
+    assert(HIVE_SUCCEEDED(status));
+    (void)supervisor;
 
-    // Spawn altitude with flight manager ID
-    altitude_actor_init(s_state_bus, s_thrust_bus, s_position_target_bus,
-                        flight_manager);
-    SPAWN_ACTOR(altitude_actor, "altitude", HIVE_PRIORITY_CRITICAL, altitude);
-
-    // Update flight manager with waypoint and altitude IDs
-    flight_manager_actor_init(waypoint, altitude, motor);
-
-    SPAWN_ACTOR(position_actor, "position", HIVE_PRIORITY_CRITICAL, position);
-    SPAWN_ACTOR(attitude_actor, "attitude", HIVE_PRIORITY_CRITICAL, attitude);
-    SPAWN_ACTOR(rate_actor, "rate", HIVE_PRIORITY_CRITICAL, rate);
-    SPAWN_ACTOR(motor_actor, "motor", HIVE_PRIORITY_CRITICAL, motor);
-
-    (void)sensor;
-    (void)estimator;
-    (void)altitude;
-    (void)waypoint;
-    (void)position;
-    (void)attitude;
-    (void)rate;
-    (void)motor;
-    (void)flight_manager;
-
-    HIVE_LOG_INFO("9 actors spawned");
+    HIVE_LOG_INFO("10 actors spawned (9 children + 1 supervisor)");
 
     // Main loop - time control differs between real-time and simulation
 #ifdef SIMULATED_TIME
