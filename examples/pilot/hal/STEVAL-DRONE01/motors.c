@@ -27,10 +27,10 @@
 //          Rear
 //
 // Channel to connector mapping:
-//   M1 (rear-left, CCW):   TIM4_CH1 (PB6) → Connector P1
-//   M2 (front-left, CW):   TIM4_CH2 (PB7) → Connector P2
-//   M3 (front-right, CCW): TIM4_CH3 (PB8) → Connector P4
-//   M4 (rear-right, CW):   TIM4_CH4 (PB9) → Connector P5
+//   M1 (rear-left, CCW):   TIM4_CH1 (PB6) -> Connector P1
+//   M2 (front-left, CW):   TIM4_CH2 (PB7) -> Connector P2
+//   M3 (front-right, CCW): TIM4_CH3 (PB8) -> Connector P4
+//   M4 (rear-right, CW):   TIM4_CH4 (PB9) -> Connector P5
 //
 // Note: Board connectors are labeled P1, P2, P4, P5 (no P3).
 // clang-format on

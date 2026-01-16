@@ -142,7 +142,7 @@ void cf_update(cf_state_t *state, const sensor_data_t *sensors, float dt) {
         // Calculate magnetic heading
         float mag_heading = atan2f(mag_y_h, mag_x_h);
 
-        // Complementary filter for yaw - handle wrap-around at ±PI
+        // Complementary filter for yaw - handle wrap-around at +/-PI
         float yaw_error = mag_heading - state->yaw;
         yaw_error = normalize_angle(yaw_error);
 
@@ -178,17 +178,17 @@ float cf_accel_roll(const float accel[3]) {
     // Roll from accelerometer:
     // roll = atan2(ay, az)
     //
-    // When level: ay = 0, az = -g → roll = 0
-    // When tilted right: ay > 0 → roll > 0
+    // When level: ay = 0, az = -g -> roll = 0
+    // When tilted right: ay > 0 -> roll > 0
     return atan2f(accel[1], accel[2]);
 }
 
 float cf_accel_pitch(const float accel[3]) {
     // Pitch from accelerometer:
-    // pitch = atan2(-ax, sqrt(ay² + az²))
+    // pitch = atan2(-ax, sqrt(ay^2 + az^2))
     //
-    // When level: ax = 0 → pitch = 0
-    // When nose up: ax < 0 → pitch > 0
+    // When level: ax = 0 -> pitch = 0
+    // When nose up: ax < 0 -> pitch > 0
     float ay_az = sqrtf(accel[1] * accel[1] + accel[2] * accel[2]);
     return atan2f(-accel[0], ay_az);
 }

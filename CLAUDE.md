@@ -51,6 +51,11 @@ Install: `make install-man` (or `sudo make install-man`)
 - Scheduler, IPC, timers, bus, network I/O, file I/O, linking/monitoring, I/O event processing
 - Hot path operations use static pools with O(1) allocation
 
+### Unicode in Comments
+
+- **Allowed**: Unicode box-drawing characters (`┌─┐│└┘├┤┬┴┼`) for diagrams (state machines, memory layouts, protocol formats)
+- **Forbidden**: Unicode in regular prose comments — use ASCII only
+
 ## Architecture
 
 The runtime is **completely single-threaded** with an event loop architecture. All actors run cooperatively in a single scheduler thread. There are no I/O worker threads.

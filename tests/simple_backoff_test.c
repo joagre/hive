@@ -62,8 +62,9 @@ void aggressive_sender_actor(void *arg) {
             failed++;
 
             if (failed == 1) {
-                printf("\nSender: ✓ Pool exhausted after %d successful sends\n",
-                       sent);
+                printf(
+                    "\nSender: [OK] Pool exhausted after %d successful sends\n",
+                    sent);
                 printf("Sender: Beginning backoff-retry pattern...\n\n");
             }
 
@@ -85,7 +86,7 @@ void aggressive_sender_actor(void *arg) {
             if (HIVE_SUCCEEDED(status)) {
                 succeeded_after_retry++;
                 if (succeeded_after_retry == 1) {
-                    printf("Sender: ✓ First retry succeeded! (pool space "
+                    printf("Sender: [OK] First retry succeeded! (pool space "
                            "became available)\n");
                 }
                 if (succeeded_after_retry % 20 == 0) {
@@ -117,7 +118,7 @@ void aggressive_sender_actor(void *arg) {
     printf("  - Succeeded after retry: %d\n", succeeded_after_retry);
 
     if (succeeded_after_retry > 0) {
-        printf("\n✓ Backoff-retry pattern WORKS!\n");
+        printf("\n[OK] Backoff-retry pattern WORKS!\n");
         printf(
             "  Pool space became available as receiver processed messages\n");
     }

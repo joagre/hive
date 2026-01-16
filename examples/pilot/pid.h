@@ -30,9 +30,9 @@ void pid_reset(pid_state_t *pid);
 //   Control output, clamped to [-output_max, +output_max]
 float pid_update(pid_state_t *pid, float setpoint, float measurement, float dt);
 
-// Update PID controller for angular quantities (handles wrap-around at ±π).
+// Update PID controller for angular quantities (handles wrap-around at +/-PI).
 //
-// Same as pid_update but normalizes error to [-π, π] range to ensure
+// Same as pid_update but normalizes error to [-PI, PI] range to ensure
 // the controller takes the shortest path around the circle.
 float pid_update_angle(pid_state_t *pid, float setpoint, float measurement,
                        float dt);

@@ -25,9 +25,9 @@ void test_timeout_actor(void *arg) {
     uint64_t elapsed = get_time_ms() - start;
 
     if (status.code == HIVE_ERR_TIMEOUT) {
-        printf("  ✓ Got timeout after %lu ms (expected ~100ms)\n", elapsed);
+        printf("  [OK] Got timeout after %lu ms (expected ~100ms)\n", elapsed);
     } else {
-        printf("  ✗ Expected timeout, got status=%d\n", status.code);
+        printf("  [FAIL] Expected timeout, got status=%d\n", status.code);
     }
 
     printf("\nTest 2: Message arrives before timeout\n");
@@ -41,10 +41,10 @@ void test_timeout_actor(void *arg) {
 
     if (HIVE_SUCCEEDED(status)) {
         int *received = (int *)msg.data;
-        printf("  ✓ Got message before timeout: %d (after %lu ms)\n", *received,
-               elapsed);
+        printf("  [OK] Got message before timeout: %d (after %lu ms)\n",
+               *received, elapsed);
     } else {
-        printf("  ✗ Expected message, got status=%d\n", status.code);
+        printf("  [FAIL] Expected message, got status=%d\n", status.code);
     }
 
     printf("\nTest 3: Backoff-retry pattern (simulated pool exhaustion)\n");
@@ -64,7 +64,7 @@ void test_timeout_actor(void *arg) {
             printf("    Got message during backoff: handling it first\n");
         }
     }
-    printf("  ✓ Backoff-retry pattern works\n");
+    printf("  [OK] Backoff-retry pattern works\n");
 
     printf("\nAll tests passed!\n");
     hive_exit();

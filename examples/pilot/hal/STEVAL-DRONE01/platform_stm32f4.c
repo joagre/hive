@@ -28,12 +28,12 @@
 #define BARO_CALIBRATION_SAMPLES 50 // Barometer calibration samples
 
 // Conversion constants
-#define GRAVITY 9.80665f // m/s²
+#define GRAVITY 9.80665f // m/s^2
 #ifndef M_PI
 #define M_PI 3.14159265358979323846f
 #endif
 #define DEG_TO_RAD (M_PI / 180.0f)
-#define MGAUSS_TO_UT 0.1f // 1 mGauss = 0.1 µT
+#define MGAUSS_TO_UT 0.1f // 1 mGauss = 0.1 uT
 
 // ----------------------------------------------------------------------------
 // Static State
@@ -217,10 +217,10 @@ void platform_read_sensors(sensor_data_t *sensors) {
     SensorAxes_t axes;
 
     // -------------------------------------------------------------------------
-    // Accelerometer (BSP returns mg, convert to m/s²)
+    // Accelerometer (BSP returns mg, convert to m/s^2)
     // -------------------------------------------------------------------------
     if (BSP_ACCELERO_Get_Axes(s_accel_handle, &axes) == COMPONENT_OK) {
-        // mg to m/s²: divide by 1000 to get g, multiply by 9.81
+        // mg to m/s^2: divide by 1000 to get g, multiply by 9.81
         sensors->accel[0] = (float)axes.AXIS_X * 0.001f * GRAVITY;
         sensors->accel[1] = (float)axes.AXIS_Y * 0.001f * GRAVITY;
         sensors->accel[2] = (float)axes.AXIS_Z * 0.001f * GRAVITY;
@@ -240,10 +240,10 @@ void platform_read_sensors(sensor_data_t *sensors) {
     }
 
     // -------------------------------------------------------------------------
-    // Magnetometer (BSP returns mGauss, convert to µT)
+    // Magnetometer (BSP returns mGauss, convert to uT)
     // -------------------------------------------------------------------------
     if (BSP_MAGNETO_Get_Axes(s_mag_handle, &axes) == COMPONENT_OK) {
-        // mGauss to µT: 1 Gauss = 100 µT, so 1 mGauss = 0.1 µT
+        // mGauss to uT: 1 Gauss = 100 uT, so 1 mGauss = 0.1 uT
         sensors->mag[0] = (float)axes.AXIS_X * MGAUSS_TO_UT;
         sensors->mag[1] = (float)axes.AXIS_Y * MGAUSS_TO_UT;
         sensors->mag[2] = (float)axes.AXIS_Z * MGAUSS_TO_UT;

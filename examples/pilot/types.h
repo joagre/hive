@@ -15,13 +15,13 @@
 // HAL populates this from hardware sensors (IMU, GPS, barometer).
 // Fusion is done in estimator_actor using the complementary filter.
 typedef struct sensor_data {
-    // Accelerometer (m/s², body frame)
+    // Accelerometer (m/s^2, body frame)
     float accel[3]; // [x, y, z]
 
     // Gyroscope (rad/s, body frame)
     float gyro[3]; // [x, y, z]
 
-    // Magnetometer (µT, body frame) - optional
+    // Magnetometer (uT, body frame) - optional
     float mag[3];   // [x, y, z]
     bool mag_valid; // false if not available
 

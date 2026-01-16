@@ -41,13 +41,13 @@
 #define ACCEL_NOISE_STDDEV 0.0f
 #define GYRO_NOISE_STDDEV 0.0f
 #elif SENSOR_NOISE == 1
-#define ACCEL_NOISE_STDDEV 0.01f  // Low - m/s² (~0.1% of gravity)
+#define ACCEL_NOISE_STDDEV 0.01f  // Low - m/s^2 (~0.1% of gravity)
 #define GYRO_NOISE_STDDEV 0.0005f // Low - rad/s (~0.03 deg/s)
 #else
 // Realistic MEMS IMU noise (MPU6050/BMI088 class)
-// Accel: ~150 µg/√Hz at 125Hz BW → 0.016 m/s²
-// Gyro:  ~0.007 °/s/√Hz at 125Hz BW → 0.0014 rad/s
-#define ACCEL_NOISE_STDDEV 0.02f // Realistic - m/s² (~0.2% of gravity)
+// Accel: ~150 ug/sqrt(Hz) at 125Hz BW -> 0.016 m/s^2
+// Gyro:  ~0.007 deg/s/sqrt(Hz) at 125Hz BW -> 0.0014 rad/s
+#define ACCEL_NOISE_STDDEV 0.02f // Realistic - m/s^2 (~0.2% of gravity)
 #define GYRO_NOISE_STDDEV 0.001f // Realistic - rad/s (~0.06 deg/s)
 #endif
 #define GYRO_BIAS_DRIFT 0.0f // rad/s per step (0 = disabled)

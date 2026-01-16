@@ -4,8 +4,8 @@
 // publishes attitude setpoints for the attitude actor to track.
 //
 // Sign conventions:
-//   Internal: Positive error → positive command → accelerate toward target
-//   Aerospace: Positive pitch (nose up) → -X accel, positive roll → -Y accel
+//   Internal: Positive error -> positive command -> accelerate toward target
+//   Aerospace: Positive pitch (nose up) -> -X accel, positive roll -> -Y accel
 //
 // Roll is negated when publishing to convert from internal to aerospace.
 
@@ -79,7 +79,7 @@ void position_actor(void *arg) {
         roll_cmd = CLAMPF(roll_cmd, -MAX_TILT_ANGLE, MAX_TILT_ANGLE);
 
         // Sign conversion to aerospace convention:
-        // - Roll negated: positive body Y error → negative roll → +Y accel
+        // - Roll negated: positive body Y error -> negative roll -> +Y accel
         attitude_setpoint_t setpoint = {
             .roll = -roll_cmd, .pitch = pitch_cmd, .yaw = target.yaw};
 

@@ -58,10 +58,10 @@ void hal_read_sensors(sensor_data_t *sensors) {
 //          Rear
 //
 // Channel to connector mapping:
-//   M1 (rear-left, CCW)   → P1 (TIM4_CH1, PB6)
-//   M2 (front-left, CW)   → P2 (TIM4_CH2, PB7)
-//   M3 (front-right, CCW) → P4 (TIM4_CH3, PB8)
-//   M4 (rear-right, CW)   → P5 (TIM4_CH4, PB9)
+//   M1 (rear-left, CCW)   -> P1 (TIM4_CH1, PB6)
+//   M2 (front-left, CW)   -> P2 (TIM4_CH2, PB7)
+//   M3 (front-right, CCW) -> P4 (TIM4_CH3, PB8)
+//   M4 (rear-right, CW)   -> P5 (TIM4_CH4, PB9)
 //
 // Note: Board connectors are labeled P1, P2, P4, P5 (no P3).
 // clang-format on

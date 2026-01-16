@@ -15,15 +15,15 @@
 static int tests_passed = 0;
 static int tests_failed = 0;
 
-#define TEST_PASS(name)                 \
-    do {                                \
-        printf("  ✓ PASS: %s\n", name); \
-        tests_passed++;                 \
+#define TEST_PASS(name)                    \
+    do {                                   \
+        printf("  [OK] PASS: %s\n", name); \
+        tests_passed++;                    \
     } while (0)
-#define TEST_FAIL(name)                 \
-    do {                                \
-        printf("  ✗ FAIL: %s\n", name); \
-        tests_failed++;                 \
+#define TEST_FAIL(name)                      \
+    do {                                     \
+        printf("  [FAIL] FAIL: %s\n", name); \
+        tests_failed++;                      \
     } while (0)
 
 // ============================================================================

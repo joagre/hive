@@ -4,23 +4,23 @@
 // Demonstrates waypoint navigation for a quadcopter using the hive actor
 // runtime. Nine actors work together in a pipeline:
 //
-//   sensor_actor    - Reads raw sensors via HAL → sensor bus
-//   estimator_actor - Complementary filter fusion → state bus
-//   altitude_actor  - Altitude PID → thrust command
-//   waypoint_actor  - Waypoint manager → position target bus
-//   position_actor  - Position PD → attitude setpoints
-//   attitude_actor  - Attitude PIDs → rate setpoints
-//   rate_actor      - Rate PIDs → torque commands
+//   sensor_actor    - Reads raw sensors via HAL -> sensor bus
+//   estimator_actor - Complementary filter fusion -> state bus
+//   altitude_actor  - Altitude PID -> thrust command
+//   waypoint_actor  - Waypoint manager -> position target bus
+//   position_actor  - Position PD -> attitude setpoints
+//   attitude_actor  - Attitude PIDs -> rate setpoints
+//   rate_actor      - Rate PIDs -> torque commands
 //   motor_actor     - Output to hardware via HAL
 //
 // Data flows through buses:
 //
-//   Sensor → Sensor Bus → Estimator → State Bus ─┬→ Altitude → Thrust Bus ────────────┐
-//                                                ├→ Position → Attitude SP Bus → Attitude │
-//                                                │                                ↓        │
-//                                                └→ Rate ← Rate SP Bus ←──────────┘        │
-//                                                      ↓                                    │
-//                                                Torque Bus → Motor ← Thrust Bus ←─────────┘
+//   Sensor -> Sensor Bus -> Estimator -> State Bus ─┬-> Altitude -> Thrust Bus ───────────┐
+//                                                   ├-> Position -> Attitude SP Bus -> Attitude │
+//                                                   │                                 v         │
+//                                                   └-> Rate <- Rate SP Bus <─────────┘         │
+//                                                         v                                     │
+//                                                   Torque Bus -> Motor <- Thrust Bus <─────────┘
 //
 // Hardware abstraction:
 //   All hardware access goes through the HAL (hal/hal.h).
@@ -122,7 +122,7 @@ int main(void) {
     //
     // All actors use CRITICAL priority. Execution order within a tick follows
     // spawn order (round-robin), which must match the data flow:
-    // sensor → estimator → waypoint → altitude → position → attitude → rate →
+    // sensor -> estimator -> waypoint -> altitude -> position -> attitude -> rate ->
     // motor
     //
     // Note: Differentiated priorities (CRITICAL/HIGH/NORMAL) don't work here

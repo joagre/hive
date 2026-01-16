@@ -104,7 +104,7 @@ void coordinator_actor(void *arg) {
     printf("  Retries succeeded: %d\n", retry_success);
 
     if (retry_needed > 0) {
-        printf("\n✓ Backoff-retry handled temporary congestion\n");
+        printf("\n[OK] Backoff-retry handled temporary congestion\n");
         printf("  Without retry, %d messages would have been lost\n",
                retry_needed);
     }

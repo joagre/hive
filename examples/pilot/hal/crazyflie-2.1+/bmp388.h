@@ -4,7 +4,7 @@
 // compensation. Uses I2C interface.
 //
 // Range: 300-1250 hPa
-// Accuracy: ±50 Pa absolute, ±8 Pa relative
+// Accuracy: +/-50 Pa absolute, +/-8 Pa relative
 //
 // Reference: Bosch BMP388 Datasheet (BST-BMP388-DS001)
 
@@ -119,7 +119,7 @@ bool bmp388_read(bmp388_data_t *data);
 // Read pressure only (hPa)
 bool bmp388_read_pressure(float *pressure_hpa);
 
-// Read temperature only (°C)
+// Read temperature only (degC)
 bool bmp388_read_temperature(float *temp_c);
 
 // Convert pressure to altitude (meters) relative to reference

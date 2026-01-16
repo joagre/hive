@@ -78,7 +78,7 @@ static bool s_initialized = false;
 static bmi088_config_t s_config;
 
 // Scale factors (set during init based on config)
-static float s_acc_scale = 0.0f;  // LSB to m/s²
+static float s_acc_scale = 0.0f;  // LSB to m/s^2
 static float s_gyro_scale = 0.0f; // LSB to rad/s
 
 // ----------------------------------------------------------------------------
@@ -146,7 +146,7 @@ static void gyro_read_burst(uint8_t reg, uint8_t *data, uint8_t len) {
 // ----------------------------------------------------------------------------
 
 static void calculate_scale_factors(void) {
-    // Accelerometer scale: LSB to m/s²
+    // Accelerometer scale: LSB to m/s^2
     // Sensitivity from datasheet (LSB/g at each range)
     switch (s_config.acc_range) {
     case BMI088_ACC_RANGE_3G:
@@ -358,7 +358,7 @@ bool bmi088_read_temp(float *temp_c) {
         raw -= 2048;
     }
 
-    // Convert to Celsius: 0 LSB = 23°C, 1 LSB = 0.125°C
+    // Convert to Celsius: 0 LSB = 23 degC, 1 LSB = 0.125 degC
     *temp_c = (raw * 0.125f) + 23.0f;
 
     return true;

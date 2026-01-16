@@ -50,9 +50,9 @@ typedef struct {
     float pressure; // hPa
 
     // Raw accelerometer (for vertical velocity estimation)
-    float accel_x; // m/s²
-    float accel_y; // m/s²
-    float accel_z; // m/s²
+    float accel_x; // m/s^2
+    float accel_y; // m/s^2
+    float accel_z; // m/s^2
 
     // Timestamps
     uint32_t timestamp_ms; // Milliseconds since boot

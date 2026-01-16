@@ -37,7 +37,7 @@ int main(void) {
     for (int i = 0; i < 64; i++) {
         actor_id id;
         if (HIVE_FAILED(hive_spawn_ex(simple_actor, NULL, &cfg, &id))) {
-            printf("Actor #%d: FAILED (arena exhausted) ✓\n", i + 1);
+            printf("Actor #%d: FAILED (arena exhausted) [OK]\n", i + 1);
             break;
         }
         count++;
@@ -50,18 +50,19 @@ int main(void) {
     printf("\nVerifying arena exhaustion...\n");
     actor_id id;
     if (HIVE_FAILED(hive_spawn_ex(simple_actor, NULL, &cfg, &id))) {
-        printf("✓ Arena is exhausted (cannot spawn more actors)\n");
+        printf("[OK] Arena is exhausted (cannot spawn more actors)\n");
     } else {
-        printf("✗ ERROR: Arena should be exhausted but spawned actor %u\n", id);
+        printf("[FAIL] ERROR: Arena should be exhausted but spawned actor %u\n",
+               id);
     }
 
     // Test that malloc_stack still works when arena is exhausted
     printf("\nTesting malloc fallback via explicit flag...\n");
     cfg.malloc_stack = true; // Explicitly use malloc
     if (HIVE_SUCCEEDED(hive_spawn_ex(simple_actor, NULL, &cfg, &id))) {
-        printf("✓ malloc_stack=true still works (spawned actor %u)\n", id);
+        printf("[OK] malloc_stack=true still works (spawned actor %u)\n", id);
     } else {
-        printf("✗ ERROR: malloc_stack=true should work\n");
+        printf("[FAIL] ERROR: malloc_stack=true should work\n");
     }
 
     printf("\nRunning scheduler (all actors will exit immediately)...\n");

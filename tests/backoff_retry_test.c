@@ -143,7 +143,7 @@ void sender_actor(void *arg) {
     }
 
     if (failed_count > 0) {
-        printf("Sender: ✓ HIVE_ERR_NOMEM on %d attempts (sent %d more)\n",
+        printf("Sender: [OK] HIVE_ERR_NOMEM on %d attempts (sent %d more)\n",
                failed_count, extra_sent);
     } else {
         printf("Sender: All 50 extra sends succeeded\n");
@@ -181,7 +181,7 @@ void sender_actor(void *arg) {
                                     sizeof(data));
 
         if (HIVE_SUCCEEDED(status)) {
-            printf("Sender: ✓ Send succeeded on attempt %d!\n", attempt + 1);
+            printf("Sender: [OK] Send succeeded on attempt %d!\n", attempt + 1);
             send_succeeded = true;
             break;
         }
@@ -205,11 +205,12 @@ void sender_actor(void *arg) {
     hive_ipc_notify_ex(receiver, HIVE_MSG_NOTIFY, TAG_DONE, NULL, 0);
 
     if (send_succeeded) {
-        printf("\nSender: ✓ Backoff-retry SUCCESS!\n");
+        printf("\nSender: [OK] Backoff-retry SUCCESS!\n");
     } else if (retry_count == 0) {
         printf("\nSender: Pool never exhausted during retry\n");
     } else {
-        printf("\nSender: ✗ Still failing after %d retries\n", retry_count);
+        printf("\nSender: [FAIL] Still failing after %d retries\n",
+               retry_count);
     }
 
     hive_exit();

@@ -41,7 +41,7 @@ void sender_actor(void *arg) {
 
         if (HIVE_FAILED(status)) {
             if (status.code == HIVE_ERR_NOMEM) {
-                printf("Sender: ✓ Pool exhausted after %d messages!\n",
+                printf("Sender: [OK] Pool exhausted after %d messages!\n",
                        sent_count);
                 printf("Sender: Got HIVE_ERR_NOMEM as expected\n");
                 break;
@@ -75,7 +75,7 @@ void sender_actor(void *arg) {
         status = hive_ipc_notify(receiver, 0, &data, sizeof(data));
 
         if (HIVE_SUCCEEDED(status)) {
-            printf("Sender: ✓ Send succeeded on attempt %d!\n", attempt + 1);
+            printf("Sender: [OK] Send succeeded on attempt %d!\n", attempt + 1);
             send_succeeded = true;
             break;
         }
@@ -99,7 +99,7 @@ void sender_actor(void *arg) {
     }
 
     if (!send_succeeded) {
-        printf("Sender: ✗ Failed to send after %d retries (pool still "
+        printf("Sender: [FAIL] Failed to send after %d retries (pool still "
                "exhausted)\n",
                retry_count);
         printf("Sender: This is expected - pool won't free until receiver "
@@ -112,9 +112,9 @@ void sender_actor(void *arg) {
     //  but demonstrates the pattern)
 
     printf("\nSender: Test complete - demonstrated:\n");
-    printf("  1. ✓ Pool exhaustion (HIVE_ERR_NOMEM)\n");
-    printf("  2. ✓ Backoff-retry with timeout\n");
-    printf("  3. ✓ Developer handles timeout vs message explicitly\n");
+    printf("  1. [OK] Pool exhaustion (HIVE_ERR_NOMEM)\n");
+    printf("  2. [OK] Backoff-retry with timeout\n");
+    printf("  3. [OK] Developer handles timeout vs message explicitly\n");
 
     hive_exit();
 }

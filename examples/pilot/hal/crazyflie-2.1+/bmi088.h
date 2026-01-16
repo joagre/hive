@@ -86,7 +86,7 @@ typedef struct {
 
 // Scaled sensor data (SI units)
 typedef struct {
-    float x, y, z; // Accel: m/s², Gyro: rad/s
+    float x, y, z; // Accel: m/s^2, Gyro: rad/s
 } bmi088_data_t;
 
 // ----------------------------------------------------------------------------
@@ -101,7 +101,7 @@ bool bmi088_init(const bmi088_config_t *config);
 // Check if sensor is initialized and responding
 bool bmi088_is_ready(void);
 
-// Read accelerometer data (m/s²)
+// Read accelerometer data (m/s^2)
 bool bmi088_read_accel(bmi088_data_t *data);
 
 // Read gyroscope data (rad/s)
@@ -116,7 +116,7 @@ bool bmi088_read_accel_raw(bmi088_raw_t *data);
 // Read raw gyroscope data (16-bit signed)
 bool bmi088_read_gyro_raw(bmi088_raw_t *data);
 
-// Read temperature (°C) from accelerometer
+// Read temperature (degC) from accelerometer
 bool bmi088_read_temp(float *temp_c);
 
 // Perform self-test (returns true if passed)

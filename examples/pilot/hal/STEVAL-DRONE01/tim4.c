@@ -182,7 +182,7 @@ void tim4_init(const tim4_config_t *config) {
     // -------------------------------------------------------------------------
     // TIM4 is on APB1 (42MHz), but timer clock is 2x APB1 = 84MHz when APB1
     // prescaler > 1 PWM frequency = TIM_CLK / ((PSC + 1) * (ARR + 1)) For 20kHz
-    // with 1024 resolution: PSC = (84MHz / (20kHz * 1024)) - 1 = 3.1 ≈ 4
+    // with 1024 resolution: PSC = (84MHz / (20kHz * 1024)) - 1 = 3.1 ~= 4
 
     uint32_t tim_clk = PCLK1_FREQ * 2; // Timer clock = 84MHz (APB1 * 2)
     uint32_t prescaler =
