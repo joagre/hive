@@ -877,7 +877,7 @@ static void test19_multi_filter_basic(void *arg) {
     hive_message msg;
     size_t matched;
     hive_status status =
-        hive_ipc_recv_match_any(filters, 2, &msg, 1000, &matched);
+        hive_ipc_recv_matches(filters, 2, &msg, 1000, &matched);
 
     if (HIVE_SUCCEEDED(status) && matched == 0 && msg.tag == TEST19_TAG_A) {
         TEST_PASS("multi-filter matched first filter correctly");
@@ -917,7 +917,7 @@ static void test20_multi_filter_second(void *arg) {
     hive_message msg;
     size_t matched;
     hive_status status =
-        hive_ipc_recv_match_any(filters, 2, &msg, 1000, &matched);
+        hive_ipc_recv_matches(filters, 2, &msg, 1000, &matched);
 
     if (HIVE_SUCCEEDED(status) && matched == 1 && msg.tag == TEST19_TAG_B) {
         TEST_PASS("multi-filter matched second filter correctly");
@@ -944,7 +944,7 @@ static void test21_multi_filter_timeout(void *arg) {
         {HIVE_SENDER_ANY, HIVE_MSG_NOTIFY, 8888},
     };
     hive_message msg;
-    hive_status status = hive_ipc_recv_match_any(filters, 2, &msg, 100, NULL);
+    hive_status status = hive_ipc_recv_matches(filters, 2, &msg, 100, NULL);
 
     if (status.code == HIVE_ERR_TIMEOUT) {
         TEST_PASS("multi-filter correctly times out when no match");
@@ -968,7 +968,7 @@ static void test22_multi_filter_nonblocking(void *arg) {
         {HIVE_SENDER_ANY, HIVE_MSG_NOTIFY, 1234},
     };
     hive_message msg;
-    hive_status status = hive_ipc_recv_match_any(filters, 1, &msg, 0, NULL);
+    hive_status status = hive_ipc_recv_matches(filters, 1, &msg, 0, NULL);
 
     if (status.code == HIVE_ERR_WOULDBLOCK) {
         TEST_PASS("multi-filter non-blocking returns WOULDBLOCK");

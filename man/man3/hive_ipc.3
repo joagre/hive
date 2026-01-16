@@ -1,7 +1,7 @@
 .\" Man page for IPC functions
 .TH HIVE_IPC 3 "January 2025" "Hive 1.0" "Actor Runtime Manual"
 .SH NAME
-hive_ipc_notify, hive_ipc_notify_ex, hive_ipc_recv, hive_ipc_recv_match, hive_ipc_recv_match_any, hive_ipc_request, hive_ipc_reply, hive_msg_is_timer, hive_ipc_pending, hive_ipc_count \- inter-process communication
+hive_ipc_notify, hive_ipc_notify_ex, hive_ipc_recv, hive_ipc_recv_match, hive_ipc_recv_matches, hive_ipc_request, hive_ipc_reply, hive_msg_is_timer, hive_ipc_pending, hive_ipc_count \- inter-process communication
 .SH SYNOPSIS
 .nf
 .B #include <hive_ipc.h>
@@ -12,7 +12,7 @@ hive_ipc_notify, hive_ipc_notify_ex, hive_ipc_recv, hive_ipc_recv_match, hive_ip
 .BI "hive_status hive_ipc_recv(hive_message *" msg ", int32_t " timeout_ms ");"
 .BI "hive_status hive_ipc_recv_match(actor_id " from ", hive_msg_class " class ","
 .BI "                            uint32_t " tag ", hive_message *" msg ", int32_t " timeout_ms ");"
-.BI "hive_status hive_ipc_recv_match_any(const hive_recv_filter *" filters ", size_t " num_filters ","
+.BI "hive_status hive_ipc_recv_matches(const hive_recv_filter *" filters ", size_t " num_filters ","
 .BI "                            hive_message *" msg ", int32_t " timeout_ms ", size_t *" matched_index ");"
 .BI "hive_status hive_ipc_request(actor_id " to ", const void *" request ", size_t " req_len ","
 .BI "                         hive_message *" reply ", int32_t " timeout_ms ");"
@@ -142,7 +142,7 @@ specified filter criteria. Use the wildcard constants to match any value:
 Non-matching messages are skipped but remain in the mailbox. This operation is
 .BR O(n) where n is the mailbox depth.
 .PP
-.BR hive_ipc_recv_match_any ()
+.BR hive_ipc_recv_matches ()
 performs multi-pattern selective receive, scanning the mailbox for a message
 matching
 .B any
@@ -166,7 +166,7 @@ hive_recv_filter filters[] = {
 };
 hive_message msg;
 size_t matched;
-hive_ipc_recv_match_any(filters, 2, &msg, -1, &matched);
+hive_ipc_recv_matches(filters, 2, &msg, -1, &matched);
 if (matched == 0) { /* sync timer */ }
 else { /* landed notification */ }
 .fi

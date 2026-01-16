@@ -188,7 +188,7 @@ All messages have a 4-byte header prepended to payload:
 - **`hive_ipc_notify_ex(to, class, tag, data, len)`**: Send with explicit class and tag
 - **`hive_ipc_recv(msg, timeout)`**: Receive any message
 - **`hive_ipc_recv_match(from, class, tag, msg, timeout)`**: Selective receive with filtering
-- **`hive_ipc_recv_match_any(filters, num_filters, msg, timeout, matched_index)`**: Multi-pattern selective receive (wait for any of several message types)
+- **`hive_ipc_recv_matches(filters, num_filters, msg, timeout, matched_index)`**: Multi-pattern selective receive (wait for any of several message types)
 - **`hive_ipc_request(to, req, len, reply, timeout)`**: Blocking request/reply (monitors target, waits for REPLY or death)
 - **`hive_ipc_reply(request, data, len)`**: Reply to a REQUEST message
 
@@ -206,7 +206,7 @@ if (msg.class == HIVE_MSG_REQUEST) { ... }
 
 ### Selective Receive
 - `hive_ipc_recv_match()` scans mailbox for messages matching filter criteria
-- `hive_ipc_recv_match_any()` waits for any message matching one of several filters (useful for waiting on timer OR notification, REPLY OR EXIT)
+- `hive_ipc_recv_matches()` waits for any message matching one of several filters (useful for waiting on timer OR notification, REPLY OR EXIT)
 - Non-matching messages are **skipped but not dropped** - they remain in mailbox
 - Filter on sender (`HIVE_SENDER_ANY` = wildcard), class (`HIVE_MSG_ANY`), tag (`HIVE_TAG_ANY`)
 - Enables request/reply pattern: send REQUEST with generated tag, wait for REPLY with matching tag

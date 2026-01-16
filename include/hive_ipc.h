@@ -41,9 +41,9 @@ hive_status hive_ipc_recv_match(actor_id from, hive_msg_class class,
 // Waits until a message matches one of the filters in the array.
 // If matched_index is non-NULL, stores which filter matched (0-based).
 // Useful for waiting on multiple conditions (e.g., REPLY or EXIT, timer A or B).
-hive_status hive_ipc_recv_match_any(const hive_recv_filter *filters,
-                                    size_t num_filters, hive_message *msg,
-                                    int32_t timeout_ms, size_t *matched_index);
+hive_status hive_ipc_recv_matches(const hive_recv_filter *filters,
+                                  size_t num_filters, hive_message *msg,
+                                  int32_t timeout_ms, size_t *matched_index);
 
 // -----------------------------------------------------------------------------
 // Request/Reply Pattern

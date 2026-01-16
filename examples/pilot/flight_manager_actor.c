@@ -109,7 +109,7 @@ void flight_manager_actor(void *arg) {
     while (!flight_timer_fired) {
         hive_message msg;
         size_t matched;
-        hive_ipc_recv_match_any(flight_filters, 2, &msg, -1, &matched);
+        hive_ipc_recv_matches(flight_filters, 2, &msg, -1, &matched);
 
         if (matched == 0) {
             // Periodic log sync
@@ -137,7 +137,7 @@ void flight_manager_actor(void *arg) {
     while (!landed) {
         hive_message msg;
         size_t matched;
-        hive_ipc_recv_match_any(landing_filters, 2, &msg, -1, &matched);
+        hive_ipc_recv_matches(landing_filters, 2, &msg, -1, &matched);
 
         if (matched == 0) {
             hive_log_file_sync();

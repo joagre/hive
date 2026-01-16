@@ -323,7 +323,7 @@ hive_status hive_ipc_notify_ex(actor_id to, hive_msg_class class, uint32_t tag,
 hive_status hive_ipc_recv(hive_message *msg, int32_t timeout_ms) {
     // Use recv_match_any with single wildcard filter
     hive_recv_filter filter = {HIVE_SENDER_ANY, HIVE_MSG_ANY, HIVE_TAG_ANY};
-    return hive_ipc_recv_match_any(&filter, 1, msg, timeout_ms, NULL);
+    return hive_ipc_recv_matches(&filter, 1, msg, timeout_ms, NULL);
 }
 
 hive_status hive_ipc_recv_match(actor_id from, hive_msg_class class,
@@ -331,12 +331,12 @@ hive_status hive_ipc_recv_match(actor_id from, hive_msg_class class,
                                 int32_t timeout_ms) {
     // Thin wrapper around recv_match_any with single filter
     hive_recv_filter filter = {from, class, tag};
-    return hive_ipc_recv_match_any(&filter, 1, msg, timeout_ms, NULL);
+    return hive_ipc_recv_matches(&filter, 1, msg, timeout_ms, NULL);
 }
 
-hive_status hive_ipc_recv_match_any(const hive_recv_filter *filters,
-                                    size_t num_filters, hive_message *msg,
-                                    int32_t timeout_ms, size_t *matched_index) {
+hive_status hive_ipc_recv_matches(const hive_recv_filter *filters,
+                                  size_t num_filters, hive_message *msg,
+                                  int32_t timeout_ms, size_t *matched_index) {
     HIVE_REQUIRE_ACTOR_CONTEXT();
     actor *current = hive_actor_current();
 
@@ -480,7 +480,7 @@ hive_status hive_ipc_request(actor_id to, const void *request, size_t req_len,
 
     hive_message msg;
     size_t matched;
-    status = hive_ipc_recv_match_any(filters, 2, &msg, timeout_ms, &matched);
+    status = hive_ipc_recv_matches(filters, 2, &msg, timeout_ms, &matched);
     hive_monitor_cancel(mon_ref);
 
     if (HIVE_FAILED(status)) {

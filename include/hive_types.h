@@ -94,7 +94,7 @@ typedef struct {
     const void *data; // Payload pointer (past header), valid until next recv
 } hive_message;
 
-// Filter for selective receive (used by hive_ipc_recv_match_any)
+// Filter for selective receive (used by hive_ipc_recv_matches)
 // Use HIVE_SENDER_ANY, HIVE_MSG_ANY, HIVE_TAG_ANY for wildcards
 typedef struct {
     actor_id sender;      // HIVE_SENDER_ANY for any sender
