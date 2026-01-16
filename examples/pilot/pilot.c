@@ -17,12 +17,23 @@
 //
 // Data flows through buses:
 //
-//   Sensor -> Sensor Bus -> Estimator -> State Bus ─┬-> Altitude -> Thrust Bus ───────────┐
-//                                                   ├-> Position -> Attitude SP Bus -> Attitude │
-//                                                   │                                 v         │
-//                                                   └-> Rate <- Rate SP Bus <─────────┘         │
-//                                                         v                                     │
-//                                                   Torque Bus -> Motor <- Thrust Bus <─────────┘
+//   Sensor --> Sensor Bus --> Estimator --> State Bus
+//                                              |
+//        +------------------+------------------+
+//        |                  |                  |
+//        v                  v                  v
+//    Waypoint           Altitude           Position
+//        |                  |                  |
+//        v                  v                  v
+//   Pos Target Bus      Thrust Bus       Att SP Bus
+//        |                  |                  |
+//        +-------+----------+                  v
+//                |                         Attitude
+//                v                             |
+//              Rate  <-------- Rate SP Bus <---+
+//                |
+//                v
+//           Torque Bus --> Motor <-- Thrust Bus
 //
 // IPC coordination via name registry:
 //   flight_manager, waypoint, altitude, motor register themselves
