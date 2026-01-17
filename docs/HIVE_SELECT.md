@@ -272,3 +272,40 @@ void net_reader(void *arg) {
 ```
 
 This keeps network complexity isolated and lets `hive_select()` remain simple and portable.
+
+## Implementation Checklist
+
+When implementing `hive_select()`, update the following:
+
+### Core Implementation
+- [ ] `include/hive_select.h` - New header with types and API declaration
+- [ ] `src/hive_select.c` - Implementation
+- [ ] `include/hive_actor.h` - Add select-related fields to actor struct
+- [ ] `src/hive_ipc.c` - Update wake logic for select sources
+- [ ] `src/hive_bus.c` - Update wake logic for select sources
+
+### Documentation
+- [ ] `SPEC.md` - Add hive_select() section
+- [ ] `README.md` - Add hive_select() to API overview
+- [ ] `CLAUDE.md` - Add hive_select() to IPC/Bus documentation
+- [ ] `man/man3/hive_select.3` - New man page
+
+### Pilot Example Updates
+- [ ] `examples/pilot/altitude_actor.c` - Use hive_select() for state + landing
+- [ ] `examples/pilot/waypoint_actor.c` - Use hive_select() where applicable
+- [ ] `examples/pilot/motor_actor.c` - Use hive_select() where applicable
+- [ ] Review other pilot actors for hive_select() opportunities
+
+### Tests
+- [ ] `tests/select_test.c` - New test file with:
+  - Basic single IPC source (equivalent to recv_match)
+  - Basic single bus source (equivalent to bus_read_wait)
+  - Multi-source: IPC + IPC
+  - Multi-source: bus + bus
+  - Multi-source: IPC + bus (mixed)
+  - Priority ordering (bus before IPC)
+  - Timeout behavior
+  - Immediate return when data ready
+
+### Example
+- [ ] `examples/select_example.c` - Standalone example demonstrating API
