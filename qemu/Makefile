@@ -49,7 +49,8 @@ ARM_LDFLAGS := -Tlm3s6965.ld \
 # Runtime source files
 QEMU_CORE_SRCS := hive_actor.c hive_bus.c hive_context.c hive_ipc.c \
                   hive_link.c hive_log.c hive_pool.c hive_runtime.c \
-                  hive_supervisor.c hive_scheduler_stm32.c hive_timer_stm32.c
+                  hive_select.c hive_supervisor.c hive_scheduler_stm32.c \
+                  hive_timer_stm32.c
 
 QEMU_SRCS := $(addprefix $(SRC_DIR)/,$(QEMU_CORE_SRCS))
 QEMU_ASM := $(SRC_DIR)/hive_context_arm_cm.S
