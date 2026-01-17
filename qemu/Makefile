@@ -76,7 +76,7 @@ QEMU_COMPAT_TESTS := actor_test ipc_test timer_test link_test \
                      backoff_retry_test simple_backoff_test congestion_demo
 
 # Compatible examples (exclude echo.c and fileio.c which require net/file features)
-QEMU_COMPAT_EXAMPLES := timer pingpong priority link_demo supervisor bus request_reply
+QEMU_COMPAT_EXAMPLES := timer pingpong priority link_demo supervisor bus request_reply select
 
 # ============================================================================
 # Build Rules

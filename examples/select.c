@@ -211,8 +211,11 @@ int main(void) {
         return 1;
     }
 
-    // Create sensor bus
+    // Create sensor bus (reduced limits for QEMU compatibility)
     hive_bus_config bus_cfg = HIVE_BUS_CONFIG_DEFAULT;
+    bus_cfg.max_subscribers = 2;
+    bus_cfg.max_entries = 4;
+    bus_cfg.max_entry_size = 64;
     bus_cfg.max_age_ms = 500; // Expire old readings after 500ms
     status = hive_bus_create(&bus_cfg, &g_sensor_bus);
     if (HIVE_FAILED(status)) {
