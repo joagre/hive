@@ -135,6 +135,120 @@ switch (result.index) {
 - Zero heap allocation - all structures caller-provided
 - Works on all platforms (Linux and STM32)
 
+## Wake Mechanism Integration
+
+### Current IPC Wake (`hive_ipc.c`)
+
+IPC stores filter info in the actor struct:
+```c
+// In actor struct (hive_actor.h):
+const hive_recv_filter *recv_filters;  // NULL = no filter active
+size_t recv_filter_count;
+```
+
+Wake logic in `hive_mailbox_add_entry()`:
+```c
+if (recipient->state == ACTOR_STATE_WAITING) {
+    if (recipient->recv_filters == NULL) {
+        // No filter - wake on any message
+        recipient->state = ACTOR_STATE_READY;
+    } else {
+        // Check if message matches any filter
+        for (size_t i = 0; i < recipient->recv_filter_count; i++) {
+            if (entry_matches_filter(entry, &recipient->recv_filters[i])) {
+                recipient->state = ACTOR_STATE_READY;
+                break;
+            }
+        }
+        // Also wake on TIMER (could be timeout timer)
+    }
+}
+```
+
+### Current Bus Wake (`hive_bus.c`)
+
+Bus uses a `blocked` flag in the subscriber struct:
+```c
+// In bus_subscriber struct:
+bool blocked;  // Is actor blocked waiting for data?
+```
+
+Wake logic in `hive_bus_publish()`:
+```c
+for (size_t i = 0; i < bus->config.max_subscribers; i++) {
+    bus_subscriber *sub = &bus->subscribers[i];
+    if (sub->active && sub->blocked) {
+        actor *a = hive_actor_get(sub->id);
+        if (a && a->state == ACTOR_STATE_WAITING) {
+            a->state = ACTOR_STATE_READY;
+        }
+    }
+}
+```
+
+### Comparison
+
+| Aspect | IPC | Bus |
+|--------|-----|-----|
+| Filter storage | Actor struct | Bus subscriber struct |
+| Wake condition | Filter match OR timer | Any publish (if blocked) |
+| Granularity | Per-filter matching | Binary blocked flag |
+
+### Integration for `hive_select()`
+
+Add new fields to actor struct:
+```c
+const hive_select_source *select_sources;  // NULL = not in select
+size_t select_source_count;
+```
+
+**Modified wake paths:**
+
+1. **`hive_mailbox_add_entry()`** - also check `select_sources`:
+   ```c
+   if (recipient->select_sources) {
+       for (size_t i = 0; i < recipient->select_source_count; i++) {
+           if (recipient->select_sources[i].type == HIVE_SEL_IPC &&
+               entry_matches_filter(entry, &recipient->select_sources[i].ipc)) {
+               recipient->state = ACTOR_STATE_READY;
+               break;
+           }
+       }
+   }
+   ```
+
+2. **`hive_bus_publish()`** - check `select_sources` for matching bus:
+   ```c
+   if (sub->blocked && a->state == ACTOR_STATE_WAITING) {
+       if (a->select_sources) {
+           // Check if this bus is in select sources
+           for (size_t i = 0; i < a->select_source_count; i++) {
+               if (a->select_sources[i].type == HIVE_SEL_BUS &&
+                   a->select_sources[i].bus == bus->id) {
+                   a->state = ACTOR_STATE_READY;
+                   break;
+               }
+           }
+       } else {
+           // Legacy single-bus wait
+           a->state = ACTOR_STATE_READY;
+       }
+   }
+   ```
+
+**Key design decisions:**
+- Existing `recv_filters` stays for `hive_ipc_recv_matches()` - no breaking changes
+- `select_sources` is separate, used only by `hive_select()`
+- Bus still uses `sub->blocked` flag for quick filtering before checking `select_sources`
+
+### Error Handling
+
+- `num_sources == 0` → `HIVE_ERR_INVALID` ("no sources")
+- `sources == NULL` → `HIVE_ERR_INVALID` ("null sources")
+- `result == NULL` → `HIVE_ERR_INVALID` ("null result")
+- Bus source with invalid/unsubscribed bus → `HIVE_ERR_INVALID` ("not subscribed")
+- No auto-subscribe - explicit subscription required before using bus in select
+
 ## Efficiency
 
 **Complexity by operation:**
