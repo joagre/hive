@@ -37,14 +37,14 @@ while (1) {
 **With `hive_select()`:**
 ```c
 enum { SEL_STATE, SEL_LANDING };
-hive_select_cond conds[] = {
+hive_select_source sources[] = {
     [SEL_STATE] = {HIVE_SEL_BUS, .bus = s_state_bus},
     [SEL_LANDING] = {HIVE_SEL_IPC, .ipc = {HIVE_SENDER_ANY, HIVE_MSG_NOTIFY, NOTIFY_LANDING}},
 };
 
 while (1) {
     hive_select_result result;
-    hive_select(conds, 2, &result, -1);
+    hive_select(sources, 2, &result, -1);
 
     if (result.index == SEL_LANDING) {
         landing_mode = true;
@@ -64,37 +64,27 @@ while (1) {
 
 Similar patterns exist in `waypoint_actor.c`, `motor_actor.c`, and others.
 
-## Naming
-
-| Name | Rationale |
-|------|-----------|
-| `hive_select()` | Mirrors POSIX `select()`. Implies choosing from multiple sources. |
-| `hive_poll()` | Mirrors POSIX `poll()`. More modern than select. |
-| `hive_wait()` | Generic. Doesn't hint at "multiple sources". |
-
-Recommendation: `hive_select()` - familiar, implies selection from alternatives.
-
 ## Proposed API
 
 ```c
-// Select condition types
+// Select source types
 typedef enum {
     HIVE_SEL_IPC,       // Message matching filter
     HIVE_SEL_BUS,       // Bus data available
 } hive_select_type;
 
-// Select condition (tagged union)
+// Select source (tagged union)
 typedef struct {
     hive_select_type type;
     union {
         hive_recv_filter ipc;    // For HIVE_SEL_IPC
         bus_id bus;              // For HIVE_SEL_BUS
     };
-} hive_select_cond;
+} hive_select_source;
 
 // Select result
 typedef struct {
-    size_t index;               // Which condition triggered (0-based)
+    size_t index;               // Which source triggered (0-based)
     hive_select_type type;      // Convenience copy of triggered type
     union {
         hive_message ipc;       // For HIVE_SEL_IPC
@@ -105,8 +95,8 @@ typedef struct {
     };
 } hive_select_result;
 
-// Block until any condition is satisfied
-hive_status hive_select(const hive_select_cond *conds, size_t num_conds,
+// Block until any source has data
+hive_status hive_select(const hive_select_source *sources, size_t num_sources,
                         hive_select_result *result, int32_t timeout_ms);
 ```
 
@@ -114,14 +104,14 @@ hive_status hive_select(const hive_select_cond *conds, size_t num_conds,
 
 ```c
 enum { SEL_TIMER, SEL_SENSOR_BUS, SEL_COMMAND };
-hive_select_cond conds[] = {
+hive_select_source sources[] = {
     [SEL_TIMER] = {HIVE_SEL_IPC, .ipc = {HIVE_SENDER_ANY, HIVE_MSG_TIMER, my_timer}},
     [SEL_SENSOR_BUS] = {HIVE_SEL_BUS, .bus = sensor_bus},
     [SEL_COMMAND] = {HIVE_SEL_IPC, .ipc = {HIVE_SENDER_ANY, HIVE_MSG_NOTIFY, CMD_TAG}},
 };
 
 hive_select_result result;
-hive_select(conds, 3, &result, -1);
+hive_select(sources, 3, &result, -1);
 
 switch (result.index) {
     case SEL_TIMER:
@@ -139,7 +129,7 @@ switch (result.index) {
 ## Implementation Notes
 
 - Scans IPC mailbox and bus buffers first (non-blocking check)
-- If nothing ready, registers conditions with scheduler and blocks
+- If nothing ready, registers sources with scheduler and blocks
 - Wakes on first match from any source
 - Timers delivered as IPC messages (no change needed)
 - Zero heap allocation - all structures caller-provided
@@ -154,11 +144,11 @@ switch (result.index) {
 | `hive_ipc_recv()` | O(1) - first entry always matches |
 | `hive_ipc_recv_match()` | O(mailbox_depth) |
 | `hive_ipc_recv_matches()` | O(filters × mailbox_depth) |
-| `hive_select()` with 1 cond | O(1) if wildcards, O(depth) if specific |
-| `hive_select()` with N conds | O(N × sources_depth) |
+| `hive_select()` with 1 source | O(1) if wildcards, O(depth) if specific |
+| `hive_select()` with N sources | O(N × sources_depth) |
 
 **Why this is acceptable:**
-- Condition counts are tiny (2-5 typical)
+- Source counts are tiny (2-5 typical)
 - Depths bounded by pool sizes (256 default)
 - Same O(n) pattern as existing `hive_ipc_recv_matches()`
 
@@ -172,7 +162,7 @@ while (1) {
 }
 
 // WITH hive_select - efficient block:
-hive_select(conds, 2, &result, -1);  // Zero CPU while waiting
+hive_select(sources, 2, &result, -1);  // Zero CPU while waiting
 ```
 
 ## Relationship to Existing APIs
@@ -186,33 +176,99 @@ hive_ipc_recv_matches(filters, n, ...);     // Multiple IPC filters
 hive_bus_read_wait(bus, &data, -1);         // Single bus
 
 // Complex cases (new)
-hive_select(conds, n, &result, -1);         // IPC + bus combined
+hive_select(sources, n, &result, -1);         // IPC + bus combined
 ```
 
 **Wrapper implementation:**
 
 ```c
 hive_status hive_ipc_recv(hive_message *msg, int32_t timeout_ms) {
-    hive_select_cond cond = {HIVE_SEL_IPC, .ipc = {HIVE_SENDER_ANY, HIVE_MSG_ANY, HIVE_TAG_ANY}};
+    hive_select_source source = {HIVE_SEL_IPC, .ipc = {HIVE_SENDER_ANY, HIVE_MSG_ANY, HIVE_TAG_ANY}};
     hive_select_result result;
-    hive_status s = hive_select(&cond, 1, &result, timeout_ms);
+    hive_status s = hive_select(&source, 1, &result, timeout_ms);
     if (HIVE_SUCCEEDED(s)) *msg = result.ipc;
     return s;
 }
 
 hive_status hive_bus_read_wait(bus_id bus, void **data, size_t *len, int32_t timeout_ms) {
-    hive_select_cond cond = {HIVE_SEL_BUS, .bus = bus};
+    hive_select_source source = {HIVE_SEL_BUS, .bus = bus};
     hive_select_result result;
-    hive_status s = hive_select(&cond, 1, &result, timeout_ms);
+    hive_status s = hive_select(&source, 1, &result, timeout_ms);
     if (HIVE_SUCCEEDED(s)) { *data = result.bus.data; *len = result.bus.len; }
     return s;
 }
 ```
 
-## Open Questions
+## Data Lifetime
 
-1. **Bus data lifetime:** Should bus data be copied into result, or use same "valid until next read" semantics as current API?
+Result data follows the same "valid until next call" semantics as existing APIs:
+- `result.ipc` - valid until next `hive_select()` (same as `hive_ipc_recv()`)
+- `result.bus.data` - valid until next `hive_select()` (same as `hive_bus_read()`)
 
-2. **Priority:** If multiple conditions satisfied simultaneously, which wins? First in array? IPC before bus?
+This maintains consistency with existing APIs, enables zero-copy, and matches the mental model users already have. Copy data immediately if needed longer:
 
-3. **Network I/O:** Intentionally excluded. Network uses fd-based semantics and is Linux-only. If needed, use a dedicated network reader actor that forwards data as IPC messages.
+```c
+hive_select_result result;
+hive_select(sources, 2, &result, -1);
+
+if (result.type == HIVE_SEL_BUS) {
+    my_data copy = *(my_data *)result.bus.data;  // Copy if needed
+}
+```
+
+## Priority When Multiple Sources Ready
+
+When multiple sources have data simultaneously, the check order is:
+1. All bus sources (in array order)
+2. All IPC sources (in array order)
+3. First match wins
+
+**Rationale:**
+- **Bus data is time-sensitive** - Sensor streams, state updates. Stale data = bad control decisions.
+- **Bus can expire** - Ring buffer wraps, `max_age_ms` expires entries. Missing bus data = data loss.
+- **IPC is queued** - Messages stay in mailbox until consumed. They won't be lost.
+
+**Example:**
+```c
+enum { SEL_STATE, SEL_SENSOR, SEL_COMMAND, SEL_TIMER };
+hive_select_source sources[] = {
+    [SEL_STATE] = {HIVE_SEL_BUS, .bus = state_bus},      // Checked 1st
+    [SEL_SENSOR] = {HIVE_SEL_BUS, .bus = sensor_bus},    // Checked 2nd
+    [SEL_COMMAND] = {HIVE_SEL_IPC, .ipc = {...}},        // Checked 3rd
+    [SEL_TIMER] = {HIVE_SEL_IPC, .ipc = {...}},          // Checked 4th
+};
+```
+
+If both `state_bus` and `SEL_COMMAND` are ready simultaneously, `state_bus` wins.
+
+This is **guaranteed behavior**, not an implementation detail. Users can rely on it for correctness.
+
+## Design Decisions
+
+### Network I/O
+
+Intentionally excluded for now. Reasons:
+- Network uses fd-based semantics (different from IPC/bus)
+- Linux-only (STM32 has no network support)
+- Different buffer management requirements
+
+**May be added in future** - the API is extensible:
+- Tagged union allows adding `HIVE_SEL_NET` enum value and union member
+- No breaking changes to existing code
+- Priority order can be decided when needed (likely: bus → IPC → network)
+
+**Current workaround** - idiomatic actor model pattern:
+```c
+// Dedicated network reader actor - separation of concerns
+void net_reader(void *arg) {
+    int fd = *(int *)arg;
+    char buf[256];
+    while (1) {
+        size_t n;
+        hive_net_recv(fd, buf, sizeof(buf), &n, -1);
+        hive_ipc_notify(handler_actor, NET_DATA_TAG, buf, n);  // Forward as IPC
+    }
+}
+```
+
+This keeps network complexity isolated and lets `hive_select()` remain simple and portable.
