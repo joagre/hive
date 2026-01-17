@@ -1618,6 +1618,133 @@ The bus can encounter two types of resource limits:
 - Use retention policies (`consume_after_reads`, `max_age_ms`) to prevent accumulation
 - Monitor `hive_bus_entry_count()` to detect slow readers
 
+## Unified Event Waiting API
+
+`hive_select()` provides a unified primitive for waiting on multiple event sources (IPC messages + bus data). The existing blocking APIs (`hive_ipc_recv*`, `hive_bus_read_wait`) are implemented as thin wrappers around this primitive.
+
+### Types
+
+```c
+// Source types
+typedef enum {
+    HIVE_SEL_IPC,  // Wait for IPC message
+    HIVE_SEL_BUS,  // Wait for bus data
+} hive_select_type;
+
+// Select source (tagged union)
+typedef struct {
+    hive_select_type type;
+    union {
+        hive_recv_filter ipc;  // For HIVE_SEL_IPC
+        bus_id bus;            // For HIVE_SEL_BUS
+    };
+} hive_select_source;
+
+// Select result
+typedef struct {
+    size_t index;           // Which source triggered (0-based)
+    hive_select_type type;  // Type of triggered source
+    union {
+        hive_message ipc;   // For HIVE_SEL_IPC
+        struct {
+            void *data;     // For HIVE_SEL_BUS
+            size_t len;
+        } bus;
+    };
+} hive_select_result;
+```
+
+### Function
+
+```c
+// Wait on multiple sources
+// Returns when any source has data or timeout expires
+// timeout_ms == 0:  non-blocking, returns HIVE_ERR_WOULDBLOCK if no data
+// timeout_ms < 0:   block forever
+// timeout_ms > 0:   block up to timeout, returns HIVE_ERR_TIMEOUT if exceeded
+hive_status hive_select(const hive_select_source *sources, size_t num_sources,
+                        hive_select_result *result, int32_t timeout_ms);
+```
+
+### Priority Semantics
+
+When multiple sources have data ready simultaneously:
+
+1. **Bus sources** are checked before **IPC sources** (bus has higher priority)
+2. Within each type, **array order** determines priority (lower index wins)
+
+This allows users to define a strict priority ordering by arranging sources appropriately.
+
+### Example Usage
+
+```c
+// Define event sources
+enum { SEL_SENSOR, SEL_TIMER, SEL_COMMAND };
+hive_select_source sources[] = {
+    [SEL_SENSOR]  = {HIVE_SEL_BUS, .bus = sensor_bus},
+    [SEL_TIMER]   = {HIVE_SEL_IPC, .ipc = {HIVE_SENDER_ANY, HIVE_MSG_TIMER, heartbeat}},
+    [SEL_COMMAND] = {HIVE_SEL_IPC, .ipc = {HIVE_SENDER_ANY, HIVE_MSG_NOTIFY, CMD_SHUTDOWN}},
+};
+
+while (running) {
+    hive_select_result result;
+    hive_status status = hive_select(sources, 3, &result, 1000);
+
+    if (status.code == HIVE_ERR_TIMEOUT) {
+        // No events for 1 second
+        continue;
+    }
+    if (HIVE_FAILED(status)) {
+        break;
+    }
+
+    switch (result.index) {
+    case SEL_SENSOR:
+        // Bus data available
+        sensor_data *data = (sensor_data *)result.bus.data;
+        process_sensor(data);
+        break;
+
+    case SEL_TIMER:
+        // Heartbeat timer
+        send_heartbeat();
+        break;
+
+    case SEL_COMMAND:
+        // Command received
+        running = false;
+        break;
+    }
+}
+```
+
+### Wrapper Relationship
+
+The existing blocking APIs are thin wrappers around `hive_select()`:
+
+| Wrapper Function | Equivalent hive_select() |
+|------------------|--------------------------|
+| `hive_ipc_recv()` | Single IPC source with wildcard filter |
+| `hive_ipc_recv_match()` | Single IPC source with specific filter |
+| `hive_ipc_recv_matches()` | Multiple IPC sources |
+| `hive_bus_read_wait()` | Single bus source |
+
+This architectural design ensures consistent blocking behavior and wake-up logic across all APIs.
+
+### Error Handling
+
+| Error Code | Condition |
+|------------|-----------|
+| `HIVE_ERR_INVALID` | NULL sources/result, num_sources == 0, bus not subscribed |
+| `HIVE_ERR_WOULDBLOCK` | timeout_ms == 0 and no data available |
+| `HIVE_ERR_TIMEOUT` | timeout_ms > 0 and no data within timeout |
+
+### Implementation Notes
+
+- **Bus data buffer:** Bus data is read into a static buffer. The `result.bus.data` pointer is valid until the next `hive_select()` call.
+- **IPC message lifetime:** IPC message data lifetime follows the same rules as `hive_ipc_recv()` - valid until next receive operation.
+- **Wake mechanism:** When blocked, the actor is woken by bus publishers (via `blocked` flag) or IPC senders (via `select_sources` check in mailbox wake logic).
+
 ## Timer API
 
 Timers for periodic and one-shot wake-ups.

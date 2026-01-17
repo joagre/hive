@@ -31,6 +31,7 @@ man hive_ipc       # Message passing
 man hive_link      # Linking and monitoring
 man hive_timer     # Timers
 man hive_bus       # Pub-sub bus
+man hive_select    # Unified event waiting
 man hive_net       # Network I/O
 man hive_file       # File I/O
 man hive_supervisor # Supervision
@@ -87,7 +88,8 @@ Actors run until they **yield** - there is no preemption. Operations that yield:
 | `hive_ipc_recv()` (timeout ≠ 0) | `hive_bus_read()` |
 | `hive_ipc_recv_match()` | `hive_ipc_notify()` |
 | `hive_ipc_request()` | `hive_bus_publish()` |
-| `hive_bus_read_wait()` | |
+| `hive_bus_read_wait()` | `hive_select(..., 0)` (timeout=0) |
+| `hive_select()` (timeout ≠ 0) | |
 | `hive_net_*()` | |
 | `hive_exit()` | |
 
@@ -158,6 +160,9 @@ All structures are statically allocated. Actor stacks use a static arena allocat
 
 # Request/reply example (with hive_ipc_request)
 ./build/request_reply
+
+# Unified event waiting (hive_select)
+./build/select
 
 # Priority scheduling example (4 levels, starvation demo)
 ./build/priority
@@ -521,6 +526,29 @@ See `examples/pilot/Makefile.STEVAL-DRONE01` for a complete example and SPEC.md 
 - `hive_bus_read(bus, buf, len, bytes_read)` - Read next message (non-blocking)
 - `hive_bus_read_wait(bus, buf, len, bytes_read, timeout_ms)` - Read next message (blocking)
 - `hive_bus_entry_count(bus)` - Get number of entries in bus
+
+### Unified Event Waiting
+
+- `hive_select(sources, num_sources, result, timeout_ms)` - Wait on multiple event sources (IPC + bus)
+
+`hive_select()` provides unified waiting on heterogeneous sources:
+```c
+hive_select_source sources[] = {
+    {HIVE_SEL_BUS, .bus = sensor_bus},
+    {HIVE_SEL_IPC, .ipc = {HIVE_SENDER_ANY, HIVE_MSG_TIMER, heartbeat}},
+    {HIVE_SEL_IPC, .ipc = {HIVE_SENDER_ANY, HIVE_MSG_NOTIFY, CMD_SHUTDOWN}},
+};
+hive_select_result result;
+hive_select(sources, 3, &result, -1);
+
+switch (result.index) {
+case 0: /* Bus data: result.bus.data, result.bus.len */ break;
+case 1: /* Timer: result.ipc */ break;
+case 2: /* Shutdown: result.ipc */ break;
+}
+```
+
+**Priority:** Bus sources are checked before IPC sources. Within each type, array order determines priority.
 
 ## Implementation Details
 

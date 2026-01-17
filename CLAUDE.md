@@ -26,6 +26,7 @@ Man pages available:
 - `hive_supervisor(3)` - Supervision (restart strategies, child specs)
 - `hive_timer(3)` - One-shot and periodic timers
 - `hive_bus(3)` - Publish-subscribe bus
+- `hive_select(3)` - Unified event waiting (IPC + bus)
 - `hive_net(3)` - Non-blocking TCP network I/O
 - `hive_file(3)` - Synchronous file I/O
 - `hive_types(3)` - Types, constants, compile-time configuration
@@ -257,6 +258,33 @@ Bus shares the message data pool with IPC and has per-bus buffer limits:
 - IPC never drops messages automatically (returns error instead)
 - Bus automatically drops oldest entry when ring buffer is full
 - Both share the same message data pool (`HIVE_MESSAGE_DATA_POOL_SIZE`)
+
+### Unified Event Waiting (hive_select)
+
+`hive_select()` provides a unified primitive for waiting on multiple event sources (IPC messages + bus data). The existing blocking APIs are thin wrappers around this primitive.
+
+**API:**
+- **`hive_select(sources, num_sources, result, timeout)`**: Wait on multiple sources simultaneously
+
+**Priority semantics:**
+- Bus sources are checked before IPC sources (higher priority)
+- Within each type, array order determines priority
+
+**Example:**
+```c
+hive_select_source sources[] = {
+    {HIVE_SEL_BUS, .bus = sensor_bus},
+    {HIVE_SEL_IPC, .ipc = {HIVE_SENDER_ANY, HIVE_MSG_TIMER, heartbeat}},
+    {HIVE_SEL_IPC, .ipc = {HIVE_SENDER_ANY, HIVE_MSG_NOTIFY, CMD_SHUTDOWN}},
+};
+hive_select_result result;
+hive_select(sources, 3, &result, -1);
+// result.index tells which source triggered
+// result.type tells if it's IPC or bus
+// result.ipc or result.bus contains the data
+```
+
+**Wrapper relationship:** `hive_ipc_recv()`, `hive_ipc_recv_match()`, `hive_ipc_recv_matches()`, and `hive_bus_read_wait()` are all implemented as thin wrappers around `hive_select()`.
 
 ## Important Implementation Details
 
