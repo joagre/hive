@@ -1,5 +1,5 @@
 .\" Man page for IPC functions
-.TH HIVE_IPC 3 "January 2025" "Hive 1.0" "Actor Runtime Manual"
+.TH HIVE_IPC 3 "January 2026" "Hive 1.0" "Actor Runtime Manual"
 .SH NAME
 hive_ipc_notify, hive_ipc_notify_ex, hive_ipc_recv, hive_ipc_recv_match, hive_ipc_recv_matches, hive_ipc_request, hive_ipc_reply, hive_msg_is_timer, hive_ipc_pending, hive_ipc_count \- inter-process communication
 .SH SYNOPSIS
@@ -299,26 +299,18 @@ if (s.code == HIVE_ERR_NOMEM) {
 }
 .fi
 .SS Target Death During Request
-If the target actor dies while
 .BR hive_ipc_request ()
-is waiting for a reply, and you have linked to or are monitoring the target,
-an EXIT message arrives in your mailbox. Since it doesn't match the expected
-REPLY, the function returns
-.B HIVE_ERR_TIMEOUT
-when the timeout expires. Check for EXIT messages to distinguish death from
-timeout:
+automatically detects target death by setting up a temporary monitor. If the
+target dies before sending a reply, the function returns
+.B HIVE_ERR_CLOSED
+immediately (no need to wait for timeout). This allows clean error handling:
 .PP
 .nf
 hive_status s = hive_ipc_request(target, &req, sizeof(req), &reply, 5000);
-if (s.code == HIVE_ERR_TIMEOUT) {
-    hive_message msg;
-    if (hive_ipc_recv(&msg, 0).code == HIVE_OK &&
-        msg.class == HIVE_MSG_EXIT) {
-        hive_exit_msg *exit = (hive_exit_msg *)msg.data;
-        if (exit->actor == target) {
-            /* Target died */
-        }
-    }
+if (s.code == HIVE_ERR_CLOSED) {
+    /* Target died before replying */
+} else if (s.code == HIVE_ERR_TIMEOUT) {
+    /* Target alive but did not reply in time */
 }
 .fi
 .SS Selective Receive Performance
