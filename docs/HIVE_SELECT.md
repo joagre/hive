@@ -440,16 +440,34 @@ void net_reader(void *arg) {
 
 This keeps network complexity isolated and lets `hive_select()` remain simple and portable.
 
+### `hive_recv_filter` Location
+
+**Decision: Move `hive_recv_filter` from `hive_ipc.h` to `hive_types.h`.**
+
+**Rationale:**
+- **Follows existing pattern** - `hive_message` is in `hive_types.h`, and `hive_recv_filter` is a filter pattern for messages. They belong together.
+- **Cross-subsystem type** - Used by both IPC (`hive_ipc_recv_matches`) and select (`hive_select_source`). Shared types belong in `hive_types.h`.
+- **Conceptual grouping** - Filter constants (`HIVE_SENDER_ANY`, `HIVE_MSG_ANY`, `HIVE_TAG_ANY`) are already in `hive_types.h`. The struct that uses them should be there too.
+
+**Include hierarchy:**
+```
+hive_types.h      ← hive_recv_filter, hive_message, constants
+    ↑
+hive_ipc.h        ← uses hive_recv_filter
+hive_select.h     ← uses hive_recv_filter
+```
+
 ## Implementation Checklist
 
 When implementing `hive_select()`, update the following:
 
 ### Core Implementation
+- [ ] `include/hive_types.h` - Move `hive_recv_filter` here from `hive_ipc.h`
 - [ ] `include/hive_select.h` - New header with types and API declaration
 - [ ] `src/hive_select.c` - Implementation
 - [ ] `include/hive_actor.h` - Add select-related fields to actor struct
-- [ ] `src/hive_ipc.c` - Update wake logic for select sources
-- [ ] `src/hive_bus.c` - Update wake logic for select sources
+- [ ] `src/hive_ipc.c` - Rewrite as wrappers around `hive_select()`
+- [ ] `src/hive_bus.c` - Rewrite `hive_bus_read_wait()` as wrapper, update wake logic
 
 ### Documentation
 - [ ] `SPEC.md` - Add hive_select() section
