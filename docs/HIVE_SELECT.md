@@ -281,19 +281,40 @@ hive_select(sources, 2, &result, -1);  // Zero CPU while waiting
 
 ## Relationship to Existing APIs
 
-Existing APIs remain as convenience wrappers - no breaking changes:
+**Decision: All blocking receive/read APIs become thin wrappers around `hive_select()`.**
+
+This is the official approach - no separate implementations.
+
+### APIs That Become Wrappers
 
 ```c
-// Simple cases (unchanged)
+// These all delegate to hive_select() internally:
 hive_ipc_recv(&msg, -1);                    // Any message
+hive_ipc_recv_match(from, class, tag, ...); // Single filter
 hive_ipc_recv_matches(filters, n, ...);     // Multiple IPC filters
 hive_bus_read_wait(bus, &data, -1);         // Single bus
 
-// Complex cases (new)
-hive_select(sources, n, &result, -1);         // IPC + bus combined
+// The unified primitive:
+hive_select(sources, n, &result, -1);       // IPC + bus combined
 ```
 
-**Wrapper implementation:**
+### Cost Analysis
+
+| Overhead | Impact |
+|----------|--------|
+| Stack: ~70 bytes extra | Negligible (64KB default stack) |
+| One extra function call | Negligible |
+| One struct copy (~32 bytes) | Negligible |
+| Algorithmic complexity | Identical - O(1) for wildcards |
+
+### Rationale
+
+- **Single implementation** - one place for blocking/wake logic
+- **Fewer code paths** - fewer bugs, easier testing
+- **Consistent behavior** - guaranteed identical semantics
+- **Maintainability** - clean code over micro-optimization
+
+### Wrapper Implementations
 
 ```c
 hive_status hive_ipc_recv(hive_message *msg, int32_t timeout_ms) {
@@ -304,11 +325,43 @@ hive_status hive_ipc_recv(hive_message *msg, int32_t timeout_ms) {
     return s;
 }
 
-hive_status hive_bus_read_wait(bus_id bus, void **data, size_t *len, int32_t timeout_ms) {
+hive_status hive_ipc_recv_match(actor_id from, hive_msg_class class,
+                                uint32_t tag, hive_message *msg,
+                                int32_t timeout_ms) {
+    hive_select_source source = {HIVE_SEL_IPC, .ipc = {from, class, tag}};
+    hive_select_result result;
+    hive_status s = hive_select(&source, 1, &result, timeout_ms);
+    if (HIVE_SUCCEEDED(s)) *msg = result.ipc;
+    return s;
+}
+
+hive_status hive_ipc_recv_matches(const hive_recv_filter *filters,
+                                  size_t num_filters, hive_message *msg,
+                                  int32_t timeout_ms, size_t *matched_index) {
+    // Build select sources from filters
+    hive_select_source sources[num_filters];  // VLA or fixed max
+    for (size_t i = 0; i < num_filters; i++) {
+        sources[i] = (hive_select_source){HIVE_SEL_IPC, .ipc = filters[i]};
+    }
+    hive_select_result result;
+    hive_status s = hive_select(sources, num_filters, &result, timeout_ms);
+    if (HIVE_SUCCEEDED(s)) {
+        *msg = result.ipc;
+        if (matched_index) *matched_index = result.index;
+    }
+    return s;
+}
+
+hive_status hive_bus_read_wait(bus_id bus, void *buf, size_t max_len,
+                               size_t *actual_len, int32_t timeout_ms) {
     hive_select_source source = {HIVE_SEL_BUS, .bus = bus};
     hive_select_result result;
     hive_status s = hive_select(&source, 1, &result, timeout_ms);
-    if (HIVE_SUCCEEDED(s)) { *data = result.bus.data; *len = result.bus.len; }
+    if (HIVE_SUCCEEDED(s)) {
+        size_t copy_len = result.bus.len < max_len ? result.bus.len : max_len;
+        memcpy(buf, result.bus.data, copy_len);
+        *actual_len = copy_len;
+    }
     return s;
 }
 ```
