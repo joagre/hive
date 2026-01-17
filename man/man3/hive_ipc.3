@@ -140,7 +140,8 @@ specified filter criteria. Use the wildcard constants to match any value:
 \- match any tag
 .PP
 Non-matching messages are skipped but remain in the mailbox. This operation is
-.BR O(n) where n is the mailbox depth.
+.B O(n)
+where n is the mailbox depth.
 .PP
 .BR hive_ipc_recv_matches ()
 performs multi-pattern selective receive, scanning the mailbox for a message
