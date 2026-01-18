@@ -37,21 +37,30 @@ Install: `make install-man` (or `sudo make install-man`)
 ## Design Principles
 
 - Minimalistic and predictable behavior
-- Statically bounded memory: All runtime memory is statically bounded. Heap allocation forbidden in hot paths, optional only for actor stacks (`malloc_stack = true`)
-- Pool-based allocation: O(1) for hot paths (IPC, scheduling, I/O); O(n) bounded arena for cold paths (spawn/exit)
+- Statically bounded memory: All runtime memory is bounded at link time; no heap allocations after init, except optional actor stacks (`malloc_stack = true`)
+- O(1) hot paths: IPC, timers, bus, monitoring, and I/O dispatch use pools with O(1) allocation; spawn/exit may use bounded arena search
 - Least surprise API design
 - Fast context switching via manual assembly (no setjmp/longjmp or ucontext)
 - Cooperative multitasking only (no preemption within actor runtime)
 
 ### Heap Usage Policy
 
-**Allowed malloc**:
-- Actor stack allocation: Only if `actor_config.malloc_stack = true` (default is arena allocator)
-- Actor cleanup: Corresponding free for malloc'd stacks
+**Definition - Hot path**: Any operation callable while the scheduler is running, including all API calls from actor context, event dispatch, and wakeup processing.
 
-**Forbidden malloc** (exhaustive):
-- Scheduler, IPC, timers, bus, network I/O, file I/O, linking/monitoring, I/O event processing
-- Hot path operations use static pools with O(1) allocation
+**Allowed malloc**:
+- Actor stack allocation during `hive_spawn()` only if `actor_config.malloc_stack = true`
+- Corresponding free on actor exit for malloc'd stacks
+
+**All other heap use is forbidden after `hive_init()` returns.**
+
+**Forbidden malloc** (by subsystem):
+- Scheduler and context switching
+- All IPC send/receive/select paths
+- All timer creation and delivery paths
+- All bus publish/read paths
+- All name registry operations
+- All link/monitor operations
+- All I/O event dispatch paths
 
 ### Unicode in Comments
 
@@ -145,7 +154,7 @@ The runtime consists of:
 - Cold path structures: Arena allocator with O(n) first-fit (bounded by free blocks)
   - Actor stacks: HIVE_STACK_ARENA_SIZE (1 MB default)
 - Bounded memory: ~1.2 MB static (incl. stack arena) + optional malloc'd stacks
-- Zero heap allocation in runtime operations (see Heap Usage Policy above)
+- No heap allocation in hot paths (see Heap Usage Policy above)
 
 ### Error Handling
 All runtime functions return `hive_status` with a code and optional string literal message. The message field is never heap-allocated.
@@ -335,9 +344,9 @@ To change these limits, edit `hive_static_config.h` or pass -D flags and recompi
 **Memory characteristics:**
 - All runtime structures are **statically allocated** based on compile-time limits
 - Actor stacks use static arena by default, with optional malloc via `actor_config.malloc_stack`
-- No malloc in hot paths (IPC, scheduling, I/O operations)
+- No malloc in hot paths (see Heap Usage Policy above)
 - Memory footprint calculable at link time
-- Zero heap fragmentation in message passing
+- No heap fragmentation in hot paths (optional malloc'd stacks may fragment process heap)
 - Ideal for embedded/safety-critical systems
 
 After `hive_run()` completes, call `hive_cleanup()` to free actor stacks.

@@ -11,32 +11,38 @@ A minimalistic actor-based runtime designed for **embedded and safety-critical s
 1. **Minimalistic**: Only essential features, no bloat
 2. **Predictable**: Cooperative scheduling, no surprises
 3. **Modern C11**: Clean, safe, standards-compliant code
-4. **Statically bounded memory**: All runtime memory is statically bounded (calculable at link time). Heap allocation is forbidden in hot paths and optional only for actor stacks (`malloc_stack = true`)
-5. **Pool-based allocation**: O(1) pools for hot paths; stack arena allocation is bounded and occurs only on spawn/exit
+4. **Statically bounded memory**: All runtime memory is bounded at link time; no heap allocations after init, except optional actor stacks under explicit configuration (`malloc_stack = true`)
+5. **O(1) hot paths**: IPC, timers, bus, monitoring, and I/O dispatch use pools with O(1) allocation; spawn/exit may use bounded arena search
 6. **No preemption**: Actors run until they block (IPC, I/O, timers) or yield
 
 ### Heap Usage Policy
 
+**Definition - Hot path**: Any operation callable while the scheduler is running, including all API calls from actor context, event dispatch, and wakeup processing.
+
 **Allowed heap use** (malloc/free):
-- `hive_init()`: None (uses only static/BSS)
-- `hive_spawn()`: Actor stack allocation **only if** `actor_config.malloc_stack = true`
-  - Default: Arena allocator (static memory, no malloc)
-  - Optional: Explicit malloc via config flag
-- Actor exit/cleanup: Corresponding free for malloc'd stacks
+- Actor stack allocation during `hive_spawn()` **only if** `actor_config.malloc_stack = true`
+- Corresponding free on actor exit for malloc'd stacks
 
-**Forbidden heap use** (exhaustive):
-- Scheduler loop (`hive_run()`, `hive_yield()`, context switching)
-- IPC (`hive_ipc_notify()`, `hive_ipc_notify_ex()`, `hive_ipc_recv()`, `hive_ipc_recv_match()`, `hive_ipc_recv_matches()`, `hive_ipc_request()`, `hive_ipc_reply()`)
-- Timers (`hive_timer_after()`, `hive_timer_every()`, timer delivery)
-- Bus (`hive_bus_publish()`, `hive_bus_read()`, `hive_bus_read_wait()`)
-- Network I/O (`hive_net_*()` functions, event loop dispatch)
-- File I/O (`hive_file_*()` functions, synchronous execution)
-- Linking/monitoring (`hive_link()`, `hive_monitor()`, death notifications)
-- All I/O event processing (epoll event dispatch)
+**All other heap use is forbidden after `hive_init()` returns.**
 
-**Consequence**: All "hot path" operations (scheduling, IPC, I/O) use **static pools** with **O(1) allocation** and return `HIVE_ERR_NOMEM` on pool exhaustion. Stack allocation (spawn/exit, cold path) uses arena allocator with O(n) first-fit search bounded by number of free blocks. No malloc in hot paths, no heap fragmentation, predictable allocation latency.
+**Forbidden heap use** (by subsystem):
+- Scheduler and context switching
+- All IPC send/receive/select paths
+- All timer creation and delivery paths
+- All bus publish/read paths
+- All name registry operations
+- All link/monitor operations
+- All I/O event dispatch paths (network, file)
 
-**Linux verification**: Run with `LD_PRELOAD` malloc wrapper to assert no malloc calls after `hive_init()` (except explicit `malloc_stack = true` spawns).
+**Consequences**:
+- Hot path operations use **static pools** with **O(1) allocation** and return `HIVE_ERR_NOMEM` on pool exhaustion
+- No heap fragmentation in hot paths
+- Predictable allocation latency
+- Optional malloc'd stacks may fragment the process heap depending on allocator behavior
+
+**Implementation detail** (may change): Stack allocation (spawn/exit) currently uses arena allocator with O(n) first-fit search bounded by number of free blocks, with coalescing on free.
+
+**Linux verification**: Assert no malloc/free after `hive_init()` returns, except stack allocations/frees performed by spawn/exit when `malloc_stack = true`. Use `LD_PRELOAD` malloc wrapper to enforce.
 
 ## Target Platforms
 
@@ -394,7 +400,7 @@ Stack growth/reallocation is not supported. Stack overflow results in undefined 
 
 The runtime uses static allocation for predictable behavior and suitability for MCU deployment:
 
-**Design Principle:** All memory regions are statically reserved at compile time; allocation within those regions (e.g., stack arena, message pools) occurs at runtime via bounded algorithms (O(1) for pools, O(n) for arena). No heap allocation occurs in hot paths (message passing, scheduling, I/O). Optional malloc for actor stacks when explicitly enabled via `actor_config.malloc_stack = true`.
+See "Heap Usage Policy" section for the complete memory allocation contract. Summary: all memory regions are statically reserved at compile time; allocation within those regions occurs at runtime via bounded algorithms. No heap allocation after `hive_init()` except optional malloc for actor stacks.
 
 **Allocation Strategy:**
 
@@ -438,7 +444,7 @@ The runtime uses static allocation for predictable behavior and suitability for 
 **Benefits:**
 
 - Bounded memory: Footprint calculable at link time
-- Zero heap fragmentation: No malloc after initialization (except explicit `malloc_stack` flag)
+- No heap fragmentation in hot paths (optional malloc'd stacks may fragment process heap)
 - Predictable allocation: Pool exhaustion returns clear errors (`HIVE_ERR_NOMEM`)
 - Suitable for safety-critical certification
 - Bounded latency: O(1) pool allocation for hot paths, O(n) bounded arena allocation for cold paths (spawn/exit)
