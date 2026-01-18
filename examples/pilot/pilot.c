@@ -35,9 +35,9 @@
 //                v
 //           Torque Bus --> Motor <-- Thrust Bus
 //
-// IPC coordination via name registry:
-//   flight_manager, waypoint, altitude, motor register themselves
-//   Uses hive_whereis() to look up actor IDs for IPC
+// IPC coordination via sibling info and name registry:
+//   flight_manager, waypoint, altitude, motor use auto_register
+//   Uses hive_find_sibling() to look up sibling actor IDs for IPC
 //
 // Supervision:
 //   All 9 actors are supervised with ONE_FOR_ALL strategy.
@@ -123,7 +123,7 @@ int main(void) {
     assert(HIVE_SUCCEEDED(hive_bus_create(&cfg, &s_rate_setpoint_bus)));
     assert(HIVE_SUCCEEDED(hive_bus_create(&cfg, &s_torque_bus)));
 
-    // Initialize actors with bus connections (no actor IDs - use name registry)
+    // Initialize actors with bus connections (actor IDs via sibling info)
     flight_manager_actor_init();
     sensor_actor_init(s_sensor_bus);
     estimator_actor_init(s_sensor_bus, s_state_bus);
@@ -139,7 +139,7 @@ int main(void) {
 
     // clang-format off
     // Define child specs for supervisor (9 actors)
-    // Spawn order matters: flight_manager last so its whereis() targets are registered.
+    // All actors receive sibling info array at startup with all sibling IDs.
     // Control loop order: sensor -> estimator -> waypoint -> altitude ->
     //                     position -> attitude -> rate -> motor -> flight_manager
     // clang-format on
@@ -166,7 +166,7 @@ int main(void) {
          .init_args = NULL,
          .init_args_size = 0,
          .name = "waypoint",
-         .auto_register = false,
+         .auto_register = true,
          .restart = HIVE_CHILD_PERMANENT,
          .actor_cfg = {.priority = HIVE_PRIORITY_CRITICAL, .name = "waypoint"}},
         {.start = altitude_actor,
@@ -174,7 +174,7 @@ int main(void) {
          .init_args = NULL,
          .init_args_size = 0,
          .name = "altitude",
-         .auto_register = false,
+         .auto_register = true,
          .restart = HIVE_CHILD_PERMANENT,
          .actor_cfg = {.priority = HIVE_PRIORITY_CRITICAL, .name = "altitude"}},
         {.start = position_actor,
@@ -206,7 +206,7 @@ int main(void) {
          .init_args = NULL,
          .init_args_size = 0,
          .name = "motor",
-         .auto_register = false,
+         .auto_register = true,
          .restart = HIVE_CHILD_PERMANENT,
          .actor_cfg = {.priority = HIVE_PRIORITY_CRITICAL, .name = "motor"}},
         {.start = flight_manager_actor,
@@ -214,7 +214,7 @@ int main(void) {
          .init_args = NULL,
          .init_args_size = 0,
          .name = "flight_manager",
-         .auto_register = false,
+         .auto_register = true,
          .restart = HIVE_CHILD_PERMANENT,
          .actor_cfg = {.priority = HIVE_PRIORITY_CRITICAL,
                        .name = "flight_mgr"}},

@@ -6,9 +6,9 @@
 // Landing is triggered by NOTIFY_LANDING message. When complete,
 // sends NOTIFY_FLIGHT_LANDED to flight manager.
 //
-// Uses name registry:
-// - Registers self as "altitude"
-// - Uses whereis() to find "flight_manager"
+// Uses auto_register and sibling info:
+// - Auto-registered as "altitude" via child spec
+// - Uses hive_find_sibling() to find "flight_manager"
 
 #include "altitude_actor.h"
 #include "notifications.h"
@@ -48,14 +48,14 @@ void altitude_actor_init(bus_id state_bus, bus_id thrust_bus,
 void altitude_actor(void *args, const hive_spawn_info *siblings,
                     size_t sibling_count) {
     (void)args;
-    (void)siblings;
-    (void)sibling_count;
 
-    // Register self with name registry
-    hive_status status = hive_register("altitude");
-    assert(HIVE_SUCCEEDED(status));
+    // Look up flight_manager from sibling info (auto-registered via child spec)
+    const hive_spawn_info *fm_info =
+        hive_find_sibling(siblings, sibling_count, "flight_manager");
+    assert(fm_info != NULL);
+    actor_id flight_manager = fm_info->id;
 
-    status = hive_bus_subscribe(s_state_bus);
+    hive_status status = hive_bus_subscribe(s_state_bus);
     assert(HIVE_SUCCEEDED(status));
     status = hive_bus_subscribe(s_position_target_bus);
     assert(HIVE_SUCCEEDED(status));
@@ -138,12 +138,7 @@ void altitude_actor(void *args, const hive_spawn_info *siblings,
             if (touchdown && !landed) {
                 landed = true;
                 HIVE_LOG_INFO("[ALT] Touchdown - notifying flight manager");
-
-                // Look up flight manager and notify
-                actor_id fm;
-                status = hive_whereis("flight_manager", &fm);
-                assert(HIVE_SUCCEEDED(status));
-                hive_ipc_notify(fm, NOTIFY_FLIGHT_LANDED, NULL, 0);
+                hive_ipc_notify(flight_manager, NOTIFY_FLIGHT_LANDED, NULL, 0);
             }
         } else if (landing_mode) {
             // Landing mode: control descent rate, not altitude

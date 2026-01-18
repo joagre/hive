@@ -5,8 +5,8 @@
 // Uses hive_select() to wait on torque bus OR STOP notification simultaneously,
 // ensuring immediate response to STOP commands (critical for safety).
 //
-// Uses name registry:
-// - Registers self as "motor"
+// Uses auto_register:
+// - Auto-registered as "motor" via child spec
 
 #include "motor_actor.h"
 #include "notifications.h"
@@ -32,11 +32,8 @@ void motor_actor(void *args, const hive_spawn_info *siblings,
     (void)siblings;
     (void)sibling_count;
 
-    // Register self with name registry
-    hive_status status = hive_register("motor");
-    assert(HIVE_SUCCEEDED(status));
-
-    status = hive_bus_subscribe(s_torque_bus);
+    // Auto-registered as "motor" via child spec
+    hive_status status = hive_bus_subscribe(s_torque_bus);
     assert(HIVE_SUCCEEDED(status));
 
     bool stopped = false;

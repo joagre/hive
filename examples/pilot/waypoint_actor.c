@@ -3,8 +3,8 @@
 // Subscribes to state bus to monitor position, publishes current target
 // to position target bus. Advances through waypoint list when arrival detected.
 //
-// Uses name registry:
-// - Registers self as "waypoint"
+// Uses auto_register:
+// - Auto-registered as "waypoint" via child spec
 
 #include "waypoint_actor.h"
 #include "flight_profiles.h"
@@ -52,11 +52,8 @@ void waypoint_actor(void *args, const hive_spawn_info *siblings,
     (void)siblings;
     (void)sibling_count;
 
-    // Register self with name registry
-    hive_status status = hive_register("waypoint");
-    assert(HIVE_SUCCEEDED(status));
-
-    status = hive_bus_subscribe(s_state_bus);
+    // Auto-registered as "waypoint" via child spec
+    hive_status status = hive_bus_subscribe(s_state_bus);
     assert(HIVE_SUCCEEDED(status));
 
     // Wait for START signal from flight manager before beginning flight
