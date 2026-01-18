@@ -13,17 +13,17 @@ Demonstrates waypoint navigation with a quadcopter using 10 actors (9 workers + 
 
 1. **Sensor actor** reads raw sensors via HAL, publishes to sensor bus
 2. **Estimator actor** runs complementary filter, computes velocities, publishes to state bus
-3. **Altitude actor** reads target altitude from position target bus, runs altitude PID
+3. **Altitude actor** reads target altitude from position target bus, runs altitude PID, handles landing
 4. **Waypoint actor** waits for START signal, manages waypoint list, publishes to position target bus
 5. **Position actor** reads target XY/yaw from position target bus, runs position PD
 6. **Attitude actor** runs attitude PIDs, publishes rate setpoints
 7. **Rate actor** runs rate PIDs, publishes torque commands
 8. **Motor actor** reads torque bus, writes to hardware via HAL (checks for STOP signal)
-9. **Flight manager actor** handles startup delay (60s), sends START/STOP notifications
+9. **Flight manager actor** handles startup delay (60s), landing coordination, log file management
 10. **Supervisor actor** monitors all 9 workers, restarts all on crash (ONE_FOR_ALL)
 
-Workers use the **name registry** (`hive_register`/`hive_whereis`) for IPC coordination
-instead of passing actor IDs at spawn time.
+Workers use `hive_find_sibling()` for IPC coordination via sibling info passed
+by the supervisor at spawn time.
 
 **Webots:** Flies a square pattern with altitude changes at each waypoint (full 3D navigation with GPS).
 
@@ -162,7 +162,7 @@ crashes, all are killed and restarted together to ensure consistent pipeline sta
 
 Workers run at CRITICAL priority. Spawn order determines execution order within
 the same priority level (round-robin). Workers are spawned in data-flow order,
-with flight_manager last so its `hive_whereis()` targets are already registered:
+with flight_manager last so all siblings are available via `hive_find_sibling()`:
 
 | Order | Actor     | Priority | Rationale |
 |-------|-----------|----------|-----------|
@@ -174,11 +174,11 @@ with flight_manager last so its `hive_whereis()` targets are already registered:
 | 6     | attitude  | CRITICAL | Needs attitude setpoints, produces rate setpoints |
 | 7     | rate      | CRITICAL | Needs state + thrust + rate setpoints |
 | 8     | motor     | CRITICAL | Needs torque + STOP signal, writes hardware last |
-| 9     | flight_mgr| CRITICAL | Spawns last; uses whereis() to find waypoint, altitude, motor |
+| 9     | flight_mgr| CRITICAL | Spawns last so all siblings are available |
 
-Workers use the **name registry** for IPC coordination:
-- `flight_manager`, `waypoint`, `altitude`, `motor` register themselves
-- `flight_manager` uses `hive_whereis()` to look up targets for notifications
+Workers use **sibling info** for IPC coordination:
+- Supervisor passes sibling info (actor IDs and names) at spawn time
+- `flight_manager` uses `hive_find_sibling()` to look up waypoint, altitude, motor
 
 ## Control System
 

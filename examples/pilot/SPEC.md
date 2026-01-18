@@ -63,11 +63,11 @@ All 9 workers are spawned by the supervisor in dependency order:
 1. **Sensor → Estimator** - Estimator subscribes to sensor bus
 2. **Controllers** - Subscribe to state bus (created by estimator)
 3. **Motor** - Subscribes to torque bus (created by rate actor)
-4. **Flight manager** - Spawns last; uses `hive_whereis()` to find targets
+4. **Flight manager** - Spawns last so all siblings are available
 
-**Name Registry:** Workers register themselves (`hive_register()`) and use
-`hive_whereis()` to look up IPC targets. This works with supervision: after
-a restart, `whereis()` returns the new actor ID.
+**Sibling Info:** Actors use `hive_find_sibling()` to look up sibling actor IDs
+for IPC coordination. The supervisor passes sibling info at spawn time, making
+the spawn order deterministic. After restart, siblings are re-resolved automatically.
 
 **Important:** Bus subscriptions see nothing until first publish *after* subscription.
 A subscriber spawned before the first publish will get valid data on first read.
@@ -75,7 +75,7 @@ A subscriber spawned *after* a publish sees nothing until the next publish.
 
 The spawn order in `pilot.c` ensures:
 1. All subscribers are ready before their data sources begin publishing
-2. `flight_manager` spawns last so its `whereis()` targets are registered
+2. `flight_manager` spawns last so all siblings are available via `hive_find_sibling()`
 
 ### Pipeline Model
 
@@ -189,8 +189,8 @@ Ten actors: nine workers connected via buses, plus one supervisor:
 **Supervision:** All 9 workers are supervised with ONE_FOR_ALL strategy. If any
 worker crashes, all are killed and restarted together to ensure consistent state.
 
-**Name Registry:** Workers use `hive_register()`/`hive_whereis()` for IPC coordination
-instead of passing actor IDs. This allows `whereis()` to return fresh IDs after restart.
+**Sibling Info:** Workers use `hive_find_sibling()` to look up sibling actor IDs
+for IPC communication. The supervisor passes sibling info at spawn time.
 
 ```mermaid
 graph TB
@@ -538,12 +538,12 @@ graph LR
 | **Sensor** | Hardware | Sensor Bus | CRITICAL | Read raw sensors, publish |
 | **Estimator** | Sensor Bus | State Bus | CRITICAL | Complementary filter fusion, state estimate |
 | **Waypoint** | State Bus + START notification | Position Target Bus | CRITICAL | Waypoint navigation (3D on Webots, altitude-only on STM32) |
-| **Altitude** | State + Position Target Bus | Thrust Bus | CRITICAL | Altitude PID (250Hz) |
+| **Altitude** | State + Position Target Bus + LANDING | Thrust Bus + LANDED | CRITICAL | Altitude PID (250Hz), landing detection |
 | **Position** | Position Target + State Bus | Attitude Setpoint Bus | CRITICAL | Position PD (250Hz) |
 | **Attitude** | Attitude Setpoint + State | Rate Setpoint Bus | CRITICAL | Attitude PIDs (250Hz) |
 | **Rate** | State + Thrust + Rate SP | Torque Bus | CRITICAL | Rate PIDs (250Hz) |
 | **Motor** | Torque Bus + STOP notification | Hardware | CRITICAL | Output to hardware via HAL |
-| **Flight Manager** | (none) | START/STOP notifications | CRITICAL | Startup delay, flight window cutoff |
+| **Flight Manager** | LANDED notification | START/LANDING/STOP notifications | CRITICAL | Startup delay, landing coordination |
 
 **Why all CRITICAL?** All workers use the same priority so execution order follows spawn order
 (round-robin within priority level). This ensures the data pipeline executes correctly:
@@ -713,20 +713,28 @@ Waypoint actor starts immediately
 
 **After:**
 ```
-Flight Manager Actor ──► START notification ──► Waypoint Actor
-                                              │
-                                              ↓ (flight begins)
-                 ──► STOP notification ──► Motor Actor
-                      (after flight window)    │
-                                               ↓ (motors zeroed)
+Flight Manager ──► START ──► Waypoint Actor
+                              │
+                              ↓ (flight begins)
+               ──► LANDING ──► Altitude Actor
+                              │
+               ◄── LANDED ◄───┘ (touchdown detected)
+                              │
+               ──► STOP ────► Motor Actor
+                              │
+                              ↓ (motors zeroed)
 ```
 
 **Implementation:**
 - Handles 60-second startup delay (hardware only)
+- Opens log file (erases flash sector on STM32)
 - Sends START notification to waypoint actor to begin flight
-- Enforces 12-second flight window (hardware only)
-- Sends STOP notification to motor actor after flight window expires
-- Motor actor zeros torque output when stopped
+- Periodic log sync every 4 seconds
+- Flight duration per profile (10s/40s/60s)
+- Sends LANDING notification to altitude actor
+- Waits for LANDED notification (touchdown detected)
+- Sends STOP notification to motor actor
+- Closes log file
 
 **Benefits:**
 - Centralized safety timing (not scattered across actors)
