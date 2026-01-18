@@ -54,10 +54,9 @@ void altitude_actor(void *args, const hive_spawn_info *siblings,
     altitude_state *state = args;
 
     // Look up flight_manager from sibling info
-    const hive_spawn_info *fm_info =
+    state->flight_manager =
         hive_find_sibling(siblings, sibling_count, "flight_manager");
-    assert(fm_info != NULL);
-    state->flight_manager = fm_info->id;
+    assert(state->flight_manager != ACTOR_ID_INVALID);
 
     hive_status status = hive_bus_subscribe(state->state_bus);
     assert(HIVE_SUCCEEDED(status));

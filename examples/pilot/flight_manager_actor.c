@@ -49,17 +49,11 @@ void flight_manager_actor(void *args, const hive_spawn_info *siblings,
     (void)args;
 
     // Look up sibling actors
-    const hive_spawn_info *wp_info =
-        hive_find_sibling(siblings, sibling_count, "waypoint");
-    const hive_spawn_info *alt_info =
-        hive_find_sibling(siblings, sibling_count, "altitude");
-    const hive_spawn_info *motor_info =
-        hive_find_sibling(siblings, sibling_count, "motor");
-    assert(wp_info != NULL && alt_info != NULL && motor_info != NULL);
-
-    actor_id waypoint = wp_info->id;
-    actor_id altitude = alt_info->id;
-    actor_id motor = motor_info->id;
+    actor_id waypoint = hive_find_sibling(siblings, sibling_count, "waypoint");
+    actor_id altitude = hive_find_sibling(siblings, sibling_count, "altitude");
+    actor_id motor = hive_find_sibling(siblings, sibling_count, "motor");
+    assert(waypoint != ACTOR_ID_INVALID && altitude != ACTOR_ID_INVALID &&
+           motor != ACTOR_ID_INVALID);
 
 #ifndef SIMULATED_TIME
     // Real hardware: wait for startup delay before allowing flight
