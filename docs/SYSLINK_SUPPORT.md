@@ -993,141 +993,20 @@ hive_status pilot_init(void) {
 
 ---
 
-## BLE Alternative
+## Why Not BLE?
 
-The nRF51822 on the Crazyflie supports both ESB and Bluetooth Low Energy (BLE).
-BLE is an alternative to the syslink/ESB approach documented above.
+The nRF51822 supports BLE, but it's not recommended for this use case:
 
-> **Important:** BLE requires replacing the stock nRF51 firmware with a BLE-enabled
-> version. This adds significant complexity compared to ESB, which works with the
-> stock firmware. **For custom STM32 firmware (like Hive), ESB/syslink is the
-> simpler choice** - you only write code for one MCU instead of two.
+- **Requires custom nRF51 firmware** - Stock firmware uses ESB, not BLE. You'd
+  need to reflash the radio MCU, adding complexity (two MCUs to program instead
+  of one).
+- **Lower throughput** - BLE connection intervals (7.5-30ms) limit telemetry to
+  ~50Hz max. ESB easily handles 100Hz.
+- **More protocol complexity** - BLE requires GATT services. ESB/syslink is just
+  raw packets.
 
-### Hardware Support
-
-The same nRF51822 chip handles both protocols:
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│ nRF51822 Radio Capabilities                                     │
-├─────────────────────────────────────────────────────────────────┤
-│  ESB (Enhanced ShockBurst)     │  BLE (Bluetooth Low Energy)   │
-│  - Nordic proprietary          │  - Bluetooth 4.0 standard     │
-│  - Used by Crazyradio PA       │  - Works with any BLE device  │
-│  - Higher throughput           │  - No special dongle needed   │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-**Note:** The nRF51 can only run one protocol at a time. Switching requires
-different firmware or a firmware that time-multiplexes (complex).
-
-### ESB vs BLE Comparison
-
-| Aspect | ESB + Crazyradio PA | BLE |
-|--------|---------------------|-----|
-| **Range** | Up to 1km (with PA) | 30-50m typical |
-| **Latency** | ~2ms | 7.5-30ms (connection interval) |
-| **Throughput** | ~1 Mbps raw | ~270 kbps practical |
-| **Ground station** | Crazyradio PA + Python | Any laptop/phone |
-| **Extra hardware** | Yes (Crazyradio PA ~$30) | No (built-in) |
-| **Protocol complexity** | Simple (syslink packets) | Complex (GATT services) |
-| **nRF51 firmware** | Stock (no changes) ✓ | Must replace with BLE build ✗ |
-| **STM32 code only** | Yes ✓ | No (need nRF51 work too) ✗ |
-
-### When to Use Each
-
-**Use ESB (syslink) when:**
-- You're writing custom STM32 firmware (like Hive) - stock nRF51 just works
-- You need high-frequency telemetry (100Hz)
-- You need long range (outdoor flying)
-- You want the simplest path - only one MCU to program
-
-**Use BLE when:**
-- You're willing to reflash the nRF51 with BLE-enabled firmware
-- 50Hz telemetry is sufficient
-- You're flying indoors (short range OK)
-- You want to receive data on a phone without any dongle
-
-### BLE Telemetry Rate Limits
-
-BLE connection intervals constrain telemetry rate:
-
-| Connection Interval | Max Telemetry Rate | Notes |
-|---------------------|-------------------|-------|
-| 7.5ms (minimum) | ~133 Hz | Aggressive, may drain battery |
-| 15ms | ~66 Hz | Good balance |
-| 30ms | ~33 Hz | Conservative, reliable |
-| 50ms | ~20 Hz | Low power |
-
-For 100Hz logging (per STABILIZATION.md), ESB is the better choice.
-For 50Hz or lower, BLE works fine.
-
-### BLE Implementation Approach
-
-If choosing BLE, the implementation differs significantly:
-
-**nRF51 firmware:** Must be replaced with BLE-enabled version (Bitcraze has
-experimental builds, or use Nordic SDK to build custom).
-
-**STM32 side:** Still uses syslink UART, but with different packet types:
-- `SYSLINK_BLE_SEND` instead of `SYSLINK_RADIO_RAW`
-- BLE-specific flow control
-
-**Ground station:** Use standard BLE libraries:
-
-```python
-# Python BLE example using bleak library
-import asyncio
-from bleak import BleakClient
-
-CRAZYFLIE_ADDRESS = "XX:XX:XX:XX:XX:XX"
-TELEMETRY_CHAR_UUID = "00002a56-0000-1000-8000-00805f9b34fb"  # Example
-
-async def receive_telemetry():
-    async with BleakClient(CRAZYFLIE_ADDRESS) as client:
-        def callback(sender, data):
-            # Process telemetry packet
-            print(f"Received: {data.hex()}")
-
-        await client.start_notify(TELEMETRY_CHAR_UUID, callback)
-        await asyncio.sleep(60)  # Receive for 60 seconds
-
-asyncio.run(receive_telemetry())
-```
-
-Or use a smartphone app (many generic BLE terminal apps available).
-
-### HAL Abstraction for Both
-
-The HAL can abstract over both transports:
-
-```c
-// hal/hal.h - transport-agnostic radio interface
-
-#ifdef HAL_HAS_RADIO
-
-// Works with either ESB (syslink) or BLE backend
-int hal_radio_init(void);
-int hal_radio_send(const void *data, size_t len);
-bool hal_radio_tx_ready(void);
-
-#endif
-```
-
-Platform implementation chooses the backend:
-- `hal/crazyflie-2.1+/hal_radio_esb.c` - ESB via syslink (this document)
-- `hal/crazyflie-2.1+/hal_radio_ble.c` - BLE via syslink (future)
-
-### Recommendation
-
-For the Hive pilot project with 100Hz telemetry requirements:
-
-**Start with ESB (syslink)** - simpler, faster, documented here.
-
-Consider BLE later if:
-- You need phone-based ground station
-- Range requirements are modest
-- You can reduce telemetry to 50Hz
+**Bottom line:** ESB + Crazyradio PA (~$30) lets you keep stock nRF51 firmware
+and only write STM32 code. Much simpler.
 
 ---
 
