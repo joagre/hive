@@ -69,14 +69,17 @@ QEMU_BIN := $(BUILD_DIR)/test.bin
 # Runtime objects for test linking (exclude test_main.o which has its own main)
 QEMU_RUNTIME_OBJS := $(filter-out $(BUILD_DIR)/test_main.o,$(QEMU_OBJS))
 
-# Compatible tests (exclude net_test.c and file_test.c which require disabled features)
+# Compatible tests (exclude net_test.c, file_test.c, logging_test.c which require disabled features)
 QEMU_COMPAT_TESTS := actor_test ipc_test timer_test link_test \
                      monitor_test bus_test priority_test runtime_test \
                      timeout_test arena_test pool_exhaustion_test \
-                     backoff_retry_test simple_backoff_test congestion_demo
+                     backoff_retry_test simple_backoff_test congestion_demo \
+                     select_test supervisor_test registry_test \
+                     sibling_test spawn_init_test
 
-# Compatible examples (exclude echo.c and fileio.c which require net/file features)
-QEMU_COMPAT_EXAMPLES := timer pingpong priority link_demo supervisor bus request_reply select
+# Compatible examples (exclude echo.c, fileio.c, logging.c which require net/file features)
+QEMU_COMPAT_EXAMPLES := timer pingpong priority link_demo supervisor bus request_reply select \
+                        supervisor_manual registry
 
 # ============================================================================
 # Build Rules
