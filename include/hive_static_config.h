@@ -36,6 +36,19 @@
 #define HIVE_DEFAULT_STACK_SIZE 65536
 #endif
 
+// Enable stack watermarking for measuring actual stack usage
+// When enabled, stacks are filled with a pattern at allocation time
+// Use hive_actor_stack_usage() to measure how much was overwritten
+// Default: disabled (adds overhead at actor spawn and query time)
+#ifndef HIVE_STACK_WATERMARK
+#define HIVE_STACK_WATERMARK 0
+#endif
+
+// Stack watermark pattern (32-bit value repeated across stack)
+#ifndef HIVE_STACK_WATERMARK_PATTERN
+#define HIVE_STACK_WATERMARK_PATTERN 0xDEADBEEF
+#endif
+
 // Stack arena size for actor stacks (when malloc_stack = false)
 // Should be sized for peak actor count * average stack size
 // Example: 20 actors * 64KB = 1.3 MB (with overhead)

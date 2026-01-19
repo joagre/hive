@@ -122,4 +122,15 @@ actor *hive_actor_current(void);
 // Set current actor (used by scheduler)
 void hive_actor_set_current(actor *a);
 
+// Stack watermarking functions (enabled when HIVE_STACK_WATERMARK=1)
+// Returns bytes used if watermarking enabled, or stack_size if disabled
+size_t hive_actor_stack_usage(actor_id id);
+
+// Callback for hive_actor_stack_usage_all()
+typedef void (*stack_usage_callback)(actor_id id, const char *name,
+                                     size_t stack_size, size_t used);
+
+// Iterate all live actors and report their stack usage via callback
+void hive_actor_stack_usage_all(stack_usage_callback cb);
+
 #endif // HIVE_ACTOR_H

@@ -50,6 +50,12 @@ CFLAGS += -DHIVE_PLATFORM_LINUX
 # Use HIVE_LOG_LEVEL_DEBUG for detailed debugging, HIVE_LOG_LEVEL_NONE to disable all
 CFLAGS += -DHIVE_LOG_LEVEL=HIVE_LOG_LEVEL_INFO
 
+# Stack profiling: enable watermarking to measure actual stack usage
+# Use: make STACK_PROFILE=1 to enable stack usage reporting
+ifdef STACK_PROFILE
+CFLAGS += -DHIVE_STACK_WATERMARK=1
+endif
+
 # Hive memory configuration (shared pilot settings + platform stack sizes)
 include hive_config.mk
 CFLAGS += $(HIVE_CFLAGS)

@@ -241,6 +241,18 @@ actor *hive_actor_alloc(actor_fn fn, void *args,
     a->stack_size = stack_size;
     a->stack_is_malloced = is_malloced; // Track allocation method
 
+#if HIVE_STACK_WATERMARK
+    // Fill stack with watermark pattern for usage measurement
+    // Stack grows downward, so fill entire stack with pattern
+    {
+        uint32_t *p = (uint32_t *)stack;
+        size_t count = stack_size / sizeof(uint32_t);
+        for (size_t i = 0; i < count; i++) {
+            p[i] = HIVE_STACK_WATERMARK_PATTERN;
+        }
+    }
+#endif
+
     // Store startup info for context_entry to use
     a->startup_args = args;
     a->startup_siblings = siblings;
@@ -330,4 +342,49 @@ actor_id hive_find_sibling(const hive_spawn_info *siblings, size_t count,
     }
 
     return ACTOR_ID_INVALID;
+}
+
+// Stack watermarking functions
+size_t hive_actor_stack_usage(actor_id id) {
+    actor *a = hive_actor_get(id);
+    if (!a || !a->stack) {
+        return 0;
+    }
+
+#if HIVE_STACK_WATERMARK
+    // Stack grows downward from top (stack + stack_size) toward base (stack)
+    // Count how many words at the base still have the watermark pattern
+    uint32_t *p = (uint32_t *)a->stack;
+    size_t total_words = a->stack_size / sizeof(uint32_t);
+    size_t clean_words = 0;
+
+    for (size_t i = 0; i < total_words; i++) {
+        if (p[i] == HIVE_STACK_WATERMARK_PATTERN) {
+            clean_words++;
+        } else {
+            break; // First non-pattern word found
+        }
+    }
+
+    // Used bytes = total bytes - clean bytes
+    size_t clean_bytes = clean_words * sizeof(uint32_t);
+    return a->stack_size - clean_bytes;
+#else
+    // Watermarking disabled, return full stack size as "used"
+    return a->stack_size;
+#endif
+}
+
+void hive_actor_stack_usage_all(stack_usage_callback cb) {
+    if (!cb) {
+        return;
+    }
+
+    for (size_t i = 0; i < s_actor_table.max_actors; i++) {
+        actor *a = &s_actor_table.actors[i];
+        if (a->state != ACTOR_STATE_DEAD && a->id != ACTOR_ID_INVALID) {
+            size_t used = hive_actor_stack_usage(a->id);
+            cb(a->id, a->name, a->stack_size, used);
+        }
+    }
 }
