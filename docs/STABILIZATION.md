@@ -406,13 +406,182 @@ correctly — prioritize attitude over altitude, avoid integrator windup.
 
 ---
 
+## Acrobatic Mode Architecture
+
+Once Steps 0-10 are complete, the flight controller has the foundation for acrobatic
+maneuvers: quaternion attitude, fast rate control, feedforward, and saturation handling.
+The remaining question is how to architect the transition between stabilized flight
+and acrobatic maneuvers.
+
+### The Naive Approach (Don't Do This)
+
+An obvious but flawed approach: "disable stabilization during maneuvers, re-enable
+after falling X meters or timeout."
+
+**Why this fails:**
+
+1. **"Disable" is too coarse.** If you disable rate PIDs, you're in open-loop control—
+   the drone becomes uncontrollable. For a flip, you still need rate control to execute
+   the rotation at a specific angular velocity (e.g., 720°/s).
+
+2. **"Fallen X meters" doesn't generalize.**
+   - Barrel roll is mostly horizontal (no altitude change)
+   - Inverted climb gains altitude
+   - Loop goes up then down
+   - This trigger only works for a subset of maneuvers
+
+3. **Loss of control authority.** With rate PIDs disabled, there's no way to control
+   flip speed, stop a rotation, or recover from disturbances mid-maneuver.
+
+### What Professional Systems Do
+
+Betaflight, PX4, ArduPilot, and other mature flight controllers use **mode-based
+setpoint routing**, not "disable stabilization":
+
+| Mode | Setpoint Source | Active Controllers |
+|------|-----------------|-------------------|
+| Angle/Stabilize | Stick → attitude | Attitude → Rate → Motors |
+| Acro/Rate | Stick → rate | Rate → Motors |
+| Horizon | Hybrid | Both (blended) |
+
+**Key insight:** The rate controller is the innermost loop and is *never* disabled.
+It's what makes the drone controllable. What changes is:
+- What generates rate setpoints
+- Whether attitude control is active
+
+For a flip maneuver in Betaflight:
+1. Pilot switches to Acro mode (stick controls angular rate directly)
+2. Commands high roll rate (e.g., stick full deflection = 720°/s)
+3. Rate PIDs track this setpoint—drone rotates at commanded speed
+4. Pilot centers stick to stop rotation
+5. (Optional) Switch back to Angle mode for self-leveling
+
+The rate controller runs continuously. Only the source of setpoints changes.
+
+### Proposed Architecture for Pilot Example
+
+Apply the same principle: change who publishes to the rate setpoint bus, don't
+disable controllers.
+
+**Normal (stabilized) mode:**
+```
+Position → Attitude SP Bus → Attitude → Rate SP Bus → Rate → Motors
+```
+
+**Acrobatic mode:**
+```
+Acro Waypoint ─────────────────────────→ Rate SP Bus → Rate → Motors
+                                              ↑
+                              (bypasses attitude actor)
+```
+
+**Implementation:**
+
+1. **Add mode flag** to attitude setpoint bus (or separate mode bus)
+2. **Attitude actor** checks mode:
+   - Normal: publishes rate setpoints as usual
+   - Acro: stops publishing (yields control to acro waypoint)
+3. **Rate actor** unchanged—tracks whatever setpoints arrive
+4. **Acro waypoint actor** owns the maneuver state machine:
+   - Publishes rate setpoints directly for maneuver execution
+   - Monitors attitude for completion triggers
+   - Handles timeout safety
+
+**For a flip maneuver:**
+```c
+// 1. Signal acro mode (attitude actor stops publishing)
+hive_bus_publish(mode_bus, ACRO_MODE);
+
+// 2. Command the flip: 720°/s roll rate
+rate_setpoint_t sp = {.roll = 720.0f, .pitch = 0, .yaw = 0};
+hive_bus_publish(rate_setpoint_bus, &sp);
+
+// 3. Monitor: wait for 360° rotation or timeout
+while (rotation < 360.0f && elapsed < timeout) {
+    // Rate actor is tracking our setpoint—drone is rotating
+    rotation += gyro_roll * dt;
+}
+
+// 4. Stop rotation
+sp.roll = 0;
+hive_bus_publish(rate_setpoint_bus, &sp);
+
+// 5. Return to normal mode
+hive_bus_publish(mode_bus, NORMAL_MODE);
+```
+
+### Maneuver Completion Triggers
+
+Different maneuvers need different completion criteria:
+
+| Maneuver | Primary Trigger | Fallback |
+|----------|-----------------|----------|
+| Flip (roll) | Roll angle crosses 360° | Timeout (1s) |
+| Flip (pitch) | Pitch angle crosses 360° | Timeout (1s) |
+| Half-roll | Roll angle crosses 180° | Timeout (0.5s) |
+| Inverted hang | Attitude near inverted | Timeout + max altitude loss |
+| Barrel roll | Combined rotation + position | Timeout |
+
+**Avoid pure time-based triggers.** "Flip for 0.5 seconds" fails if:
+- Battery is low (slower rotation)
+- Wind affects rotation speed
+- Motors are degraded
+
+**Prefer attitude-based triggers** with timeout as safety fallback.
+
+### Safety Mechanisms
+
+**Per-maneuver timeout:** Each maneuver has a maximum duration. If the completion
+trigger hasn't fired, abort and return to stabilized flight.
+
+```c
+typedef struct {
+    maneuver_type type;
+    float timeout_ms;           // Max duration (e.g., 1000ms for flip)
+    float max_altitude_loss_m;  // Abort if exceeded (e.g., 2m)
+    float completion_angle_deg; // e.g., 360 for full flip
+} maneuver_config;
+```
+
+**Hard timeout in rate actor:** As a last-resort safety, if no setpoints arrive
+for N milliseconds, the rate actor could zero its outputs or switch to a safe
+default. This catches bugs where the acro waypoint actor crashes mid-maneuver.
+
+**Attitude limits during transition:** When returning from acro to normal mode,
+the attitude actor may see a large error (e.g., 30° off level). Implement rate
+limiting on the transition to avoid commanding maximum deflection instantly.
+
+### Actor Responsibilities
+
+| Actor | Normal Mode | Acro Mode |
+|-------|-------------|-----------|
+| Position | Publishes attitude setpoints | Paused (or tracking disabled) |
+| Attitude | Publishes rate setpoints | Paused (mode flag) |
+| Rate | Tracks rate setpoints | Tracks rate setpoints (unchanged) |
+| Altitude | Controls thrust | May be paused or given "don't care" target |
+| Acro Waypoint | Inactive | Publishes rate setpoints, monitors completion |
+
+**The rate actor doesn't know about modes.** It just tracks setpoints. This is
+the cleanest separation—mode logic lives in one place (acro waypoint actor).
+
+### Why This Architecture Works
+
+1. **Rate control never disabled** — drone is always controllable
+2. **Clean separation** — stabilization actors don't know about flips
+3. **Testable** — can test maneuvers by injecting rate setpoints manually
+4. **Extensible** — new maneuvers are just new state machines in acro waypoint
+5. **Safe** — multiple layers of timeout protection
+6. **Standard practice** — matches how Betaflight/PX4 handle acro mode
+
+---
+
 ## Future Steps (Beyond Basic Acrobatics)
 
 These are out of scope for this document but noted for completeness:
 
 - **Trajectory generation**: Minimum-snap polynomials, time-optimal paths
-- **Flip maneuvers**: Open-loop + closed-loop hybrid control
-- **Inverted flight**: Negative thrust handling
+- **Flip maneuvers**: Implement the acro waypoint actor described above
+- **Inverted flight**: Negative thrust handling, requires thrust reversal logic
 - **Multi-drone coordination**: For the arena concept
 
 ---
