@@ -588,57 +588,153 @@ python3 tools/telemetry_receiver.py
 
 ---
 
-## Integration with Hive Build System
+## Integration with Pilot HAL
 
-### New Files
+The pilot example already has a Hardware Abstraction Layer (HAL) with two main
+functions used by actors:
+
+```c
+// Existing HAL functions (examples/pilot/hal/hal.h)
+void hal_read_sensors(sensor_data_t *sensors);  // Used by sensor_actor
+void hal_write_torque(const torque_cmd_t *cmd); // Used by motor_actor
+```
+
+Syslink support adds radio functions to this same HAL interface.
+
+### Existing HAL Structure
 
 ```
-src/
-  hive_radio.c              # Stub (returns HIVE_ERR_UNSUPPORTED)
-  hive_radio_crazyflie.c    # Crazyflie implementation
+examples/pilot/
+├── hal/
+│   ├── hal.h                      # Common interface (all platforms)
+│   ├── crazyflie-2.1+/
+│   │   ├── hal_crazyflie.c        # HAL implementation
+│   │   ├── platform_crazyflie.h   # Platform-specific functions
+│   │   └── Makefile
+│   ├── STEVAL-DRONE01/
+│   │   ├── hal_stm32.c
+│   │   └── ...
+│   └── webots-crazyflie/
+│       ├── hal_webots.c
+│       └── ...
+```
 
-include/
-  hive_radio.h              # Public API
+### Adding Syslink to HAL
+
+New functions in `hal/hal.h`:
+
+```c
+// ----------------------------------------------------------------------------
+// Radio Interface (Crazyflie only)
+// ----------------------------------------------------------------------------
+
+#ifdef HAL_HAS_RADIO
+
+// Initialize syslink UART to nRF51.
+// Called by hal_init() on platforms with radio.
+int hal_radio_init(void);
+
+// Send raw data over radio (max 31 bytes).
+// Returns 0 on success, -1 if flow control disallows TX.
+int hal_radio_send(const void *data, size_t len);
+
+// Check if radio TX is permitted (flow control).
+bool hal_radio_tx_ready(void);
+
+// Poll for incoming radio data (call from main loop).
+void hal_radio_poll(void);
+
+// Register callback for incoming radio packets.
+typedef void (*hal_radio_rx_callback)(const void *data, size_t len);
+void hal_radio_set_rx_callback(hal_radio_rx_callback cb);
+
+// Get battery voltage (received via syslink PM_BATTERY).
+float hal_radio_get_battery(void);
+
+#endif // HAL_HAS_RADIO
+```
+
+### Platform Implementation
+
+The Crazyflie HAL implements these functions using syslink:
+
+```
+examples/pilot/hal/crazyflie-2.1+/
+├── hal_crazyflie.c          # Existing: sensors, motors
+├── hal_radio.c              # NEW: syslink implementation
+├── platform_crazyflie.h     # Add syslink declarations
+└── Makefile                 # Add hal_radio.c, define HAL_HAS_RADIO
+```
+
+**hal_radio.c** contains the syslink state machine, UART driver, and flow
+control logic (see "Minimal Implementation for Hive" section above).
+
+### Stubs for Other Platforms
+
+Platforms without radio provide empty stubs or compile-time exclusion:
+
+```c
+// hal/STEVAL-DRONE01/hal_stm32.c (no radio)
+
+#ifdef HAL_HAS_RADIO
+// Not defined for this platform - radio functions excluded
+#endif
+```
+
+Or with stubs if HAL_HAS_RADIO is defined globally:
+
+```c
+// hal/webots-crazyflie/hal_webots.c (simulation stub)
+
+int hal_radio_init(void) { return 0; }
+int hal_radio_send(const void *data, size_t len) { (void)data; (void)len; return -1; }
+bool hal_radio_tx_ready(void) { return false; }
+void hal_radio_poll(void) { }
+void hal_radio_set_rx_callback(hal_radio_rx_callback cb) { (void)cb; }
+float hal_radio_get_battery(void) { return 0.0f; }
 ```
 
 ### Makefile Changes
 
 ```makefile
-# In Makefile.crazyflie or similar
-
-# Add radio source
-SRCS += hive_radio_crazyflie.c
+# hal/crazyflie-2.1+/Makefile
 
 # Enable radio support
-CFLAGS += -DHIVE_ENABLE_RADIO=1
+CFLAGS += -DHAL_HAS_RADIO
+
+# Add radio source
+SRCS += hal_radio.c
 ```
 
-### Conditional Compilation
+### Usage in Actors
+
+Actors use HAL functions directly, staying hardware-independent:
 
 ```c
-// hive_radio.h
+// logging_actor.c
 
-#ifndef HIVE_ENABLE_RADIO
-#define HIVE_ENABLE_RADIO 0
-#endif
+#include "hal/hal.h"
 
-#if HIVE_ENABLE_RADIO
-
-hive_status hive_radio_init(void);
-hive_status hive_radio_send(const void *data, size_t len);
-bool hive_radio_tx_ready(void);
-// ...
-
-#else
-
-// Stubs that return errors
-static inline hive_status hive_radio_init(void) {
-    return HIVE_ERROR(HIVE_ERR_UNSUPPORTED, "Radio not enabled");
+static void logging_actor(void *args, ...) {
+    #ifdef HAL_HAS_RADIO
+    // Send telemetry if radio available and flow control permits
+    if (hal_radio_tx_ready()) {
+        telemetry_packet_t pkt = { ... };
+        hal_radio_send(&pkt, sizeof(pkt));
+    }
+    #endif
 }
-// ...
-
-#endif
 ```
+
+### Complete HAL Function Summary
+
+After adding syslink, the HAL has three categories:
+
+| Category | Functions | Used By |
+|----------|-----------|---------|
+| **Lifecycle** | `hal_init`, `hal_cleanup`, `hal_calibrate`, `hal_arm`, `hal_disarm` | pilot.c |
+| **Sensors/Motors** | `hal_read_sensors`, `hal_write_torque` | sensor_actor, motor_actor |
+| **Radio** (new) | `hal_radio_init`, `hal_radio_send`, `hal_radio_tx_ready`, `hal_radio_poll`, `hal_radio_set_rx_callback`, `hal_radio_get_battery` | logging_actor, hive_log |
 
 ---
 
