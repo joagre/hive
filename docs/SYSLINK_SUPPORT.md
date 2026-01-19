@@ -919,6 +919,11 @@ hive_status pilot_init(void) {
 The nRF51822 on the Crazyflie supports both ESB and Bluetooth Low Energy (BLE).
 BLE is an alternative to the syslink/ESB approach documented above.
 
+> **Important:** BLE requires replacing the stock nRF51 firmware with a BLE-enabled
+> version. This adds significant complexity compared to ESB, which works with the
+> stock firmware. **For custom STM32 firmware (like Hive), ESB/syslink is the
+> simpler choice** - you only write code for one MCU instead of two.
+
 ### Hardware Support
 
 The same nRF51822 chip handles both protocols:
@@ -947,21 +952,22 @@ different firmware or a firmware that time-multiplexes (complex).
 | **Ground station** | Crazyradio PA + Python | Any laptop/phone |
 | **Extra hardware** | Yes (Crazyradio PA ~$30) | No (built-in) |
 | **Protocol complexity** | Simple (syslink packets) | Complex (GATT services) |
-| **Firmware** | Stock nRF51 firmware | Needs BLE-enabled firmware |
+| **nRF51 firmware** | Stock (no changes) ✓ | Must replace with BLE build ✗ |
+| **STM32 code only** | Yes ✓ | No (need nRF51 work too) ✗ |
 
 ### When to Use Each
 
 **Use ESB (syslink) when:**
+- You're writing custom STM32 firmware (like Hive) - stock nRF51 just works
 - You need high-frequency telemetry (100Hz)
 - You need long range (outdoor flying)
-- You already have a Crazyradio PA
-- You want the simplest STM32-side implementation
+- You want the simplest path - only one MCU to program
 
 **Use BLE when:**
+- You're willing to reflash the nRF51 with BLE-enabled firmware
 - 50Hz telemetry is sufficient
 - You're flying indoors (short range OK)
-- You don't want to buy extra hardware
-- You want to receive data on a phone/tablet
+- You want to receive data on a phone without any dongle
 
 ### BLE Telemetry Rate Limits
 
