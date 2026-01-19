@@ -7,6 +7,11 @@
 #include "platform_stm32f4.h"
 #include "steval_fcu001_v1.h" // For BSP_LED_Toggle
 
+// Clamp helper
+static inline float clampf(float x, float lo, float hi) {
+    return (x < lo) ? lo : ((x > hi) ? hi : x);
+}
+
 // ----------------------------------------------------------------------------
 // Platform Lifecycle
 // ----------------------------------------------------------------------------
@@ -82,7 +87,7 @@ void hal_write_torque(const torque_cmd_t *cmd) {
 
     // Clamp motor values
     for (int i = 0; i < NUM_MOTORS; i++) {
-        motors.motor[i] = CLAMPF(motors.motor[i], 0.0f, 1.0f);
+        motors.motor[i] = clampf(motors.motor[i], 0.0f, 1.0f);
     }
 
     // Output to hardware

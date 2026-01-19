@@ -122,9 +122,10 @@ CFLAGS += -DHIVE_ENABLE_FILE=1
 # Hive memory configuration (shared pilot settings + platform stack sizes)
 include hive_config.mk
 CFLAGS += $(HIVE_CFLAGS)
-# Stack: 4KB per actor, Arena: 40KB (9×4KB = 36KB + headers)
-CFLAGS += -DHIVE_DEFAULT_STACK_SIZE=4096
-CFLAGS += '-DHIVE_STACK_ARENA_SIZE=(40*1024)'
+# Stack: 2KB per actor, Arena: 20KB (10×2KB = 20KB)
+# STEVAL has only 64KB SRAM - very tight
+CFLAGS += -DHIVE_DEFAULT_STACK_SIZE=2048
+CFLAGS += '-DHIVE_STACK_ARENA_SIZE=(20*1024)'
 
 # Log level: NONE to minimize stack usage (sprintf is very stack-heavy)
 CFLAGS += -DHIVE_LOG_LEVEL=HIVE_LOG_LEVEL_NONE
