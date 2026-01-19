@@ -774,6 +774,27 @@ The shared settings in `hive_config.mk` are determined by the pilot application
 (10 actors, 7 buses, pool sizes for supervision) and are identical across all
 platforms. Only stack sizes vary based on available RAM.
 
+### Measured Stack Usage
+
+Build with `STACK_PROFILE=1` to measure actual stack usage via watermarking.
+Results from x86-64 Linux (Webots simulation) with 4KB stacks:
+
+| Actor | Used | Usage | Notes |
+|-------|------|-------|-------|
+| waypoint | 3232 | 78.9% | Highest - waypoint list + arrival detection |
+| flight_mgr | 3112 | 76.0% | Log file management + IPC |
+| altitude | 2664 | 65.0% | PID state + landing logic |
+| supervisor | 2504 | 61.1% | Child management overhead |
+| sensor | 2008 | 49.0% | HAL sensor structs |
+| estimator | 808 | 19.7% | Complementary filter state |
+| rate | 792 | 19.3% | Rate PIDs |
+| attitude | 760 | 18.6% | Attitude PIDs |
+| position | 680 | 16.6% | Position PD |
+| motor | 488 | 11.9% | Lowest - simple output |
+
+All actors fit comfortably in 4KB with ~860 bytes headroom (78.9% peak).
+ARM Cortex-M may differ slightly due to calling conventions.
+
 ---
 
 ## Future Extensions
