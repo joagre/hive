@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Receive telemetry and download logs from Crazyflie via Crazyradio PA.
+Receive telemetry and download logs from Crazyflie via Crazyradio 2.0.
 
 Connects to the Crazyflie using ESB radio protocol and decodes binary
 telemetry packets. Displays real-time data and optionally logs to CSV.
@@ -381,7 +381,7 @@ class TelemetryReceiver:
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Receive telemetry and download logs from Crazyflie via Crazyradio PA",
+        description="Receive telemetry and download logs from Crazyflie via Crazyradio 2.0",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__
     )

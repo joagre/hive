@@ -1,7 +1,7 @@
 // Crazyflie 2.1+ Radio HAL - Syslink Implementation
 //
 // Implements radio communication via syslink protocol to the nRF51822.
-// The nRF51 handles ESB radio protocol to Crazyradio PA on the ground.
+// The nRF51 handles ESB radio protocol to Crazyradio 2.0 on the ground.
 //
 // UART: USART2 at 1Mbaud (PA2=TX, PA3=RX)
 // Flow control: PC4 (TXEN) indicates nRF51 ready to receive

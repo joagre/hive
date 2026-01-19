@@ -767,7 +767,7 @@ No real-time flight data logging during flight
 
 **After:**
 ```
-State Bus ──┬──► Telemetry Actor ──► HAL Radio ──► Crazyradio PA ──► Ground Station
+State Bus ──┬──► Telemetry Actor ──► HAL Radio ──► Crazyradio 2.0 ──► Ground Station
 Sensor Bus ─┤         (100Hz)
 Thrust Bus ─┘
 ```

@@ -30,7 +30,7 @@ by the supervisor at spawn time.
 
 **Crazyflie 2.1+:** With Flow deck v2, uses optical flow for XY positioning and ToF for altitude.
 Without Flow deck, hovers and changes altitude only. 60-second startup delay before flight.
-Radio telemetry enabled via Crazyradio PA for real-time ground station logging.
+Radio telemetry enabled via Crazyradio 2.0 for real-time ground station logging.
 
 **STEVAL-DRONE01:** Hovers and changes altitude only (no GPS, so XY position fixed at origin).
 60-second startup delay before flight.
@@ -267,7 +267,7 @@ Note: Telemetry actor (Crazyflie only) not included in Webots measurements.
 
 The Crazyflie build includes a telemetry actor that sends flight data over radio
 at 100Hz for real-time ground station logging. This uses the syslink protocol
-to the nRF51822 radio chip, which transmits via ESB to a Crazyradio PA on the ground.
+to the nRF51822 radio chip, which transmits via ESB to a Crazyradio 2.0 on the ground.
 
 **Packet types** (31-byte ESB limit requires two packet types):
 - Type 0x01: Attitude/rates (gyro XYZ, roll/pitch/yaw)

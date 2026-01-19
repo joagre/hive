@@ -29,7 +29,7 @@ The Crazyflie has two MCUs that handle radio communication:
                                                │ 2.4GHz ESB
                                                │
                                     ┌──────────▼───────────┐
-                                    │ Crazyradio PA (USB)  │
+                                    │ Crazyradio 2.0 (USB)  │
                                     │ - nRF24LU1+ chip     │
                                     │ - ESB compatible     │
                                     └──────────┬───────────┘
@@ -47,9 +47,9 @@ firmware. You only need to implement the syslink protocol on the STM32 side.
 
 ## No Custom Firmware Required
 
-A common question: Do you need custom firmware on the Crazyradio PA dongle?
+A common question: Do you need custom firmware on the Crazyradio 2.0 dongle?
 
-**No.** The stock firmware on both the nRF51 and Crazyradio PA handles everything
+**No.** The stock firmware on both the nRF51 and Crazyradio 2.0 handles everything
 at the radio layer:
 
 ```
@@ -66,7 +66,7 @@ Your STM32 firmware          Stock firmware           Stock firmware
 | Component | Firmware | Why it works |
 |-----------|----------|--------------|
 | nRF51 on Crazyflie | Bitcraze stock | Flashing STM32 doesn't touch it |
-| Crazyradio PA | Bitcraze stock | Ships ready to use |
+| Crazyradio 2.0 | Bitcraze stock | Ships ready to use |
 | ESB radio protocol | Built into both | Already compatible |
 
 ### What you customize:
@@ -78,14 +78,14 @@ Your STM32 firmware          Stock firmware           Stock firmware
 
 ### How cflib handles the complexity
 
-The Crazyradio PA is essentially a USB-to-ESB bridge. On the PC side, cflib
+The Crazyradio 2.0 is essentially a USB-to-ESB bridge. On the PC side, cflib
 abstracts all USB and radio details:
 
 ```python
 import cflib.crtp
 from cflib.crtp.radiodriver import RadioDriver
 
-# cflib talks to stock Crazyradio PA firmware
+# cflib talks to stock Crazyradio 2.0 firmware
 cflib.crtp.init_drivers()
 link = cflib.crtp.get_link_driver("radio://0/80/2M")
 
@@ -97,12 +97,12 @@ while True:
         process_telemetry(packet.data)
 ```
 
-The Crazyradio PA firmware:
+The Crazyradio 2.0 firmware:
 1. Receives ESB packets from the air (sent by nRF51)
 2. Passes them to the PC via USB
 3. cflib reads them and gives you the raw bytes
 
-You send whatever data you want via: **syslink → nRF51 → ESB → Crazyradio PA → USB → cflib**.
+You send whatever data you want via: **syslink → nRF51 → ESB → Crazyradio 2.0 → USB → cflib**.
 The radio layer doesn't care about packet contents—it just moves bytes.
 
 ---
@@ -591,7 +591,7 @@ if __name__ == '__main__':
 # Install cflib if needed
 pip install cflib
 
-# Run receiver (Crazyradio PA must be plugged in)
+# Run receiver (Crazyradio 2.0 must be plugged in)
 python3 examples/pilot/tools/telemetry_receiver.py
 
 # Output: telemetry.csv with all logged data
@@ -911,7 +911,7 @@ The nRF51822 supports BLE, but it's not recommended for this use case:
 - **More protocol complexity** - BLE requires GATT services. ESB/syslink is just
   raw packets.
 
-**Bottom line:** ESB + Crazyradio PA (~$30) lets you keep stock nRF51 firmware
+**Bottom line:** ESB + Crazyradio 2.0 (~$30) lets you keep stock nRF51 firmware
 and only write STM32 code. Much simpler.
 
 ---
