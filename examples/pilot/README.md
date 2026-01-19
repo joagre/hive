@@ -279,8 +279,8 @@ pip install cflib
 ./tools/telemetry_receiver.py -o flight.csv
 ```
 
-The telemetry actor runs at LOW priority to avoid blocking control loops (~370us
-per radio send). It uses TEMPORARY restart type so crashes don't trigger restarts
+The telemetry actor runs at LOW priority so control loops run first each cycle.
+Radio send blocks ~370us (37 bytes * 10 bits/byte / 1Mbaud). It uses TEMPORARY restart type so crashes don't trigger restarts
 of flight-critical actors - telemetry simply stops if it fails.
 
 ## Log Download (Crazyflie 2.1+ only)

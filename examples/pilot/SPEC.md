@@ -785,7 +785,8 @@ Thrust Bus ─┘
   - Type 0x10: CMD_REQUEST_LOG (ground -> drone)
   - Type 0x11: LOG_CHUNK (drone -> ground, 28 bytes data)
   - Type 0x12: LOG_COMPLETE (drone -> ground)
-- Runs at LOW priority to avoid blocking control loops (~370us per send)
+- Runs at LOW priority so control loops run first each cycle
+- Radio send blocks ~370us (37 bytes * 10 bits/byte / 1Mbaud)
 - Uses TEMPORARY restart (crash/exit doesn't trigger restarts of flight-critical actors)
 
 **Ground station commands (from examples/pilot directory):**
