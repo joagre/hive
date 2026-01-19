@@ -446,12 +446,22 @@ void hive_radio_poll(void) {
 }
 ```
 
-### Usage in Logging Actor
+### Usage in Telemetry Actor
 
 ```c
-// Example: logging actor that sends telemetry over radio
+// telemetry_actor.c - Sends binary sensor data at 100Hz
+//
+// NOTE: This is TELEMETRY, not logging. Telemetry is:
+//   - Binary packed structs (not text)
+//   - High-frequency periodic data (100Hz)
+//   - For PID tuning and analysis
+//
+// For text log messages (HIVE_LOG_*), see "Radio as Third Log Target" below.
+
+#define PACKET_TYPE_TELEMETRY  0x01  // Distinguishes from log packets
 
 typedef struct __attribute__((packed)) {
+    uint8_t  type;            // PACKET_TYPE_TELEMETRY
     uint32_t seq;
     uint32_t timestamp_us;
     int16_t gyro_x, gyro_y, gyro_z;
@@ -459,30 +469,31 @@ typedef struct __attribute__((packed)) {
     int16_t pitch_sp, pitch_meas;
     int16_t yaw_sp, yaw_meas;
     int16_t thrust;
-} telemetry_packet_t;  // 26 bytes - fits in 31-byte limit
+} telemetry_packet_t;  // 27 bytes - fits in 31-byte limit
 
 static uint32_t seq = 0;
 
-static void logging_actor(void *args, const hive_spawn_info *siblings,
-                          size_t sibling_count) {
+static void telemetry_actor(void *args, const hive_spawn_info *siblings,
+                            size_t sibling_count) {
     (void)args; (void)siblings; (void)sibling_count;
 
     // Subscribe to sensor and setpoint buses
     hive_bus_subscribe(sensor_bus);
     hive_bus_subscribe(setpoint_bus);
 
-    // Create 10ms timer (100Hz logging)
-    timer_id log_timer;
-    hive_timer_every(10000, &log_timer);  // 10ms = 100Hz
+    // Create 10ms timer (100Hz telemetry)
+    timer_id telem_timer;
+    hive_timer_every(10000, &telem_timer);  // 10ms = 100Hz
 
     while (1) {
         hive_message msg;
         hive_ipc_recv(&msg, -1);
 
-        if (hive_msg_is_timer(&msg) && msg.tag == log_timer) {
+        if (hive_msg_is_timer(&msg) && msg.tag == telem_timer) {
             // Only send if flow control allows
             if (hive_radio_tx_ready()) {
                 telemetry_packet_t pkt = {
+                    .type = PACKET_TYPE_TELEMETRY,
                     .seq = seq++,
                     .timestamp_us = hive_get_time(),
                     // Fill from latest sensor/setpoint data...
@@ -711,15 +722,20 @@ SRCS += hal_radio.c
 Actors use HAL functions directly, staying hardware-independent:
 
 ```c
-// logging_actor.c
+// telemetry_actor.c
 
 #include "hal/hal.h"
 
-static void logging_actor(void *args, ...) {
+#define PACKET_TYPE_TELEMETRY  0x01
+
+static void telemetry_actor(void *args, ...) {
     #ifdef HAL_HAS_RADIO
     // Send telemetry if radio available and flow control permits
     if (hal_radio_tx_ready()) {
-        telemetry_packet_t pkt = { ... };
+        telemetry_packet_t pkt = {
+            .type = PACKET_TYPE_TELEMETRY,
+            // ... fill sensor data
+        };
         hal_radio_send(&pkt, sizeof(pkt));
     }
     #endif
@@ -734,18 +750,41 @@ After adding syslink, the HAL has three categories:
 |----------|-----------|---------|
 | **Lifecycle** | `hal_init`, `hal_cleanup`, `hal_calibrate`, `hal_arm`, `hal_disarm` | pilot.c |
 | **Sensors/Motors** | `hal_read_sensors`, `hal_write_torque` | sensor_actor, motor_actor |
-| **Radio** (new) | `hal_radio_init`, `hal_radio_send`, `hal_radio_tx_ready`, `hal_radio_poll`, `hal_radio_set_rx_callback`, `hal_radio_get_battery` | logging_actor, hive_log |
+| **Radio** (new) | `hal_radio_init`, `hal_radio_send`, `hal_radio_tx_ready`, `hal_radio_poll`, `hal_radio_set_rx_callback`, `hal_radio_get_battery` | telemetry_actor, hive_log |
 
 ---
 
-## Radio as Third Log Target
+## Telemetry vs Logging
+
+Radio packets carry two distinct data types. Keep them separate:
+
+| Aspect | Telemetry | Logging (HIVE_LOG_*) |
+|--------|-----------|----------------------|
+| **Format** | Binary packed structs | Text strings |
+| **Rate** | Periodic, 100Hz | Sporadic, event-driven |
+| **Purpose** | PID tuning, analysis | Debugging, diagnostics |
+| **Size** | Fixed (27 bytes) | Variable (up to 25 chars) |
+| **Source** | telemetry_actor | HIVE_LOG_WARN/ERROR macros |
+| **Packet type** | `0x01` | `0x02` |
+
+**Do NOT use HIVE_LOG_* for telemetry data.** HIVE_LOG formats text strings,
+which is inefficient for high-frequency binary sensor data.
+
+---
+
+## Radio as Third Log Target (Optional)
+
+> **Note:** This section describes optional text logging over radio, which is
+> **separate from telemetry**. For most use cases, telemetry_actor alone is
+> sufficient. Radio logging is useful for real-time warnings/errors during flight.
 
 The Hive logging system currently supports two output targets:
 - **stdout** - Console output (Linux default, disabled on STM32)
 - **file** - Binary log file (`/var/tmp/hive.log` on Linux, `/log` on STM32)
 
 Radio can be added as a **third target**, enabling real-time log streaming over
-the Crazyflie radio link.
+the Crazyflie radio link. This is for **text messages only** (HIVE_LOG_WARN,
+HIVE_LOG_ERROR), not telemetry data.
 
 ### Configuration
 
@@ -812,20 +851,24 @@ void hive_log_write(int level, const char *fmt, ...) {
 Compact binary format optimized for 31-byte radio packets:
 
 ```
-┌───────┬───────────┬────────┬─────────────────────────┐
-│ LEVEL │ TIMESTAMP │ LENGTH │       MESSAGE           │
-│ 1byte │  4 bytes  │ 1 byte │     0-25 bytes          │
-└───────┴───────────┴────────┴─────────────────────────┘
+┌──────┬───────┬───────────┬────────┬─────────────────────────┐
+│ TYPE │ LEVEL │ TIMESTAMP │ LENGTH │       MESSAGE           │
+│ 0x02 │ 1byte │  4 bytes  │ 1 byte │     0-24 bytes          │
+└──────┴───────┴───────────┴────────┴─────────────────────────┘
 ```
 
 | Field | Size | Description |
 |-------|------|-------------|
+| TYPE | 1 byte | Packet type: `0x02` = log entry |
 | LEVEL | 1 byte | Log level (0=TRACE to 4=ERROR) |
 | TIMESTAMP | 4 bytes | Microseconds since boot (wraps at ~71 min) |
-| LENGTH | 1 byte | Message length (0-25) |
-| MESSAGE | 0-25 bytes | Truncated log message |
+| LENGTH | 1 byte | Message length (0-24) |
+| MESSAGE | 0-24 bytes | Truncated log message |
 
-**Total:** 6 bytes header + 25 bytes message = 31 bytes max
+**Total:** 7 bytes header + 24 bytes message = 31 bytes max
+
+The TYPE byte allows the ground station to distinguish log packets (`0x02`)
+from telemetry packets (`0x01`).
 
 ### Implementation Sketch
 
@@ -834,56 +877,92 @@ Compact binary format optimized for 31-byte radio packets:
 
 #if HIVE_LOG_TO_RADIO
 
+#define PACKET_TYPE_LOG  0x02  // Distinguishes from telemetry (0x01)
+
 typedef struct __attribute__((packed)) {
+    uint8_t  type;            // PACKET_TYPE_LOG
     uint8_t  level;
     uint32_t timestamp_us;
     uint8_t  length;
-    char     message[25];
+    char     message[24];
 } radio_log_packet_t;
 
 static void write_radio_log_entry(int level, const char *msg, int len) {
     radio_log_packet_t pkt = {
+        .type = PACKET_TYPE_LOG,
         .level = (uint8_t)level,
         .timestamp_us = hive_get_time(),
-        .length = (len > 25) ? 25 : len,
+        .length = (len > 24) ? 24 : len,
     };
     memcpy(pkt.message, msg, pkt.length);
 
     // Non-blocking send - drop if flow control disallows
-    hive_radio_send(&pkt, 6 + pkt.length);
+    hive_radio_send(&pkt, 7 + pkt.length);
 }
 
 #endif
 ```
 
-### Ground Station Log Receiver
+### Ground Station Receiver
 
-Extend the Python receiver to decode log packets:
+The Python receiver handles both packet types:
 
 ```python
 import struct
 
+PACKET_TYPE_TELEMETRY = 0x01
+PACKET_TYPE_LOG = 0x02
 LOG_LEVELS = ['TRACE', 'DEBUG', 'INFO', 'WARN', 'ERROR']
 
-def decode_log_packet(data):
-    if len(data) < 6:
+def decode_packet(data):
+    if len(data) < 1:
         return None
 
-    level, timestamp, length = struct.unpack('<BIB', data[:6])
-    message = data[6:6+length].decode('utf-8', errors='replace')
+    pkt_type = data[0]
 
-    return {
-        'level': LOG_LEVELS[level] if level < 5 else f'L{level}',
-        'time_ms': timestamp / 1000.0,
-        'message': message
-    }
+    if pkt_type == PACKET_TYPE_TELEMETRY:
+        # Telemetry: type(1) + seq(4) + timestamp(4) + 10x int16(20) = 29 bytes
+        if len(data) < 29:
+            return None
+        values = struct.unpack('<BIIhhhhhhhhhh', data[:29])
+        return {
+            'type': 'telemetry',
+            'seq': values[1],
+            'timestamp_us': values[2],
+            'gyro': values[3:6],
+            'roll': (values[6], values[7]),    # (setpoint, measured)
+            'pitch': (values[8], values[9]),
+            'yaw': (values[10], values[11]),
+            'thrust': values[12]
+        }
+
+    elif pkt_type == PACKET_TYPE_LOG:
+        # Log: type(1) + level(1) + timestamp(4) + length(1) + message
+        if len(data) < 7:
+            return None
+        _, level, timestamp, length = struct.unpack('<BBIB', data[:7])
+        message = data[7:7+length].decode('utf-8', errors='replace')
+        return {
+            'type': 'log',
+            'level': LOG_LEVELS[level] if level < 5 else f'L{level}',
+            'timestamp_us': timestamp,
+            'message': message
+        }
+
+    return None  # Unknown packet type
 
 # In receive loop:
 packet = link.receive_packet(timeout=1)
 if packet:
-    log = decode_log_packet(packet.data)
-    if log:
-        print(f"[{log['time_ms']:10.1f}ms] {log['level']:5s} {log['message']}")
+    decoded = decode_packet(packet.data)
+    if decoded:
+        if decoded['type'] == 'telemetry':
+            # Log to CSV, update plots, etc.
+            print(f"TELEM seq={decoded['seq']}")
+        elif decoded['type'] == 'log':
+            # Display log message
+            t_ms = decoded['timestamp_us'] / 1000.0
+            print(f"[{t_ms:10.1f}ms] {decoded['level']:5s} {decoded['message']}")
 ```
 
 ### Platform Summary
