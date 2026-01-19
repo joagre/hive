@@ -8,9 +8,9 @@
 //   Type 0x01: Attitude/rates (gyro, roll/pitch/yaw)
 //   Type 0x02: Position/altitude (height, velocities, thrust)
 //
-// Future: Add HIVE_LOG over radio (Type 0x03) as third log transport.
-// This would enable real-time log visibility from the ground station,
-// complementing stdout (dev) and flash file (post-flight analysis).
+// Future: Add post-flight log download over radio.
+// Ground station sends request, drone reads flash log and sends in chunks.
+// Keeps flight phase simple (telemetry only), transfers complete log after landing.
 
 #include "telemetry_actor.h"
 #include "pilot_buses.h"
