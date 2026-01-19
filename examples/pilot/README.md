@@ -226,3 +226,30 @@ Webots controls time via `hal_step()` (which wraps `wb_robot_step()`). Each call
 4. Actors read sensors, compute, publish results
 5. Loop repeats
 
+## Stack Profiling
+
+Build with `STACK_PROFILE=1` to measure actual stack usage:
+
+```bash
+make clean && make STACK_PROFILE=1 && make install
+```
+
+After flight completes, a stack usage report is printed to stderr:
+
+| Actor | Size | Used | Usage |
+|-------|------|------|-------|
+| supervisor | 4096 | 2504 | 61.1% |
+| sensor | 4096 | 2008 | 49.0% |
+| estimator | 4096 | 808 | 19.7% |
+| waypoint | 4096 | 3232 | 78.9% |
+| altitude | 4096 | 2664 | 65.0% |
+| position | 4096 | 680 | 16.6% |
+| attitude | 4096 | 760 | 18.6% |
+| rate | 4096 | 792 | 19.3% |
+| motor | 4096 | 488 | 11.9% |
+| flight_mgr | 4096 | 3112 | 76.0% |
+
+Measured on x86-64 Linux (Webots simulation). ARM Cortex-M may differ slightly
+due to calling conventions. All actors fit comfortably in 4KB with the highest
+usage at 78.9% (waypoint), leaving ~860 bytes headroom.
+
