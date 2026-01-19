@@ -100,7 +100,10 @@ void hal_radio_poll(void);
 
 // Register callback for received radio data.
 // Callback is called from hal_radio_poll() context.
-void hal_radio_set_rx_callback(void (*callback)(const void *data, size_t len));
+// user_data is passed back to callback for context.
+void hal_radio_set_rx_callback(void (*callback)(const void *data, size_t len,
+                                                void *user_data),
+                               void *user_data);
 
 // Get battery voltage from power management packets.
 // Returns 0.0 if not yet received.

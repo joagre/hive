@@ -53,8 +53,10 @@ static volatile bool s_tx_allowed = false;
 static volatile float s_battery_voltage = 0.0f;
 
 // RX callback
-typedef void (*radio_rx_callback_t)(const void *data, size_t len);
+typedef void (*radio_rx_callback_t)(const void *data, size_t len,
+                                    void *user_data);
 static radio_rx_callback_t s_rx_callback = NULL;
+static void *s_rx_callback_user_data = NULL;
 
 // RX state machine
 typedef enum {
@@ -177,7 +179,7 @@ static void syslink_process_packet(void) {
 
         // Pass to application if callback registered and data present
         if (s_rx_callback && s_rx_length > 0) {
-            s_rx_callback(s_rx_data, s_rx_length);
+            s_rx_callback(s_rx_data, s_rx_length, s_rx_callback_user_data);
         }
         break;
 
@@ -300,8 +302,11 @@ void hal_radio_poll(void) {
     }
 }
 
-void hal_radio_set_rx_callback(void (*callback)(const void *data, size_t len)) {
+void hal_radio_set_rx_callback(void (*callback)(const void *data, size_t len,
+                                                void *user_data),
+                               void *user_data) {
     s_rx_callback = callback;
+    s_rx_callback_user_data = user_data;
 }
 
 float hal_radio_get_battery(void) {

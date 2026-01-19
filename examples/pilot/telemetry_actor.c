@@ -134,12 +134,10 @@ typedef struct {
     uint16_t log_sequence;
 } telemetry_state;
 
-// Global pointer for RX callback access (callback has no user data parameter)
-static telemetry_state *g_state = NULL;
-
 // RX callback - handles incoming commands from ground station
-static void radio_rx_callback(const void *data, size_t len) {
-    if (len < 1 || !g_state) {
+static void radio_rx_callback(const void *data, size_t len, void *user_data) {
+    telemetry_state *state = (telemetry_state *)user_data;
+    if (len < 1 || !state) {
         return;
     }
 
@@ -157,10 +155,10 @@ static void radio_rx_callback(const void *data, size_t len) {
             return;
         }
 
-        g_state->log_fd = fd;
-        g_state->log_offset = 0;
-        g_state->log_sequence = 0;
-        g_state->mode = TELEM_MODE_LOG_DOWNLOAD;
+        state->log_fd = fd;
+        state->log_offset = 0;
+        state->log_sequence = 0;
+        state->mode = TELEM_MODE_LOG_DOWNLOAD;
         HIVE_LOG_INFO("[TELEM] Log download started");
     }
 }
@@ -187,9 +185,6 @@ void telemetry_actor(void *args, const hive_spawn_info *siblings,
 
     telemetry_state *state = args;
 
-    // Set global state pointer for RX callback
-    g_state = state;
-
     // Initialize radio
     if (hal_radio_init() != 0) {
         HIVE_LOG_ERROR("[TELEM] Radio init failed");
@@ -198,7 +193,7 @@ void telemetry_actor(void *args, const hive_spawn_info *siblings,
     }
 
     // Register RX callback for ground station commands
-    hal_radio_set_rx_callback(radio_rx_callback);
+    hal_radio_set_rx_callback(radio_rx_callback, state);
 
     HIVE_LOG_INFO("[TELEM] Radio initialized");
 
