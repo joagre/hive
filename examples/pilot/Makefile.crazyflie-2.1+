@@ -79,6 +79,7 @@ HIVE_CORE_SRCS = \
 	hive_pool.c \
 	hive_runtime.c \
 	hive_select.c \
+	hive_supervisor.c \
 	hive_scheduler_stm32.c \
 	hive_timer_stm32.c \
 	hive_file_stm32.c
@@ -121,9 +122,9 @@ CFLAGS += -DHIVE_ENABLE_FILE=1
 # Hive memory configuration (shared pilot settings + platform stack sizes)
 include hive_config.mk
 CFLAGS += $(HIVE_CFLAGS)
-# Stack: 8KB per actor, Arena: 80KB (larger due to more RAM)
-CFLAGS += -DHIVE_DEFAULT_STACK_SIZE=8192
-CFLAGS += '-DHIVE_STACK_ARENA_SIZE=(80*1024)'
+# Stack: 6KB per actor, Arena: 64KB (fits in 128KB SRAM with other data)
+CFLAGS += -DHIVE_DEFAULT_STACK_SIZE=6144
+CFLAGS += '-DHIVE_STACK_ARENA_SIZE=(64*1024)'
 
 # Log level: NONE to minimize stack usage (sprintf is very stack-heavy)
 CFLAGS += -DHIVE_LOG_LEVEL=HIVE_LOG_LEVEL_NONE

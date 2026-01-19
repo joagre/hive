@@ -2,6 +2,11 @@
 
 A practical, incremental path from current hover to acrobatic-ready flight control.
 
+**Context:** This document is a prerequisite for [COPTER_ARENA_IDEA.md](COPTER_ARENA_IDEA.md).
+Before attempting aggressive maneuvers, pursuit-evasion, or any form of aerial acrobatics,
+the flight controller must have rock-solid stabilization. Quick, precise, noise-tolerant
+attitude control is the foundation everything else builds on.
+
 **Guiding principle:** Every improvement must make hover *better*, not worse. The path to
 acrobatics goes through rock-solid hover. If a change degrades gentle flight, it's wrong.
 
