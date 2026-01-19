@@ -146,6 +146,9 @@ All structures are statically allocated. Actor stacks use a static arena allocat
 # Supervisor (auto-restart workers)
 ./build/supervisor
 
+# Manual supervisor (link/monitor pattern without hive_supervisor)
+./build/supervisor_manual
+
 # File I/O example
 ./build/fileio
 
@@ -192,10 +195,17 @@ void my_actor(void *args, const hive_spawn_info *siblings, size_t sibling_count)
 }
 
 int main(void) {
-    hive_init();
+    if (HIVE_FAILED(hive_init())) {
+        fprintf(stderr, "Failed to initialize runtime\n");
+        return 1;
+    }
 
     actor_id id;
-    hive_spawn(my_actor, NULL, NULL, NULL, &id);
+    if (HIVE_FAILED(hive_spawn(my_actor, NULL, NULL, NULL, &id))) {
+        fprintf(stderr, "Failed to spawn actor\n");
+        hive_cleanup();
+        return 1;
+    }
 
     hive_run();
     hive_cleanup();
@@ -214,11 +224,14 @@ cfg.stack_size = 128 * 1024;
 cfg.malloc_stack = false;     // false=arena (default), true=malloc
 cfg.auto_register = false;    // true = auto-register name in registry
 actor_id worker;
-hive_spawn(worker_actor, NULL, &args, &cfg, &worker);
+hive_status status = hive_spawn(worker_actor, NULL, &args, &cfg, &worker);
+if (HIVE_FAILED(status)) {
+    // HIVE_ERR_NOMEM if actor table or stack arena full
+}
 
 // Notify (async message with tag for selective receive)
 int data = 42;
-hive_status status = hive_ipc_notify(target, 0, &data, sizeof(data));  // tag=0
+status = hive_ipc_notify(target, 0, &data, sizeof(data));  // tag=0
 if (HIVE_FAILED(status)) {
     // Pool exhausted: HIVE_MAILBOX_ENTRY_POOL_SIZE or HIVE_MESSAGE_DATA_POOL_SIZE
     // Notify does NOT block or drop - caller must handle HIVE_ERR_NOMEM
@@ -256,13 +269,22 @@ if (msg.class == HIVE_MSG_REQUEST) {
 ### Timers
 
 ```c
-timer_id timer;
-hive_timer_after(500000, &timer);    // One-shot, 500ms
-hive_timer_every(200000, &periodic); // Periodic, 200ms
+timer_id timer, periodic;
+hive_status status = hive_timer_after(500000, &timer);    // One-shot, 500ms
+if (HIVE_FAILED(status)) {
+    // HIVE_ERR_NOMEM if timer pool exhausted (HIVE_TIMER_ENTRY_POOL_SIZE)
+}
+status = hive_timer_every(200000, &periodic); // Periodic, 200ms
+if (HIVE_FAILED(status)) {
+    // Handle error...
+}
 
 // Wait for specific timer using selective receive (recommended)
 hive_message msg;
-hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
+status = hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
+if (HIVE_FAILED(status)) {
+    // HIVE_ERR_TIMEOUT if timeout expires (not possible with -1)
+}
 // Other messages stay in mailbox, only this timer is consumed
 
 // Or receive any message and check timer_id in msg.tag
@@ -279,22 +301,43 @@ hive_timer_cancel(periodic);
 // File operations (block until complete)
 int fd;
 size_t bytes_written, bytes_read;
-hive_file_open("test.txt", HIVE_O_RDWR | HIVE_O_CREAT, 0644, &fd);
-hive_file_write(fd, data, len, &bytes_written);
-hive_file_read(fd, buffer, sizeof(buffer), &bytes_read);
+hive_status status = hive_file_open("test.txt", HIVE_O_RDWR | HIVE_O_CREAT, 0644, &fd);
+if (HIVE_FAILED(status)) {
+    // HIVE_ERR_IO on open failure, HIVE_ERR_INVALID for bad flags
+}
+status = hive_file_write(fd, data, len, &bytes_written);
+if (HIVE_FAILED(status)) {
+    // HIVE_ERR_IO on write failure
+}
+status = hive_file_read(fd, buffer, sizeof(buffer), &bytes_read);
+// bytes_read == 0 indicates EOF (not an error)
 hive_file_close(fd);
 
 // Network server
 int listen_fd, client_fd;
-hive_net_listen(8080, &listen_fd);
-hive_net_accept(listen_fd, &client_fd, -1);
-hive_net_recv(client_fd, buffer, sizeof(buffer), &received, -1);
+status = hive_net_listen(8080, &listen_fd);
+if (HIVE_FAILED(status)) {
+    // HIVE_ERR_IO if bind/listen fails (port in use, permission denied)
+}
+status = hive_net_accept(listen_fd, &client_fd, -1);
+if (HIVE_FAILED(status)) {
+    // HIVE_ERR_TIMEOUT if timeout expires
+}
+size_t received, sent;
+status = hive_net_recv(client_fd, buffer, sizeof(buffer), &received, -1);
+if (HIVE_FAILED(status)) {
+    // HIVE_ERR_CLOSED if peer closed connection
+}
 hive_net_send(client_fd, buffer, received, &sent, -1);
 hive_net_close(client_fd);
 
 // Network client
 int server_fd;
-hive_net_connect("127.0.0.1", 8080, &server_fd, 5000);
+status = hive_net_connect("127.0.0.1", 8080, &server_fd, 5000);
+if (HIVE_FAILED(status)) {
+    // HIVE_ERR_TIMEOUT if connection times out
+    // HIVE_ERR_IO if connection refused
+}
 ```
 
 ### Bus (Pub-Sub)
@@ -306,29 +349,49 @@ cfg.max_age_ms = 0;    // 0=no expiry, T=expire after T ms
 // Note: Maximum 32 subscribers per bus (architectural limit)
 
 bus_id bus;
-hive_bus_create(&cfg, &bus);
-hive_bus_subscribe(bus);
+hive_status status = hive_bus_create(&cfg, &bus);
+if (HIVE_FAILED(status)) {
+    // HIVE_ERR_NOMEM if bus table full (HIVE_MAX_BUSES)
+}
+status = hive_bus_subscribe(bus);
+if (HIVE_FAILED(status)) {
+    // HIVE_ERR_NOMEM if subscriber table full (HIVE_MAX_BUS_SUBSCRIBERS)
+}
 
 sensor_data data = {.temperature = 25.5f};
-hive_status status = hive_bus_publish(bus, &data, sizeof(data));
+status = hive_bus_publish(bus, &data, sizeof(data));
 if (HIVE_FAILED(status)) {
-    // Message pool exhausted (shares HIVE_MESSAGE_DATA_POOL_SIZE with IPC)
-    // Note: Ring buffer full automatically drops oldest entry
+    // HIVE_ERR_NOMEM if message pool exhausted (shares HIVE_MESSAGE_DATA_POOL_SIZE with IPC)
+    // Note: Ring buffer full automatically drops oldest entry (not an error)
 }
 
 sensor_data received;
 size_t bytes_read;
-hive_bus_read_wait(bus, &received, sizeof(received), &bytes_read, -1);
+status = hive_bus_read_wait(bus, &received, sizeof(received), &bytes_read, -1);
+if (HIVE_FAILED(status)) {
+    // HIVE_ERR_TIMEOUT if timeout expires, HIVE_ERR_WOULDBLOCK if no data (timeout=0)
+}
 ```
 
 ### Linking and Monitoring
 
 ```c
 actor_id other;
-hive_spawn(other_actor, NULL, NULL, NULL, &other);
-hive_link(other);     // Bidirectional - both get exit notifications
+hive_status status = hive_spawn(other_actor, NULL, NULL, NULL, &other);
+if (HIVE_FAILED(status)) {
+    // Handle spawn failure...
+}
+status = hive_link(other);
+if (HIVE_FAILED(status)) {
+    // HIVE_ERR_INVALID if target doesn't exist
+    // HIVE_ERR_NOMEM if link pool exhausted (HIVE_LINK_ENTRY_POOL_SIZE)
+}
 uint32_t mon_id;
-hive_monitor(other, &mon_id);  // Unidirectional - only monitor gets notifications
+status = hive_monitor(other, &mon_id);
+if (HIVE_FAILED(status)) {
+    // HIVE_ERR_INVALID if target doesn't exist
+    // HIVE_ERR_NOMEM if monitor pool exhausted (HIVE_MONITOR_ENTRY_POOL_SIZE)
+}
 
 hive_message msg;
 hive_ipc_recv(&msg, -1);
@@ -383,11 +446,18 @@ hive_supervisor_config config = {
 
 // Start supervisor
 actor_id supervisor;
-hive_supervisor_start(&config, NULL, &supervisor);
+hive_status status = hive_supervisor_start(&config, NULL, &supervisor);
+if (HIVE_FAILED(status)) {
+    // HIVE_ERR_NOMEM if supervisor table full (HIVE_MAX_SUPERVISORS)
+    // HIVE_ERR_INVALID if config is invalid
+}
 
 // Monitor supervisor for shutdown (optional)
 uint32_t mon_ref;
-hive_monitor(supervisor, &mon_ref);
+status = hive_monitor(supervisor, &mon_ref);
+if (HIVE_FAILED(status)) {
+    // Handle error...
+}
 
 // Stop supervisor gracefully
 hive_supervisor_stop(supervisor);
@@ -439,6 +509,7 @@ hive_supervisor_stop(supervisor);
 - `hive_ipc_notify_ex(to, class, tag, data, len)` - Send with explicit class and tag
 - `hive_ipc_recv(msg, timeout)` - Receive any message (`msg.class`, `msg.tag`, `msg.data`)
 - `hive_ipc_recv_match(from, class, tag, msg, timeout)` - Selective receive with filtering
+- `hive_ipc_recv_matches(filters, n, msg, timeout, matched_idx)` - Multi-pattern selective receive
 - `hive_ipc_request(to, req, len, reply, timeout)` - Blocking request/reply
 - `hive_ipc_reply(request, data, len)` - Reply to a REQUEST message
 - `hive_msg_is_timer(msg)` - Check if message is a timer tick
@@ -460,8 +531,6 @@ hive_supervisor_stop(supervisor);
 
 - `hive_supervisor_start(config, actor_cfg, out)` - Start supervisor with child specs
 - `hive_supervisor_stop(supervisor)` - Stop supervisor gracefully (terminates all children)
-- `hive_supervisor_start_child(supervisor, spec)` - Add child dynamically
-- `hive_supervisor_stop_child(supervisor, id)` - Remove child by ID
 - `hive_restart_strategy_str(strategy)` - Convert strategy to string
 - `hive_child_restart_str(restart)` - Convert restart type to string
 
@@ -557,7 +626,11 @@ hive_select_source sources[] = {
     {HIVE_SEL_IPC, .ipc = {HIVE_SENDER_ANY, HIVE_MSG_NOTIFY, CMD_SHUTDOWN}},
 };
 hive_select_result result;
-hive_select(sources, 3, &result, -1);
+hive_status status = hive_select(sources, 3, &result, -1);
+if (HIVE_FAILED(status)) {
+    // HIVE_ERR_TIMEOUT if timeout expires
+    // HIVE_ERR_WOULDBLOCK if no data ready (timeout=0)
+}
 
 switch (result.index) {
 case 0: /* Bus data: result.bus.data, result.bus.len */ break;
@@ -624,7 +697,7 @@ valgrind --leak-check=full ./build/ipc_test
 
 ```
 
-The test suite includes 17 test programs covering actors, IPC, timers, bus, networking, file I/O, linking, monitoring, supervision, and edge cases like pool exhaustion.
+The test suite includes 22 test programs covering actors, IPC, timers, bus, networking, file I/O, linking, monitoring, supervision, logging, name registry, and edge cases like pool exhaustion.
 
 ## Building
 
@@ -698,16 +771,16 @@ The runtime can be tested on ARM Cortex-M via QEMU emulation:
 sudo apt install gcc-arm-none-eabi qemu-system-arm
 
 # Build and run tests on QEMU
-make qemu-test-suite           # Run all compatible tests (14 tests)
+make qemu-test-suite           # Run all compatible tests (19 tests)
 make qemu-run-actor_test       # Run specific test
 
 # Build and run examples on QEMU
-make qemu-example-suite        # Run all compatible examples (7 examples)
+make qemu-example-suite        # Run all compatible examples (10 examples)
 make qemu-example-pingpong     # Run specific example
 ```
 
-Compatible tests exclude `net_test` and `file_test` (require ENABLE_NET/ENABLE_FILE).
-Compatible examples exclude `echo` and `fileio` (same reason).
+Compatible tests exclude `net_test`, `file_test`, and `logging_test` (require ENABLE_NET/ENABLE_FILE).
+Compatible examples exclude `echo`, `fileio`, and `logging` (same reason).
 
 ## Future Work
 
