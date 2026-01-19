@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """
-Receive telemetry data from Crazyflie via Crazyradio PA.
+Receive telemetry and download logs from Crazyflie via Crazyradio PA.
 
 Connects to the Crazyflie using ESB radio protocol and decodes binary
 telemetry packets. Displays real-time data and optionally logs to CSV.
+Can also download the binary flight log from flash storage.
 
 Telemetry packet formats:
   Type 0x01 - Attitude/Rates (17 bytes):
@@ -12,13 +13,21 @@ Telemetry packet formats:
   Type 0x02 - Position/Altitude (15 bytes):
     type(1) + timestamp_ms(4) + altitude(2) + vz(2) + vx(2) + vy(2) + thrust(2)
 
+Log download packet formats:
+  Type 0x10 - CMD_REQUEST_LOG (1 byte): Ground -> Drone to request log
+  Type 0x11 - LOG_CHUNK (31 bytes): Drone -> Ground log data chunk
+    type(1) + sequence(2) + data(28)
+  Type 0x12 - LOG_COMPLETE (3 bytes): Drone -> Ground download complete
+    type(1) + total_chunks(2)
+
 Requirements:
   pip install cflib
 
 Usage:
-  ./telemetry_receiver.py                      # Display to stdout
-  ./telemetry_receiver.py -o flight.csv        # Log to CSV file
-  ./telemetry_receiver.py --uri radio://0/80/2M  # Custom radio URI
+  ./telemetry_receiver.py                         # Display telemetry to stdout
+  ./telemetry_receiver.py -o flight.csv           # Log telemetry to CSV file
+  ./telemetry_receiver.py --download-log log.bin  # Download binary log file
+  ./telemetry_receiver.py --uri radio://0/80/2M   # Custom radio URI
 
 Default radio URI: radio://0/80/2M (channel 80, 2Mbps)
 """
@@ -38,9 +47,17 @@ except ImportError:
     print("Error: cflib not installed. Run: pip install cflib", file=sys.stderr)
     sys.exit(1)
 
-# Packet type identifiers
+# Packet type identifiers - telemetry
 PACKET_TYPE_ATTITUDE = 0x01
 PACKET_TYPE_POSITION = 0x02
+
+# Packet type identifiers - log download
+CMD_REQUEST_LOG = 0x10
+PACKET_LOG_CHUNK = 0x11
+PACKET_LOG_COMPLETE = 0x12
+
+# Log chunk data size
+LOG_CHUNK_DATA_SIZE = 28
 
 # Scale factors (inverse of transmitter)
 SCALE_ANGLE = 1000.0   # millirad -> rad
@@ -274,10 +291,97 @@ class TelemetryReceiver:
         print(f"  Position: {self.position_count}", file=sys.stderr)
         print(f"Errors: {self.errors}", file=sys.stderr)
 
+    def download_log(self, output_path: str) -> bool:
+        """Download binary log file from drone.
+
+        Sends CMD_REQUEST_LOG command and receives LOG_CHUNK packets until
+        LOG_COMPLETE is received. Returns True on success.
+        """
+        print(f"Requesting log download...", file=sys.stderr)
+
+        # Send request command
+        request = bytes([CMD_REQUEST_LOG])
+        response = self.radio.send_packet(request)
+
+        if not response or not response.ack:
+            print("Error: No ACK for log request", file=sys.stderr)
+            return False
+
+        # Open output file
+        with open(output_path, "wb") as f:
+            chunks_received = 0
+            expected_seq = 0
+            total_bytes = 0
+
+            while True:
+                try:
+                    # Send empty packet to receive next chunk
+                    empty_packet = bytes([0xFF])
+                    response = self.radio.send_packet(empty_packet)
+
+                    if not response or not response.ack or not response.data:
+                        time.sleep(0.005)
+                        continue
+
+                    data = bytes(response.data)
+                    if len(data) < 1:
+                        continue
+
+                    pkt_type = data[0]
+
+                    if pkt_type == PACKET_LOG_CHUNK:
+                        if len(data) < 3 + LOG_CHUNK_DATA_SIZE:
+                            print(f"Warning: Short chunk packet ({len(data)} bytes)",
+                                  file=sys.stderr)
+                            continue
+
+                        sequence = struct.unpack("<H", data[1:3])[0]
+                        chunk_data = data[3:3 + LOG_CHUNK_DATA_SIZE]
+
+                        if sequence != expected_seq:
+                            print(f"Warning: Sequence mismatch, expected {expected_seq}, "
+                                  f"got {sequence}", file=sys.stderr)
+
+                        f.write(chunk_data)
+                        chunks_received += 1
+                        total_bytes += len(chunk_data)
+                        expected_seq = sequence + 1
+
+                        # Progress indicator
+                        if chunks_received % 100 == 0:
+                            print(f"  Received {chunks_received} chunks "
+                                  f"({total_bytes} bytes)...", file=sys.stderr)
+
+                    elif pkt_type == PACKET_LOG_COMPLETE:
+                        if len(data) >= 3:
+                            total_chunks = struct.unpack("<H", data[1:3])[0]
+                            print(f"Download complete: {total_chunks} chunks, "
+                                  f"{total_bytes} bytes", file=sys.stderr)
+                        else:
+                            print(f"Download complete: {chunks_received} chunks, "
+                                  f"{total_bytes} bytes", file=sys.stderr)
+                        break
+
+                    elif pkt_type in (PACKET_TYPE_ATTITUDE, PACKET_TYPE_POSITION):
+                        # Ignore telemetry packets during download
+                        pass
+
+                    time.sleep(0.005)
+
+                except KeyboardInterrupt:
+                    print("\nDownload interrupted", file=sys.stderr)
+                    return False
+                except Exception as e:
+                    print(f"Error during download: {e}", file=sys.stderr)
+                    return False
+
+        print(f"Log saved to {output_path}", file=sys.stderr)
+        return True
+
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Receive telemetry from Crazyflie via Crazyradio PA",
+        description="Receive telemetry and download logs from Crazyflie via Crazyradio PA",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__
     )
@@ -287,11 +391,15 @@ def main():
     )
     parser.add_argument(
         "-o", "--output", type=str,
-        help="Output CSV file for logging"
+        help="Output CSV file for telemetry logging"
     )
     parser.add_argument(
         "--quiet", "-q", action="store_true",
         help="Suppress real-time output (only log to file)"
+    )
+    parser.add_argument(
+        "--download-log", type=str, metavar="FILE",
+        help="Download binary log file from drone flash storage"
     )
 
     args = parser.parse_args()
@@ -313,20 +421,28 @@ def main():
     # Create receiver
     receiver = TelemetryReceiver(args.uri)
 
-    def on_packet(pkt):
-        if not args.quiet:
-            print(format_packet(pkt))
-
     try:
         receiver.connect()
-        print("Waiting for telemetry... (Ctrl+C to stop)", file=sys.stderr)
-        receiver.receive_loop(on_packet, csv_writer)
+
+        if args.download_log:
+            # Log download mode
+            success = receiver.download_log(args.download_log)
+            sys.exit(0 if success else 1)
+        else:
+            # Telemetry receive mode
+            def on_packet(pkt):
+                if not args.quiet:
+                    print(format_packet(pkt))
+
+            print("Waiting for telemetry... (Ctrl+C to stop)", file=sys.stderr)
+            receiver.receive_loop(on_packet, csv_writer)
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
     finally:
         receiver.disconnect()
-        receiver.print_stats()
+        if not args.download_log:
+            receiver.print_stats()
         if csv_file:
             csv_file.close()
 

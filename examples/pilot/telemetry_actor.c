@@ -1,16 +1,17 @@
-// Telemetry actor - Radio transmission of flight data
+// Telemetry actor - Radio transmission of flight data and log download
 //
-// Sends binary telemetry over radio for ground station logging/analysis.
-// Uses two alternating packet types due to 31-byte ESB limit.
+// Two modes of operation:
+//   1. Flight mode: Sends binary telemetry at 100Hz for ground station logging
+//   2. Download mode: Transfers flash log file to ground station on request
+//
 // Runs at LOW priority to avoid blocking control loops (~370us per send).
 //
-// Packet format:
-//   Type 0x01: Attitude/rates (gyro, roll/pitch/yaw)
-//   Type 0x02: Position/altitude (height, velocities, thrust)
-//
-// Future: Add post-flight log download over radio.
-// Ground station sends request, drone reads flash log and sends in chunks.
-// Keeps flight phase simple (telemetry only), transfers complete log after landing.
+// Packet types:
+//   0x01: Attitude/rates (gyro, roll/pitch/yaw) - flight telemetry
+//   0x02: Position/altitude (height, velocities, thrust) - flight telemetry
+//   0x10: CMD_REQUEST_LOG - ground station requests log download
+//   0x11: LOG_CHUNK - drone sends log data chunk
+//   0x12: LOG_COMPLETE - drone signals end of log file
 
 #include "telemetry_actor.h"
 #include "pilot_buses.h"
@@ -21,6 +22,7 @@
 #include "hive_timer.h"
 #include "hive_ipc.h"
 #include "hive_log.h"
+#include "hive_file.h"
 #include <string.h>
 
 #ifdef HAL_HAS_RADIO
@@ -28,9 +30,23 @@
 // Telemetry rate: 100Hz total (50Hz per packet type)
 #define TELEMETRY_INTERVAL_US 10000 // 10ms = 100Hz
 
-// Packet type identifiers
+// Packet type identifiers - telemetry
 #define PACKET_TYPE_ATTITUDE 0x01
 #define PACKET_TYPE_POSITION 0x02
+
+// Packet type identifiers - log download
+#define CMD_REQUEST_LOG 0x10  // Ground -> drone: request log download
+#define PACKET_LOG_CHUNK 0x11 // Drone -> ground: log data chunk
+#define PACKET_LOG_DONE 0x12  // Drone -> ground: download complete
+
+// Log chunk data size (31 - 3 byte header = 28 bytes)
+#define LOG_CHUNK_DATA_SIZE 28
+
+// Operating modes
+typedef enum {
+    TELEM_MODE_FLIGHT,      // Normal telemetry transmission
+    TELEM_MODE_LOG_DOWNLOAD // Sending log file to ground station
+} telem_mode_t;
 
 // Scale factors for int16 encoding
 #define SCALE_ANGLE 1000   // rad -> millirad
@@ -65,9 +81,25 @@ typedef struct __attribute__((packed)) {
     uint16_t thrust;       // Thrust (0-65535)
 } telemetry_position_t;
 
+// Packet type 0x11: Log chunk (31 bytes)
+typedef struct __attribute__((packed)) {
+    uint8_t type;                      // 0x11
+    uint16_t sequence;                 // Chunk sequence number
+    uint8_t data[LOG_CHUNK_DATA_SIZE]; // File data
+} log_chunk_packet_t;
+
+// Packet type 0x12: Log complete (3 bytes)
+typedef struct __attribute__((packed)) {
+    uint8_t type;          // 0x12
+    uint16_t total_chunks; // Total chunks sent
+} log_complete_packet_t;
+
 // Verify packet sizes at compile time
 _Static_assert(sizeof(telemetry_attitude_t) <= 31, "Attitude packet too large");
 _Static_assert(sizeof(telemetry_position_t) <= 31, "Position packet too large");
+_Static_assert(sizeof(log_chunk_packet_t) <= 31, "Log chunk packet too large");
+_Static_assert(sizeof(log_complete_packet_t) <= 31,
+               "Log complete packet too large");
 
 // Helper: clamp float to int16 range
 static inline int16_t float_to_i16(float val, float scale) {
@@ -95,7 +127,43 @@ typedef struct {
     bus_id thrust_bus;
     bool next_is_attitude; // Alternate between packet types
     uint32_t tick_count;   // Tick counter for timestamps (10ms per tick)
+    // Log download state
+    telem_mode_t mode;
+    int log_fd;
+    uint32_t log_offset;
+    uint16_t log_sequence;
 } telemetry_state;
+
+// Global pointer for RX callback access (callback has no user data parameter)
+static telemetry_state *g_state = NULL;
+
+// RX callback - handles incoming commands from ground station
+static void radio_rx_callback(const void *data, size_t len) {
+    if (len < 1 || !g_state) {
+        return;
+    }
+
+    const uint8_t *bytes = (const uint8_t *)data;
+    uint8_t cmd = bytes[0];
+
+    if (cmd == CMD_REQUEST_LOG) {
+        // Ground station requests log download
+        // Open log file and switch to download mode
+        int fd;
+        hive_status s = hive_file_open("/log", HIVE_O_RDONLY, 0, &fd);
+        if (HIVE_FAILED(s)) {
+            HIVE_LOG_WARN(
+                "[TELEM] Log download request failed: cannot open /log");
+            return;
+        }
+
+        g_state->log_fd = fd;
+        g_state->log_offset = 0;
+        g_state->log_sequence = 0;
+        g_state->mode = TELEM_MODE_LOG_DOWNLOAD;
+        HIVE_LOG_INFO("[TELEM] Log download started");
+    }
+}
 
 void *telemetry_actor_init(void *init_args) {
     const pilot_buses *buses = init_args;
@@ -105,6 +173,10 @@ void *telemetry_actor_init(void *init_args) {
     state.thrust_bus = buses->thrust_bus;
     state.next_is_attitude = true;
     state.tick_count = 0;
+    state.mode = TELEM_MODE_FLIGHT;
+    state.log_fd = -1;
+    state.log_offset = 0;
+    state.log_sequence = 0;
     return &state;
 }
 
@@ -115,12 +187,19 @@ void telemetry_actor(void *args, const hive_spawn_info *siblings,
 
     telemetry_state *state = args;
 
+    // Set global state pointer for RX callback
+    g_state = state;
+
     // Initialize radio
     if (hal_radio_init() != 0) {
         HIVE_LOG_ERROR("[TELEM] Radio init failed");
         hive_exit();
         return; // Never reached, but silences compiler warning
     }
+
+    // Register RX callback for ground station commands
+    hal_radio_set_rx_callback(radio_rx_callback);
+
     HIVE_LOG_INFO("[TELEM] Radio initialized");
 
     // Subscribe to buses
@@ -180,38 +259,80 @@ void telemetry_actor(void *args, const hive_spawn_info *siblings,
             continue; // Skip this cycle, try again next tick
         }
 
-        // Calculate timestamp (tick_count * 10ms)
-        uint32_t now_ms = state->tick_count * 10;
-
-        if (state->next_is_attitude) {
-            // Send attitude/rates packet
-            telemetry_attitude_t pkt = {
-                .type = PACKET_TYPE_ATTITUDE,
-                .timestamp_ms = now_ms,
-                .gyro_x = float_to_i16(latest_sensors.gyro[0], SCALE_RATE),
-                .gyro_y = float_to_i16(latest_sensors.gyro[1], SCALE_RATE),
-                .gyro_z = float_to_i16(latest_sensors.gyro[2], SCALE_RATE),
-                .roll = float_to_i16(latest_state.roll, SCALE_ANGLE),
-                .pitch = float_to_i16(latest_state.pitch, SCALE_ANGLE),
-                .yaw = float_to_i16(latest_state.yaw, SCALE_ANGLE),
+        // Handle current mode
+        if (state->mode == TELEM_MODE_LOG_DOWNLOAD) {
+            // Log download mode: send next chunk or complete
+            log_chunk_packet_t chunk = {
+                .type = PACKET_LOG_CHUNK,
+                .sequence = state->log_sequence,
             };
-            hal_radio_send(&pkt, sizeof(pkt));
+
+            // Read next chunk from file
+            size_t bytes_read;
+            hive_status s =
+                hive_file_pread(state->log_fd, chunk.data, LOG_CHUNK_DATA_SIZE,
+                                state->log_offset, &bytes_read);
+
+            if (HIVE_FAILED(s) || bytes_read == 0) {
+                // End of file or error - send completion packet
+                log_complete_packet_t done = {
+                    .type = PACKET_LOG_DONE,
+                    .total_chunks = state->log_sequence,
+                };
+                hal_radio_send(&done, sizeof(done));
+
+                // Close file and return to flight mode
+                hive_file_close(state->log_fd);
+                state->log_fd = -1;
+                state->mode = TELEM_MODE_FLIGHT;
+                HIVE_LOG_INFO("[TELEM] Log download complete: %u chunks",
+                              state->log_sequence);
+            } else {
+                // Pad remaining bytes with zeros if partial chunk
+                if (bytes_read < LOG_CHUNK_DATA_SIZE) {
+                    memset(chunk.data + bytes_read, 0,
+                           LOG_CHUNK_DATA_SIZE - bytes_read);
+                }
+
+                hal_radio_send(&chunk, sizeof(chunk));
+                state->log_offset += bytes_read;
+                state->log_sequence++;
+            }
         } else {
-            // Send position/altitude packet
-            telemetry_position_t pkt = {
-                .type = PACKET_TYPE_POSITION,
-                .timestamp_ms = now_ms,
-                .altitude = float_to_i16(latest_state.altitude, SCALE_POS),
-                .vz = float_to_i16(latest_state.vertical_velocity, SCALE_VEL),
-                .vx = float_to_i16(latest_state.x_velocity, SCALE_VEL),
-                .vy = float_to_i16(latest_state.y_velocity, SCALE_VEL),
-                .thrust = float_to_u16(latest_thrust.thrust),
-            };
-            hal_radio_send(&pkt, sizeof(pkt));
-        }
+            // Flight telemetry mode: send attitude/position packets
+            uint32_t now_ms = state->tick_count * 10;
 
-        // Alternate packet type
-        state->next_is_attitude = !state->next_is_attitude;
+            if (state->next_is_attitude) {
+                // Send attitude/rates packet
+                telemetry_attitude_t pkt = {
+                    .type = PACKET_TYPE_ATTITUDE,
+                    .timestamp_ms = now_ms,
+                    .gyro_x = float_to_i16(latest_sensors.gyro[0], SCALE_RATE),
+                    .gyro_y = float_to_i16(latest_sensors.gyro[1], SCALE_RATE),
+                    .gyro_z = float_to_i16(latest_sensors.gyro[2], SCALE_RATE),
+                    .roll = float_to_i16(latest_state.roll, SCALE_ANGLE),
+                    .pitch = float_to_i16(latest_state.pitch, SCALE_ANGLE),
+                    .yaw = float_to_i16(latest_state.yaw, SCALE_ANGLE),
+                };
+                hal_radio_send(&pkt, sizeof(pkt));
+            } else {
+                // Send position/altitude packet
+                telemetry_position_t pkt = {
+                    .type = PACKET_TYPE_POSITION,
+                    .timestamp_ms = now_ms,
+                    .altitude = float_to_i16(latest_state.altitude, SCALE_POS),
+                    .vz =
+                        float_to_i16(latest_state.vertical_velocity, SCALE_VEL),
+                    .vx = float_to_i16(latest_state.x_velocity, SCALE_VEL),
+                    .vy = float_to_i16(latest_state.y_velocity, SCALE_VEL),
+                    .thrust = float_to_u16(latest_thrust.thrust),
+                };
+                hal_radio_send(&pkt, sizeof(pkt));
+            }
+
+            // Alternate packet type
+            state->next_is_attitude = !state->next_is_attitude;
+        }
     }
 }
 

@@ -775,20 +775,30 @@ Thrust Bus ─┘
 **Implementation:**
 - Subscribes to sensor, state, and thrust buses
 - Sends binary packets at 100Hz over syslink protocol
-- Two packet types (31-byte ESB limit):
+- Two operating modes:
+  - Flight mode: Sends telemetry packets at 100Hz
+  - Download mode: Transfers flash log file to ground station on request
+- Telemetry packet types (31-byte ESB limit):
   - Type 0x01: Attitude/rates (gyro XYZ, roll/pitch/yaw)
   - Type 0x02: Position (altitude, velocities, thrust)
-- Runs at LOW priority to avoid blocking control loops (~370µs per send)
+- Log download packet types:
+  - Type 0x10: CMD_REQUEST_LOG (ground -> drone)
+  - Type 0x11: LOG_CHUNK (drone -> ground, 28 bytes data)
+  - Type 0x12: LOG_COMPLETE (drone -> ground)
+- Runs at LOW priority to avoid blocking control loops (~370us per send)
 - Uses TEMPORARY restart (crash/exit doesn't trigger restarts of flight-critical actors)
 
-**Ground station receiver:**
+**Ground station commands (from examples/pilot directory):**
 ```bash
 pip install cflib
-./tools/telemetry_receiver.py -o flight.csv
+./tools/telemetry_receiver.py -o flight.csv        # Receive telemetry
+./tools/telemetry_receiver.py --download-log log.bin  # Download log file
+../../tools/decode_log.py log.bin > log.txt        # Decode binary log
 ```
 
 **Benefits:**
 - Real-time flight data for debugging and analysis
+- Post-flight log download (no physical access required)
 - Separate from flash logging (higher rate, no flash wear)
 - Non-intrusive (LOW priority doesn't affect control loops)
 

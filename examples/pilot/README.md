@@ -279,7 +279,26 @@ pip install cflib
 ./tools/telemetry_receiver.py -o flight.csv
 ```
 
-The telemetry actor runs at LOW priority to avoid blocking control loops (~370µs
+The telemetry actor runs at LOW priority to avoid blocking control loops (~370us
 per radio send). It uses TEMPORARY restart type so crashes don't trigger restarts
 of flight-critical actors - telemetry simply stops if it fails.
+
+## Log Download (Crazyflie 2.1+ only)
+
+After flight, the binary log file stored in flash can be downloaded over radio.
+The ground station sends a CMD_REQUEST_LOG command, and the drone responds with
+LOG_CHUNK packets (28 bytes each) until the entire file is transferred.
+
+**Download log file:**
+```bash
+./tools/telemetry_receiver.py --download-log flight.bin
+```
+
+**Decode binary log:**
+```bash
+../../tools/decode_log.py flight.bin > flight.txt
+```
+
+Log download operates at the same 100Hz rate as telemetry. A typical 8KB log file
+downloads in about 3 seconds (8192 bytes / 28 bytes per chunk / 100 chunks per second).
 

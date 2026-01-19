@@ -592,7 +592,7 @@ if __name__ == '__main__':
 pip install cflib
 
 # Run receiver (Crazyradio PA must be plugged in)
-python3 tools/telemetry_receiver.py
+python3 examples/pilot/tools/telemetry_receiver.py
 
 # Output: telemetry.csv with all logged data
 ```
@@ -772,223 +772,129 @@ which is inefficient for high-frequency binary sensor data.
 
 ---
 
-## Radio as Third Log Target (Optional)
+## Post-Flight Log Download
 
-> **Note:** This section describes optional text logging over radio, which is
-> **separate from telemetry**. For most use cases, telemetry_actor alone is
-> sufficient. Radio logging is useful for real-time warnings/errors during flight.
+After landing, the complete flash log file can be downloaded over radio. This
+keeps flight phase simple (telemetry only) while enabling full log retrieval.
 
-The Hive logging system currently supports two output targets:
-- **stdout** - Console output (Linux default, disabled on STM32)
-- **file** - Binary log file (`/var/tmp/hive.log` on Linux, `/log` on STM32)
+### Design Principles
 
-Radio can be added as a **third target**, enabling real-time log streaming over
-the Crazyflie radio link. This is for **text messages only** (HIVE_LOG_WARN,
-HIVE_LOG_ERROR), not telemetry data.
+- **Flight phase:** Only telemetry packets (attitude, position) at 100Hz
+- **Post-flight:** Ground station requests log, drone sends in chunks
+- **Complete file:** All log entries, not filtered by level
+- **Simple protocol:** Request/response, ESB handles flow control
 
-### Configuration
+### Protocol
 
-New compile-time options in `hive_static_config.h`:
-
-```c
-// Radio logging (Crazyflie only)
-#ifndef HIVE_LOG_TO_RADIO
-#define HIVE_LOG_TO_RADIO 0      // Disabled by default
-#endif
-
-#ifndef HIVE_LOG_RADIO_LEVEL
-#define HIVE_LOG_RADIO_LEVEL HIVE_LOG_LEVEL_WARN  // Only WARN+ over radio
-#endif
-```
-
-### Why a Separate Level?
-
-Radio has limited bandwidth (~100 packets/sec, 31 bytes each). Streaming all
-logs would saturate the link. The `HIVE_LOG_RADIO_LEVEL` setting allows:
-
-- Full logging to file (TRACE level for post-flight analysis)
-- Filtered logging to radio (WARN+ for real-time monitoring)
-
-### Integration with Existing Macros
-
-The existing `HIVE_LOG_*` macros would gain radio support:
-
-```c
-// In hive_log.c - simplified sketch
-
-void hive_log_write(int level, const char *fmt, ...) {
-    char buf[HIVE_LOG_MAX_ENTRY_SIZE];
-    va_list args;
-    va_start(args, fmt);
-    int len = vsnprintf(buf, sizeof(buf), fmt, args);
-    va_end(args);
-
-    // Target 1: stdout (if enabled and level meets threshold)
-    #if HIVE_LOG_TO_STDOUT
-    if (level >= HIVE_LOG_LEVEL) {
-        fprintf(stderr, "[%s] %s\n", level_str(level), buf);
-    }
-    #endif
-
-    // Target 2: file (if enabled and open)
-    #if HIVE_LOG_TO_FILE
-    if (level >= HIVE_LOG_LEVEL && log_file_open) {
-        write_binary_log_entry(level, buf, len);
-    }
-    #endif
-
-    // Target 3: radio (if enabled and level meets radio threshold)
-    #if HIVE_LOG_TO_RADIO
-    if (level >= HIVE_LOG_RADIO_LEVEL && hive_radio_tx_ready()) {
-        write_radio_log_entry(level, buf, len);
-    }
-    #endif
-}
-```
-
-### Radio Log Packet Format
-
-Compact binary format optimized for 31-byte radio packets:
+Ground station initiates download by sending a command packet:
 
 ```
-┌──────┬───────┬───────────┬────────┬─────────────────────────┐
-│ TYPE │ LEVEL │ TIMESTAMP │ LENGTH │       MESSAGE           │
-│ 0x02 │ 1byte │  4 bytes  │ 1 byte │     0-24 bytes          │
-└──────┴───────┴───────────┴────────┴─────────────────────────┘
+Ground Station                       Drone (telemetry_actor)
+      │                                       │
+      │──── CMD_REQUEST_LOG (0x10) ──────────>│
+      │                                       │ Opens /log file
+      │<──── LOG_CHUNK (0x11) ────────────────│ Sends chunk 0
+      │<──── LOG_CHUNK (0x11) ────────────────│ Sends chunk 1
+      │<──── LOG_CHUNK (0x11) ────────────────│ ...
+      │<──── LOG_COMPLETE (0x12) ─────────────│ EOF reached
+      │                                       │
+```
+
+### Packet Formats
+
+**Command: Request Log (ground -> drone)**
+
+```
+┌──────┬─────────┐
+│ TYPE │ RESERVED│
+│ 0x10 │ 0x00    │
+└──────┴─────────┘
+```
+
+**Response: Log Chunk (drone -> ground)**
+
+```
+┌──────┬────────┬────────┬─────────────────────────────┐
+│ TYPE │ SEQ_LO │ SEQ_HI │          DATA               │
+│ 0x11 │ 1 byte │ 1 byte │       0-28 bytes            │
+└──────┴────────┴────────┴─────────────────────────────┘
 ```
 
 | Field | Size | Description |
 |-------|------|-------------|
-| TYPE | 1 byte | Packet type: `0x02` = log entry |
-| LEVEL | 1 byte | Log level (0=TRACE to 4=ERROR) |
-| TIMESTAMP | 4 bytes | Microseconds since boot (wraps at ~71 min) |
-| LENGTH | 1 byte | Message length (0-24) |
-| MESSAGE | 0-24 bytes | Truncated log message |
+| TYPE | 1 byte | `0x11` = log chunk |
+| SEQ | 2 bytes | Chunk sequence number (little-endian) |
+| DATA | 0-28 bytes | Raw log file data |
 
-**Total:** 7 bytes header + 24 bytes message = 31 bytes max
+**Response: Log Complete (drone -> ground)**
 
-The TYPE byte allows the ground station to distinguish log packets (`0x02`)
-from telemetry packets (`0x01`).
-
-### Implementation Sketch
-
-```c
-// New function in hive_log.c (Crazyflie build only)
-
-#if HIVE_LOG_TO_RADIO
-
-#define PACKET_TYPE_LOG  0x02  // Distinguishes from telemetry (0x01)
-
-typedef struct __attribute__((packed)) {
-    uint8_t  type;            // PACKET_TYPE_LOG
-    uint8_t  level;
-    uint32_t timestamp_us;
-    uint8_t  length;
-    char     message[24];
-} radio_log_packet_t;
-
-static void write_radio_log_entry(int level, const char *msg, int len) {
-    radio_log_packet_t pkt = {
-        .type = PACKET_TYPE_LOG,
-        .level = (uint8_t)level,
-        .timestamp_us = hive_get_time(),
-        .length = (len > 24) ? 24 : len,
-    };
-    memcpy(pkt.message, msg, pkt.length);
-
-    // Non-blocking send - drop if flow control disallows
-    hive_radio_send(&pkt, 7 + pkt.length);
-}
-
-#endif
+```
+┌──────┬──────────┬──────────┐
+│ TYPE │ TOTAL_LO │ TOTAL_HI │
+│ 0x12 │  2 bytes │  2 bytes │
+└──────┴──────────┴──────────┘
 ```
 
-### Ground Station Receiver
+| Field | Size | Description |
+|-------|------|-------------|
+| TYPE | 1 byte | `0x12` = log complete |
+| TOTAL | 4 bytes | Total bytes sent (little-endian) |
 
-The Python receiver handles both packet types:
+### Implementation in telemetry_actor
 
-```python
-import struct
-
-PACKET_TYPE_TELEMETRY = 0x01
-PACKET_TYPE_LOG = 0x02
-LOG_LEVELS = ['TRACE', 'DEBUG', 'INFO', 'WARN', 'ERROR']
-
-def decode_packet(data):
-    if len(data) < 1:
-        return None
-
-    pkt_type = data[0]
-
-    if pkt_type == PACKET_TYPE_TELEMETRY:
-        # Telemetry: type(1) + seq(4) + timestamp(4) + 10x int16(20) = 29 bytes
-        if len(data) < 29:
-            return None
-        values = struct.unpack('<BIIhhhhhhhhhh', data[:29])
-        return {
-            'type': 'telemetry',
-            'seq': values[1],
-            'timestamp_us': values[2],
-            'gyro': values[3:6],
-            'roll': (values[6], values[7]),    # (setpoint, measured)
-            'pitch': (values[8], values[9]),
-            'yaw': (values[10], values[11]),
-            'thrust': values[12]
-        }
-
-    elif pkt_type == PACKET_TYPE_LOG:
-        # Log: type(1) + level(1) + timestamp(4) + length(1) + message
-        if len(data) < 7:
-            return None
-        _, level, timestamp, length = struct.unpack('<BBIB', data[:7])
-        message = data[7:7+length].decode('utf-8', errors='replace')
-        return {
-            'type': 'log',
-            'level': LOG_LEVELS[level] if level < 5 else f'L{level}',
-            'timestamp_us': timestamp,
-            'message': message
-        }
-
-    return None  # Unknown packet type
-
-# In receive loop:
-packet = link.receive_packet(timeout=1)
-if packet:
-    decoded = decode_packet(packet.data)
-    if decoded:
-        if decoded['type'] == 'telemetry':
-            # Log to CSV, update plots, etc.
-            print(f"TELEM seq={decoded['seq']}")
-        elif decoded['type'] == 'log':
-            # Display log message
-            t_ms = decoded['timestamp_us'] / 1000.0
-            print(f"[{t_ms:10.1f}ms] {decoded['level']:5s} {decoded['message']}")
-```
-
-### Platform Summary
-
-| Target | Linux | STM32 | Crazyflie |
-|--------|-------|-------|-----------|
-| stdout | ✓ (default on) | ✗ | ✗ |
-| file | ✓ | ✓ (flash) | ✓ (flash) |
-| radio | ✗ | ✗ | ✓ (optional) |
-
-### Usage Example
+The telemetry actor handles log download as a secondary mode:
 
 ```c
-// In your Crazyflie Hive application
+// State machine
+typedef enum {
+    TELEM_MODE_FLIGHT,      // Normal telemetry
+    TELEM_MODE_LOG_DOWNLOAD // Sending log file
+} telem_mode_t;
 
-hive_status pilot_init(void) {
-    // Initialize radio for logging
-    hive_radio_init();
-
-    // Now all HIVE_LOG_WARN/ERROR calls also go to radio
-    HIVE_LOG_INFO("Pilot starting");   // File only (below radio threshold)
-    HIVE_LOG_WARN("Low battery");      // File + radio
-    HIVE_LOG_ERROR("Sensor failure"); // File + radio
-
-    return HIVE_SUCCESS;
+// RX callback handles CMD_REQUEST_LOG
+static void on_radio_rx(const void *data, size_t len) {
+    const uint8_t *pkt = data;
+    if (len >= 1 && pkt[0] == CMD_REQUEST_LOG) {
+        // Transition to log download mode
+        start_log_download();
+    }
 }
+
+// In main loop, check mode
+if (mode == TELEM_MODE_LOG_DOWNLOAD) {
+    send_next_log_chunk();
+} else {
+    send_telemetry();
+}
+```
+
+### Ground Station Usage
+
+```bash
+# Download log after flight (from project root)
+./examples/pilot/tools/telemetry_receiver.py --download-log flight.log
+
+# Or from examples/pilot directory
+./tools/telemetry_receiver.py --download-log flight.log
+```
+
+### Advantages Over Real-Time Log Streaming
+
+| Aspect | Real-Time Streaming | Post-Flight Download |
+|--------|---------------------|----------------------|
+| Bandwidth during flight | Competes with telemetry | Zero impact |
+| Log completeness | Filtered (WARN+ only) | Complete (all levels) |
+| Complexity | Callback hooks in hive_log | Self-contained in telemetry_actor |
+| Runtime coupling | hive_log knows about radio | No runtime changes |
+
+### Log File Format
+
+The downloaded file is the raw binary log from flash (`/log`). Use the existing
+decoder tool:
+
+```bash
+# Decode downloaded log
+python3 tools/decode_log.py flight.log
 ```
 
 ---
@@ -1014,17 +920,20 @@ and only write STM32 code. Much simpler.
 
 ### Current Limitations
 
-1. **One-way telemetry only** - Commands from ground not implemented
-2. **No acknowledgment** - Lost packets are not retransmitted
-3. **31-byte payload limit** - Multiple packets needed for larger data
-4. **~100Hz practical limit** - Flow control restricts throughput
+1. **No acknowledgment** - Lost packets are not retransmitted
+2. **31-byte payload limit** - Multiple packets needed for larger data
+3. **~100Hz practical limit** - Flow control restricts throughput
 
-### Possible Improvements
+### Implemented Features
 
-1. **Command channel** - Receive PID tuning commands over radio
-2. **Packet sequencing** - Detect dropped packets on ground
-3. **Compression** - Delta encoding for sensor data
-4. **Multiple log streams** - Different rates for different data
+1. **Bidirectional communication** - Ground station can send commands
+2. **Post-flight log download** - Complete flash log retrieval over radio
+
+### Possible Future Improvements
+
+1. **PID tuning commands** - Adjust gains over radio during hover
+2. **Compression** - Delta encoding for sensor data
+3. **Retransmission** - ACK/NAK for reliable log download
 
 ---
 
