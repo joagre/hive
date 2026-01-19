@@ -18,6 +18,7 @@ A quadcopter autopilot example using the actor runtime. Supports Webots simulati
 - Step 6: Position actor (horizontal position hold + heading hold)
 - Step 7: Waypoint actor (waypoint navigation)
 - Step 8: Flight manager actor (startup coordination, safety cutoff)
+- Step 9: Telemetry actor (radio telemetry, Crazyflie only)
 - Mixer moved to HAL (platform-specific, X-configuration)
 
 ## Goals
@@ -184,10 +185,12 @@ maintain code clarity. A production system would add these as first priorities.
 
 ## Architecture Overview
 
-Ten actors: nine workers connected via buses, plus one supervisor:
+Ten to eleven actors: nine flight-critical workers connected via buses, plus one
+supervisor, and an optional telemetry actor on radio-enabled platforms (Crazyflie):
 
-**Supervision:** All 9 workers are supervised with ONE_FOR_ALL strategy. If any
-worker crashes, all are killed and restarted together to ensure consistent state.
+**Supervision:** All actors are supervised with ONE_FOR_ALL strategy. Flight-critical
+actors use PERMANENT restart (crash triggers restart of all). Telemetry uses
+TEMPORARY restart (crash/exit doesn't trigger restarts, just stops telemetry).
 
 **Sibling Info:** Workers use `hive_find_sibling()` to look up sibling actor IDs
 for IPC communication. The supervisor passes sibling info at spawn time.
@@ -262,6 +265,7 @@ Code is split into focused modules:
 | `rate_actor.c/h` | Rate PIDs → torque commands |
 | `motor_actor.c/h` | Output: torque → HAL → motors |
 | `flight_manager_actor.c/h` | Startup delay, flight window cutoff |
+| `telemetry_actor.c/h` | Radio telemetry (Crazyflie only) |
 | `pid.c/h` | Reusable PID controller |
 | `types.h` | Portable data types |
 | `config.h` | Configuration constants (timing, thresholds) |
@@ -391,6 +395,12 @@ void hal_read_sensors(sensor_data_t *sensors);
 // Motor interface (called by motor_actor)
 void hal_write_torque(const torque_cmd_t *cmd);
 
+// Radio interface (called by telemetry_actor, HAL_HAS_RADIO only)
+int hal_radio_init(void);
+int hal_radio_send(const void *data, size_t len);
+bool hal_radio_tx_ready(void);
+void hal_radio_poll(void);
+
 // Simulation time (only for SIMULATED_TIME builds)
 bool hal_step(void);  // Advance simulation, returns false when done
 ```
@@ -398,6 +408,7 @@ bool hal_step(void);  // Advance simulation, returns false when done
 Actors use the HAL directly - no function pointers needed:
 - `sensor_actor.c` calls `hal_read_sensors()`
 - `motor_actor.c` calls `hal_write_torque()`
+- `telemetry_actor.c` calls `hal_radio_*()` (Crazyflie only)
 
 ### Supported Platforms
 
@@ -428,6 +439,7 @@ All actor code is platform-independent. Actors use:
 | `rate_actor.c/h` | Bus API only |
 | `motor_actor.c/h` | HAL (hal_write_torque) + IPC + bus API |
 | `flight_manager_actor.c/h` | IPC only (no bus) |
+| `telemetry_actor.c/h` | HAL (hal_radio_*) + bus API (Crazyflie only) |
 | `pid.c/h` | Pure C, no runtime deps |
 | `types.h` | Data structures |
 | `config.h` | Tuning parameters |
@@ -448,6 +460,7 @@ examples/pilot/
     rate_actor.c/h       # Rate PIDs → torque commands
     motor_actor.c/h      # Output: torque → HAL → motors
     flight_manager_actor.c/h # Startup delay, flight window cutoff
+    telemetry_actor.c/h  # Radio telemetry (Crazyflie only)
     pid.c/h              # Reusable PID controller
     types.h              # Portable data types
     config.h             # Configuration constants
@@ -544,6 +557,7 @@ graph LR
 | **Rate** | State + Thrust + Rate SP | Torque Bus | CRITICAL | Rate PIDs (250Hz) |
 | **Motor** | Torque Bus + STOP notification | Hardware | CRITICAL | Output to hardware via HAL |
 | **Flight Manager** | LANDED notification | START/LANDING/STOP notifications | CRITICAL | Startup delay, landing coordination |
+| **Telemetry** | Sensor + State + Thrust Bus | Radio (HAL) | LOW | Radio telemetry (Crazyflie only, TEMPORARY restart) |
 
 **Why all CRITICAL?** All workers use the same priority so execution order follows spawn order
 (round-robin within priority level). This ensures the data pipeline executes correctly:
@@ -742,7 +756,43 @@ Flight Manager ──► START ──► Waypoint Actor
 - Waypoint actor blocks until flight manager authorizes flight
 - Easy to add pre-flight checks in one place
 
-### Step 9 (Future): RC Input / Mode Switching
+### Step 9: Telemetry Actor ✓
+
+Add radio telemetry for ground station logging (Crazyflie only).
+
+**Before:**
+```
+No real-time flight data logging during flight
+```
+
+**After:**
+```
+State Bus ──┬──► Telemetry Actor ──► HAL Radio ──► Crazyradio PA ──► Ground Station
+Sensor Bus ─┤         (100Hz)
+Thrust Bus ─┘
+```
+
+**Implementation:**
+- Subscribes to sensor, state, and thrust buses
+- Sends binary packets at 100Hz over syslink protocol
+- Two packet types (31-byte ESB limit):
+  - Type 0x01: Attitude/rates (gyro XYZ, roll/pitch/yaw)
+  - Type 0x02: Position (altitude, velocities, thrust)
+- Runs at LOW priority to avoid blocking control loops (~370µs per send)
+- Uses TEMPORARY restart (crash/exit doesn't trigger restarts of flight-critical actors)
+
+**Ground station receiver:**
+```bash
+pip install cflib
+./tools/telemetry_receiver.py -o flight.csv
+```
+
+**Benefits:**
+- Real-time flight data for debugging and analysis
+- Separate from flash logging (higher rate, no flash wear)
+- Non-intrusive (LOW priority doesn't affect control loops)
+
+### Step 10 (Future): RC Input / Mode Switching
 
 **Future extensions:**
 - RC input handling (manual override)
@@ -800,8 +850,8 @@ ARM Cortex-M may differ slightly due to calling conventions.
 ## Future Extensions
 
 1. **Mission planning** - Load waypoints from file, complex routes
-2. **Sensor fusion** - Complementary filter for better attitude estimation
+2. **Sensor fusion** - ✓ Complementary filter implemented (estimator actor)
 3. **Failsafe** - Motor failure detection, emergency landing
-4. **Telemetry** - Logging, MAVLink output
+4. **Telemetry** - ✓ Radio telemetry implemented (Crazyflie only)
 5. **RC input** - Manual control override
 6. **Setpoint actor** - Altitude command generation, mode switching

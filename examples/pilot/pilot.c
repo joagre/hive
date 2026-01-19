@@ -2,10 +2,10 @@
 // Pilot example - Quadcopter waypoint navigation using actor runtime
 //
 // Demonstrates waypoint navigation for a quadcopter using the hive actor
-// runtime. Nine actors work together in a pipeline, supervised by one
-// supervisor actor (10 actors total):
+// runtime. Nine flight actors work together in a pipeline, supervised by one
+// supervisor actor. On platforms with radio (HAL_HAS_RADIO), a telemetry
+// actor is also included (10-11 actors total):
 //
-//   flight_manager  - Flight authority and safety monitoring
 //   sensor_actor    - Reads raw sensors via HAL -> sensor bus
 //   estimator_actor - Complementary filter fusion -> state bus
 //   altitude_actor  - Altitude PID -> thrust command
@@ -14,6 +14,8 @@
 //   attitude_actor  - Attitude PIDs -> rate setpoints
 //   rate_actor      - Rate PIDs -> torque commands
 //   motor_actor     - Output to hardware via HAL
+//   flight_manager  - Flight authority and safety monitoring
+//   telemetry_actor - Radio transmission of flight data (optional)
 //
 // Data flows through buses:
 //
@@ -41,8 +43,9 @@
 //   Actors use hive_find_sibling() to look up sibling actor IDs for IPC
 //
 // Supervision:
-//   All 9 actors are supervised with ONE_FOR_ALL strategy.
-//   If any actor crashes, all are restarted together.
+//   All actors are supervised with ONE_FOR_ALL strategy.
+//   If any flight-critical actor crashes, all are restarted together.
+//   Telemetry uses TEMPORARY restart (not flight-critical, won't trigger restarts).
 //
 // Hardware abstraction:
 //   All hardware access goes through the HAL (hal/hal.h).
@@ -73,6 +76,9 @@
 #include "motor_actor.h"
 #include "flight_manager_actor.h"
 #include "stack_profile.h"
+#ifdef HAL_HAS_RADIO
+#include "telemetry_actor.h"
+#endif
 
 #include <assert.h>
 
@@ -117,10 +123,11 @@ int main(void) {
     assert(HIVE_SUCCEEDED(hive_bus_create(&cfg, &buses.torque_bus)));
 
     // clang-format off
-    // Define child specs for supervisor (9 actors)
+    // Define child specs for supervisor (9 flight actors + optional telemetry)
     // Each actor's init function receives pilot_buses and extracts what it needs.
     // Control loop order: sensor -> estimator -> waypoint -> altitude ->
     //                     position -> attitude -> rate -> motor -> flight_manager
+    // Telemetry runs at LOW priority and uses TEMPORARY restart.
     // clang-format on
     hive_child_spec children[] = {
         {.start = sensor_actor,
@@ -197,17 +204,28 @@ int main(void) {
          .restart = HIVE_CHILD_TRANSIENT, // Normal exit = mission complete
          .actor_cfg = {.priority = HIVE_PRIORITY_CRITICAL,
                        .name = "flight_mgr"}},
+#ifdef HAL_HAS_RADIO
+        {.start = telemetry_actor,
+         .init = telemetry_actor_init,
+         .init_args = &buses,
+         .init_args_size = sizeof(buses),
+         .name = "telemetry",
+         .auto_register = false,
+         .restart = HIVE_CHILD_TEMPORARY, // Not flight-critical, don't restart
+         .actor_cfg = {.priority = HIVE_PRIORITY_LOW, .name = "telemetry"}},
+#endif
     };
 
     // Configure supervisor with ONE_FOR_ALL strategy:
     // If any actor crashes, all are killed and restarted together.
     // This ensures consistent pipeline state after recovery.
+    // Note: telemetry is TEMPORARY so its exit won't trigger restarts.
     hive_supervisor_config sup_cfg = {
         .strategy = HIVE_STRATEGY_ONE_FOR_ALL,
         .max_restarts = 3,
         .restart_period_ms = 10000,
         .children = children,
-        .num_children = 9,
+        .num_children = sizeof(children) / sizeof(children[0]),
         .on_shutdown = on_pipeline_shutdown,
         .shutdown_ctx = NULL,
     };
@@ -217,7 +235,12 @@ int main(void) {
     assert(HIVE_SUCCEEDED(status));
     (void)supervisor;
 
+    // Log actor count (9 flight actors + optional telemetry + 1 supervisor)
+#ifdef HAL_HAS_RADIO
+    HIVE_LOG_INFO("11 actors spawned (10 children + 1 supervisor)");
+#else
     HIVE_LOG_INFO("10 actors spawned (9 children + 1 supervisor)");
+#endif
 
     // Main loop - time control differs between real-time and simulation
 #ifdef SIMULATED_TIME

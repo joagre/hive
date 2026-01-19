@@ -9,7 +9,7 @@ Supports three platforms:
 
 ## What it does
 
-Demonstrates waypoint navigation with a quadcopter using 10 actors (9 workers + 1 supervisor):
+Demonstrates waypoint navigation with a quadcopter using 10-11 actors (9-10 workers + 1 supervisor):
 
 1. **Sensor actor** reads raw sensors via HAL, publishes to sensor bus
 2. **Estimator actor** runs complementary filter, computes velocities, publishes to state bus
@@ -20,7 +20,8 @@ Demonstrates waypoint navigation with a quadcopter using 10 actors (9 workers + 
 7. **Rate actor** runs rate PIDs, publishes torque commands
 8. **Motor actor** reads torque bus, writes to hardware via HAL (checks for STOP signal)
 9. **Flight manager actor** handles startup delay (60s), landing coordination, log file management
-10. **Supervisor actor** monitors all 9 workers, restarts all on crash (ONE_FOR_ALL)
+10. **Telemetry actor** (Crazyflie only) sends flight data over radio at 100Hz for ground station logging
+11. **Supervisor actor** monitors all workers, restarts flight-critical actors on crash (ONE_FOR_ALL)
 
 Workers use `hive_find_sibling()` for IPC coordination via sibling info passed
 by the supervisor at spawn time.
@@ -29,6 +30,7 @@ by the supervisor at spawn time.
 
 **Crazyflie 2.1+:** With Flow deck v2, uses optical flow for XY positioning and ToF for altitude.
 Without Flow deck, hovers and changes altitude only. 60-second startup delay before flight.
+Radio telemetry enabled via Crazyradio PA for real-time ground station logging.
 
 **STEVAL-DRONE01:** Hovers and changes altitude only (no GPS, so XY position fixed at origin).
 60-second startup delay before flight.
@@ -84,6 +86,7 @@ See `hal/<platform>/README.md` for hardware details, pin mapping, and flight pro
 | `rate_actor.c/h` | Rate PIDs → torque commands |
 | `motor_actor.c/h` | Output: torque → HAL → motors |
 | `flight_manager_actor.c/h` | Startup delay, flight window cutoff |
+| `telemetry_actor.c/h` | Radio telemetry (Crazyflie only) |
 | `pid.c/h` | Reusable PID controller |
 | `fusion/complementary_filter.c/h` | Portable attitude estimation (accel+gyro fusion) |
 | `types.h` | Shared data types (sensor_data_t, state_estimate_t, etc.) |
@@ -133,7 +136,8 @@ sizes differ per platform based on available RAM.
 
 ## Architecture
 
-Ten actors: nine workers connected via buses, one supervisor monitoring all workers:
+Ten to eleven actors: nine flight-critical workers connected via buses, one supervisor
+monitoring all workers, plus an optional telemetry actor on Crazyflie (radio-enabled platforms):
 
 ```mermaid
 graph TB
@@ -151,30 +155,34 @@ graph TB
 Hardware Abstraction Layer (HAL) provides platform independence:
 - `hal_read_sensors()` - reads sensors (called by sensor_actor)
 - `hal_write_torque()` - writes motors with mixing (called by motor_actor)
+- `hal_radio_*()` - radio telemetry (Crazyflie only, called by telemetry_actor)
 
 Actor code is identical across platforms. See `hal/<platform>/README.md` for
 hardware-specific details.
 
 ## Supervision and Spawn Order
 
-All 9 worker actors are supervised with **ONE_FOR_ALL** strategy: if any worker
-crashes, all are killed and restarted together to ensure consistent pipeline state.
+All actors are supervised with **ONE_FOR_ALL** strategy. Flight-critical actors
+use PERMANENT restart (crash triggers restart of all). Telemetry uses TEMPORARY
+restart (crash/exit doesn't trigger restarts, just stops telemetry).
 
-Workers run at CRITICAL priority. Spawn order determines execution order within
-the same priority level (round-robin). Workers are spawned in data-flow order,
-with flight_manager last so all siblings are available via `hive_find_sibling()`:
+Workers run at CRITICAL priority (telemetry at LOW). Spawn order determines
+execution order within the same priority level (round-robin). Workers are spawned
+in data-flow order, with flight_manager last so all siblings are available via
+`hive_find_sibling()`:
 
-| Order | Actor     | Priority | Rationale |
-|-------|-----------|----------|-----------|
-| 1     | sensor    | CRITICAL | Reads hardware first |
-| 2     | estimator | CRITICAL | Needs sensors, produces state estimate |
-| 3     | waypoint  | CRITICAL | Needs state + START signal, produces position targets |
-| 4     | altitude  | CRITICAL | Needs state, produces thrust |
-| 5     | position  | CRITICAL | Needs target, produces attitude setpoints |
-| 6     | attitude  | CRITICAL | Needs attitude setpoints, produces rate setpoints |
-| 7     | rate      | CRITICAL | Needs state + thrust + rate setpoints |
-| 8     | motor     | CRITICAL | Needs torque + STOP signal, writes hardware last |
-| 9     | flight_mgr| CRITICAL | Spawns last so all siblings are available |
+| Order | Actor     | Priority | Restart   | Rationale |
+|-------|-----------|----------|-----------|-----------|
+| 1     | sensor    | CRITICAL | PERMANENT | Reads hardware first |
+| 2     | estimator | CRITICAL | PERMANENT | Needs sensors, produces state estimate |
+| 3     | waypoint  | CRITICAL | PERMANENT | Needs state + START signal, produces position targets |
+| 4     | altitude  | CRITICAL | PERMANENT | Needs state, produces thrust |
+| 5     | position  | CRITICAL | PERMANENT | Needs target, produces attitude setpoints |
+| 6     | attitude  | CRITICAL | PERMANENT | Needs attitude setpoints, produces rate setpoints |
+| 7     | rate      | CRITICAL | PERMANENT | Needs state + thrust + rate setpoints |
+| 8     | motor     | CRITICAL | PERMANENT | Needs torque + STOP signal, writes hardware last |
+| 9     | flight_mgr| CRITICAL | TRANSIENT | Normal exit = mission complete |
+| 10    | telemetry | LOW      | TEMPORARY | Crazyflie only, not flight-critical |
 
 Workers use **sibling info** for IPC coordination:
 - Supervisor passes sibling info (actor IDs and names) at spawn time
@@ -252,4 +260,26 @@ After flight completes, a stack usage report is printed to stderr:
 Measured on x86-64 Linux (Webots simulation). ARM Cortex-M may differ slightly
 due to calling conventions. All actors fit comfortably in 4KB with the highest
 usage at 78.9% (waypoint), leaving ~860 bytes headroom.
+
+Note: Telemetry actor (Crazyflie only) not included in Webots measurements.
+
+## Radio Telemetry (Crazyflie 2.1+ only)
+
+The Crazyflie build includes a telemetry actor that sends flight data over radio
+at 100Hz for real-time ground station logging. This uses the syslink protocol
+to the nRF51822 radio chip, which transmits via ESB to a Crazyradio PA on the ground.
+
+**Packet types** (31-byte ESB limit requires two packet types):
+- Type 0x01: Attitude/rates (gyro XYZ, roll/pitch/yaw)
+- Type 0x02: Position (altitude, velocities, thrust)
+
+**Ground station receiver:**
+```bash
+pip install cflib
+./tools/telemetry_receiver.py -o flight.csv
+```
+
+The telemetry actor runs at LOW priority to avoid blocking control loops (~370µs
+per radio send). It uses TEMPORARY restart type so crashes don't trigger restarts
+of flight-critical actors - telemetry simply stops if it fails.
 

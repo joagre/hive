@@ -32,6 +32,7 @@ CFLAGS += -MMD -MP
 # Processor defines
 CFLAGS += -DSTM32F405xx
 CFLAGS += -DUSE_FULL_ASSERT
+CFLAGS += -DHAL_HAS_RADIO
 
 # Include paths
 CFLAGS += -I.
@@ -46,6 +47,7 @@ ASFLAGS = $(MCU) -g
 # Source files
 C_SOURCES = \
     hal_crazyflie.c \
+    hal_radio.c \
     platform_crazyflie.c \
     motors.c \
     bmi088.c \

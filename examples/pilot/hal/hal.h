@@ -20,6 +20,7 @@
 #include "../types.h"
 #include "../config.h"
 #include <stdbool.h>
+#include <stddef.h>
 
 // ----------------------------------------------------------------------------
 // Platform Lifecycle
@@ -73,6 +74,39 @@ void hal_write_torque(const torque_cmd_t *cmd);
 //   hal/webots-crazyflie/hal_config.h
 // The appropriate file is included via the platform-specific Makefile.
 // This keeps platform constants in platform directories (no #ifdefs here).
+
+// ----------------------------------------------------------------------------
+// Radio Interface (optional, for telemetry)
+// ----------------------------------------------------------------------------
+
+#ifdef HAL_HAS_RADIO
+
+// Initialize radio hardware.
+// Returns 0 on success, -1 on error.
+int hal_radio_init(void);
+
+// Send data over radio.
+// Returns 0 on success, -1 on error (not ready or too large).
+// Max payload: 31 bytes (ESB limit).
+int hal_radio_send(const void *data, size_t len);
+
+// Check if radio is ready to send.
+// Flow control: can only send after receiving a packet from ground.
+bool hal_radio_tx_ready(void);
+
+// Poll for incoming radio packets.
+// Call periodically to process RX data.
+void hal_radio_poll(void);
+
+// Register callback for received radio data.
+// Callback is called from hal_radio_poll() context.
+void hal_radio_set_rx_callback(void (*callback)(const void *data, size_t len));
+
+// Get battery voltage from power management packets.
+// Returns 0.0 if not yet received.
+float hal_radio_get_battery(void);
+
+#endif // HAL_HAS_RADIO
 
 // ----------------------------------------------------------------------------
 // Simulated Time Interface (only for simulation platforms)

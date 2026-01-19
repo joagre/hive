@@ -28,6 +28,7 @@ extern "C" {
 #define TIM2_BASE         (APB1PERIPH_BASE + 0x0000UL)
 #define TIM3_BASE         (APB1PERIPH_BASE + 0x0400UL)
 #define TIM4_BASE         (APB1PERIPH_BASE + 0x0800UL)
+#define USART2_BASE       (APB1PERIPH_BASE + 0x4400UL)
 #define SPI2_BASE         (APB1PERIPH_BASE + 0x3800UL)
 #define SPI3_BASE         (APB1PERIPH_BASE + 0x3C00UL)
 #define I2C1_BASE         (APB1PERIPH_BASE + 0x5400UL)
@@ -116,6 +117,8 @@ typedef struct {
 #define GPIO_PUPDR_PUPDR2     (0x3UL << 4)
 #define GPIO_PUPDR_PUPDR3     (0x3UL << 6)
 #define GPIO_PUPDR_PUPDR4     (0x3UL << 8)
+#define GPIO_PUPDR_PUPDR4_0   (0x1UL << 8)
+#define GPIO_PUPDR_PUPDR4_1   (0x2UL << 8)
 #define GPIO_PUPDR_PUPDR5     (0x3UL << 10)
 #define GPIO_PUPDR_PUPDR6     (0x3UL << 12)
 #define GPIO_PUPDR_PUPDR7     (0x3UL << 14)
@@ -194,6 +197,7 @@ typedef struct {
 #define RCC_AHB1ENR_GPIOCEN   (1UL << 2)
 
 #define RCC_APB1ENR_TIM2EN    (1UL << 0)
+#define RCC_APB1ENR_USART2EN  (1UL << 17)
 #define RCC_APB1ENR_I2C3EN    (1UL << 23)
 
 #define RCC_APB2ENR_SPI1EN    (1UL << 12)
@@ -326,6 +330,32 @@ typedef struct {
 #define I2C_SR1_BTF           (1UL << 2)
 #define I2C_SR1_RXNE          (1UL << 6)
 #define I2C_SR1_TXE           (1UL << 7)
+
+// ----------------------------------------------------------------------------
+// USART Registers
+// ----------------------------------------------------------------------------
+
+typedef struct {
+    volatile uint32_t SR;
+    volatile uint32_t DR;
+    volatile uint32_t BRR;
+    volatile uint32_t CR1;
+    volatile uint32_t CR2;
+    volatile uint32_t CR3;
+    volatile uint32_t GTPR;
+} USART_TypeDef;
+
+#define USART1  ((USART_TypeDef *)USART1_BASE)
+#define USART2  ((USART_TypeDef *)USART2_BASE)
+
+// USART CR1 bit definitions
+#define USART_CR1_UE          (1UL << 13)
+#define USART_CR1_TE          (1UL << 3)
+#define USART_CR1_RE          (1UL << 2)
+
+// USART SR bit definitions
+#define USART_SR_TXE          (1UL << 7)
+#define USART_SR_RXNE         (1UL << 5)
 
 // ----------------------------------------------------------------------------
 // System Variables
