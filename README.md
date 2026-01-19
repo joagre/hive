@@ -166,6 +166,12 @@ All structures are statically allocated. Actor stacks use a static arena allocat
 
 # Priority scheduling example (4 levels, starvation demo)
 ./build/priority
+
+# Logging example (HIVE_LOG_* macros, binary log file)
+./build/logging
+
+# Name registry example (service discovery pattern)
+./build/registry
 ```
 
 ## Quick Start
