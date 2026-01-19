@@ -72,25 +72,12 @@
 #include "rate_actor.h"
 #include "motor_actor.h"
 #include "flight_manager_actor.h"
+#include "stack_profile.h"
 
 #include <assert.h>
-#include <stdio.h>
 
 // Bus configuration from HAL (platform-specific)
 #define PILOT_BUS_CONFIG HAL_BUS_CONFIG
-
-// Stack usage reporting callback (when HIVE_STACK_WATERMARK=1)
-#if HIVE_STACK_WATERMARK
-#include "hive_static_config.h"
-static void print_stack_usage(actor_id id, const char *name, size_t stack_size,
-                              size_t used) {
-    (void)id;
-    const char *display_name = name ? name : "(unnamed)";
-    float pct =
-        stack_size > 0 ? 100.0f * (float)used / (float)stack_size : 0.0f;
-    printf("%-15s %8zu %8zu %5.1f%%\n", display_name, stack_size, used, pct);
-}
-#endif
 
 // ============================================================================
 // SUPERVISOR CALLBACK
@@ -238,20 +225,15 @@ int main(void) {
     while (hal_step()) {
         hive_advance_time(HAL_TIME_STEP_US);
         hive_run_until_blocked();
+
+        // Check if stack profile report was requested (flight complete)
+        if (stack_profile_check()) {
+            break;
+        }
     }
 #else
     // Real-time: Scheduler runs event loop with hardware timers
     hive_run();
-#endif
-
-    // Report stack usage (when HIVE_STACK_WATERMARK=1)
-#if HIVE_STACK_WATERMARK
-    printf("\n=== Stack Usage Report ===\n");
-    printf("%-15s %8s %8s %6s\n", "Actor", "Size", "Used", "Usage");
-    printf("%-15s %8s %8s %6s\n", "---------------", "--------", "--------",
-           "------");
-    hive_actor_stack_usage_all(print_stack_usage);
-    printf("==========================\n\n");
 #endif
 
     // Cleanup

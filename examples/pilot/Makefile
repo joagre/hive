@@ -78,7 +78,8 @@ ACTOR_SRCS = sensor_actor.c estimator_actor.c altitude_actor.c waypoint_actor.c 
              flight_manager_actor.c
 HAL_SRCS = hal/webots-crazyflie/hal_webots.c
 FUSION_SRCS = fusion/complementary_filter.c
-PILOT_SRCS = pilot.c pid.c $(ACTOR_SRCS) $(HAL_SRCS) $(FUSION_SRCS)
+UTIL_SRCS = stack_profile.c
+PILOT_SRCS = pilot.c pid.c $(ACTOR_SRCS) $(HAL_SRCS) $(FUSION_SRCS) $(UTIL_SRCS)
 
 # Hive runtime (Linux x86-64 platform)
 HIVE_CORE_SRCS = hive_actor.c hive_bus.c hive_context.c hive_ipc.c \

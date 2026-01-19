@@ -22,6 +22,7 @@
 #include "hive_timer.h"
 #include "hive_log.h"
 #include "hive_static_config.h"
+#include "stack_profile.h"
 #include <assert.h>
 
 // Flight duration per profile (flight manager decides when to land)
@@ -159,6 +160,9 @@ void flight_manager_actor(void *args, const hive_spawn_info *siblings,
     HIVE_LOG_INFO("[FLM] Closing log file...");
     hive_log_file_close();
     HIVE_LOG_INFO("[FLM] Log file closed");
+
+    stack_profile_capture("flight_mgr");
+    stack_profile_request();
 
     hive_exit();
 }
