@@ -642,6 +642,182 @@ static inline hive_status hive_radio_init(void) {
 
 ---
 
+## Radio as Third Log Target
+
+The Hive logging system currently supports two output targets:
+- **stdout** - Console output (Linux default, disabled on STM32)
+- **file** - Binary log file (`/var/tmp/hive.log` on Linux, `/log` on STM32)
+
+Radio can be added as a **third target**, enabling real-time log streaming over
+the Crazyflie radio link.
+
+### Configuration
+
+New compile-time options in `hive_static_config.h`:
+
+```c
+// Radio logging (Crazyflie only)
+#ifndef HIVE_LOG_TO_RADIO
+#define HIVE_LOG_TO_RADIO 0      // Disabled by default
+#endif
+
+#ifndef HIVE_LOG_RADIO_LEVEL
+#define HIVE_LOG_RADIO_LEVEL HIVE_LOG_LEVEL_WARN  // Only WARN+ over radio
+#endif
+```
+
+### Why a Separate Level?
+
+Radio has limited bandwidth (~100 packets/sec, 31 bytes each). Streaming all
+logs would saturate the link. The `HIVE_LOG_RADIO_LEVEL` setting allows:
+
+- Full logging to file (TRACE level for post-flight analysis)
+- Filtered logging to radio (WARN+ for real-time monitoring)
+
+### Integration with Existing Macros
+
+The existing `HIVE_LOG_*` macros would gain radio support:
+
+```c
+// In hive_log.c - simplified sketch
+
+void hive_log_write(int level, const char *fmt, ...) {
+    char buf[HIVE_LOG_MAX_ENTRY_SIZE];
+    va_list args;
+    va_start(args, fmt);
+    int len = vsnprintf(buf, sizeof(buf), fmt, args);
+    va_end(args);
+
+    // Target 1: stdout (if enabled and level meets threshold)
+    #if HIVE_LOG_TO_STDOUT
+    if (level >= HIVE_LOG_LEVEL) {
+        fprintf(stderr, "[%s] %s\n", level_str(level), buf);
+    }
+    #endif
+
+    // Target 2: file (if enabled and open)
+    #if HIVE_LOG_TO_FILE
+    if (level >= HIVE_LOG_LEVEL && log_file_open) {
+        write_binary_log_entry(level, buf, len);
+    }
+    #endif
+
+    // Target 3: radio (if enabled and level meets radio threshold)
+    #if HIVE_LOG_TO_RADIO
+    if (level >= HIVE_LOG_RADIO_LEVEL && hive_radio_tx_ready()) {
+        write_radio_log_entry(level, buf, len);
+    }
+    #endif
+}
+```
+
+### Radio Log Packet Format
+
+Compact binary format optimized for 31-byte radio packets:
+
+```
+┌───────┬───────────┬────────┬─────────────────────────┐
+│ LEVEL │ TIMESTAMP │ LENGTH │       MESSAGE           │
+│ 1byte │  4 bytes  │ 1 byte │     0-25 bytes          │
+└───────┴───────────┴────────┴─────────────────────────┘
+```
+
+| Field | Size | Description |
+|-------|------|-------------|
+| LEVEL | 1 byte | Log level (0=TRACE to 4=ERROR) |
+| TIMESTAMP | 4 bytes | Microseconds since boot (wraps at ~71 min) |
+| LENGTH | 1 byte | Message length (0-25) |
+| MESSAGE | 0-25 bytes | Truncated log message |
+
+**Total:** 6 bytes header + 25 bytes message = 31 bytes max
+
+### Implementation Sketch
+
+```c
+// New function in hive_log.c (Crazyflie build only)
+
+#if HIVE_LOG_TO_RADIO
+
+typedef struct __attribute__((packed)) {
+    uint8_t  level;
+    uint32_t timestamp_us;
+    uint8_t  length;
+    char     message[25];
+} radio_log_packet_t;
+
+static void write_radio_log_entry(int level, const char *msg, int len) {
+    radio_log_packet_t pkt = {
+        .level = (uint8_t)level,
+        .timestamp_us = hive_get_time(),
+        .length = (len > 25) ? 25 : len,
+    };
+    memcpy(pkt.message, msg, pkt.length);
+
+    // Non-blocking send - drop if flow control disallows
+    hive_radio_send(&pkt, 6 + pkt.length);
+}
+
+#endif
+```
+
+### Ground Station Log Receiver
+
+Extend the Python receiver to decode log packets:
+
+```python
+import struct
+
+LOG_LEVELS = ['TRACE', 'DEBUG', 'INFO', 'WARN', 'ERROR']
+
+def decode_log_packet(data):
+    if len(data) < 6:
+        return None
+
+    level, timestamp, length = struct.unpack('<BIB', data[:6])
+    message = data[6:6+length].decode('utf-8', errors='replace')
+
+    return {
+        'level': LOG_LEVELS[level] if level < 5 else f'L{level}',
+        'time_ms': timestamp / 1000.0,
+        'message': message
+    }
+
+# In receive loop:
+packet = link.receive_packet(timeout=1)
+if packet:
+    log = decode_log_packet(packet.data)
+    if log:
+        print(f"[{log['time_ms']:10.1f}ms] {log['level']:5s} {log['message']}")
+```
+
+### Platform Summary
+
+| Target | Linux | STM32 | Crazyflie |
+|--------|-------|-------|-----------|
+| stdout | ✓ (default on) | ✗ | ✗ |
+| file | ✓ | ✓ (flash) | ✓ (flash) |
+| radio | ✗ | ✗ | ✓ (optional) |
+
+### Usage Example
+
+```c
+// In your Crazyflie Hive application
+
+hive_status pilot_init(void) {
+    // Initialize radio for logging
+    hive_radio_init();
+
+    // Now all HIVE_LOG_WARN/ERROR calls also go to radio
+    HIVE_LOG_INFO("Pilot starting");   // File only (below radio threshold)
+    HIVE_LOG_WARN("Low battery");      // File + radio
+    HIVE_LOG_ERROR("Sensor failure"); // File + radio
+
+    return HIVE_SUCCESS;
+}
+```
+
+---
+
 ## Limitations and Future Work
 
 ### Current Limitations
