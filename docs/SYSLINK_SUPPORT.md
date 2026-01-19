@@ -45,6 +45,68 @@ firmware. You only need to implement the syslink protocol on the STM32 side.
 
 ---
 
+## No Custom Firmware Required
+
+A common question: Do you need custom firmware on the Crazyradio PA dongle?
+
+**No.** The stock firmware on both the nRF51 and Crazyradio PA handles everything
+at the radio layer:
+
+```
+Your STM32 firmware          Stock firmware           Stock firmware
+┌─────────────────┐         ┌───────────────┐        ┌──────────────┐
+│  Hive + syslink │──UART──▶│ nRF51 on      │~~ESB~~▶│ Crazyradio   │──USB──▶ PC
+│  (custom)       │         │ Crazyflie     │  radio │ PA dongle    │
+└─────────────────┘         │ (stock)       │        │ (stock)      │
+                            └───────────────┘        └──────────────┘
+```
+
+### What stays stock (no changes needed):
+
+| Component | Firmware | Why it works |
+|-----------|----------|--------------|
+| nRF51 on Crazyflie | Bitcraze stock | Flashing STM32 doesn't touch it |
+| Crazyradio PA | Bitcraze stock | Ships ready to use |
+| ESB radio protocol | Built into both | Already compatible |
+
+### What you customize:
+
+| Component | What to do |
+|-----------|------------|
+| STM32 firmware | Your Hive application using syslink |
+| Python ground station | Use cflib to receive packets |
+
+### How cflib handles the complexity
+
+The Crazyradio PA is essentially a USB-to-ESB bridge. On the PC side, cflib
+abstracts all USB and radio details:
+
+```python
+import cflib.crtp
+from cflib.crtp.radiodriver import RadioDriver
+
+# cflib talks to stock Crazyradio PA firmware
+cflib.crtp.init_drivers()
+link = cflib.crtp.get_link_driver("radio://0/80/2M")
+
+# Receive your custom packets - just raw bytes
+while True:
+    packet = link.receive_packet(timeout=1)
+    if packet:
+        # Your telemetry data, as sent via syslink
+        process_telemetry(packet.data)
+```
+
+The Crazyradio PA firmware:
+1. Receives ESB packets from the air (sent by nRF51)
+2. Passes them to the PC via USB
+3. cflib reads them and gives you the raw bytes
+
+You send whatever data you want via: **syslink → nRF51 → ESB → Crazyradio PA → USB → cflib**.
+The radio layer doesn't care about packet contents—it just moves bytes.
+
+---
+
 ## Syslink Protocol
 
 Syslink is the packet-based protocol between STM32 and nRF51 over UART.
