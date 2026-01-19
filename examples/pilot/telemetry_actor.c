@@ -4,7 +4,8 @@
 //   1. Flight mode: Sends binary telemetry at 100Hz for ground station logging
 //   2. Download mode: Transfers flash log file to ground station on request
 //
-// Runs at LOW priority to avoid blocking control loops (~370us per send).
+// Runs at LOW priority so control loops run first each cycle.
+// Radio send blocks ~370us (37 bytes * 10 bits/byte / 1Mbaud).
 //
 // Packet types:
 //   0x01: Attitude/rates (gyro, roll/pitch/yaw) - flight telemetry
