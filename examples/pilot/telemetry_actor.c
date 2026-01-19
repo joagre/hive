@@ -56,8 +56,9 @@ typedef enum {
 #define SCALE_VEL 1000     // m/s -> mm/s
 #define SCALE_THRUST 65535 // 0.0-1.0 -> 0-65535
 
-// Packed telemetry packet structures (must fit in 31 bytes)
-// Using __attribute__((packed)) to ensure no padding
+// Packed structs for wire format (must fit in 31-byte ESB limit).
+// Packed is appropriate here: bandwidth is tight, both ends are controlled
+// by this codebase, and ARM Cortex-M handles unaligned access.
 
 // Packet type 0x01: Attitude and rates (17 bytes)
 typedef struct __attribute__((packed)) {
