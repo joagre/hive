@@ -41,7 +41,7 @@ ifneq ($(ENABLE_NET),1)
   EXAMPLE_SRCS := $(filter-out echo.c,$(EXAMPLE_SRCS))
 endif
 ifneq ($(ENABLE_FILE),1)
-  EXAMPLE_SRCS := $(filter-out fileio.c,$(EXAMPLE_SRCS))
+  EXAMPLE_SRCS := $(filter-out fileio.c logging.c,$(EXAMPLE_SRCS))
 endif
 
 EXAMPLES := $(EXAMPLE_SRCS:%.c=$(BUILD_DIR)/%)
