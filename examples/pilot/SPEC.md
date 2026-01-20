@@ -443,6 +443,7 @@ implementation of this interface:
 // Platform lifecycle
 int hal_init(void);        // Initialize hardware
 void hal_cleanup(void);    // Release resources
+bool hal_self_test(void);  // Verify sensors respond (returns true if OK)
 void hal_calibrate(void);  // Calibrate sensors
 void hal_arm(void);        // Enable motor output
 void hal_disarm(void);     // Disable motor output

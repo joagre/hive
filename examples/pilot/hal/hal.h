@@ -33,8 +33,14 @@ int hal_init(void);
 // Cleanup and release resources.
 void hal_cleanup(void);
 
+// Self-test hardware: verify sensors respond and return sane values.
+// Call after hal_init(), before hal_calibrate().
+// Returns true if all required hardware is functional, false otherwise.
+// Always returns true on simulation platforms.
+bool hal_self_test(void);
+
 // Calibrate sensors (gyro bias, barometer reference, etc.).
-// Call after hal_init(), keep drone still and level.
+// Call after hal_self_test(), keep drone still and level.
 // No-op on platforms that don't need calibration (e.g., simulation).
 void hal_calibrate(void);
 

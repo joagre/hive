@@ -443,6 +443,33 @@ int platform_init(void) {
     return 0;
 }
 
+bool platform_self_test(void) {
+    if (!s_initialized) {
+        return false;
+    }
+
+    // Required sensors: BMI088 (IMU) and BMP388 (barometer)
+    if (!bmi088_is_ready()) {
+        return false;
+    }
+    if (!bmp388_is_ready()) {
+        return false;
+    }
+
+    // Optional sensors: Flow deck (PMW3901 + VL53L1x)
+    // Only test if deck was detected during init
+    if (s_flow_deck_present) {
+        if (!pmw3901_is_ready()) {
+            return false;
+        }
+        if (!vl53l1x_is_ready()) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 int platform_calibrate(void) {
     if (!s_initialized) {
         return -1;

@@ -34,8 +34,14 @@ void platform_write_motors(const motor_cmd_t *cmd);
 // Extended Platform Interface
 // ----------------------------------------------------------------------------
 
+// Self-test hardware: verify sensors respond and return sane values.
+// Call after platform_init(), before platform_calibrate().
+// Returns true if all required hardware is functional (BMI088, BMP388).
+// Optional hardware (Flow deck) is tested if present.
+bool platform_self_test(void);
+
 // Calibrate sensors (gyro bias, barometer reference).
-// Call after platform_init(), keep drone still and level.
+// Call after platform_self_test(), keep drone still and level.
 // Returns 0 on success, -1 on error.
 int platform_calibrate(void);
 

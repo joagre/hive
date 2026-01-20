@@ -145,6 +145,11 @@ void hal_cleanup(void) {
     wb_robot_cleanup();
 }
 
+bool hal_self_test(void) {
+    // Webots sensors always work
+    return true;
+}
+
 void hal_calibrate(void) {
     // No-op: Webots sensors don't need calibration
 }

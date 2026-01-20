@@ -255,6 +255,7 @@ The HAL provides a platform-independent interface used by pilot actors:
 
 // Initialization
 hal_init();         // Initialize hardware
+hal_self_test();    // Verify sensors respond (returns true if OK)
 hal_calibrate();    // Calibrate sensors (keep drone still and level)
 hal_arm();          // Arm motors
 
@@ -307,6 +308,15 @@ M4 = thrust - roll - pitch - yaw
 ```
 
 **To reverse motor direction:** Swap the two motor wires at the connector.
+
+## Self-Test
+
+After initialization, `hal_self_test()` verifies all sensors respond:
+
+1. **Required:** BMI088 (gyro/accel), BMP388 (barometer)
+2. **Optional:** Flow deck sensors (PMW3901, VL53L1x) - only tested if deck was detected
+
+Returns `true` if all required sensors pass, `false` otherwise.
 
 ## Calibration
 

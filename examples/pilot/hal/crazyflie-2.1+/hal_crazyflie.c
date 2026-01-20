@@ -18,6 +18,10 @@ void hal_cleanup(void) {
     platform_disarm();
 }
 
+bool hal_self_test(void) {
+    return platform_self_test();
+}
+
 void hal_calibrate(void) {
     platform_calibrate();
 }

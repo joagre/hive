@@ -102,6 +102,10 @@ int main(void) {
     if (hal_init() != 0) {
         return 1;
     }
+    if (!hal_self_test()) {
+        hal_cleanup();
+        return 1;
+    }
     hal_calibrate();
     hal_arm();
 
