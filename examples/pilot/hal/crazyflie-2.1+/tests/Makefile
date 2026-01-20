@@ -37,6 +37,7 @@ CFLAGS += -g3
 CFLAGS += -ffunction-sections -fdata-sections
 CFLAGS += -fno-common
 CFLAGS += -DSTM32F405xx
+CFLAGS += -MMD -MP
 
 # Additional flags for HAL test
 HAL_CFLAGS = $(CFLAGS)
@@ -91,19 +92,22 @@ $(BUILD_DIR)/sensor_motor_test.bin: $(BUILD_DIR)/sensor_motor_test.elf
 	@echo "BIN sensor_motor_test.bin"
 	@$(CP) -O binary $< $@
 
+# HAL library location
+HAL_LIB = $(HAL_DIR)/build/libhal.a
+
 # HAL test (links against libhal.a)
-hal_test: $(HAL_DIR)/libhal.a $(BUILD_DIR)/hal_test.bin
+hal_test: $(HAL_LIB) $(BUILD_DIR)/hal_test.bin
 	@echo ""
 	@echo "Built: $(BUILD_DIR)/hal_test.bin"
 	@$(SZ) $(BUILD_DIR)/hal_test.elf
 
-$(HAL_DIR)/libhal.a:
+$(HAL_LIB):
 	@echo "Building HAL library..."
-	@$(MAKE) -C $(HAL_DIR) libhal.a
+	@$(MAKE) -C $(HAL_DIR)
 
 $(BUILD_DIR)/hal_test.elf: hal_test.c | $(BUILD_DIR)
 	@echo "CC hal_test.c (with HAL)"
-	@$(CC) $(HAL_CFLAGS) $< $(HAL_DIR)/libhal.a $(LDFLAGS) -o $@
+	@$(CC) $(HAL_CFLAGS) $< $(HAL_LIB) $(LDFLAGS) -o $@
 
 $(BUILD_DIR)/hal_test.bin: $(BUILD_DIR)/hal_test.elf
 	@echo "BIN hal_test.bin"
@@ -189,3 +193,7 @@ help:
 	@echo "    6-9 fast blinks = hal_self_test() failed (from HAL)"
 	@echo "    10 fast blinks  = Sensor data out of range (hal_test)"
 	@echo "    Continuous slow = Fatal error"
+
+# Include dependency files
+DEPS = $(BUILD_DIR)/thrust_test.d $(BUILD_DIR)/sensor_motor_test.d $(BUILD_DIR)/hal_test.d
+-include $(DEPS)
