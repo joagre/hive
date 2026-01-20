@@ -1,917 +1,3037 @@
-# Pilot Example Specification
+# Actor Runtime Specification
 
-A quadcopter autopilot example using the actor runtime. Supports Webots simulation
-(default) and STM32 hardware (Crazyflie 2.1+, STEVAL-DRONE01).
+## Overview
 
-## Status
+A minimalistic actor-based runtime designed for **embedded and safety-critical systems**. The runtime implements cooperative multitasking with priority-based scheduling and message passing using the actor model.
 
-**Implemented:**
-- Altitude-hold hover with attitude stabilization
-- Horizontal position hold (GPS-based XY control)
-- Heading hold (yaw control with angle wrap-around)
-- Waypoint navigation (square demo route with altitude and heading changes)
-- Step 1: Motor actor (safety, watchdog)
-- Step 2: Separate altitude actor (altitude/rate split)
-- Step 3: Sensor actor (hardware abstraction)
-- Step 4: Attitude actor (attitude angle control)
-- Step 5: Estimator actor (sensor fusion, vertical velocity)
-- Step 6: Position actor (horizontal position hold + heading hold)
-- Step 7: Waypoint actor (waypoint navigation)
-- Step 8: Flight manager actor (startup coordination, safety cutoff)
-- Step 9: Comms actor (radio telemetry, Crazyflie only)
-- Mixer moved to HAL (platform-specific, X-configuration)
+**Target use cases:** Drone autopilots, industrial sensor networks, robotics control systems, and other resource-constrained embedded applications requiring structured concurrency.
 
-## Goals
+**Design principles:**
 
-1. **Showcase the actor runtime** - demonstrate benefits of actor-based design for embedded systems
-2. **Improve the runtime** - if problems arise (latency, scheduling), fix the runtime, don't work around it
-3. **Beautiful code** - show how an autopilot can be elegantly written using actors
-4. **Hover control** - maintain stable altitude and attitude
-5. **Clean architecture** - portable actor code with HAL abstraction
-6. **Webots integration** - use `hive_advance_time()` + `hive_run_until_blocked()` per simulation step
+1. **Minimalistic**: Only essential features, no bloat
+2. **Predictable**: Cooperative scheduling, no surprises
+3. **Modern C11**: Clean, safe, standards-compliant code
+4. **Statically bounded memory**: All runtime memory is bounded at link time; no heap allocations after init, except optional actor stacks under explicit configuration (`malloc_stack = true`)
+5. **O(1) hot paths**: IPC, timers, bus, monitoring, and I/O dispatch use pools with O(1) allocation; spawn/exit may use bounded arena search
+6. **No preemption**: Actors run until they block (IPC, I/O, timers) or yield
 
-The pilot serves dual purposes: a real-world stress test that exposes runtime weaknesses, and a showcase of clean actor-based embedded design.
+### Heap Usage Policy
 
-## Design Decisions
+**Definition - Hot path**: Any operation callable while the scheduler is running, including all API calls from actor context, event dispatch, and wakeup processing.
 
-### Why buses instead of IPC?
+**Allowed heap use** (malloc/free):
+- Actor stack allocation during `hive_spawn()` **only if** `actor_config.malloc_stack = true`
+- Corresponding free on actor exit for malloc'd stacks
 
-- **Buses** provide latest-value semantics - subscribers get current state, not history
-- **IPC notify** queues every message - slow consumers would process stale data
-- For control loops, you always want the *latest* sensor reading, not a backlog
+**All other heap use is forbidden after `hive_init()` returns.**
 
-### Why max_entries=1?
+**Forbidden heap use** (by subsystem):
+- Scheduler and context switching
+- All IPC send/receive/select paths
+- All timer creation and delivery paths
+- All bus publish/read paths
+- All name registry operations
+- All link/monitor operations
+- All I/O event dispatch paths (network, file)
 
-All buses use `max_entries=1` (single entry, latest value only):
+**Consequences**:
+- Hot path operations use **static pools** with **O(1) allocation** and return `HIVE_ERR_NOMEM` on pool exhaustion
+- No heap fragmentation in hot paths
+- Predictable allocation latency
+- Optional malloc'd stacks may fragment the process heap depending on allocator behavior
+
+**Implementation detail** (may change): Stack allocation (spawn/exit) currently uses arena allocator with O(n) first-fit search bounded by number of free blocks, with coalescing on free.
+
+**Linux verification**: Assert no malloc/free after `hive_init()` returns, except stack allocations/frees performed by spawn/exit when `malloc_stack = true`. Use `LD_PRELOAD` malloc wrapper to enforce.
+
+## Target Platforms
+
+**Development:** Linux x86-64
+
+**Production:** STM32 (ARM Cortex-M) bare metal
+
+On both platforms, the actor runtime is **single-threaded** with an event loop architecture. All actors run cooperatively in a single scheduler thread. I/O operations use platform-specific non-blocking mechanisms integrated directly into the scheduler's event loop.
+
+## Architecture
+
+```
+┌──────────────────────────────────────────────────────────┐
+│              Actor Runtime (single-threaded)             │
+│  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐         │
+│  │ Actor 1 │ │ Actor 2 │ │ Actor 3 │ │   ...   │         │
+│  └────┬────┘ └────┬────┘ └────┬────┘ └────┬────┘         │
+│       │           │           │           │              │
+│       └───────────┴─────┬─────┴───────────┘              │
+│                         │                                │
+│              ┌──────────▼──────────┐                     │
+│              │     Scheduler       │                     │
+│              │  (event loop with   │                     │
+│              │       epoll)        │                     │
+│              └──────────┬──────────┘                     │
+│                         │                                │
+│       ┌─────────────────┼─────────────────┐              │
+│       │                 │                 │              │
+│       ▼                 ▼                 ▼              │
+│   ┌──────┐          ┌──────┐          ┌──────┐           │
+│   │ IPC  │          │ Bus  │          │Timers│           │
+│   │      │          │      │          │(tfd) │           │
+│   └──────┘          └──────┘          └──┬───┘           │
+│                                          │               │
+│                    ┌─────────────────────┼──────┐        │
+│                    │                     │      │        │
+│                    ▼                     ▼      ▼        │
+│               ┌─────────┐         ┌──────────────────┐   │
+│               │ Network │         │   File I/O       │   │
+│               │(sockets)│         │ (synchronous)    │   │
+│               └────┬────┘         └──────────────────┘   │
+│                    │                                     │
+└────────────────────┼─────────────────────────────────────┘
+                     │
+            ┌────────▼─────────┐
+            │  epoll (Linux)   │
+            │  WFI (STM32)     │
+            └──────────────────┘
+```
+
+## Scheduling
+
+### Cooperative Model
+
+Actors run until they explicitly yield control. The scheduler reschedules an actor only when:
+
+- The actor calls a blocking I/O primitive (net, file, IPC receive)
+- The actor explicitly yields via `hive_yield()`
+- The actor exits via `hive_exit()`
+
+There is no preemptive scheduling or time slicing within the actor runtime.
+
+**Reentrancy constraint:**
+- Runtime APIs are **not reentrant**
+- Actors **must not** call runtime APIs from signal handlers or interrupt service routines (ISRs)
+- All runtime API calls must occur from actor context (the scheduler thread)
+- Violating this constraint results in undefined behavior (data corruption, crashes)
+
+### Actor Blocking Semantics
+
+When an actor calls a blocking API, the following contract applies:
+
+**State transition:**
+- Actor transitions to `ACTOR_STATE_WAITING` and yields to scheduler
+- Actor is removed from run queue (not schedulable until unblocked)
+- Scheduler saves actor context and switches to next runnable actor
+
+**Operations that yield (actor gives up CPU, other actors run):**
+
+| Function | Blocks until |
+|----------|--------------|
+| `hive_yield()` | Immediately reschedules (no wait condition) |
+| `hive_ipc_recv()` | Message arrives or timeout (if timeout ≠ 0) |
+| `hive_ipc_recv_match()` | Matching message arrives or timeout |
+| `hive_ipc_recv_matches()` | Message matching any filter arrives or timeout |
+| `hive_ipc_request()` | Reply arrives or timeout |
+| `hive_bus_read_wait()` | Bus data available or timeout |
+| `hive_net_connect()` | Connection established or timeout |
+| `hive_net_accept()` | Incoming connection or timeout |
+| `hive_net_send()` | At least 1 byte sent or timeout |
+| `hive_net_recv()` | At least 1 byte received or timeout |
+| `hive_exit()` | Never returns (actor terminates) |
+
+**Non-blocking variants** (return immediately, never yield):
+- `hive_ipc_recv()` with timeout = 0 → returns `HIVE_ERR_WOULDBLOCK` if empty
+- `hive_bus_read()` → returns `HIVE_ERR_WOULDBLOCK` if no data
+
+**Note:** File I/O (`hive_file_*`) is NOT in this list. See "Scheduler-Stalling Calls" below.
+
+**Mailbox availability while blocked:**
+- Blocked actors **can** receive mailbox messages
+- Message enqueues are scheduler-owned operations (do not require actor to be runnable)
+- Enqueued messages are available when actor unblocks
+
+**Unblock conditions:**
+- I/O readiness signaled (network socket becomes readable/writable)
+- Timer expires (for APIs with timeout)
+- Message arrives in mailbox (for `hive_ipc_recv()`, `hive_ipc_recv_match()`, `hive_ipc_recv_matches()`, `hive_ipc_request()`)
+- Bus data published (for `hive_bus_read_wait()`)
+- **Important**: Mailbox arrival only unblocks actors blocked in IPC receive operations, not actors blocked on network I/O or bus read
+
+**Scheduling phase definition:**
+
+A scheduling phase consists of one iteration of the scheduler loop:
+
+1. **Find next runnable actor**: Select highest-priority ready actor (round-robin within priority)
+2. **Execute actor**: Run until yield, block, or exit
+3. **If no runnable actors**: Call `epoll_wait()` to block until I/O events arrive
+4. **Drain epoll events**: Process all returned events before returning to step 1
+
+**Event drain order within a phase:**
+
+When `epoll_wait()` returns multiple ready events (timers and network I/O), they are processed in **array index order** as returned by the kernel. This order is deterministic for a given set of ready file descriptors but is not controllable by the runtime.
+
+For each event:
+- **Timer event (timerfd)**: Read timerfd, send timer tick message to actor's mailbox, wake actor
+- **Network event (socket)**: Perform I/O operation, store result in actor's `io_status`, wake actor
+
+**Event drain timing:**
+- If runnable actors exist, they run immediately (no `epoll_wait` call)
+- `epoll_wait` is only called when the run queue is empty
+- All events from a single `epoll_wait` call are drained before selecting the next actor
+- This minimizes latency for already-runnable actors at the cost of potentially delayed I/O event processing
+
+**Timeout vs I/O readiness - request state machine:**
+
+Each blocking network request has an implicit state: `PENDING` → `COMPLETED` or `TIMED_OUT`.
+
+**State transitions:**
+- Request starts in `PENDING` when actor blocks on network I/O with timeout
+- First event processed transitions state out of `PENDING`; subsequent events for same request are **ignored without side effects**
+
+**Tie-break rule (deadline check at wake time):**
+- When actor wakes, check: `now >= deadline`?
+- If yes: state = `TIMED_OUT`, return `HIVE_ERR_TIMEOUT`, **do not perform I/O even if socket is ready**
+- If no: state = `COMPLETED`, perform I/O operation, return result
+
+**Rationale:** This avoids the "read data then discard" oddity. The deadline check is deterministic and independent of epoll event ordering.
+
+**Concrete behavior:**
+- If I/O ready **before** timeout: Actor wakes, deadline not reached, I/O performed, success
+- If timeout **before** I/O ready: Actor wakes, deadline reached, return timeout (no I/O attempted)
+- If both fire in **same** `epoll_wait()`: Actor wakes, deadline check determines outcome (I/O not performed if timed out)
+
+**Request serialization (network I/O only):**
+- Applies to: `hive_net_accept()`, `hive_net_connect()`, `hive_net_recv()`, `hive_net_send()` with timeouts
+- Constraint: **One outstanding network request per actor** (enforced by actor blocking)
+- When timeout occurs: epoll registration cleaned up, any late readiness signal is ignored
+- New request from same actor gets fresh epoll state
+
+**Note:** This serialization model does NOT apply to:
+- **File I/O**: Stalls scheduler synchronously (no event loop involvement)
+
+**Predictability guarantee:**
+
+> **Summary:** The runtime has predictable scheduling policy but not reproducible execution order. Given the same epoll event order, scheduling is reproducible; but epoll event order itself is kernel-dependent.
+
+The runtime provides **bounded, predictable behavior**, not full reproducibility:
+
+- **Predictable policy**: Given identical epoll event arrays in identical order, scheduling decisions are reproducible
+- **Source of variation**: epoll_wait returns ready file descriptors in kernel-determined order (not sorted, not stable)
+- **Consequence**: If multiple FDs become ready simultaneously, their processing order is kernel-dependent
+- **What we guarantee**:
+  - Bounded memory usage (calculable at link time)
+  - Bounded latency (O(1) pool allocation in hot paths)
+  - No phantom wakeups (actor only unblocks on specified conditions)
+  - Consistent policy (same event order → same scheduling decisions)
+  - **Concrete wake ordering rule**: When processing I/O events from a single `epoll_wait` call, actors made ready are appended to their priority run queues in event processing order. Within a priority level, the run queue is FIFO.
+- **What we do NOT guarantee**:
+  - Reproducible ordering when multiple timers/sockets fire in the same epoll_wait call
+  - Same event dispatch order across kernel versions or system load conditions
+
+**Design choice**: Sorting epoll events by fd/source-id before dispatch would provide reproducibility but adds O(n log n) overhead per epoll_wait. For embedded systems prioritizing latency over reproducibility, this overhead is not justified. Applications requiring reproducible replay should use external event logging.
+
+### Scheduler-Stalling Calls
+
+File I/O operations (`hive_file_read()`, `hive_file_write()`, `hive_file_sync()`) are **synchronous** and stall the entire runtime:
+
+**Behavior:**
+- Calling actor does NOT transition to `ACTOR_STATE_WAITING`
+- The scheduler event loop is paused during the syscall
+- All actors are stalled (no actor runs while file I/O executes)
+- Timer delivery is suspended during the stall (timerfd expirations accumulate in kernel)
+- Network events are not processed during the stall
+- After stall resumes: accumulated timer expirations are observed and delivered per tick-coalescing rules (one tick message regardless of expiration count)
+
+**Rationale:**
+- Regular files do not work with `epoll` on Linux (always report ready)
+- True async file I/O would require `io_uring` (Linux 5.1+) or a thread pool
+- For embedded (STM32): FATFS/littlefs operations are typically fast (<1ms)
+- Simplicity: no additional complexity for a rarely-needed feature
+
+**Consequences:**
+- File I/O breaks real-time latency bounds
+- Long file operations delay all actors, timers, and network processing
+- Use file I/O sparingly and with small buffers
+- For latency-sensitive systems: perform file I/O only during initialization or shutdown
+
+**Priority rule:** Actors using file I/O should run at `HIVE_PRIORITY_LOW` or `HIVE_PRIORITY_NORMAL`. Never use file I/O from `HIVE_PRIORITY_CRITICAL` or `HIVE_PRIORITY_HIGH` actors - this stalls time-critical control loops.
+
+**Design alternatives not implemented:**
+- `io_uring`: Would add Linux 5.1+ dependency and significant complexity
+- Thread pool: Contradicts single-threaded design; removed in event loop migration
+- DMA with completion interrupt (STM32): Could be added for specific flash/SD drivers
+
+### Priority Levels
+
+Four priority levels, lower value means higher priority:
+
+| Level | Name | Typical Use |
+|-------|------|-------------|
+| 0 | `HIVE_PRIORITY_CRITICAL` | Flight control loop |
+| 1 | `HIVE_PRIORITY_HIGH` | Sensor fusion |
+| 2 | `HIVE_PRIORITY_NORMAL` | Telemetry |
+| 3 | `HIVE_PRIORITY_LOW` | Logging |
+
+The scheduler always picks the highest-priority runnable actor. Within the same priority level, actors are scheduled round-robin.
+
+**Fairness guarantees:**
+- Round-robin scheduling within a priority level ensures fairness among actors of equal priority
+- The scheduler does **not** guarantee starvation freedom across priority levels
+- A continuously runnable high-priority actor can starve lower-priority actors indefinitely
+- Applications must design priority hierarchies to avoid starvation scenarios
+
+### Context Switching
+
+Context switching is implemented via manual assembly for performance:
+
+- **x86-64 (Linux):** Save/restore callee-saved registers (rbx, rbp, r12-r15) and stack pointer
+- **ARM Cortex-M (STM32):** Save/restore callee-saved registers (r4-r11) and stack pointer. On Cortex-M4F and similar with hardware FPU, also saves/restores FPU registers (s16-s31) when `__ARM_FP` is defined.
+
+No use of setjmp/longjmp or ucontext for performance reasons.
+
+## Thread Safety
+
+### Single-Threaded Event Loop Model
+
+The runtime is **completely single-threaded**. All runtime operations execute in a single scheduler thread with an event loop architecture. There are **no I/O worker threads** - all I/O operations are integrated into the scheduler's event loop using platform-specific non-blocking mechanisms.
+
+**Key architectural invariant:** Only one actor executes at any given time. Actors run cooperatively until they explicitly yield (via `hive_yield()`, blocking I/O, or `hive_exit()`). The scheduler then switches to the next runnable actor or waits for I/O events.
+
+### Runtime API Thread Safety Contract
+
+**All runtime APIs must be called from actor context (the scheduler thread):**
+
+| API Category | Thread Safety | Enforcement |
+|-------------|---------------|-------------|
+| **Actor APIs** (`hive_spawn`, `hive_exit`, etc.) | Single-threaded only | Must call from actor context |
+| **IPC APIs** (`hive_ipc_notify`, `hive_ipc_recv`) | Single-threaded only | Must call from actor context |
+| **Bus APIs** (`hive_bus_publish`, `hive_bus_read`) | Single-threaded only | Must call from actor context |
+| **Timer APIs** (`hive_timer_after`, `hive_timer_every`) | Single-threaded only | Must call from actor context |
+| **File APIs** (`hive_file_read`, `hive_file_write`) | Single-threaded only | Must call from actor context; stalls scheduler |
+| **Network APIs** (`hive_net_recv`, `hive_net_send`) | Single-threaded only | Must call from actor context |
+
+**Forbidden from:**
+- Signal handlers (not reentrant)
+- Interrupt service routines (ISRs on embedded systems)
+- External threads (no locking/atomics implemented)
+
+### External Thread Communication Pattern
+
+**Problem:** External threads cannot call runtime APIs directly (no thread safety layer).
+
+**Solution:** Use platform-specific IPC mechanisms with a dedicated reader actor:
 
 ```c
-#define HAL_BUS_CONFIG { \
-    .max_subscribers = 6, \
-    .max_entries = 1, \      // Latest value only
-    .max_entry_size = 128 \
+// External thread writes to socket/pipe
+void external_producer(void) {
+    int sock = connect_to_actor_socket();
+    write(sock, data, len);  // Platform IPC, not runtime API
+}
+
+// Dedicated reader actor bridges external thread -> actors
+void socket_reader_actor(void *arg) {
+    int sock = listen_and_accept();
+    while (1) {
+        size_t received;
+        hive_net_recv(sock, buf, len, &received, -1);  // Blocks in event loop
+        hive_ipc_notify(worker, 0, buf, received);  // Forward to actors
+    }
 }
 ```
 
-- Control loops need current state, not history
-- If a subscriber is slow, it should skip stale data, not queue it
-- Larger buffers would cause processing of outdated sensor readings
-- This matches how real flight controllers handle sensor data
+This pattern is safe because:
+- External thread only touches OS-level socket (thread-safe by OS)
+- `hive_net_recv()` executes in scheduler thread (actor context)
+- `hive_ipc_notify()` executes in scheduler thread (actor context)
+- No direct runtime state access from external thread
 
-### Startup Ordering and Supervision
+### Synchronization Primitives
 
-All 9 workers are spawned by the supervisor in dependency order:
+The runtime uses **zero synchronization primitives** in the core event loop:
 
-1. **Sensor → Estimator** - Estimator subscribes to sensor bus
-2. **Controllers** - Subscribe to state bus (created by estimator)
-3. **Motor** - Subscribes to torque bus (created by rate actor)
-4. **Flight manager** - Spawns last so all siblings are available
+- **No mutexes** - single thread, no contention
+- **No C11 atomics** - single writer/reader per data structure
+- **No condition variables** - event loop uses epoll for waiting
+- **No locks** - mailboxes, actor state, bus state accessed only by scheduler thread
 
-**Sibling Info:** Actors use `hive_find_sibling()` to look up sibling actor IDs
-for IPC coordination. The supervisor passes sibling info at spawn time, making
-the spawn order deterministic. After restart, siblings are re-resolved automatically.
+**STM32 exception:** ISR-to-scheduler communication uses `volatile bool` flags with interrupt disable/enable for safe flag clearing. This is a synchronization protocol but not C11 atomics or lock-based synchronization.
 
-**Important:** Bus subscriptions see nothing until first publish *after* subscription.
-A subscriber spawned before the first publish will get valid data on first read.
-A subscriber spawned *after* a publish sees nothing until the next publish.
+**Optional synchronization** (not part of hot path):
+- **Logging:** No synchronization needed (single-threaded)
 
-The spawn order in `pilot.c` ensures:
-1. All subscribers are ready before their data sources begin publishing
-2. `flight_manager` spawns last so all siblings are available via `hive_find_sibling()`
+### Rationale
 
-### Pipeline Model
+This pure single-threaded model provides:
 
-The control system is a pipeline, not a synchronous snapshot. Each actor processes
-the most recent data available when it runs, not a coordinated snapshot from the
-same instant.
+- **Maximum simplicity:** No lock ordering, no deadlock, trivial to reason about
+- **No threading nondeterminism:** No lock contention, no priority inversion, no data races
+- **Maximum performance:** Zero lock overhead, no cache line bouncing, no atomic operations
+- **Safety-critical friendly:** No threading edge cases (event dispatch order is kernel-dependent, see "Determinism guarantee")
+- **Portability:** Works on platforms without pthread support
 
-**Timing characteristics (250 Hz, 4ms tick):**
-- Sensor reads hardware, publishes to sensor bus
-- Estimator processes sensor data, publishes state estimate
-- Controllers cascade: altitude → position → attitude → rate
-- Motor receives torque commands, outputs to hardware
+**Trade-off:** Cannot leverage multiple CPU cores for I/O parallelism. This is acceptable for embedded systems (typically single-core) and simplifies the implementation dramatically.
 
-**Worst-case latency:** One tick (4ms) from sensor read to motor output. This occurs
-when sensor publishes just after motor finishes reading, requiring a full tick before
-motor sees the new data.
+### Event Loop Architecture
 
-**Why this is acceptable:**
-- This pipelined approach is standard practice in flight controllers (PX4, ArduPilot)
-- At 250 Hz, one tick of latency is 4ms—well within control loop requirements
-- Synchronous snapshotting would add complexity with minimal benefit
-- Controllers use rate damping terms that compensate for small latencies
+*Terminology: "Event loop" and "scheduler loop" refer to the same construct - the main loop that dispatches I/O events and schedules actors. This document uses "event loop" as the canonical term.*
 
-### Error Handling Pattern
+**Linux:**
+- Timers: `timerfd` registered in `epoll`
+- Network: Non-blocking sockets registered in `epoll`
+- File: Direct synchronous I/O (regular files don't work with epoll anyway)
+- Event loop: `epoll_wait()` with bounded timeout (10ms) for defensive wakeup
 
-Actors use explicit error checking instead of `assert()`. This enables the supervisor
-to detect and recover from failed actors.
+**Defensive timeout rationale:** The 10ms bounded timeout guards against lost wakeups, misconfigured epoll registrations, or unexpected platform behavior. It is not required for correctness under ideal conditions but provides a safety net against programming errors or kernel edge cases.
 
-**Cold path (initialization):** Log error and return without calling `hive_exit()`.
-The supervisor sees this as a CRASH and can attempt restart per the restart strategy.
+**STM32 (bare metal):**
+- Timers: Hardware timers (SysTick or TIM peripherals)
+- Network: Not yet implemented (planned: lwIP in NO_SYS mode)
+- File: Flash-backed virtual files with ring buffer (see File I/O section)
+- Event loop: WFI (Wait For Interrupt) when no actors runnable
+
+**Key insight:** Modern OSes provide non-blocking I/O mechanisms (epoll, kqueue, IOCP). On bare metal, hardware interrupts and WFI provide equivalent functionality. The event loop pattern is standard in async runtimes (Node.js, Tokio, libuv, asyncio).
+
+## Memory Model
+
+### Actor Stacks
+
+Each actor has a fixed-size stack allocated at spawn time. Stack size is configurable per actor via `actor_config.stack_size`, with a system-wide default (`HIVE_DEFAULT_STACK_SIZE`). Different actors can use different stack sizes to optimize memory usage.
+
+Stack growth/reallocation is not supported. Stack overflow results in undefined behavior - proper stack sizing is required (see "Stack Overflow" section).
+
+### Memory Allocation
+
+The runtime uses static allocation for predictable behavior and suitability for MCU deployment:
+
+See "Heap Usage Policy" section for the complete memory allocation contract. Summary: all memory regions are statically reserved at compile time; allocation within those regions occurs at runtime via bounded algorithms. No heap allocation after `hive_init()` except optional malloc for actor stacks.
+
+**Allocation Strategy:**
+
+- **Actor table:** Static array of `HIVE_MAX_ACTORS` (64), configured at compile time
+- **Actor stacks:** Hybrid allocation (configurable per actor)
+  - Default: Static arena allocator with `HIVE_STACK_ARENA_SIZE` (1 MB)
+    - First-fit allocation with block splitting for variable stack sizes
+    - Automatic memory reclamation and reuse when actors exit (coalescing)
+    - Supports different stack sizes for different actors
+  - Optional: malloc via `actor_config.malloc_stack = true`
+- **IPC pools:** Static pools with O(1) allocation (hot path)
+  - Mailbox entry pool: `HIVE_MAILBOX_ENTRY_POOL_SIZE` (256)
+  - Message data pool: `HIVE_MESSAGE_DATA_POOL_SIZE` (256), fixed-size entries of `HIVE_MAX_MESSAGE_SIZE` bytes
+- **Link/Monitor pools:** Static pools for actor relationships
+  - Link entry pool: `HIVE_LINK_ENTRY_POOL_SIZE` (128)
+  - Monitor entry pool: `HIVE_MONITOR_ENTRY_POOL_SIZE` (128)
+- **Timer pool:** Static pool of `HIVE_TIMER_ENTRY_POOL_SIZE` (64)
+- **Bus storage:** Static arrays per bus
+  - Bus entries: Pre-allocated array of `HIVE_MAX_BUS_ENTRIES` (64) per bus
+  - Bus subscribers: Pre-allocated array of `HIVE_MAX_BUS_SUBSCRIBERS` (32) per bus
+  - Entry data: Uses shared message pool
+- **I/O sources:** Pool of `io_source` structures for tracking pending I/O operations in the event loop
+
+**Memory Footprint (estimated, 64-bit Linux build, default configuration):**
+
+*Note: Exact sizes are toolchain-dependent. Run `size build/libhive.a` for precise numbers. Estimates below are for GCC on x86-64 Linux.*
+
+- Static data (BSS): ~1.2 MB total (includes 1 MB stack arena)
+  - Stack arena: 1 MB (configurable via `HIVE_STACK_ARENA_SIZE`)
+  - Actor table: ~10–15 KB
+  - Mailbox pool: ~10–15 KB
+  - Message pool: 64 KB (256 × 256 bytes, configurable)
+  - Link/monitor pools: ~5 KB
+  - Timer pool: ~5 KB
+  - Bus tables: ~90 KB
+  - I/O source pool: ~5 KB
+- Without stack arena: ~190 KB
+
+**Total:** ~1.2 MB static (verify with `size` command; no heap allocation with default arena)
+
+**Benefits:**
+
+- Bounded memory: Footprint calculable at link time
+- No heap fragmentation in hot paths (optional malloc'd stacks may fragment process heap)
+- Predictable allocation: Pool exhaustion returns clear errors (`HIVE_ERR_NOMEM`)
+- Suitable for safety-critical certification
+- Bounded latency: O(1) pool allocation for hot paths, O(n) bounded arena allocation for cold paths (spawn/exit)
+
+## Architectural Limits
+
+The following limits are **hardcoded** and cannot be changed without modifying the runtime source code. They differ from compile-time configurable limits (like `HIVE_MAX_ACTORS`) which can be adjusted via preprocessor defines.
+
+| Limit | Value | Reason | Location |
+|-------|-------|--------|----------|
+| Bus subscribers | 32 max | `uint32_t` bitmask tracks which subscribers read each entry | `hive_bus.c` |
+| Priority levels | 4 (0-3) | Enum: CRITICAL=0, HIGH=1, NORMAL=2, LOW=3 | `hive_types.h` |
+| Message header | 4 bytes | Wire format: class (4 bits) + gen (1 bit) + tag (27 bits) | `hive_ipc.c` |
+| Tag values | 27 bits | 134M unique values before wrap; bit 27 marks generated tags | `hive_ipc.c` |
+| Message classes | 6 | NOTIFY, REQUEST, REPLY, TIMER, EXIT, ANY (4-bit field) | `hive_types.h` |
+
+**Bus subscriber limit (32):** Each bus entry has a `uint32_t readers_mask` bitmask where bit N indicates subscriber N has read the entry. This enables O(1) read tracking per entry. Enforced by `_Static_assert` in `hive_bus.c`.
+
+**Configurable limits** (via `hive_static_config.h`, recompile required):
+- `HIVE_MAX_ACTORS` (64) - maximum concurrent actors
+- `HIVE_MAX_BUSES` (32) - maximum concurrent buses
+- `HIVE_MAX_BUS_ENTRIES` (64) - entries per bus ring buffer
+- `HIVE_MAX_BUS_SUBSCRIBERS` (32) - subscribers per bus (capped by architectural limit)
+- `HIVE_MAILBOX_ENTRY_POOL_SIZE` (256) - global mailbox entry pool
+- `HIVE_MESSAGE_DATA_POOL_SIZE` (256) - global message data pool
+- `HIVE_MAX_MESSAGE_SIZE` (256) - maximum message size including header
+- `HIVE_STACK_ARENA_SIZE` (1 MB) - actor stack arena
+- `HIVE_DEFAULT_STACK_SIZE` (64 KB) - default actor stack size
+
+## Error Handling
+
+All runtime functions return `hive_status`:
 
 ```c
-if (HIVE_FAILED(hive_bus_subscribe(state->sensor_bus))) {
-    HIVE_LOG_ERROR("[SENSOR] bus subscribe failed");
-    return;
+typedef enum {
+    HIVE_OK = 0,
+    HIVE_ERR_NOMEM,
+    HIVE_ERR_INVALID,
+    HIVE_ERR_TIMEOUT,
+    HIVE_ERR_CLOSED,
+    HIVE_ERR_WOULDBLOCK,
+    HIVE_ERR_IO,
+} hive_error_code;
+
+typedef struct {
+    hive_error_code code;
+    const char    *msg;   // string literal or NULL, never heap-allocated
+} hive_status;
+```
+
+The `msg` field always points to a string literal or is NULL. It is never dynamically allocated, ensuring safe use across concurrent actors.
+
+Convenience macros:
+
+```c
+#define HIVE_SUCCESS ((hive_status){HIVE_OK, NULL})
+#define HIVE_SUCCEEDED(s) ((s).code == HIVE_OK)
+#define HIVE_FAILED(s) ((s).code != HIVE_OK)
+#define HIVE_ERROR(code, msg) ((hive_status){(code), (msg)})
+#define HIVE_ERR_STR(s) ((s).msg ? (s).msg : "unknown error")
+```
+
+Usage example:
+```c
+if (len > HIVE_MAX_MESSAGE_SIZE) {
+    return HIVE_ERROR(HIVE_ERR_INVALID, "Message too large");
 }
 ```
 
-**Hot path (main loop):** Log warning and continue. The actor keeps running and
-processes the next iteration.
+## Design Trade-offs and Sharp Edges
+
+This runtime makes deliberate design choices that favor **predictability, performance, and simplicity** over **ergonomics and safety**. These are not bugs - they are conscious trade-offs suitable for embedded/safety-critical systems with trusted code.
+
+**Accept these consciously before using this runtime:**
+
+### 1. Message Lifetime Rule is Sharp and Error-Prone
+
+**Trade-off:** Message payload pointer valid only until next `hive_ipc_recv()` call.
+
+**Why this design:**
+- Pool reuse: Bounded O(1) allocation, no fragmentation
+- Performance: Single pool slot per actor, no reference counting
+- Simplicity: No hidden malloc, no garbage collection
+
+**Consequence:** Easy to misuse - storing `msg.data` across recv iterations causes use-after-free.
+
+**This is not beginner-friendly.** Code must copy data immediately if needed beyond current iteration.
+
+**Mitigation:** Documented with WARNING box and correct/incorrect examples in IPC section. But developers will still make mistakes.
+
+**Acceptable if:** You optimize for predictability over ergonomics, and code reviews catch pointer misuse.
+
+---
+
+### 2. No Per-Actor Mailbox Quota (Global Starvation Possible)
+
+**Trade-off:** One slow/malicious actor can consume all mailbox entries, starving the system.
+
+**Why this design:**
+- Simplicity: No per-actor accounting, no quota enforcement
+- Flexibility: Bursty actors can use available pool space
+- Performance: No quota checks on send path
+
+**Consequence:** A single bad actor can cause global `HIVE_ERR_NOMEM` failures for all IPC sends.
+
+**Mitigation:** Application-level quotas, monitoring, backpressure patterns. Runtime provides primitives, not policies.
+
+**Acceptable if:** You deploy trusted code in embedded systems, not untrusted actors in general-purpose systems.
+
+---
+
+### 3. Selective Receive is O(n) per Mailbox Scan
+
+**Trade-off:** Selective receive scans mailbox linearly, which is O(n) where n = mailbox depth.
+
+**Why this design:**
+- Battle-tested: Proven pattern for building complex protocols
+- Simplicity: No index structures, no additional memory overhead
+- Flexibility: Any filter criteria supported without pre-registration
+
+**Consequence:** Deep mailboxes slow down selective receive. If 100 messages are queued and you're waiting for a specific tag, each wake scans all 100.
+
+**Keep mailboxes shallow.** The request/reply pattern naturally does this (block waiting for reply).
+
+**Mitigation:** Process messages promptly. Don't let mailbox grow deep. Use `hive_ipc_request()` which blocks until reply.
+
+**Acceptable if:** Typical mailbox depth is small (< 20 messages) and request/reply pattern is followed.
+
+---
+
+### 4. Bus and IPC Share Message Pool (Resource Contention)
+
+**Trade-off:** High-rate bus publishing can starve IPC globally.
+
+**Why this design:**
+- Simplicity: Single message pool, no subsystem isolation
+- Flexibility: Pool space shared dynamically based on actual usage
+- Memory efficiency: No wasted dedicated pools
+
+**Consequence:** Misconfigured bus can cause all IPC sends to fail with `HIVE_ERR_NOMEM`.
+
+**Mitigation:** WARNING box in Bus section, size pool for combined load, monitor exhaustion.
+
+**Acceptable if:** You size pools correctly and monitor resource usage in production.
+
+---
+
+### Summary: This Runtime is a Sharp Tool
+
+These design choices make the runtime:
+- **Predictable:** Bounded memory, bounded latency, no hidden allocations
+- **Fast:** O(1) hot paths, minimal overhead, zero-copy options
+- **Simple:** Minimal code, easy to audit, no complex features
+- **Not beginner-friendly:** Sharp edges require careful use
+- **Not fault-tolerant:** No automatic isolation, quotas, or recovery
+
+**This is intentional.** The runtime provides primitives for building robust systems, not a complete safe environment.
+
+This runtime provides primitives for predictable embedded performance with full control.
+
+## Core Types
 
 ```c
-if (result.bus.len != sizeof(expected)) {
-    HIVE_LOG_WARN("[MOTOR] Invalid message size: %zu", result.bus.len);
-    continue;
+// Handles (opaque to user)
+typedef uint32_t actor_id;
+typedef uint32_t bus_id;
+typedef uint32_t timer_id;
+
+#define ACTOR_ID_INVALID  ((actor_id)0)
+#define BUS_ID_INVALID    ((bus_id)0)
+#define TIMER_ID_INVALID  ((timer_id)0)
+
+// Wildcard for selective receive filtering
+#define HIVE_SENDER_ANY     ((actor_id)0xFFFFFFFF)
+
+// Actor entry point (see Actor API section for full signature)
+typedef void (*actor_fn)(void *args, const hive_spawn_info *siblings, size_t sibling_count);
+
+// Init function called in spawner context
+typedef void *(*hive_actor_init_fn)(void *init_args);
+
+// Spawn info passed to actors at startup
+typedef struct {
+    const char *name;  // Actor name (may be NULL)
+    actor_id id;       // Actor ID
+    bool registered;   // Whether registered in name registry
+} hive_spawn_info;
+
+// Actor configuration
+typedef struct {
+    size_t      stack_size;   // bytes, 0 = default
+    hive_priority_level priority;
+    const char *name;         // for debugging, may be NULL
+    bool        malloc_stack; // false = use static arena (default), true = malloc
+    bool        auto_register;// auto-register name in registry
+} actor_config;
+```
+
+## Actor API
+
+### Actor Function Signature
+
+```c
+// Actor entry function receives arguments, sibling info, and sibling count
+typedef void (*actor_fn)(void *args, const hive_spawn_info *siblings, size_t sibling_count);
+
+// Init function (optional) called in spawner context
+typedef void *(*hive_actor_init_fn)(void *init_args);
+
+// Spawn info passed to actors at startup
+typedef struct {
+    const char *name;  // Actor name (may be NULL)
+    actor_id id;       // Actor ID
+    bool registered;   // Whether registered in name registry
+} hive_spawn_info;
+```
+
+### Lifecycle
+
+```c
+// Spawn a new actor
+// fn: Actor entry function
+// init: Init function (NULL = skip, pass init_args directly to actor)
+// init_args: Arguments to init (or directly to actor if init is NULL)
+// cfg: Actor configuration (NULL = use defaults)
+// out: Receives the new actor's ID
+hive_status hive_spawn(actor_fn fn, hive_actor_init_fn init, void *init_args,
+                       const actor_config *cfg, actor_id *out);
+
+// Terminate current actor
+_Noreturn void hive_exit(void);
+
+// Find sibling by name in spawn info array
+const hive_spawn_info *hive_find_sibling(const hive_spawn_info *siblings,
+                                          size_t count, const char *name);
+```
+
+**Spawn behavior:**
+- `init` (if provided) is called in spawner context before actor starts
+- `init` return value is passed to actor as `args`
+- Actor receives sibling info at startup:
+  - Standalone actors: siblings[0] = self info, sibling_count = 1
+  - Supervised actors: siblings = all sibling children
+- If `cfg->auto_register` is true and `cfg->name` is set, actor is auto-registered in name registry
+
+**Sibling array lifetime:**
+The sibling array is a **startup-time snapshot**. If a sibling restarts (getting a new `actor_id`), any cached IDs become stale. For scenarios where siblings may restart:
+- Use `hive_whereis()` for dynamic lookups
+- Sibling array is best for stable peer references in ONE_FOR_ALL supervision (all restart together)
+- Registry is best for service discovery patterns where restarts are expected
+
+**Actor function return behavior:**
+
+Actors **must** call `hive_exit()` to terminate cleanly. If an actor function returns without calling `hive_exit()`, the runtime detects this as a crash:
+
+1. Exit reason is set to `HIVE_EXIT_CRASH`
+2. Linked/monitoring actors receive exit notification with `HIVE_EXIT_CRASH` reason
+3. Normal cleanup proceeds (mailbox cleared, resources freed)
+4. An ERROR log is emitted: "Actor N returned without calling hive_exit()"
+
+This crash detection prevents infinite loops and ensures linked actors are notified of the improper termination.
+
+```c
+// Get current actor's ID
+actor_id hive_self(void);
+
+// Yield to scheduler
+void hive_yield(void);
+
+// Check if actor is alive
+bool hive_actor_alive(actor_id id);
+
+// Kill an actor externally
+hive_status hive_kill(actor_id target);
+```
+
+**hive_kill(target)**: Terminates the target actor immediately. This is a **hard kill** - the target cannot resist or defer termination. There is no graceful shutdown protocol; the actor is removed from the scheduler at the next opportunity. The target's exit reason is set to `HIVE_EXIT_KILLED`. Linked/monitoring actors receive exit notifications. Cannot kill self (use `hive_exit()` instead). Used internally by supervisors to terminate children during shutdown or strategy application.
+
+For graceful shutdown, implement an application-level protocol: send a shutdown request message, wait for acknowledgment, then kill if needed.
+
+### Linking and Monitoring
+
+Actors can link to other actors to receive notification when they die:
+
+```c
+// Bidirectional link: if either dies, the other receives exit message
+hive_status hive_link(actor_id target);
+hive_status hive_link_remove(actor_id target);
+
+// Unidirectional monitor: receive notification when target dies
+hive_status hive_monitor(actor_id target, uint32_t *out);
+hive_status hive_monitor_cancel(uint32_t id);
+```
+
+Exit message structure:
+
+```c
+typedef enum {
+    HIVE_EXIT_NORMAL,       // Actor called hive_exit()
+    HIVE_EXIT_CRASH,        // Actor function returned without calling hive_exit()
+    HIVE_EXIT_CRASH_STACK,  // Stack overflow detected
+    HIVE_EXIT_KILLED,       // Actor was killed externally
+} hive_exit_reason;
+
+typedef struct {
+    actor_id         actor;      // who died
+    hive_exit_reason reason;     // why they died
+    uint32_t         monitor_id; // 0 = link, non-zero = from monitor
+} hive_exit_msg;
+
+// Check if message is exit notification
+bool hive_is_exit_msg(const hive_message *msg);
+
+// Decode exit message into struct
+hive_status hive_decode_exit(const hive_message *msg, hive_exit_msg *out);
+
+// Convert exit reason to string (for logging/debugging)
+const char *hive_exit_reason_str(hive_exit_reason reason);
+```
+
+**The monitor_id field** distinguishes exit notifications from links vs monitors:
+- `monitor_id == 0`: notification came from a bidirectional link
+- `monitor_id != 0`: notification came from a monitor; value matches the ID returned by `hive_monitor()`
+
+**Handling exit messages:**
+
+Exit messages should be decoded using `hive_decode_exit()`:
+
+```c
+hive_message msg;
+hive_ipc_recv(&msg, -1);
+
+if (hive_is_exit_msg(&msg)) {
+    hive_exit_msg exit_info;
+    hive_decode_exit(&msg, &exit_info);
+    if (exit_info.monitor_id == 0) {
+        printf("Linked actor %u died: %s\n", exit_info.actor,
+               hive_exit_reason_str(exit_info.reason));
+    } else {
+        printf("Monitored actor %u died (id=%u): %s\n", exit_info.actor,
+               exit_info.monitor_id, hive_exit_reason_str(exit_info.reason));
+    }
 }
 ```
 
-**Why no `assert()`:**
-- `assert()` terminates the entire process - supervisor cannot recover
-- On STM32, `assert()` behavior is platform-dependent (hang, reset, undefined)
-- Log + return gives consistent behavior across platforms
-- Supervisor sees CRASH and applies restart strategy (ONE_FOR_ALL in pilot)
+### Name Registry
 
-**Exception:** `_Static_assert` is used for compile-time checks (e.g., packet sizes
-in comms_actor.c) since these fail at build time, not runtime.
-
-**Logging configuration (Crazyflie):**
-
-The Crazyflie build uses `HIVE_LOG_LEVEL=INFO`:
-
-| Level | Status | Rationale |
-|-------|--------|-----------|
-| TRACE, DEBUG | Compiled out | Verbose, development only |
-| INFO | Captured to flash | Important events (waypoint reached, flight started) |
-| WARN, ERROR | Captured to flash | Problems that need attention |
-
-Logs are written to flash and downloaded over radio after flight. This provides a
-complete flight record for debugging without the overhead of TRACE/DEBUG messages.
-
-## Non-Goals (Future Work)
-
-- Full state estimation (Kalman filter)
-- Failsafe handling
-- Parameter tuning UI
-- Multiple vehicle types
-
-## Limitations (Production Requirements)
-
-**This example is a demonstration, not production-ready flight software.**
-
-A production flight controller would need error handling and failsafes that this example omits:
-
-### Missing Error Handling
-
-| Scenario | Current Behavior | Production Requirement |
-|----------|------------------|------------------------|
-| Sensor read fails | `hive_bus_read()` returns error, actor skips iteration | Watchdog timeout, switch to backup sensor or land |
-| Bus publish fails | Error ignored | Log error, trigger failsafe |
-| Actor crashes | Runtime notifies linked actors | Auto-restart or emergency landing |
-| GPS signal lost | Position control uses stale data | Hold last position, descend slowly, or return-to-home |
-| IMU data invalid | Garbage in, garbage out | Sanity checks, sensor voting, reject outliers |
-
-### Implemented Safety Features (STM32 only)
-
-The following safety features are enabled for real hardware (not in Webots simulation):
-
-| Feature | Location | Behavior |
-|---------|----------|----------|
-| Attitude cutoff | altitude_actor.c | Motors off if roll or pitch >45° |
-| Altitude cutoff | altitude_actor.c | Motors off if altitude >2m |
-| Landed detection | altitude_actor.c | Motors off when target <5cm and altitude <15cm |
-| Thrust ramp | altitude_actor.c | Gradual thrust increase over 0.5 seconds on takeoff |
-| Startup delay | flight_manager_actor.c | Flight blocked for 60 seconds after boot |
-| Hard cutoff | flight_manager_actor.c | Motors forced off 12 seconds after flight starts |
-
-### Future Safety Features
-
-The following may be added after initial flight testing:
-
-- **Rate cutoff**: Motors off if angular rate exceeds threshold (e.g., >300°/s) - catches violent oscillation while within tilt limits
-- **Accelerometer sanity check**: Motors off if acceleration readings are implausible
-- **Sensor timeout**: Motors off if no sensor updates within expected interval
-
-### Missing Safety Features (Production Requirements)
-
-- **Geofence**: No boundary limits - drone can fly away indefinitely
-- **Battery monitoring**: No low-voltage warning or auto-land
-- **Arming/disarming**: No safety switch to prevent accidental motor start
-- **Pre-flight checks**: No sensor validation before takeoff
-- **Communication loss**: No failsafe if telemetry link drops
-
-### Why These Are Omitted
-
-This example focuses on demonstrating the actor runtime architecture, not building a safe drone. Adding proper failsafes would obscure the core concepts (actors, buses, control loops) with error handling code.
-
-For a production system, each actor should:
-1. Validate inputs before processing
-2. Handle bus read/write failures
-3. Implement timeouts for expected data
-4. Report health status to a flight manager actor
-5. Respond to emergency stop commands
-
-### Production Instrumentation Requirements
-
-The following instrumentation should be added for production flight software:
-
-**Error Counters (per actor):**
-- `bus_read_fail_count` - incremented when `hive_bus_read()` returns error
-- `bus_publish_fail_count` - incremented when `hive_bus_publish()` returns error
-- Counters exposed via telemetry or debug interface
-
-**Motor Deadman Watchdog:**
-- Production motor actor requires a torque watchdog
-- If no valid torque command received within 3 ticks (12ms), zero all motors
-- Protects against controller actor crash leaving motors at last commanded value
-- This example omits the watchdog to keep motor actor minimal
-
-These requirements are documented here but not implemented in the example to
-maintain code clarity. A production system would add these as first priorities.
-
----
-
-## Architecture Overview
-
-Ten to eleven actors: nine flight-critical workers connected via buses, plus one
-supervisor, and an optional comms actor on radio-enabled platforms (Crazyflie):
-
-**Supervision:** All actors are supervised with ONE_FOR_ALL strategy. Flight-critical
-actors use PERMANENT restart (crash triggers restart of all). Telemetry uses
-TEMPORARY restart (crash/exit doesn't trigger restarts, just stops telemetry).
-
-**Sibling Info:** Workers use `hive_find_sibling()` to look up sibling actor IDs
-for IPC communication. The supervisor passes sibling info at spawn time.
-
-```mermaid
-graph TB
-    subgraph WEBOTS["WEBOTS SIMULATION"]
-        IMU[IMU]
-        GPS[GPS]
-        Gyro[Gyro]
-        Motors[Motors x4]
-    end
-
-    subgraph HAL["HARDWARE ABSTRACTION LAYER (hal/)"]
-        ReadSensors[hal_read_sensors]
-        WriteTorque[hal_write_torque]
-    end
-
-    subgraph RUNTIME["ACTOR RUNTIME"]
-        Sensor[SENSOR ACTOR]
-        SensorBus([Sensor Bus])
-        Estimator[ESTIMATOR ACTOR]
-        StateBus([State Bus])
-
-        Altitude[ALTITUDE ACTOR<br/>altitude PID]
-        Waypoint[WAYPOINT ACTOR<br/>navigation]
-        PositionTargetBus([Position Target Bus])
-        Position[POSITION ACTOR<br/>position PD]
-        ThrustBus([Thrust Bus])
-        AttitudeSPBus([Attitude Setpoint Bus])
-        Attitude[ATTITUDE ACTOR<br/>attitude PIDs]
-        RateSPBus([Rate Setpoint Bus])
-        Rate[RATE ACTOR<br/>rate PIDs]
-        TorqueBus([Torque Bus])
-        Motor[MOTOR ACTOR<br/>output]
-    end
-
-    IMU --> ReadSensors
-    GPS --> ReadSensors
-    Gyro --> ReadSensors
-    WriteTorque --> Motors
-
-    ReadSensors --> Sensor
-    Sensor --> SensorBus --> Estimator --> StateBus
-
-    StateBus --> Waypoint --> PositionTargetBus --> Altitude --> ThrustBus --> Rate
-    PositionTargetBus --> Position
-    StateBus --> Altitude
-    StateBus --> Position --> AttitudeSPBus --> Attitude
-    StateBus --> Attitude --> RateSPBus --> Rate --> TorqueBus --> Motor
-
-    Motor --> WriteTorque
-```
-
----
-
-## Implementation Details
-
-### Multi-File Design
-
-Code is split into focused modules:
-
-| File | Purpose |
-|------|---------|
-| `pilot.c` | Main loop, bus setup, actor spawn |
-| `sensor_actor.c/h` | Reads sensors via HAL, publishes to sensor bus |
-| `estimator_actor.c/h` | Sensor fusion → state bus |
-| `altitude_actor.c/h` | Altitude PID → thrust |
-| `waypoint_actor.c/h` | Waypoint navigation → position target bus |
-| `position_actor.c/h` | Position PD → attitude setpoints |
-| `attitude_actor.c/h` | Attitude PIDs → rate setpoints |
-| `rate_actor.c/h` | Rate PIDs → torque commands |
-| `motor_actor.c/h` | Output: torque → HAL → motors |
-| `flight_manager_actor.c/h` | Startup delay, flight window cutoff |
-| `comms_actor.c/h` | Radio telemetry (Crazyflie only) |
-| `pid.c/h` | Reusable PID controller |
-| `types.h` | Portable data types |
-| `config.h` | Configuration constants (timing, thresholds) |
-| `math_utils.h` | Math macros (CLAMPF, LPF, NORMALIZE_ANGLE) |
-| `notifications.h` | IPC notification tags (NOTIFY_FLIGHT_START, etc.) |
-| `flight_profiles.h` | Waypoint definitions per flight profile |
-
-### Data Flow
-
-```mermaid
-graph TB
-    subgraph HW["Hardware"]
-        Sensors[Sensors]
-        Motors[Motors]
-    end
-
-    ReadSensors[hal_read_sensors]
-    WriteTorque[hal_write_torque]
-
-    Sensors --> ReadSensors --> Sensor[Sensor Actor]
-    Sensor --> SensorBus([Sensor Bus])
-    SensorBus --> Estimator[Estimator Actor]
-    Estimator --> StateBus([State Bus])
-
-    StateBus --> Waypoint[Waypoint Actor<br/>navigation]
-    StateBus --> Altitude[Altitude Actor<br/>altitude PID]
-    StateBus --> Position[Position Actor<br/>position PD]
-    StateBus --> Attitude[Attitude Actor<br/>attitude PIDs]
-    StateBus --> Rate[Rate Actor<br/>rate PIDs]
-
-    Waypoint --> PositionTargetBus([Position Target Bus])
-    PositionTargetBus --> Altitude
-    PositionTargetBus --> Position
-    Altitude --> ThrustBus([Thrust Bus])
-    ThrustBus --> Rate
-    Position --> AttitudeSP([Attitude Setpoint Bus])
-    AttitudeSP --> Attitude
-    Attitude --> RateSP([Rate Setpoint Bus])
-    RateSP --> Rate
-
-    Rate --> TorqueBus([Torque Bus])
-    TorqueBus --> Motor[Motor Actor<br/>output]
-
-    Motor --> WriteTorque --> Motors
-```
-
----
-
-## Control Algorithms
-
-### PID Controller
-
-Standard discrete PID with anti-windup:
+Actor naming. Actors can register themselves with a symbolic name, and other actors can look up actor IDs by name. Names are automatically unregistered when the actor exits.
 
 ```c
-float pid_update(pid_state_t *pid, float setpoint, float measurement, float dt) {
-    float error = setpoint - measurement;
+// Register calling actor with a name (must be unique)
+hive_status hive_register(const char *name);
 
-    float p = pid->kp * error;
+// Look up actor ID by name
+hive_status hive_whereis(const char *name, actor_id *out);
 
-    pid->integral += error * dt;
-    pid->integral = clamp(pid->integral, -integral_max, integral_max);
-    float i = pid->ki * pid->integral;
+// Unregister a name (also automatic on actor exit)
+hive_status hive_unregister(const char *name);
+```
 
-    float d = pid->kd * (error - pid->prev_error) / dt;
-    pid->prev_error = error;
+**Behavior:**
 
-    return clamp(p + i + d, -output_max, output_max);
+- `hive_register(name)`: Associates the calling actor with `name`. The name must be unique. The name string must remain valid for the lifetime of the registration (typically a string literal). Returns `HIVE_ERR_INVALID` if name is NULL or already registered. Returns `HIVE_ERR_NOMEM` if registry is full (`HIVE_MAX_REGISTERED_NAMES`).
+
+- `hive_whereis(name, out)`: Looks up an actor ID by name. Returns `HIVE_ERR_INVALID` if name is NULL or not found. If the named actor has exited and re-registered (e.g., after supervisor restart), returns the new actor ID.
+
+- `hive_unregister(name)`: Removes a name registration. Only the owning actor can unregister its own names. Returns `HIVE_ERR_INVALID` if name is NULL, not found, or not owned by caller. Rarely needed since names are automatically unregistered on actor exit.
+
+**Implementation:**
+
+- Static table of `(name, actor_id)` pairs (`HIVE_MAX_REGISTERED_NAMES` = 32 default)
+- Linear scan for lookups (O(n), suitable for small registries)
+- Names are pointers to user-provided strings (not copied)
+- Auto-cleanup in `hive_actor_free()` removes all entries for the exiting actor
+
+**Use with supervisors:**
+
+When actors are restarted by a supervisor, they should call `hive_register()` with the same name. Actors that need to communicate with them should call `hive_whereis()` each time they need to send a message, rather than caching the actor ID at startup. This ensures they get the current actor ID even after restarts.
+
+```c
+// Service actor that registers itself
+void database_service(void *arg) {
+    hive_register("database");
+    while (1) {
+        hive_message msg;
+        hive_ipc_recv(&msg, -1);
+        // Handle database requests...
+    }
+}
+
+// Client actor that uses whereis (called on each send)
+void send_query(const char *query) {
+    actor_id db;
+    if (HIVE_SUCCEEDED(hive_whereis("database", &db))) {
+        hive_ipc_notify(db, 0, query, strlen(query) + 1);
+    }
 }
 ```
 
-### Tuned PID Gains
+### Siblings vs Registry: When to Use Each
 
-PID gains are platform-specific, defined in each `hal/<platform>/hal_config.h`.
-The control cascade uses:
+| Use Case | Siblings | Registry |
+|----------|----------|----------|
+| Supervised pipeline (ONE_FOR_ALL) | ✓ Best | Works |
+| Supervised workers (ONE_FOR_ONE) | Careful | ✓ Best |
+| Service discovery pattern | No | ✓ Best |
+| Tight peer coupling | ✓ Best | Overkill |
+| Cross-supervisor communication | No | ✓ Required |
 
-- **Altitude:** PI + velocity damping (Kv) for smooth response
-- **Position:** PD with velocity damping, max tilt limited
-- **Attitude:** P controller for roll/pitch/yaw angles
-- **Rate:** PD controller for angular rates
+**Heuristics:**
 
-### Mixer
+1. **Use siblings when:**
+   - All communicating actors restart together (ONE_FOR_ALL strategy)
+   - Actors are tightly coupled and always start/stop as a group
+   - You want zero-overhead lookup (sibling array is passed at startup)
 
-Each HAL implements its own X-configuration mixer in `hal_write_torque()`.
-See `hal/<platform>/README.md` for motor layout and mixing equations.
+2. **Use registry when:**
+   - Actors may restart independently (ONE_FOR_ONE or separate supervisors)
+   - You need late binding (sender doesn't know receiver at compile time)
+   - Cross-supervisor or cross-subsystem communication
+   - Service discovery pattern (many clients, one named service)
 
----
+3. **Avoid caching IDs from either:**
+   - Both sibling IDs and registry IDs become stale after target restarts
+   - Always lookup fresh when the target may have restarted
+   - Exception: ONE_FOR_ALL where you restart together anyway
 
-## Main Loop
+## IPC API
 
-The main loop is minimal - all logic lives in actors:
+Inter-process communication via mailboxes. Each actor has one mailbox. All messages are asynchronous (sender doesn't wait for response). Request/reply is built on top using message tags for correlation.
+
+### Message Header Format
+
+All messages have a 4-byte header prepended to the payload:
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│ class (4 bits) │ gen (1 bit) │ tag (27 bits) │ payload (len) │
+└──────────────────────────────────────────────────────────────┘
+```
+
+- **class**: Message type (4 bits, 16 possible values)
+- **gen**: Generated flag (1 = runtime-generated tag, 0 = user-provided tag)
+- **tag**: Correlation identifier (27 bits, 134M unique values)
+- **payload**: Application data (up to `HIVE_MAX_MESSAGE_SIZE - 4` = 252 bytes)
+
+**Header overhead:** 4 bytes per message.
+
+### Message Classes
 
 ```c
-// Simulation (Webots)
-while (hal_step()) {
-    hive_advance_time(HAL_TIME_STEP_US);
-    hive_run_until_blocked();
+typedef enum {
+    HIVE_MSG_NOTIFY = 0,   // Fire-and-forget message
+    HIVE_MSG_REQUEST,       // Request expecting a reply
+    HIVE_MSG_REPLY,      // Response to a REQUEST
+    HIVE_MSG_TIMER,      // Timer tick
+    HIVE_MSG_EXIT,     // System notifications (actor death)
+    // 5-14 reserved for future use
+    HIVE_MSG_ANY = 15,   // Wildcard for selective receive filtering
+} hive_msg_class;
+```
+
+### Tag System
+
+```c
+#define HIVE_TAG_NONE        0            // No tag (for simple NOTIFY messages)
+#define HIVE_TAG_ANY         0x0FFFFFFF   // Wildcard for selective receive filtering
+
+// Note: HIVE_TAG_GEN_BIT and HIVE_TAG_VALUE_MASK are internal implementation
+// details and not part of the public API
+```
+
+**Tag semantics:**
+- **HIVE_TAG_NONE**: Used for simple NOTIFY messages where no correlation is needed
+- **HIVE_TAG_ANY**: Used in `hive_ipc_recv_match()` to match any tag
+- **Generated tags**: Created automatically by `hive_ipc_request()` for request/reply correlation
+
+**Tag generation:** Internal to `hive_ipc_request()`. Global counter increments on each call. Generated tags have `HIVE_TAG_GEN_BIT` set. Wraps at 2^27 (134M values).
+
+**Namespace separation:** Generated tags (gen=1) and user tags (gen=0) can never collide.
+
+### Message Structure
+
+```c
+typedef struct {
+    actor_id       sender;       // Sender actor ID
+    hive_msg_class class;        // Message class
+    uint32_t       tag;          // Message tag
+    size_t         len;          // Payload length (excludes 4-byte header)
+    const void    *data;         // Payload pointer (past header)
+} hive_message;
+```
+
+The message struct provides **direct access to all fields**:
+
+```c
+hive_message msg;
+hive_ipc_recv(&msg, -1);
+
+// Direct access - no boilerplate
+my_data *payload = (my_data *)msg.data;
+if (msg.class == HIVE_MSG_REQUEST) {
+    hive_ipc_reply(&msg, &response, sizeof(response));
+}
+```
+
+**Lifetime rule:** Data is valid until the next successful `hive_ipc_recv()`, `hive_ipc_recv_match()`, or `hive_ipc_recv_matches()` call. Copy immediately if needed beyond current iteration.
+
+### Functions
+
+#### Basic Messaging
+
+```c
+// Fire-and-forget message (class=NOTIFY)
+// Tag enables selective receive filtering on the receiver side
+hive_status hive_ipc_notify(actor_id to, uint32_t tag, const void *data, size_t len);
+
+// Send with explicit class and tag (sender is current actor)
+hive_status hive_ipc_notify_ex(actor_id to, hive_msg_class class,
+                               uint32_t tag, const void *data, size_t len);
+
+// Receive any message (no filtering)
+// timeout_ms == 0:  non-blocking, returns HIVE_ERR_WOULDBLOCK if empty
+// timeout_ms < 0:   block forever
+// timeout_ms > 0:   block up to timeout, returns HIVE_ERR_TIMEOUT if exceeded
+hive_status hive_ipc_recv(hive_message *msg, int32_t timeout_ms);
+```
+
+#### Selective Receive
+
+```c
+// Receive with filtering on sender, class, and/or tag
+// Blocks until message matches ALL non-wildcard criteria, or timeout
+// Use HIVE_SENDER_ANY, HIVE_MSG_ANY, HIVE_TAG_ANY as wildcards
+hive_status hive_ipc_recv_match(actor_id from, hive_msg_class class,
+                            uint32_t tag, hive_message *msg, int32_t timeout_ms);
+```
+
+**Filter semantics:**
+- `from == HIVE_SENDER_ANY` → match any sender
+- `class == HIVE_MSG_ANY` → match any class
+- `tag == HIVE_TAG_ANY` → match any tag
+- Non-wildcard values must match exactly
+
+**Usage examples:**
+```c
+// Match any message (equivalent to hive_ipc_recv)
+hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_ANY, HIVE_TAG_ANY, &msg, -1);
+
+// Match only from specific sender
+hive_ipc_recv_match(some_actor, HIVE_MSG_ANY, HIVE_TAG_ANY, &msg, -1);
+
+// Match REQUEST messages from any sender
+hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_REQUEST, HIVE_TAG_ANY, &msg, -1);
+
+// Match REPLY with specific tag (used internally by hive_ipc_request)
+hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_REPLY, expected_tag, &msg, 5000);
+```
+
+#### Multi-Pattern Selective Receive
+
+```c
+// Filter structure for multi-pattern matching
+typedef struct {
+    actor_id sender;      // HIVE_SENDER_ANY for any sender
+    hive_msg_class class; // HIVE_MSG_ANY for any class
+    uint32_t tag;         // HIVE_TAG_ANY for any tag
+} hive_recv_filter;
+
+// Receive message matching ANY of the provided filters
+// matched_index (optional): which filter matched (0-based)
+hive_status hive_ipc_recv_matches(const hive_recv_filter *filters,
+                            size_t num_filters, hive_message *msg,
+                            int32_t timeout_ms, size_t *matched_index);
+```
+
+**Use cases:**
+- Waiting for REPLY or EXIT (used internally by `hive_ipc_request()`)
+- Waiting for multiple timer types (sync timer OR flight timer)
+- State machines waiting for multiple event types
+
+**Usage example:**
+```c
+// Wait for either a sync timer or a landed notification
+enum { FILTER_SYNC_TIMER, FILTER_LANDED };
+hive_recv_filter filters[] = {
+    [FILTER_SYNC_TIMER] = {HIVE_SENDER_ANY, HIVE_MSG_TIMER, sync_timer},
+    [FILTER_LANDED] = {HIVE_SENDER_ANY, HIVE_MSG_NOTIFY, NOTIFY_LANDED},
+};
+hive_message msg;
+size_t matched;
+hive_ipc_recv_matches(filters, 2, &msg, -1, &matched);
+if (matched == FILTER_SYNC_TIMER) {
+    // Handle sync timer
+} else {
+    // Handle landed notification
+}
+```
+
+#### Request/Reply
+
+```c
+// Send REQUEST, block until REPLY with matching tag, or timeout
+hive_status hive_ipc_request(actor_id to, const void *request, size_t req_len,
+                      hive_message *reply, int32_t timeout_ms);
+
+// Reply to a received REQUEST (extracts sender and tag from request automatically)
+hive_status hive_ipc_reply(const hive_message *request, const void *data, size_t len);
+```
+
+**Request/reply implementation:**
+```c
+// hive_ipc_request internally does:
+// 1. Set up temporary monitor on target (to detect death)
+// 2. Generate unique tag
+// 3. Send message with class=REQUEST
+// 4. Wait for REPLY with matching tag OR EXIT from monitor
+// 5. Clean up monitor and return reply, HIVE_ERR_CLOSED, or timeout error
+
+// hive_ipc_reply internally does:
+// 1. Decode sender and tag from request
+// 2. Send message with class=REPLY and same tag
+```
+
+**Error conditions for `hive_ipc_request()`:**
+- `HIVE_ERR_CLOSED`: Target actor died before sending a reply (detected via internal monitor)
+- `HIVE_ERR_TIMEOUT`: No reply received within timeout period
+- `HIVE_ERR_NOMEM`: Pool exhausted when sending request
+- `HIVE_ERR_INVALID`: Invalid target actor ID or NULL request with non-zero length
+
+**Target death detection:** `hive_ipc_request()` internally monitors the target actor for the duration of the request. If the target dies before replying, the function returns `HIVE_ERR_CLOSED` immediately without waiting for timeout:
+
+```c
+hive_message reply;
+hive_status status = hive_ipc_request(target, &req, sizeof(req), &reply, 5000);
+if (status.code == HIVE_ERR_CLOSED) {
+    // Target died during request - no ambiguity with timeout
+    printf("Target actor died\n");
+} else if (status.code == HIVE_ERR_TIMEOUT) {
+    // Target is alive but didn't reply in time
+    printf("Request timed out\n");
+}
+```
+
+This eliminates the "timeout but actually dead" ambiguity from previous versions.
+
+**Concurrency constraint:** An actor can only have **one outstanding request at a time**. Since `hive_ipc_request()` blocks the caller until a reply arrives (or timeout), the actor cannot issue concurrent requests. To implement scatter/gather patterns, spawn multiple worker actors that each make one request.
+
+### API Contract: hive_ipc_notify()
+
+**Parameter validation:**
+- If `data == NULL && len > 0`: Returns `HIVE_ERR_INVALID`
+- If `len > HIVE_MAX_MESSAGE_SIZE - 4` (252 bytes payload): Returns `HIVE_ERR_INVALID`
+- Oversized messages are rejected immediately, not truncated
+
+**Behavior when pools are exhausted:**
+
+`hive_ipc_notify()` uses two global pools:
+1. **Mailbox entry pool** (`HIVE_MAILBOX_ENTRY_POOL_SIZE` = 256)
+2. **Message data pool** (`HIVE_MESSAGE_DATA_POOL_SIZE` = 256)
+
+**Fail-fast semantics:**
+
+- **Returns `HIVE_ERR_NOMEM` immediately** if either pool is exhausted
+- **Does NOT block** waiting for pool space
+- **Does NOT drop** messages silently
+- **Atomic operation:** Either succeeds completely or fails
+
+**Caller responsibilities:**
+- **MUST** check return value and handle `HIVE_ERR_NOMEM`
+- **MUST** implement backpressure/retry logic if needed
+- **MUST NOT** assume message was delivered if `HIVE_FAILED(status)`
+
+**Example: Handling pool exhaustion**
+
+```c
+// Bad: Ignoring return value
+hive_ipc_notify(target, 0, &data, sizeof(data));  // WRONG - message may be lost
+
+// Good: Check and handle with backoff-retry
+hive_status status = hive_ipc_notify(target, 0, &data, sizeof(data));
+if (status.code == HIVE_ERR_NOMEM) {
+    // Pool exhausted - backoff and retry
+    hive_message msg;
+    hive_ipc_recv(&msg, 10);  // Wait 10ms, process any incoming messages
+    // Retry the send
+    status = hive_ipc_notify(target, 0, &data, sizeof(data));
+    if (HIVE_FAILED(status)) {
+        // Still failing - drop message or take other action
+    }
+}
+```
+
+### Message Data Lifetime
+
+**CRITICAL LIFETIME RULE:**
+- **Data is ONLY valid until the next successful `hive_ipc_recv()`, `hive_ipc_recv_match()`, or `hive_ipc_recv_matches()` call**
+- **Per actor: only ONE message payload pointer is valid at a time**
+- **Storing `msg.data` across receive iterations causes use-after-free**
+- **If you need the data later, COPY IT IMMEDIATELY**
+
+**Failed recv does NOT invalidate:**
+- If recv returns `HIVE_ERR_TIMEOUT` or `HIVE_ERR_WOULDBLOCK`, previous buffer remains valid
+- Only a successful recv invalidates the previous pointer
+
+**Correct pattern:**
+```c
+hive_message msg;
+hive_ipc_recv(&msg, -1);
+
+// SAFE: Direct access and copy immediately
+char local_copy[256];
+memcpy(local_copy, msg.data, msg.len);
+// local_copy is safe to use indefinitely
+// msg.class and msg.tag also available directly
+
+// UNSAFE: Storing pointer across recv calls
+const char *ptr = msg.data;   // DANGER
+hive_ipc_recv(&msg, -1);       // ptr now INVALID
+```
+
+### Mailbox Semantics
+
+**Capacity model:**
+
+Per-actor mailbox limits: **No per-actor quota** - capacity is constrained by global pools
+
+Global pool limits: **Yes** - all actors share:
+- `HIVE_MAILBOX_ENTRY_POOL_SIZE` (256 default) - mailbox entries
+- `HIVE_MESSAGE_DATA_POOL_SIZE` (256 default) - message data
+
+**Important:** One slow receiver can consume all mailbox entries, starving other actors.
+
+**Fairness guarantees:** The runtime does not provide per-actor fairness guarantees; resource exhaustion caused by a misbehaving actor is considered an application-level fault. Applications requiring protection against resource starvation can implement application-level quotas or monitoring.
+
+### Selective Receive Semantics
+
+`hive_ipc_recv_match()` and `hive_ipc_recv_matches()` implement selective receive. This is the key mechanism for building complex protocols like request/reply.
+
+**Blocking behavior:**
+
+1. Scan mailbox from head for message matching all filter criteria
+2. If found → remove from mailbox, return immediately
+3. If not found → block, yield to scheduler
+4. When any message arrives → wake, rescan from head
+5. If match → return
+6. If no match → go back to sleep
+7. Repeat until match or timeout
+
+**Key properties:**
+
+- **Non-matching messages are NOT dropped** — they stay in mailbox
+- **Order preserved** — messages remain in FIFO order
+- **Later retrieval** — non-matching messages retrieved by subsequent `hive_ipc_recv()` calls
+- **Scan complexity** — O(n) where n = mailbox depth
+
+**Example: Waiting for specific reply**
+
+```c
+// Using hive_ipc_request() for request/reply (recommended - handles tag generation internally)
+hive_message reply;
+hive_ipc_request(server, &request, sizeof(request), &reply, 5000);
+
+// Or manually using selective receive:
+uint32_t expected_tag = 42;  // Known tag from earlier call
+hive_ipc_recv_match(server, HIVE_MSG_REPLY, expected_tag, &reply, 5000);
+
+// During the wait:
+// - NOTIFY messages from other actors: skipped, stay in mailbox
+// - TIMER messages: skipped, stay in mailbox
+// - REPLY from server with wrong tag: skipped
+// - REPLY from server with matching tag: returned!
+
+// After returning, skipped messages can be retrieved:
+hive_ipc_recv(&msg, 0);  // Gets first skipped message
+```
+
+**When selective receive is efficient:**
+
+- Typical request/reply: mailbox is empty or near-empty while waiting for reply
+- Shallow mailbox: O(n) scan is fast when n is small
+
+**When selective receive is less efficient:**
+
+- Deep mailbox with many non-matching messages
+- Example: 100 pending NOTIFYs while waiting for specific REPLY → scans 100 messages
+
+**Mitigation:** Process messages promptly. Don't let mailbox grow deep. The request/reply pattern naturally keeps mailbox shallow because you block waiting for reply.
+
+### Message Ordering
+
+**Mailbox implementation:** FIFO linked list (enqueue at tail, dequeue from head)
+
+**Ordering guarantees:**
+
+**Single sender to single receiver:**
+- Messages are received in the order they were sent
+- **FIFO guaranteed**
+- Example: If actor A sends M1, M2, M3 to actor B, B receives them in order M1 → M2 → M3
+
+**Multiple senders to single receiver:**
+- Message order depends on scheduling (which sender runs first)
+- **Arrival order is scheduling-dependent**
+- Example: If actor A sends M1 and actor B sends M2, receiver may get M1→M2 or M2→M1
+
+**Selective receive and ordering:**
+- Selective receive can retrieve messages out of FIFO order
+- Non-matching messages are skipped but not reordered
+- Example: Mailbox has [NOTIFY, TIMER, REPLY]. Filtering for REPLY returns REPLY first.
+
+**Consequences:**
+
+```c
+// Single sender - FIFO guaranteed
+void sender_actor(void *arg) {
+    hive_ipc_notify(receiver, 0, &msg1, sizeof(msg1));  // Sent first
+    hive_ipc_notify(receiver, 0, &msg2, sizeof(msg2));  // Sent second
+    // Receiver will see: msg1, then msg2 (guaranteed)
 }
 
-// Real-time (STM32)
-hive_run();
+// Multiple senders - order depends on scheduling
+void sender_A(void *arg) {
+    hive_ipc_notify(receiver, 0, &msgA, sizeof(msgA));
+}
+void sender_B(void *arg) {
+    hive_ipc_notify(receiver, 0, &msgB, sizeof(msgB));
+}
+// Receiver may see: msgA then msgB, OR msgB then msgA
+
+// Selective receive - can retrieve out of order
+void request_reply_actor(void *arg) {
+    // Start timer
+    timer_id t;
+    hive_timer_after(1000000, &t);
+
+    // Do request/reply
+    hive_message reply;
+    hive_ipc_request(server, &req, sizeof(req), &reply, 5000);
+    // Timer tick arrived during request/reply wait - it's in mailbox
+
+    // Now process timer using selective receive with timer_id
+    hive_message timer_msg;
+    hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, t, &timer_msg, 0);
+}
 ```
 
-Control rate is 250 Hz (4ms time step). Each step triggers the control chain:
-sensor → estimator → altitude/waypoint/position → attitude → rate → motor.
+### Timer and System Messages
 
----
+Timer and system messages use the same mailbox and message format as IPC.
 
-## Portability
+**Timer messages:**
+- Class: `HIVE_MSG_TIMER`
+- Sender: Actor that owns the timer
+- Tag: `timer_id`
+- Payload: Empty (len = 0 after decoding header)
 
-### Hardware Abstraction Layer (HAL)
+**System messages (exit notifications):**
+- Class: `HIVE_MSG_EXIT`
+- Sender: Actor that died
+- Tag: `HIVE_TAG_NONE`
+- Payload: `hive_exit_msg` struct
 
-All hardware access goes through `hal/hal.h`. Each platform provides its own
-implementation of this interface:
+**Checking message type:**
 
 ```c
-// Platform lifecycle
-int hal_init(void);        // Initialize hardware
-void hal_cleanup(void);    // Release resources
-void hal_calibrate(void);  // Calibrate sensors
-void hal_arm(void);        // Enable motor output
-void hal_disarm(void);     // Disable motor output
+hive_message msg;
+hive_ipc_recv(&msg, -1);
 
-// Sensor interface (called by sensor_actor)
-void hal_read_sensors(sensor_data_t *sensors);
-
-// Motor interface (called by motor_actor)
-void hal_write_torque(const torque_cmd_t *cmd);
-
-// Radio interface (called by comms_actor, HAL_HAS_RADIO only)
-int hal_radio_init(void);
-int hal_radio_send(const void *data, size_t len);
-bool hal_radio_tx_ready(void);
-void hal_radio_poll(void);
-
-// Simulation time (only for SIMULATED_TIME builds)
-bool hal_step(void);  // Advance simulation, returns false when done
+switch (msg.class) {
+    case HIVE_MSG_NOTIFY:
+        handle_cast(msg.sender, msg.data, msg.len);
+        break;
+    case HIVE_MSG_REQUEST:
+        handle_call_and_reply(&msg, msg.data, msg.len);
+        break;
+    case HIVE_MSG_TIMER:
+        handle_timer_tick(msg.tag);  // tag is timer_id
+        break;
+    case HIVE_MSG_EXIT:
+        handle_exit_notification(msg.sender, msg.data);
+        break;
+    default:
+        break;
+}
 ```
 
-Actors use the HAL directly - no function pointers needed:
-- `sensor_actor.c` calls `hal_read_sensors()`
-- `motor_actor.c` calls `hal_write_torque()`
-- `comms_actor.c` calls `hal_radio_*()` (Crazyflie only)
+**Convenience function for timer checking:**
 
-### Supported Platforms
+```c
+// Returns true if message is a timer tick
+bool hive_msg_is_timer(const hive_message *msg);
+```
 
-| Platform | Build | Details |
-|----------|-------|---------|
-| Webots simulation | `make` | Uses `-DSIMULATED_TIME` |
-| Crazyflie 2.1+ | `make -f Makefile.crazyflie-2.1+` | See `hal/crazyflie-2.1+/README.md` |
-| STEVAL-DRONE01 | `make -f Makefile.STEVAL-DRONE01` | See `hal/STEVAL-DRONE01/README.md` |
+### Query Functions
 
-All hardware differences are encapsulated in the HAL. Actor code is identical
-across platforms. The only compile-time difference is `SIMULATED_TIME` which
-controls the main loop (simulation vs real-time).
+```c
+// Check if any message is pending in current actor's mailbox
+bool hive_ipc_pending(void);
 
-### Portable Code
+// Count messages in current actor's mailbox
+size_t hive_ipc_count(void);
+```
 
-All actor code is platform-independent. Actors use:
-- Bus API for inter-actor communication
-- HAL API for hardware access (abstracted)
+**Semantics:**
+- Query the **current actor's** mailbox only
+- Cannot query another actor's mailbox
+- Return `false` / `0` if called outside actor context
 
-| File | Dependencies |
-|------|--------------|
-| `sensor_actor.c/h` | HAL (hal_read_sensors) + bus API |
-| `estimator_actor.c/h` | Bus API only |
-| `altitude_actor.c/h` | Bus API only |
-| `waypoint_actor.c/h` | IPC + bus API |
-| `position_actor.c/h` | Bus API only |
-| `attitude_actor.c/h` | Bus API only |
-| `rate_actor.c/h` | Bus API only |
-| `motor_actor.c/h` | HAL (hal_write_torque) + IPC + bus API |
-| `flight_manager_actor.c/h` | IPC only (no bus) |
-| `comms_actor.c/h` | HAL (hal_radio_*) + bus API (Crazyflie only) |
-| `pid.c/h` | Pure C, no runtime deps |
-| `types.h` | Data structures |
-| `config.h` | Tuning parameters |
+### Pool Exhaustion Behavior
+
+IPC uses two global pools shared by all actors:
+- **Mailbox entry pool**: `HIVE_MAILBOX_ENTRY_POOL_SIZE` (256 default)
+- **Message data pool**: `HIVE_MESSAGE_DATA_POOL_SIZE` (256 default)
+
+**When pools are exhausted:**
+- `hive_ipc_notify()` returns `HIVE_ERR_NOMEM` immediately
+- Send operation **does NOT block** waiting for space
+- Send operation **does NOT drop** messages automatically
+- Caller **must check** return value and handle failure
+
+**No per-actor mailbox limit**: All actors share the global pools. A single actor can consume all available entries if receivers don't process messages.
+
+**Mitigation strategies:**
+- Size pools appropriately: `1.5× peak concurrent messages`
+- Check return values and implement retry logic or backpressure
+- Use `hive_ipc_request()` for natural backpressure (sender waits for reply)
+- Ensure receivers process messages promptly
+
+**Backoff-retry example:**
+```c
+hive_status status = hive_ipc_notify(target, 0, data, len);
+if (status.code == HIVE_ERR_NOMEM) {
+    // Pool exhausted - backoff before retry
+    hive_message msg;
+    status = hive_ipc_recv(&msg, 10);  // Backoff 10ms
+
+    if (HIVE_SUCCEEDED(status)) {
+        // Got message during backoff, handle it first
+        handle_message(&msg);
+    }
+    // Retry send...
+}
+```
+
+## Bus API
+
+Publish-subscribe communication with configurable retention policy.
+
+### Configuration
+
+```c
+typedef struct {
+    uint8_t  max_subscribers; // max concurrent subscribers (1..HIVE_MAX_BUS_SUBSCRIBERS)
+    uint8_t  consume_after_reads;     // consume after N reads, 0 = unlimited (0..max_subscribers)
+    uint32_t max_age_ms;      // expire entries after ms, 0 = no expiry
+    size_t   max_entries;     // ring buffer capacity
+    size_t   max_entry_size;  // max payload bytes per entry
+} hive_bus_config;
+```
+
+**Configuration constraints (normative):**
+- `max_subscribers`: **Architectural limit of 32 subscribers** (enforced by 32-bit `readers_mask`)
+  - Valid range: 1..32
+  - `HIVE_MAX_BUS_SUBSCRIBERS = 32` is a hard architectural invariant, not a tunable parameter
+  - Attempts to configure `max_subscribers > 32` return `HIVE_ERR_INVALID`
+- `consume_after_reads`: Valid range: 0..max_subscribers
+- Subscriber index assignment is stable for the lifetime of a subscription (affects `readers_mask` bit position)
+
+### Functions
+
+```c
+// Create bus
+hive_status hive_bus_create(const hive_bus_config *cfg, bus_id *out);
+
+// Destroy bus (fails if subscribers exist)
+hive_status hive_bus_destroy(bus_id bus);
+
+// Publish data
+hive_status hive_bus_publish(bus_id bus, const void *data, size_t len);
+
+// Subscribe/unsubscribe current actor
+hive_status hive_bus_subscribe(bus_id bus);
+hive_status hive_bus_unsubscribe(bus_id bus);
+
+// Read entry (non-blocking)
+// Returns HIVE_ERR_WOULDBLOCK if no data available
+hive_status hive_bus_read(bus_id bus, void *buf, size_t max_len, size_t *bytes_read);
+
+// Read with blocking
+hive_status hive_bus_read_wait(bus_id bus, void *buf, size_t max_len,
+                               size_t *bytes_read, int32_t timeout_ms);
+
+// Query bus state
+size_t hive_bus_entry_count(bus_id bus);
+```
+
+**Message size validation:**
+
+`hive_bus_create()`:
+- If `cfg->max_entry_size > HIVE_MAX_MESSAGE_SIZE` (256 bytes): Returns `HIVE_ERR_INVALID`
+- Bus entries share the message data pool, which uses fixed-size `HIVE_MAX_MESSAGE_SIZE` entries
+- This constraint ensures bus entries fit in pool slots
+
+`hive_bus_publish()`:
+- If `len > cfg.max_entry_size`: Returns `HIVE_ERR_INVALID`
+- Oversized messages are rejected immediately, not truncated
+- The `max_entry_size` was validated at bus creation time
+
+`hive_bus_read()` / `hive_bus_read_wait()`:
+- If message size > `max_len`: Data is **truncated** to fit in buffer
+- `*bytes_read` returns the **actual bytes copied** (truncated length)
+- Returns `HIVE_ERR_TRUNCATED` when truncation occurs (data was still read successfully)
+- Caller can check for truncation: `if (status.code == HIVE_ERR_TRUNCATED) { /* handle */ }`
+
+### Bus Consumption Model (Semantic Contract)
+
+The bus implements **per-subscriber read cursors** with the following **three contractual rules**:
 
 ---
 
-## File Structure
+#### **RULE 1: Subscription Start Position**
 
-```
-examples/pilot/
-    pilot.c              # Main loop, bus setup, supervisor config
-    sensor_actor.c/h     # Reads sensors via HAL → sensor bus
-    estimator_actor.c/h  # Sensor fusion → state bus
-    altitude_actor.c/h   # Altitude PID → thrust
-    waypoint_actor.c/h   # Waypoint navigation → position target bus
-    position_actor.c/h   # Position PD → attitude setpoints
-    attitude_actor.c/h   # Attitude PIDs → rate setpoints
-    rate_actor.c/h       # Rate PIDs → torque commands
-    motor_actor.c/h      # Output: torque → HAL → motors
-    flight_manager_actor.c/h # Startup delay, flight window cutoff
-    comms_actor.c/h  # Radio telemetry (Crazyflie only)
-    pid.c/h              # Reusable PID controller
-    types.h              # Portable data types
-    config.h             # Configuration constants
-    math_utils.h         # Math macros
-    notifications.h      # IPC notification tags
-    flight_profiles.h    # Waypoint definitions
-    fusion/
-        complementary_filter.c/h  # Portable attitude estimation
-    Makefile                 # Webots simulation build
-    Makefile.crazyflie-2.1+  # Crazyflie 2.1+ build
-    Makefile.STEVAL-DRONE01  # STEVAL-DRONE01 build
-    hive_config.mk           # Shared Hive memory config
-    SPEC.md              # This specification
-    README.md            # Usage instructions
-    worlds/
-        hover_test.wbt   # Webots world file
-    controllers/
-        pilot/           # Webots controller (installed here)
-    hal/
-        hal.h                # Common HAL interface
-        webots-crazyflie/    # Webots simulation HAL
-        crazyflie-2.1+/      # Crazyflie 2.1+ HAL (STM32F405)
-        STEVAL-DRONE01/      # STEVAL-DRONE01 HAL (STM32F401)
+**Contract:** `hive_bus_subscribe()` initializes the subscriber's read cursor to **"next publish"** (current `bus->head` write position).
+
+**Guaranteed semantics:**
+- Subscriber **CANNOT** read retained entries published before subscription
+- Subscriber **ONLY** sees entries published **after** `hive_bus_subscribe()` returns
+- First `hive_bus_read()` call returns `HIVE_ERR_WOULDBLOCK` if no new entries published since subscription
+- Implementation: `subscriber.next_read_idx = bus->head`
+
+**Implications:**
+- New subscribers do NOT see history
+- If you need to read retained entries, subscribe **before** publishing starts
+- Late subscribers will miss all prior messages
+
+**Example:**
+```c
+// Bus has retained entries [E1, E2, E3] with head=3
+hive_bus_subscribe(bus);
+//   -> subscriber.next_read_idx = 3 (next write position)
+
+hive_bus_read(bus, buf, len, &bytes_read);
+//   -> Returns HIVE_ERR_WOULDBLOCK (no new data)
+//   -> E1, E2, E3 are invisible (behind cursor)
+
+// Publisher publishes E4 (head advances to 4)
+hive_bus_read(bus, buf, len, &bytes_read);
+//   -> Returns E4 (first entry after subscription)
 ```
 
 ---
 
-## Testing Results
+#### **RULE 2: Per-Subscriber Cursor Storage and Eviction Behavior**
 
-### Hover Behavior
+**Contract:** Each subscriber has an independent read cursor. Slow subscribers may miss entries due to buffer wraparound; no error or notification is generated. The bus implementation supports a maximum of 32 concurrent subscribers per bus, enforced by the 32-bit `readers_mask`.
 
-1. Drone starts at 0.5m altitude (world file setting)
-2. Altitude PID commands increased thrust
-3. Drone rises with some initial oscillation
-4. Settles at 1.0m within ~3 seconds
-5. Maintains stable hover at 1.0m ± 0.05m
+**Guaranteed semantics:**
+1. **Storage per subscriber:**
+   - `bus_subscriber` struct with `next_read_idx` field (tracks next entry to read)
+   - Each subscriber reads at their own pace independently
+   - Storage cost: **O(max_subscribers)** fixed overhead
 
-### Console Output
+2. **Storage per entry:**
+   - 32-bit `readers_mask` bitmask (max 32 subscribers per bus)
+   - Bit N set -> subscriber N has read this entry
+   - Storage cost: **O(1)** per entry (4 bytes bitmask + 1 byte read_count)
 
+3. **Eviction behavior (buffer full):**
+   - When `hive_bus_publish()` finds buffer full (`count >= max_entries`):
+     - Oldest entry at `bus->tail` is **evicted immediately** (freed from message pool)
+     - Tail advances: `bus->tail = (bus->tail + 1) % max_entries`
+     - **No check if subscribers have read the evicted entry**
+   - If slow subscriber's cursor pointed to evicted entry:
+     - On next `hive_bus_read()`, search starts from **current `bus->tail`** (oldest surviving entry)
+     - Subscriber **silently skips** to next available unread entry
+     - **No error** returned (appears as normal read)
+     - **No signal** of data loss (by design)
+
+**Implications:**
+- Slow subscribers lose data without notification
+- Fast subscribers never lose data (assuming buffer sized for publish rate)
+- No backpressure mechanism (unlike `hive_ipc_request()` request/reply pattern)
+- Real-time principle: Prefer fresh data over old data
+
+**Example (data loss):**
+```c
+// Bus: max_entries=3, entries=[E1, E2, E3] (full), tail=0, head=0
+// Fast subscriber: next_read_idx=0 (read all, awaiting E4)
+// Slow subscriber: next_read_idx=0 (still at E1, hasn't read any)
+
+hive_bus_publish(bus, &E4, sizeof(E4));
+//   -> Buffer full: Evict E1 at tail=0, free from pool
+//   -> Write E4 at index 0: entries=[E4, E2, E3]
+//   -> tail=1 (E2 is now oldest), head=1 (next write)
+
+// Slow subscriber calls hive_bus_read():
+//   -> Search from tail=1: E2 (unread), E3 (unread), E4 (unread)
+//   -> Returns E2 (first unread)
+//   -> E1 is LOST (no error, silent skip)
 ```
-10 actors spawned (9 children + 1 supervisor)
-[ALT] tgt=1.00 alt=0.01 vvel=0.00 thrust=0.750
-[ALT] tgt=1.00 alt=0.05 vvel=0.12 thrust=0.720
-...
-[WPT] Advancing to waypoint 1: (1.0, 0.0, 1.2) yaw=0 deg
-[ALT] tgt=1.20 alt=1.02 vvel=0.05 thrust=0.560
-[POS] tgt=(1.0,0.0) x=0.12 y=0.00 pitch=5.2 roll=0.0
-...
+
+**Eviction does NOT notify slow subscribers:**
+- No `HIVE_ERR_OVERFLOW` or similar
+- No special message indicating data loss
+- Application must detect via message sequence numbers if needed
+
+---
+
+#### **RULE 3: consume_after_reads Counting Semantics**
+
+**Contract:** `consume_after_reads` counts **unique subscribers** who have read an entry, **NOT** total reads.
+
+**Guaranteed semantics:**
+- Each entry has a `readers_mask` bitmask (32 bits, max 32 subscribers per bus)
+- When subscriber N reads an entry:
+  1. Check if bit N is set in `readers_mask` -> if yes, skip (already read)
+  2. If no, set bit N, increment `read_count`, return entry
+- Entry is removed when `read_count >= consume_after_reads` (N unique subscribers have read)
+- Same subscriber CANNOT read the same entry twice (deduplication)
+
+**Implementation mechanism:**
+```c
+// Check if already read
+if (entry->readers_mask & (1u << subscriber_idx)) {
+    continue;  // Skip, already read by this subscriber
+}
+
+// Mark as read
+entry->readers_mask |= (1u << subscriber_idx);
+entry->read_count++;
+
+// Remove if consume_after_reads reached
+if (config.consume_after_reads > 0 && entry->read_count >= config.consume_after_reads) {
+    // Free entry from pool, invalidate
+}
+```
+
+**Implications:**
+- `consume_after_reads=3` means "remove after 3 **different** subscribers read it"
+- If subscriber A reads entry twice (e.g., re-subscribes), that's still 1 read
+- If 3 subscribers each read entry once, that's 3 reads -> entry removed
+- Set `consume_after_reads=0` to disable (entry persists until aged out or evicted)
+
+**Example (unique counting):**
+```c
+// Bus with consume_after_reads=2
+// Subscribers: A, B, C
+
+hive_bus_publish(bus, &E1, sizeof(E1));
+//   -> E1: readers_mask=0b000, read_count=0
+
+// Subscriber A reads E1
+hive_bus_read(bus, ...);
+//   -> E1: readers_mask=0b001, read_count=1 (A's bit set)
+
+// Subscriber A reads again (tries to read E1)
+hive_bus_read(bus, ...);
+//   -> E1 skipped (bit already set), returns HIVE_ERR_WOULDBLOCK
+//   -> E1: readers_mask=0b001, read_count=1 (unchanged)
+
+// Subscriber B reads E1
+hive_bus_read(bus, ...);
+//   -> E1: readers_mask=0b011, read_count=2 (B's bit set)
+//   -> read_count >= consume_after_reads (2) -> E1 REMOVED, freed from pool
 ```
 
 ---
 
-## Architecture Evolution Roadmap
+### Summary: The Three Rules
 
-The example will evolve incrementally toward a clean multi-actor design.
-Each step maintains a working system while improving separation of concerns.
-
-### Target Architecture
-
-```mermaid
-graph LR
-    subgraph Sensing
-        Sensor[Sensor Actor<br/>Read HW]
-        Estimator[Estimator Actor<br/>Fuse data]
-    end
-
-    subgraph Control
-        Setpoint[Setpoint Actor<br/>RC/Waypoints]
-        Altitude[Altitude Actor<br/>Z control]
-        Attitude[Attitude Actor<br/>Attitude control]
-        Rate[Rate Actor<br/>Rate control]
-    end
-
-    subgraph Output
-        Motor[Motor Actor<br/>Safety + Write HW]
-    end
-
-    Sensor --> Estimator --> StateBus([State Bus])
-    Setpoint --> Altitude
-    StateBus --> Altitude --> Attitude --> Rate --> Motor
-```
-
-### Actor Responsibilities (Current)
-
-| Actor | Input | Output | Priority | Responsibility |
-|-------|-------|--------|----------|----------------|
-| **Supervisor** | Child exit notifications | (internal) | CRITICAL | Monitors 9 workers, ONE_FOR_ALL restart |
-| **Sensor** | Hardware | Sensor Bus | CRITICAL | Read raw sensors, publish |
-| **Estimator** | Sensor Bus | State Bus | CRITICAL | Complementary filter fusion, state estimate |
-| **Waypoint** | State Bus + START notification | Position Target Bus | CRITICAL | Waypoint navigation (3D on Webots, altitude-only on STM32) |
-| **Altitude** | State + Position Target Bus + LANDING | Thrust Bus + LANDED | CRITICAL | Altitude PID (250Hz), landing detection |
-| **Position** | Position Target + State Bus | Attitude Setpoint Bus | CRITICAL | Position PD (250Hz) |
-| **Attitude** | Attitude Setpoint + State | Rate Setpoint Bus | CRITICAL | Attitude PIDs (250Hz) |
-| **Rate** | State + Thrust + Rate SP | Torque Bus | CRITICAL | Rate PIDs (250Hz) |
-| **Motor** | Torque Bus + STOP notification | Hardware | CRITICAL | Output to hardware via HAL |
-| **Flight Manager** | LANDED notification | START/LANDING/STOP notifications | CRITICAL | Startup delay, landing coordination |
-| **Telemetry** | Sensor + State + Thrust Bus | Radio (HAL) | LOW | Radio telemetry (Crazyflie only, TEMPORARY restart) |
-
-**Why CRITICAL for flight actors?** Flight-critical actors share the same priority so execution
-order follows spawn order (round-robin within priority level). This ensures the data pipeline
-executes correctly: sensor → estimator → waypoint → altitude → position → attitude → rate →
-motor → flight_manager. Differentiated priorities would break this—higher priority actors run
-first regardless of spawn order, causing motor to output before controllers have computed new
-values. Telemetry runs at LOW priority since it's not flight-critical and shouldn't delay
-control loops.
-
-### Step 1: Motor Actor ✓
-
-Separate motor output into dedicated actor.
-
-```
-Rate Actor ──► Torque Bus ──► Motor Actor ──► HAL ──► Hardware
-                               (output)         (mixer)
-```
-
-**Features:** Subscribe to torque bus, call HAL for motor output. Mixer is in HAL.
-
-### Step 2: Separate Altitude Actor ✓
-
-Split altitude control from rate control.
-
-```
-Sensor Bus ──► Altitude Actor ──► Thrust Bus ──► Rate Actor ──► Torque Bus
-            (altitude PID)                    (rate PIDs only)
-```
-
-**Benefits:** Clear separation, different rates possible, easier tuning.
-
-### Step 3: Sensor Actor ✓
-
-Move sensor reading from main loop into actor.
-
-```
-Main Loop: hal_step() + hive_advance_time() + hive_run_until_blocked()
-Sensor Actor: timer ──► hal_read_sensors() ──► Sensor Bus
-```
-
-**Benefits:** Main loop is minimal, all logic in timer-driven actors.
-
-### Step 4: Attitude Actor ✓
-
-Add attitude angle control between altitude and rate control.
-
-**Before:**
-```
-Sensor Bus ──► Rate Actor (rate PIDs with hardcoded 0.0 setpoints)
-```
-
-**After:**
-```
-Sensor Bus ──► Attitude Actor ──► Rate Setpoint Bus ──► Rate Actor
-            (attitude PIDs)                          (rate PIDs)
-```
-
-**Benefits:**
-- Cascaded control (proper drone architecture)
-- Attitude controller generates rate setpoints
-- Rate controller tracks those setpoints
-- Easier to tune each layer independently
-
-### Step 5: Estimator Actor ✓
-
-Add sensor fusion between raw sensors and controllers.
-
-**Before:**
-```
-Sensor Actor ──► Sensor Bus ──► Controllers
-```
-
-**After:**
-```
-Sensor Actor ──► Sensor Bus ──► Estimator Actor ──► State Bus ──► Controllers
-                             (complementary filter)
-```
-
-**Implementation:**
-- Runs portable complementary filter (`fusion/complementary_filter.c`)
-- Fuses accelerometer and gyroscope for roll/pitch estimation
-- Fuses magnetometer for yaw (when available)
-- Computes velocities by differentiating position with low-pass filter
-- Webots: synthesizes accelerometer from gravity + inertial_unit angles
-
-**Benefits:**
-- Controllers use state estimate, not raw sensors
-- Derived values (velocities) computed in one place
-- Fusion algorithm is portable (same code on all platforms)
-- HALs are simpler (just raw sensor reads)
-
-### Step 6: Position Actor ✓
-
-Add horizontal position hold and heading hold.
-
-**Before:**
-```
-Attitude Actor uses hardcoded 0.0 attitude setpoints
-```
-
-**After:**
-```
-State Bus ──► Position Actor ──► Attitude Setpoint Bus ──► Attitude Actor
-              (position PD)       (roll, pitch, yaw)    (attitude PIDs)
-```
-
-**Implementation:**
-- Simple PD controller: position error → attitude command
-- Velocity damping: reduces overshoot
-- Max tilt limit: 0.35 rad (~20°) for safety
-- Sign conventions match Bitcraze Webots controller
-- Heading hold: publishes target yaw from waypoint actor
-- Angle wrap-around: `pid_update_angle()` handles ±π discontinuity
-- World-to-body frame transformation based on current yaw
-
-**Benefits:**
-- Drone holds XY position and heading
-- Returns to target when displaced or rotated
-- Takes shortest rotation path (never rotates >180°)
-
-### Step 7: Waypoint Actor ✓
-
-Add waypoint navigation with platform-specific routes.
-
-**Before:**
-```
-Altitude Actor uses hardcoded TARGET_ALTITUDE
-Position Actor uses hardcoded TARGET_X, TARGET_Y, TARGET_YAW
-```
-
-**After:**
-```
-                              ┌──► Altitude Actor (reads z)
-State Bus ──► Waypoint Actor ──► Position Target Bus
-              (navigation)       (x, y, z, yaw)
-                              └──► Position Actor (reads x, y, yaw)
-```
-
-**Implementation:**
-- Manages list of waypoints (platform-specific)
-- Publishes current target to position target bus
-- Altitude actor reads target altitude from position target bus
-- Position actor reads target XY and yaw from position target bus
-- Monitors state bus for arrival detection
-- Arrival requires: altitude, heading within tolerance, velocity below threshold
-- Hovers briefly at each waypoint before advancing
-- Loops forever: returns to first waypoint after completing route
-
-**Platform-specific routes:**
-- **Webots:** 3D waypoints with square pattern and altitude changes
-- **STM32 hardware:** Platform-dependent (see flight profiles in README.md)
-- **First flight test:** Hover at 0.5m briefly, then land (safe tethered test)
-
-**Benefits:**
-- Decouples waypoint logic from both position and altitude control
-- Both actors read targets from bus (no hardcoded values)
-- World-to-body frame transformation handles arbitrary headings
-- Easy to extend with mission planning
-
-### Step 8: Flight Manager Actor ✓
-
-Add centralized startup coordination and safety cutoff.
-
-**Before:**
-```
-Startup delay and flight window in motor_actor
-Waypoint actor starts immediately
-```
-
-**After:**
-```
-Flight Manager ──► START ──► Waypoint Actor
-                              │
-                              ↓ (flight begins)
-               ──► LANDING ──► Altitude Actor
-                              │
-               ◄── LANDED ◄───┘ (touchdown detected)
-                              │
-               ──► STOP ────► Motor Actor
-                              │
-                              ↓ (motors zeroed)
-```
-
-**Implementation:**
-- Handles 60-second startup delay (hardware only)
-- Opens log file (erases flash sector on STM32)
-- Sends START notification to waypoint actor to begin flight
-- Periodic log sync every 4 seconds
-- Flight duration per profile (10s/40s/60s)
-- Sends LANDING notification to altitude actor
-- Waits for LANDED notification (touchdown detected)
-- Sends STOP notification to motor actor
-- Closes log file
-
-**Benefits:**
-- Centralized safety timing (not scattered across actors)
-- Clear flight authorization flow
-- Waypoint actor blocks until flight manager authorizes flight
-- Easy to add pre-flight checks in one place
-
-### Step 9: Telemetry Actor ✓
-
-Add radio telemetry for ground station logging (Crazyflie only).
-
-**Before:**
-```
-No real-time flight data logging during flight
-```
-
-**After:**
-```
-State Bus ──┬──► Telemetry Actor ──► HAL Radio ──► Crazyradio 2.0 ──► Ground Station
-Sensor Bus ─┤         (100Hz)
-Thrust Bus ─┘
-```
-
-**Implementation:**
-- Subscribes to sensor, state, and thrust buses
-- Sends binary packets at 100Hz over syslink protocol
-- Two operating modes:
-  - Flight mode: Sends telemetry packets at 100Hz
-  - Download mode: Transfers flash log file to ground station on request
-- Telemetry packet types (31-byte ESB limit):
-  - Type 0x01: Attitude/rates (gyro XYZ, roll/pitch/yaw)
-  - Type 0x02: Position (altitude, velocities, thrust)
-- Log download packet types:
-  - Type 0x10: CMD_REQUEST_LOG (ground -> drone)
-  - Type 0x11: LOG_CHUNK (drone -> ground, 28 bytes data)
-  - Type 0x12: LOG_COMPLETE (drone -> ground)
-- Runs at LOW priority so control loops run first each cycle
-- Radio send blocks ~370us (37 bytes * 10 bits/byte / 1Mbaud)
-- Uses TEMPORARY restart (crash/exit doesn't trigger restarts of flight-critical actors)
-
-**Ground station commands (from examples/pilot directory):**
-```bash
-pip install cflib
-./tools/telemetry_receiver.py -o flight.csv        # Receive telemetry
-./tools/telemetry_receiver.py --download-log log.bin  # Download log file
-../../tools/decode_log.py log.bin > log.txt        # Decode binary log
-```
-
-**Benefits:**
-- Real-time flight data for debugging and analysis
-- Post-flight log download (no physical access required)
-- Separate from flash logging (higher rate, no flash wear)
-- Non-intrusive (LOW priority doesn't affect control loops)
-
-### Step 10 (Future): RC Input / Mode Switching
-
-**Future extensions:**
-- RC input handling (manual override)
-- Takeoff/landing sequences
-- Mode switching (hover, land, follow-me, etc.)
-- Dynamic waypoint updates via telemetry
-
----
-
-## Memory Requirements
-
-### STM32 Builds
-
-| Platform | Flash | RAM | MCU |
-|----------|-------|-----|-----|
-| Crazyflie 2.1+ | ~39 KB | ~140 KB | STM32F405 (1 MB / 192 KB) |
-| STEVAL-DRONE01 | ~60 KB | ~57 KB | STM32F401 (256 KB / 64 KB) |
-
-### Configuration Split
-
-Hive memory settings are split between shared and platform-specific files:
-
-| File | Contents |
+| Rule | Contract |
 |------|----------|
-| `hive_config.mk` | Shared settings: actors, buses, pools, message size |
-| `Makefile.<platform>` | Platform-specific: stack sizes, flash layout |
-
-The shared settings in `hive_config.mk` are determined by the pilot application
-(10 actors, 7 buses, pool sizes for supervision) and are identical across all
-platforms. Only stack sizes vary based on available RAM.
-
-### Measured Stack Usage
-
-Build with `STACK_PROFILE=1` to measure actual stack usage via watermarking.
-Results from x86-64 Linux (Webots simulation) with 4KB stacks:
-
-| Actor | Used | Usage | Notes |
-|-------|------|-------|-------|
-| waypoint | 3232 | 78.9% | Highest - waypoint list + arrival detection |
-| flight_mgr | 3112 | 76.0% | Log file management + IPC |
-| altitude | 2664 | 65.0% | PID state + landing logic |
-| supervisor | 2504 | 61.1% | Child management overhead |
-| sensor | 2008 | 49.0% | HAL sensor structs |
-| estimator | 808 | 19.7% | Complementary filter state |
-| rate | 792 | 19.3% | Rate PIDs |
-| attitude | 760 | 18.6% | Attitude PIDs |
-| position | 680 | 16.6% | Position PD |
-| motor | 488 | 11.9% | Lowest - simple output |
-
-All actors fit comfortably in 4KB with ~860 bytes headroom (78.9% peak).
-ARM Cortex-M may differ slightly due to calling conventions.
+| **1. Subscription start position** | New subscribers start at "next publish" (cannot read history) |
+| **2. Cursor storage & eviction** | Per-subscriber cursors; slow readers may miss entries on wraparound (no notification) |
+| **3. consume_after_reads counting** | Counts UNIQUE subscribers (deduplication), not total reads |
 
 ---
 
-## Future Extensions
+### Retention Policy Configuration
 
-1. **Mission planning** - Load waypoints from file, complex routes
-2. **Sensor fusion** - ✓ Complementary filter implemented (estimator actor)
-3. **Failsafe** - Motor failure detection, emergency landing
-4. **Telemetry** - ✓ Radio telemetry implemented (Crazyflie only)
-5. **RC input** - Manual control override
-6. **Setpoint actor** - Altitude command generation, mode switching
+Entries can be removed by **three mechanisms** (whichever occurs first):
+
+1. **consume_after_reads (unique subscriber counting):**
+   - Entry removed when `read_count >= consume_after_reads` (N unique subscribers have read it)
+   - Value `0` = disabled (entry persists until aged out or evicted)
+   - See **RULE 3** above for exact counting semantics
+
+2. **max_age_ms (time-based expiry):**
+   - Entry removed when `(current_time_ms - entry.timestamp_ms) >= max_age_ms`
+   - Value `0` = disabled (no time-based expiry)
+   - Checked on every `hive_bus_read()` and `hive_bus_publish()` call
+
+3. **Buffer full (forced eviction):**
+   - Oldest entry at `bus->tail` evicted when `count >= max_entries` on publish
+   - ALWAYS enabled (cannot be disabled)
+   - See **RULE 2** above for eviction semantics
+
+**Typical configurations:**
+
+| Use Case | consume_after_reads | max_age_ms | Behavior |
+|----------|-------------|------------|----------|
+| **Sensor data** | `0` | `100` | Multiple readers, data stale after 100ms |
+| **Configuration** | `0` | `0` | Persistent until buffer wraps |
+| **Events** | `N` | `0` | Consumed after N subscribers read, no timeout |
+| **Recent history** | `0` | `5000` | Keep 5 seconds of history, multiple readers |
+
+**Interaction of mechanisms:**
+- Entry is removed when **FIRST** condition is met (OR, not AND)
+- Example: `consume_after_reads=3, max_age_ms=1000`
+  - Entry removed after 3 subscribers read it, **OR**
+  - Entry removed after 1 second, **OR**
+  - Entry removed when buffer full (forced eviction)
+
+### Pool Exhaustion and Buffer Full Behavior
+
+**WARNING: Resource Contention Between IPC and Bus**
+
+Bus publishing consumes the same message data pool as IPC (`HIVE_MESSAGE_DATA_POOL_SIZE`). A misconfigured or high-rate bus can exhaust the message pool and cause **all** IPC sends to fail with `HIVE_ERR_NOMEM`, potentially starving critical actor communication.
+
+**Architectural consequences:**
+- Bus auto-evicts oldest entries when its ring buffer fills (graceful degradation)
+- IPC never auto-drops (fails immediately with `HIVE_ERR_NOMEM`)
+- A single high-rate bus publisher can starve IPC globally
+- No per-subsystem quotas or fairness guarantees
+
+**Design implications:**
+- Size `HIVE_MESSAGE_DATA_POOL_SIZE` for combined IPC + bus peak load
+- Use bus retention policies to limit memory consumption
+- Monitor pool exhaustion in critical systems
+- Consider separate message pools if isolation is required (requires code modification)
+
+---
+
+The bus can encounter two types of resource limits:
+
+**1. Message Pool Exhaustion** (shared with IPC):
+- Bus uses the global `HIVE_MESSAGE_DATA_POOL_SIZE` pool (same as IPC)
+- When pool is exhausted, `hive_bus_publish()` returns `HIVE_ERR_NOMEM` immediately
+- Does NOT block waiting for space
+- Does NOT drop messages automatically in this case
+- Caller must check return value and handle failure
+
+**2. Bus Ring Buffer Full** (per-bus limit):
+- Each bus has its own ring buffer sized via `max_entries` config
+- When ring buffer is full, `hive_bus_publish()` **automatically evicts oldest entry**
+- This is different from IPC - bus has automatic message dropping
+- Publish succeeds (unless message pool also exhausted)
+- Slow readers may miss messages if buffer wraps
+
+**3. Subscriber Table Full**:
+- Each bus has subscriber limit via `max_subscribers` config (up to `HIVE_MAX_BUS_SUBSCRIBERS`)
+- When full, `hive_bus_subscribe()` returns `HIVE_ERR_NOMEM`
+
+**Key Differences from IPC:**
+- IPC never drops messages automatically (returns error instead)
+- Bus automatically drops oldest entry when ring buffer is full
+- Both share the same message data pool (`HIVE_MESSAGE_DATA_POOL_SIZE`)
+
+**Mitigation strategies:**
+- Size message pool appropriately for combined IPC + bus load
+- Configure per-bus `max_entries` based on publish rate vs read rate
+- Use retention policies (`consume_after_reads`, `max_age_ms`) to prevent accumulation
+- Monitor `hive_bus_entry_count()` to detect slow readers
+
+## Unified Event Waiting API
+
+`hive_select()` provides a unified primitive for waiting on multiple event sources (IPC messages + bus data). The existing blocking APIs (`hive_ipc_recv*`, `hive_bus_read_wait`) are implemented as thin wrappers around this primitive.
+
+### Types
+
+```c
+// Source types
+typedef enum {
+    HIVE_SEL_IPC,  // Wait for IPC message
+    HIVE_SEL_BUS,  // Wait for bus data
+} hive_select_type;
+
+// Select source (tagged union)
+typedef struct {
+    hive_select_type type;
+    union {
+        hive_recv_filter ipc;  // For HIVE_SEL_IPC
+        bus_id bus;            // For HIVE_SEL_BUS
+    };
+} hive_select_source;
+
+// Select result
+typedef struct {
+    size_t index;           // Which source triggered (0-based)
+    hive_select_type type;  // Type of triggered source
+    union {
+        hive_message ipc;   // For HIVE_SEL_IPC
+        struct {
+            void *data;     // For HIVE_SEL_BUS
+            size_t len;
+        } bus;
+    };
+} hive_select_result;
+```
+
+### Function
+
+```c
+// Wait on multiple sources
+// Returns when any source has data or timeout expires
+// timeout_ms == 0:  non-blocking, returns HIVE_ERR_WOULDBLOCK if no data
+// timeout_ms < 0:   block forever
+// timeout_ms > 0:   block up to timeout, returns HIVE_ERR_TIMEOUT if exceeded
+hive_status hive_select(const hive_select_source *sources, size_t num_sources,
+                        hive_select_result *result, int32_t timeout_ms);
+```
+
+### Priority Semantics
+
+When multiple sources have data ready simultaneously, sources are checked in **strict array order**. The first ready source wins. There is no type-based priority - bus and IPC sources are treated equally.
+
+To prioritize certain sources, place them earlier in the array.
+
+### Bus Readiness Semantics
+
+A bus source is "ready" when the bus contains an entry the calling actor has not yet read. Each subscriber's read position is tracked independently via a bitmask. This means:
+
+- A bus can have data for one subscriber but not another
+- Reading an entry marks it as read for that subscriber only
+- New publishes are unread for all subscribers until consumed
+
+### Example Usage
+
+```c
+// Define event sources
+enum { SEL_SENSOR, SEL_TIMER, SEL_COMMAND };
+hive_select_source sources[] = {
+    [SEL_SENSOR]  = {HIVE_SEL_BUS, .bus = sensor_bus},
+    [SEL_TIMER]   = {HIVE_SEL_IPC, .ipc = {HIVE_SENDER_ANY, HIVE_MSG_TIMER, heartbeat}},
+    [SEL_COMMAND] = {HIVE_SEL_IPC, .ipc = {HIVE_SENDER_ANY, HIVE_MSG_NOTIFY, CMD_SHUTDOWN}},
+};
+
+while (running) {
+    hive_select_result result;
+    hive_status status = hive_select(sources, 3, &result, 1000);
+
+    if (status.code == HIVE_ERR_TIMEOUT) {
+        // No events for 1 second
+        continue;
+    }
+    if (HIVE_FAILED(status)) {
+        break;
+    }
+
+    switch (result.index) {
+    case SEL_SENSOR:
+        // Bus data available
+        sensor_data *data = (sensor_data *)result.bus.data;
+        process_sensor(data);
+        break;
+
+    case SEL_TIMER:
+        // Heartbeat timer
+        send_heartbeat();
+        break;
+
+    case SEL_COMMAND:
+        // Command received
+        running = false;
+        break;
+    }
+}
+```
+
+### Wrapper Relationship
+
+The existing blocking APIs are thin wrappers around `hive_select()`:
+
+| Wrapper Function | Equivalent hive_select() |
+|------------------|--------------------------|
+| `hive_ipc_recv()` | Single IPC source with wildcard filter |
+| `hive_ipc_recv_match()` | Single IPC source with specific filter |
+| `hive_ipc_recv_matches()` | Multiple IPC sources |
+| `hive_bus_read_wait()` | Single bus source |
+
+This architectural design ensures consistent blocking behavior and wake-up logic across all APIs.
+
+### Error Handling
+
+| Error Code | Condition |
+|------------|-----------|
+| `HIVE_ERR_INVALID` | NULL sources/result, num_sources == 0, bus not subscribed |
+| `HIVE_ERR_WOULDBLOCK` | timeout_ms == 0 and no data available |
+| `HIVE_ERR_TIMEOUT` | timeout_ms > 0 and no data within timeout |
+
+### Implementation Notes
+
+- **Data lifetime:** All data in `result` (both `result.ipc` and `result.bus.data`) is valid until the next blocking call: `hive_select()`, `hive_ipc_recv*()`, or `hive_bus_read*()`. Copy immediately if needed longer.
+- **Wake mechanism:** When blocked, the actor is woken by bus publishers (via `blocked` flag) or IPC senders (via `select_sources` check in mailbox wake logic).
+
+## Timer API
+
+Timers for periodic and one-shot wake-ups.
+
+```c
+// One-shot: wake current actor after delay
+hive_status hive_timer_after(uint32_t delay_us, timer_id *out);
+
+// Periodic: wake current actor every interval
+hive_status hive_timer_every(uint32_t interval_us, timer_id *out);
+
+// Cancel timer
+hive_status hive_timer_cancel(timer_id id);
+
+// Sleep for specified duration (microseconds)
+// Uses selective receive - other messages remain in mailbox
+hive_status hive_sleep(uint32_t delay_us);
+
+// Get current time in microseconds (monotonic)
+// Returns monotonic time suitable for measuring elapsed durations.
+// In simulation mode, returns simulated time.
+uint64_t hive_get_time(void);
+
+// Check if message is a timer tick
+bool hive_msg_is_timer(const hive_message *msg);
+```
+
+Timer wake-ups are delivered as messages with `class == HIVE_MSG_TIMER`. The tag contains the `timer_id`. The actor receives these in its normal `hive_ipc_recv()` loop and can use `hive_msg_is_timer()` to identify timer messages.
+
+**Important:** When waiting for a specific timer, use selective receive with the timer_id as the tag filter:
+```c
+timer_id my_timer;
+hive_timer_after(500000, &my_timer);
+hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, my_timer, &msg, -1);
+```
+Do **not** use `HIVE_TAG_ANY` for timer messages—this could consume the wrong timer's message if multiple timers are active.
+
+### Timer Tick Coalescing (Periodic Timers)
+
+**Behavior:** When the scheduler reads a timerfd, it obtains an expiration count (how many intervals elapsed since last read). The runtime sends **exactly one tick message** regardless of the expiration count.
+
+**Rationale:**
+- Simplicity: Actor receives predictable single-message notification
+- Real-time principle: Current state matters more than history
+- Memory efficiency: No risk of mailbox flooding from fast timers
+
+**Implications:**
+- If scheduler is delayed (file I/O stall, long actor computation), periodic timer ticks are **coalesced**
+- Actor cannot determine how many intervals actually elapsed
+- For precise tick counting, use `hive_get_time()` to measure elapsed time
+
+**Example:**
+```c
+// 10ms periodic timer, but actor takes 35ms to process
+hive_timer_every(10000, &timer);  // 10ms = 10000us
+
+while (1) {
+    hive_ipc_recv(&msg, -1);
+    if (hive_msg_is_timer(&msg)) {
+        // Even if 35ms passed (3-4 intervals), actor receives ONE tick
+        // timerfd read returned expirations=3 or 4, but only one message sent
+        do_work();  // Takes 35ms
+    }
+}
+```
+
+**Alternative not implemented:** Enqueuing N tick messages for N expirations was rejected because:
+- Risk of mailbox overflow for fast timers
+- Most embedded use cases don't need tick counting
+- Actors needing precise counts can use `hive_get_time()` to measure elapsed time
+
+### Timer Precision and Monotonicity
+
+**Unit mismatch by design:**
+- Timer API uses **microseconds** (`uint32_t delay_us`, `uint32_t interval_us`)
+- Rest of system (IPC, file, network) uses **milliseconds** (`int32_t timeout_ms`)
+- Rationale: Timers often need sub-millisecond precision; I/O timeouts rarely do
+
+**Resolution and precision:**
+
+Platform | Clock Source | API Precision | Actual Precision | Notes
+---------|-------------|---------------|------------------|------
+**Linux (x86-64)** | `CLOCK_MONOTONIC` via `timerfd` | Nanosecond (`itimerspec`) | ~1 ms typical | Kernel-limited, non-realtime scheduler
+**STM32 (ARM)** | Hardware timer (SysTick/TIM) | Microsecond | ~1-10 us typical | Depends on timer configuration
+
+- On Linux, timers use `CLOCK_MONOTONIC` clock source via `timerfd_create()`
+- On Linux, requests < 1ms may still fire with ~1ms precision due to kernel scheduling
+- On STM32, hardware timers provide microsecond-level precision
+
+**Monotonic clock guarantee:**
+- Uses **monotonic clock** on both platforms (CLOCK_MONOTONIC on Linux, hardware timer on STM32)
+- **NOT affected by**:
+  - System time changes (NTP adjustments, user setting clock)
+  - Timezone changes
+  - Daylight saving time
+- **Guaranteed to**:
+  - Never go backwards
+  - Count elapsed time accurately (subject to clock drift, typically <100 ppm)
+- **Use case**: Timers measure **elapsed time**, not wall-clock time
+
+**hive_get_time() precision:**
+
+`hive_get_time()` returns the current monotonic time in microseconds:
+
+Platform | Implementation | Resolution | Notes
+---------|----------------|------------|------
+**Linux** | `clock_gettime(CLOCK_MONOTONIC)` | Nanosecond | vDSO, minimal overhead
+**STM32** | `tick_count * HIVE_TIMER_TICK_US` | 1 ms default | Limited by tick rate
+
+- Linux: Uses vDSO for low-overhead system call (no kernel trap in most cases)
+- STM32: Resolution limited by `HIVE_TIMER_TICK_US` (default 1000μs = 1ms)
+- For sub-millisecond precision on STM32, reduce `HIVE_TIMER_TICK_US` or use DWT cycle counter
+- In simulation mode, returns simulated time (advanced by `hive_timer_advance_time()`)
+
+**Delivery guarantee:**
+- Timer callbacks are delivered **at or after** the requested time; early delivery never occurs
+- Delays may occur due to scheduling (higher priority actors, blocked scheduler)
+- In safety-critical systems, timers provide lower bounds on timing, not exact timing
+
+**Wraparound behavior:**
+
+1. **Timer interval wraparound** (`uint32_t interval_us`):
+   - Type: 32-bit unsigned integer
+   - Max value: 4,294,967,295 microseconds = **~4295 seconds** = **~71.6 minutes**
+   - Wraparound: Values > 71.6 minutes wrap around (e.g., 72 minutes becomes 24 seconds)
+   - **Mitigation**: Use multiple timers or external tick counting for intervals > 1 hour
+
+2. **Timer ID wraparound** (`timer_id` = `uint32_t`):
+   - Global counter `g_timer.next_id` increments on each timer creation
+   - Wraps at 4,294,967,295 timers
+   - Potential collision: If timer ID wraps and old timer still active, `hive_timer_cancel()` may cancel wrong timer
+   - **Likelihood**: Extremely rare (requires 4 billion timer creations without runtime restart)
+   - **Mitigation**: None needed in practice; runtime typically restarts long before wraparound
+
+**Example: Maximum timer interval**
+
+```c
+// Maximum safe one-shot timer: ~71 minutes
+uint32_t max_interval = UINT32_MAX;  // 4,294,967,295 us
+hive_timer_after(max_interval, &timer);  // OK, fires after ~71.6 minutes
+
+// For longer intervals, use periodic timer with counter
+uint32_t seventy_two_min_us = 72 * 60 * 1000000;  // 4.32 billion us
+// ERROR: Exceeds UINT32_MAX (4.29 billion), wraps to ~25 seconds
+
+// Correct approach for long intervals:
+uint32_t tick_interval = 60 * 1000000;  // 1 minute
+hive_timer_every(tick_interval, &timer);
+// Count ticks in actor to reach 60 minutes
+```
+
+**Comparison with rest of system:**
+
+Feature | Timer API | IPC/File/Network API
+--------|-----------|---------------------
+**Units** | Microseconds (`uint32_t`) | Milliseconds (`int32_t`)
+**Max value** | ~71 minutes | ~24.8 days (2^31 ms)
+**Signed/Unsigned** | Unsigned (always positive) | Signed (negative = block forever)
+**Wraparound** | At ~71 minutes | At ~24.8 days (unlikely in practice)
+
+**Design rationale:**
+- Microseconds for timers: Sub-millisecond intervals common in embedded systems (sensor sampling, PWM, etc.)
+- Milliseconds for I/O: Network/file timeouts rarely need microsecond precision
+- 32-bit limit: Embedded systems prefer fixed-size types; 64-bit would waste memory
+- Trade-off: Accept wraparound at ~71 minutes for memory efficiency
+
+## Supervisor API
+
+Supervision for automatic child actor restart. A supervisor is an actor that monitors children and restarts them according to configurable policies.
+
+```c
+#include "hive_supervisor.h"
+
+// Start supervisor with configuration
+hive_status hive_supervisor_start(const hive_supervisor_config *config,
+                                  const actor_config *sup_actor_cfg,
+                                  actor_id *out_supervisor);
+
+// Request graceful shutdown (async)
+hive_status hive_supervisor_stop(actor_id supervisor);
+
+// Utility functions
+const char *hive_restart_strategy_str(hive_restart_strategy strategy);
+const char *hive_child_restart_str(hive_child_restart restart);
+```
+
+### Child Restart Types
+
+```c
+typedef enum {
+    HIVE_CHILD_PERMANENT,  // Always restart, regardless of exit reason
+    HIVE_CHILD_TRANSIENT,  // Restart only on abnormal exit (crash)
+    HIVE_CHILD_TEMPORARY   // Never restart
+} hive_child_restart;
+```
+
+| Type | Normal Exit | Crash |
+|------|-------------|-------|
+| `PERMANENT` | Restart | Restart |
+| `TRANSIENT` | No restart | Restart |
+| `TEMPORARY` | No restart | No restart |
+
+### Restart Strategies
+
+```c
+typedef enum {
+    HIVE_STRATEGY_ONE_FOR_ONE,   // Restart only the failed child
+    HIVE_STRATEGY_ONE_FOR_ALL,   // Restart all children when one fails
+    HIVE_STRATEGY_REST_FOR_ONE   // Restart failed child and all started after it
+} hive_restart_strategy;
+```
+
+**one_for_one**: When a child crashes, only that child is restarted. Other children continue running undisturbed. Use for independent workers.
+
+**one_for_all**: When any child crashes, all children are stopped and restarted. Use when children have strong interdependencies.
+
+**rest_for_one**: When a child crashes, that child and all children started after it are restarted. Children started before continue running. Use for pipelines or sequential dependencies.
+
+### Child Specification
+
+```c
+typedef struct {
+    actor_fn start;              // Actor entry point
+    hive_actor_init_fn init;     // Init function (NULL = skip)
+    void *init_args;             // Arguments to init/actor
+    size_t init_args_size;       // Size to copy (0 = pass pointer directly)
+    const char *name;            // Child identifier for tracking
+    bool auto_register;          // Auto-register in name registry
+    hive_child_restart restart;  // Restart policy
+    actor_config actor_cfg;      // Actor configuration (stack size, priority, etc.)
+} hive_child_spec;
+```
+
+**Argument handling:**
+- If `init_args_size > 0`: Argument is copied to supervisor-managed storage (max `HIVE_MAX_MESSAGE_SIZE` bytes). Safe for stack-allocated arguments.
+- If `init_args_size == 0`: Pointer is passed directly. Caller must ensure lifetime.
+
+**Two-phase child start:**
+1. All children are allocated (actor structures created)
+2. Sibling info array is built with all child names and IDs
+3. All children are started, each receiving the complete sibling array
+
+This allows children to discover sibling actor IDs at startup without using the name registry.
+
+### Supervisor Configuration
+
+```c
+typedef struct {
+    hive_restart_strategy strategy;  // How to handle child failures
+    uint32_t max_restarts;           // Max restarts in period (0 = unlimited)
+    uint32_t restart_period_ms;      // Time window for max_restarts
+    const hive_child_spec *children; // Array of child specifications
+    size_t num_children;             // Number of children
+    void (*on_shutdown)(void *ctx);  // Called when supervisor shuts down
+    void *shutdown_ctx;              // Context for shutdown callback
+} hive_supervisor_config;
+
+#define HIVE_SUPERVISOR_CONFIG_DEFAULT {           \
+    .strategy = HIVE_STRATEGY_ONE_FOR_ONE,         \
+    .max_restarts = 3,                             \
+    .restart_period_ms = 5000,                     \
+    .children = NULL, .num_children = 0,           \
+    .on_shutdown = NULL, .shutdown_ctx = NULL      \
+}
+```
+
+### Restart Intensity
+
+The supervisor tracks restart attempts within a sliding time window. If `max_restarts` is exceeded within `restart_period_ms` milliseconds, the supervisor gives up and shuts down (with normal exit).
+
+- `max_restarts = 0`: Unlimited restarts (never give up)
+- `max_restarts = 5, restart_period_ms = 10000`: Allow 5 restarts in 10 seconds
+
+**Algorithm:** The supervisor maintains a ring buffer of the last `HIVE_MAX_SUPERVISOR_CHILDREN` restart timestamps. On each restart attempt:
+1. Record current timestamp in ring buffer
+2. Count entries where `now - timestamp <= restart_period_ms`
+3. If `count >= max_restarts`, intensity exceeded → supervisor shuts down
+
+**Rationale**: Prevents infinite restart loops when a child has a persistent bug (e.g., crashes immediately on startup).
+
+### Functions
+
+**hive_supervisor_start(config, sup_actor_cfg, out_supervisor)**
+
+Creates a new supervisor actor that immediately spawns and monitors all specified children.
+
+| Parameter | Description |
+|-----------|-------------|
+| `config` | Supervisor configuration (children, strategy, intensity) |
+| `sup_actor_cfg` | Optional actor config for supervisor itself (NULL = defaults) |
+| `out_supervisor` | Receives supervisor's actor ID |
+
+Returns:
+- `HIVE_OK`: Supervisor started, all children spawned
+- `HIVE_ERR_INVALID`: NULL config, NULL out_supervisor, too many children, NULL children with non-zero count, NULL child function
+- `HIVE_ERR_NOMEM`: No supervisor slots available or spawn failed
+
+**hive_supervisor_stop(supervisor)**
+
+Sends asynchronous stop request to supervisor. The supervisor will:
+1. Stop all children (in reverse start order)
+2. Call `on_shutdown` callback if configured
+3. Exit normally
+
+Use `hive_monitor()` to be notified when shutdown completes.
+
+Returns:
+- `HIVE_OK`: Stop request sent
+- `HIVE_ERR_INVALID`: Invalid supervisor ID
+- `HIVE_ERR_NOMEM`: Failed to send shutdown message
+
+### Compile-Time Configuration
+
+```c
+// hive_static_config.h
+#define HIVE_MAX_SUPERVISOR_CHILDREN 16  // Max children per supervisor
+#define HIVE_MAX_SUPERVISORS 8           // Max concurrent supervisors
+```
+
+### Implementation Notes
+
+**Architecture**: The supervisor is a regular actor using `hive_monitor()` to watch children. When a monitored child dies, the supervisor receives an EXIT message and applies the restart strategy.
+
+**Memory**: Supervisor state allocated from static pool (no malloc). Child arguments copied to fixed-size storage within supervisor state.
+
+**Monitor pool usage**: Each child consumes one entry from `HIVE_MONITOR_ENTRY_POOL_SIZE`. Plan pool sizes accordingly.
+
+**Shutdown callback**: Called from supervisor actor context just before exit. All children already stopped when callback runs.
+
+**hive_kill()**: Supervisors use `hive_kill(target)` to terminate children during shutdown or when applying `one_for_all`/`rest_for_one` strategies.
+
+### Restart Semantics
+
+**A restarted child starts with a clean slate.** It MUST NOT assume:
+
+- Preserved mailbox state (mailbox is empty)
+- Preserved bus cursor position (must re-subscribe)
+- Preserved timer IDs (old timers cancelled, must create new ones)
+- Preserved actor_id (new ID assigned on restart)
+- Preserved monitor/link state (must re-establish)
+
+The only state preserved across restarts is the argument passed to the child function (copied by the supervisor at configuration time).
+
+**External Resources:** A restarted child MUST treat all external handles as invalid and reacquire them. This includes:
+
+- File descriptors
+- Sockets
+- HAL handles
+- Device state
+- Shared-memory pointers not owned by the runtime
+
+Failure to do so causes "works in simulation, dies on hardware" bugs because resource lifetime is not actor lifetime.
+
+**Name Registration:** A supervised child intended to be discoverable MUST:
+
+- Register its name during startup (call `hive_register()` early)
+- Tolerate name lookup from other actors at any time
+
+**Client Rule:** Actors communicating with supervised children MUST NOT cache `actor_id` across awaits, timeouts, or receive calls. They MUST re-resolve by name (`hive_whereis()`) on each interaction or after any failure signal (timeout, EXIT message).
+
+This prevents the classic bug: client caches ID → server restarts → client sends to dead ID → silent failure or mysterious behavior.
+
+### Restart Contract Checklist
+
+**On child restart, these are always reset:**
+
+- [ ] Mailbox empty
+- [ ] Bus subscriptions gone
+- [ ] Bus cursors reset (fresh subscribe required)
+- [ ] Timers cancelled
+- [ ] Links and monitors cleared
+- [ ] actor_id changes
+- [ ] Name registration removed (must re-register)
+- [ ] External handles invalid (must reacquire)
+
+**Supervisor guarantees:**
+
+- [ ] Restart order is deterministic: child spec order
+- [ ] Restart strategy applied exactly as defined (no hidden backoff)
+- [ ] Intensity limit is deterministic: when exceeded, supervisor shuts down, no further restarts
+- [ ] Supervisor never uses heap in hot paths; child-arg copies are bounded and static
+
+**Failure visibility:**
+
+- [ ] Every restart attempt is observable (log)
+- [ ] Every give-up is observable (log + shutdown callback)
+
+### Example
+
+```c
+#include "hive_supervisor.h"
+
+void worker(void *args, const hive_spawn_info *siblings, size_t sibling_count) {
+    int id = *(int *)args;
+    printf("Worker %d started\n", id);
+
+    // Can find siblings by name
+    const hive_spawn_info *peer = hive_find_sibling(siblings, sibling_count, "worker-1");
+    if (peer) {
+        printf("Found sibling worker-1 at actor %u\n", peer->id);
+    }
+
+    // Do work, may crash...
+
+    hive_exit();
+}
+
+void orchestrator(void *args, const hive_spawn_info *siblings, size_t sibling_count) {
+    (void)args;
+    (void)siblings;
+    (void)sibling_count;
+
+    // Define children
+    static int ids[3] = {0, 1, 2};
+    hive_child_spec children[3] = {
+        {.start = worker, .init = NULL, .init_args = &ids[0],
+         .init_args_size = sizeof(int), .name = "worker-0",
+         .auto_register = false, .restart = HIVE_CHILD_PERMANENT,
+         .actor_cfg = HIVE_ACTOR_CONFIG_DEFAULT},
+        {.start = worker, .init = NULL, .init_args = &ids[1],
+         .init_args_size = sizeof(int), .name = "worker-1",
+         .auto_register = true, .restart = HIVE_CHILD_PERMANENT,
+         .actor_cfg = HIVE_ACTOR_CONFIG_DEFAULT},
+        {.start = worker, .init = NULL, .init_args = &ids[2],
+         .init_args_size = sizeof(int), .name = "worker-2",
+         .auto_register = false, .restart = HIVE_CHILD_TRANSIENT,
+         .actor_cfg = HIVE_ACTOR_CONFIG_DEFAULT},
+    };
+
+    // Configure supervisor
+    hive_supervisor_config cfg = {
+        .strategy = HIVE_STRATEGY_ONE_FOR_ONE,
+        .max_restarts = 5,
+        .restart_period_ms = 10000,
+        .children = children,
+        .num_children = 3,
+    };
+
+    // Start supervisor
+    actor_id supervisor;
+    hive_supervisor_start(&cfg, NULL, &supervisor);
+
+    // Monitor supervisor to know when it exits
+    uint32_t mon_ref;
+    hive_monitor(supervisor, &mon_ref);
+
+    // Wait for supervisor exit (intensity exceeded or explicit stop)
+    hive_message msg;
+    hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_EXIT, HIVE_TAG_ANY, &msg, -1);
+
+    hive_exit();
+}
+```
+
+## Network API
+
+Non-blocking network I/O with blocking wrappers.
+
+```c
+// Socket management
+hive_status hive_net_listen(uint16_t port, int *fd_out);
+hive_status hive_net_accept(int listen_fd, int *conn_fd_out, int32_t timeout_ms);
+hive_status hive_net_connect(const char *ip, uint16_t port, int *fd_out, int32_t timeout_ms);
+hive_status hive_net_close(int fd);
+
+// Data transfer
+hive_status hive_net_recv(int fd, void *buf, size_t len, size_t *received, int32_t timeout_ms);
+hive_status hive_net_send(int fd, const void *buf, size_t len, size_t *sent, int32_t timeout_ms);
+```
+
+**DNS resolution is out of scope.** The `ip` parameter must be a numeric IPv4 address (e.g., "192.168.1.1"). Hostnames are not supported. Rationale:
+- DNS resolution (`getaddrinfo`, `gethostbyname`) is blocking and would stall the scheduler
+- On STM32 bare metal, DNS typically unavailable or requires complex async plumbing
+- Callers needing DNS should resolve externally before calling `hive_net_connect()`
+
+All functions with `timeout_ms` parameter support **timeout enforcement**:
+
+- `timeout_ms == 0`: Non-blocking, returns `HIVE_ERR_WOULDBLOCK` if would block
+- `timeout_ms < 0`: Block forever until I/O completes
+- `timeout_ms > 0`: Block up to timeout, returns `HIVE_ERR_TIMEOUT` if exceeded
+
+**Timeout implementation:** Uses timer-based enforcement (consistent with `hive_ipc_recv`). When timeout expires, a timer message wakes the actor and `HIVE_ERR_TIMEOUT` is returned. This is essential for handling unreachable hosts, slow connections, and implementing application-level keepalives.
+
+On blocking calls, the actor yields to the scheduler. The scheduler's event loop registers the I/O operation with the platform's event notification mechanism (epoll on Linux, interrupt flags on STM32) and dispatches the operation when the socket becomes ready.
+
+### Completion Semantics
+
+**`hive_net_recv()` - Partial completion:**
+- Returns successfully when **at least 1 byte** is read (or 0 for EOF/peer closed)
+- Does NOT loop until `len` bytes are received
+- `*received` contains actual bytes read (may be less than `len`)
+- Caller must loop if full message is required:
+```c
+size_t total = 0;
+while (total < expected_len) {
+    size_t n;
+    hive_status s = hive_net_recv(fd, buf + total, expected_len - total, &n, timeout);
+    if (HIVE_FAILED(s)) return s;
+    if (n == 0) return HIVE_ERROR(HIVE_ERR_IO, "Connection closed");
+    total += n;
+}
+```
+
+**`hive_net_send()` - Partial completion:**
+- Returns successfully when **at least 1 byte** is written
+- Does NOT loop until `len` bytes are sent
+- `*sent` contains actual bytes written (may be less than `len`)
+- Caller must loop if full buffer must be sent:
+```c
+size_t total = 0;
+while (total < len) {
+    size_t n;
+    hive_status s = hive_net_send(fd, buf + total, len - total, &n, timeout);
+    if (HIVE_FAILED(s)) return s;
+    total += n;
+}
+```
+
+**`hive_net_connect()` - Async connect completion:**
+- If `connect()` returns `EINPROGRESS`: registers for `EPOLLOUT`, actor yields
+- When socket becomes writable: checks `getsockopt(fd, SOL_SOCKET, SO_ERROR, ...)`
+- If `SO_ERROR == 0`: success, returns `HIVE_SUCCESS` with connected socket in `*fd_out`
+- If `SO_ERROR != 0`: returns `HIVE_ERR_IO` with error message, socket is closed
+- If timeout expires before writable: returns `HIVE_ERR_TIMEOUT`, socket is closed
+
+**`hive_net_accept()` - Connection ready:**
+- Waits for `EPOLLIN` on listen socket (incoming connection ready)
+- Calls `accept()` to obtain connected socket
+- Returns `HIVE_SUCCESS` with new socket in `*conn_fd_out`
+
+**Rationale for partial completion:**
+- Matches POSIX socket semantics (recv/send may return partial)
+- Avoids hidden loops that could block indefinitely
+- Caller controls retry policy and timeout behavior
+- Simpler implementation, more predictable behavior
+
+## File API
+
+File I/O operations.
+
+```c
+hive_status hive_file_open(const char *path, int flags, int mode, int *fd_out);
+hive_status hive_file_close(int fd);
+
+hive_status hive_file_read(int fd, void *buf, size_t len, size_t *bytes_read);
+hive_status hive_file_pread(int fd, void *buf, size_t len, size_t offset, size_t *bytes_read);
+
+hive_status hive_file_write(int fd, const void *buf, size_t len, size_t *bytes_written);
+hive_status hive_file_pwrite(int fd, const void *buf, size_t len, size_t offset, size_t *bytes_written);
+
+hive_status hive_file_sync(int fd);
+```
+
+### Platform-Independent Flags
+
+Use `HIVE_O_*` flags instead of POSIX `O_*` flags for cross-platform compatibility:
+
+```c
+#define HIVE_O_RDONLY   0x0001
+#define HIVE_O_WRONLY   0x0002
+#define HIVE_O_RDWR     0x0003
+#define HIVE_O_CREAT    0x0100
+#define HIVE_O_TRUNC    0x0200
+#define HIVE_O_APPEND   0x0400
+```
+
+On Linux, these map directly to POSIX equivalents. On STM32, they're interpreted by the flash file implementation.
+
+### Platform Differences
+
+**Linux:**
+- Standard filesystem paths (e.g., `/tmp/log.bin`)
+- Uses POSIX `open()`, `read()`, `write()`, `fsync()`
+- Synchronous blocking I/O
+- All flags and functions fully supported
+
+**STM32:**
+- Virtual file paths mapped to flash sectors (e.g., `/log`)
+- Board configuration via -D flags (each virtual file is optional):
+  ```makefile
+  # /log virtual file (required for flight logging)
+  CFLAGS += -DHIVE_VFILE_LOG_BASE=0x08020000
+  CFLAGS += -DHIVE_VFILE_LOG_SIZE=131072
+  CFLAGS += -DHIVE_VFILE_LOG_SECTOR=5
+  # /config virtual file (optional, for calibration data)
+  # CFLAGS += -DHIVE_VFILE_CONFIG_BASE=0x08040000
+  # CFLAGS += -DHIVE_VFILE_CONFIG_SIZE=16384
+  # CFLAGS += -DHIVE_VFILE_CONFIG_SECTOR=6
+  ```
+- Ring buffer for efficient writes (most are O(1), blocks to flush when full)
+- `HIVE_O_TRUNC` triggers flash sector erase (blocks 1-4 seconds)
+- `hive_file_sync()` drains ring buffer to flash (blocking)
+- No data loss - writes block when buffer is full to ensure delivery
+
+**STM32 Write Behavior:**
+
+The STM32 implementation uses a ring buffer for efficiency. Most writes complete
+immediately. When the buffer fills up, `write()` blocks to flush data to flash
+before continuing. This ensures the same no-data-loss semantics as Linux, while
+still providing fast writes in the common case.
+
+| Platform | Behavior | Data Loss |
+|----------|----------|-----------|
+| Linux | Blocking | Never (or error) |
+| STM32 | Fast (ring buffer), blocks when full | Never (or error) |
+
+**STM32 API Restrictions:**
+
+| Feature | Linux | STM32 |
+|---------|-------|-------|
+| Arbitrary paths | Yes | No - only virtual paths (board-defined, e.g., `/log`) |
+| `hive_file_read()` | Works | **Returns error** - use `pread()` |
+| `hive_file_pread()` | Works | Works (direct flash read) |
+| `hive_file_write()` | Blocking | Ring buffer (fast, blocks when full) |
+| `hive_file_pwrite()` | Works | **Returns error** |
+| Multiple writers | Yes | No - single writer at a time |
+
+**STM32 Flag Restrictions:**
+
+| Flag | Linux | STM32 |
+|------|-------|-------|
+| `HIVE_O_RDONLY` | Supported | Supported |
+| `HIVE_O_WRONLY` | Supported | **Requires `HIVE_O_TRUNC`** |
+| `HIVE_O_RDWR` | Supported | **Rejected** (read() doesn't work) |
+| `HIVE_O_CREAT` | Creates file | Ignored (virtual files always exist) |
+| `HIVE_O_TRUNC` | Truncates file | **Required for writes** (erases flash sector) |
+| `HIVE_O_APPEND` | Appends | Ignored (always appends via ring buffer) |
+
+**STM32 Ring Buffer Defaults** (`hive_static_config.h`):
+```c
+#define HIVE_FILE_RING_SIZE     (8 * 1024)  // 8 KB
+#define HIVE_FILE_BLOCK_SIZE    256         // Flash write block size
+```
+
+**STM32 Usage Example:**
+```c
+int log_fd;
+// Erase flash sector and open for writing
+hive_file_open("/log", HIVE_O_WRONLY | HIVE_O_TRUNC, 0, &log_fd);
+
+// Fast writes go to ring buffer (rarely blocks, only when buffer full)
+hive_file_write(log_fd, &sensor_data, sizeof(sensor_data), &written);
+
+// Periodically flush to flash (call from low-priority logger actor)
+hive_file_sync(log_fd);
+
+hive_file_close(log_fd);
+```
+
+## Logging API
+
+Structured logging with compile-time level filtering and dual output (console + file).
+
+### Log Levels
+
+```c
+#define HIVE_LOG_LEVEL_TRACE 0  // Verbose tracing
+#define HIVE_LOG_LEVEL_DEBUG 1  // Debug information
+#define HIVE_LOG_LEVEL_INFO  2  // General information (default)
+#define HIVE_LOG_LEVEL_WARN  3  // Warnings
+#define HIVE_LOG_LEVEL_ERROR 4  // Errors
+#define HIVE_LOG_LEVEL_NONE  5  // Disable all logging
+```
+
+### Logging Macros
+
+```c
+HIVE_LOG_TRACE(fmt, ...)  // Compile out if HIVE_LOG_LEVEL > TRACE
+HIVE_LOG_DEBUG(fmt, ...)  // Compile out if HIVE_LOG_LEVEL > DEBUG
+HIVE_LOG_INFO(fmt, ...)   // Compile out if HIVE_LOG_LEVEL > INFO
+HIVE_LOG_WARN(fmt, ...)   // Compile out if HIVE_LOG_LEVEL > WARN
+HIVE_LOG_ERROR(fmt, ...)  // Compile out if HIVE_LOG_LEVEL > ERROR
+```
+
+### File Logging API
+
+```c
+hive_status hive_log_init(void);              // Initialize (call once at startup)
+hive_status hive_log_file_open(const char *path);  // Open log file
+hive_status hive_log_file_sync(void);         // Flush to storage
+hive_status hive_log_file_close(void);        // Close log file
+void hive_log_cleanup(void);                  // Cleanup (call at shutdown)
+```
+
+### Binary Log Format
+
+Log files use a binary format with 12-byte headers for efficient storage and crash recovery:
+
+```
+Offset  Size  Field
+0       2     magic       0x4C47 ("LG" little-endian)
+2       2     seq         Monotonic sequence number
+4       4     timestamp   Microseconds since boot
+8       2     len         Payload length
+10      1     level       Log level (0-4)
+11      1     reserved    Always 0
+12      len   payload     Log message text (no null terminator)
+```
+
+### Compile-Time Configuration (`hive_static_config.h`)
+
+```c
+// Maximum log entry size (excluding header)
+#define HIVE_LOG_MAX_ENTRY_SIZE 128
+
+// Enable console output (default: 1 on Linux, 0 on STM32)
+#define HIVE_LOG_TO_STDOUT 1
+
+// Enable file logging (default: 1 on both platforms)
+#define HIVE_LOG_TO_FILE 1
+
+// Log file path (default: "/var/tmp/hive.log" on Linux, "/log" on STM32)
+#define HIVE_LOG_FILE_PATH "/var/tmp/hive.log"
+
+// Log level (default: INFO)
+#define HIVE_LOG_LEVEL HIVE_LOG_LEVEL_INFO
+```
+
+### Platform Differences
+
+| Feature | Linux | STM32 |
+|---------|-------|-------|
+| Console output | Enabled by default | Disabled by default |
+| File logging | Regular file | Flash-backed virtual file |
+| Default log path | `/var/tmp/hive.log` | `/log` |
+| Default log level | INFO | NONE (disabled) |
+
+### Usage Pattern
+
+```c
+// Main actor manages log lifecycle
+void main_actor(void *arg) {
+    // ARM phase: open log file (on STM32, erases flash sector)
+    hive_log_file_open(HIVE_LOG_FILE_PATH);
+
+    // Start periodic sync timer (every 4 seconds)
+    timer_id sync_timer;
+    hive_timer_every(4000000, &sync_timer);
+
+    while (flying) {
+        hive_message msg;
+        hive_ipc_recv(&msg, -1);
+        if (msg.class == HIVE_MSG_TIMER && msg.tag == sync_timer) {
+            hive_log_file_sync();  // Flush logs to storage
+        }
+    }
+
+    // DISARM phase: close log file
+    hive_timer_cancel(sync_timer);
+    hive_log_file_close();
+}
+```
+
+## Memory Allocation Architecture
+
+The runtime uses **compile-time configuration** for bounded, predictable memory allocation.
+
+### Compile-Time Configuration (`hive_static_config.h`)
+
+All resource limits are defined at compile-time and require recompilation to change:
+
+```c
+// Feature toggles (set to 0 to disable)
+#define HIVE_ENABLE_NET 1                     // Network I/O subsystem
+#define HIVE_ENABLE_FILE 1                    // File I/O subsystem
+
+// Resource limits
+#define HIVE_MAX_ACTORS 64                    // Maximum concurrent actors
+#define HIVE_STACK_ARENA_SIZE (1*1024*1024)   // Stack arena size (1 MB)
+#define HIVE_MAX_BUSES 32                     // Maximum concurrent buses
+#define HIVE_MAILBOX_ENTRY_POOL_SIZE 256      // Mailbox entry pool
+#define HIVE_MESSAGE_DATA_POOL_SIZE 256       // Message data pool
+#define HIVE_MAX_MESSAGE_SIZE 256             // Maximum message size
+#define HIVE_LINK_ENTRY_POOL_SIZE 128         // Link entry pool
+#define HIVE_MONITOR_ENTRY_POOL_SIZE 128      // Monitor entry pool
+#define HIVE_TIMER_ENTRY_POOL_SIZE 64         // Timer entry pool
+#define HIVE_DEFAULT_STACK_SIZE 65536         // Default actor stack size
+
+// Supervisor limits
+#define HIVE_MAX_SUPERVISOR_CHILDREN 16       // Max children per supervisor
+#define HIVE_MAX_SUPERVISORS 8                // Max concurrent supervisors
+```
+
+Feature toggles can also be set via Makefile: `make ENABLE_NET=0 ENABLE_FILE=0`.
+
+All runtime structures are **statically allocated** based on these limits. Actor stacks use a static arena allocator by default (configurable via `actor_config.malloc_stack` for malloc). This ensures:
+- Bounded memory footprint (calculable at link time)
+- Zero heap allocation in runtime operations (see Heap Usage Policy)
+- O(1) pool allocation for hot paths (scheduling, IPC); O(n) bounded arena allocation for cold paths (spawn/exit)
+- Suitable for embedded/MCU deployment
+
+### Runtime API
+
+```c
+// Initialize runtime (call once from main)
+hive_status hive_init(void);
+
+// Run scheduler (blocks until all actors exit or hive_shutdown called)
+void hive_run(void);
+
+// Request graceful shutdown
+void hive_shutdown(void);
+
+// Cleanup runtime resources (call after hive_run completes)
+void hive_cleanup(void);
+```
+
+## Actor Death Handling
+
+When an actor dies (via `hive_exit()`, crash, or external kill):
+
+**Note:** Stack overflow results in undefined behavior since there is no runtime detection. The cleanup below assumes normal actor death. If stack overflow corrupts runtime metadata, the system may crash before cleanup completes.
+
+**Normal death cleanup:**
+
+1. **Mailbox cleared:** All pending messages are discarded.
+
+2. **Links notified:** All linked actors receive an exit message (class=`HIVE_MSG_EXIT`, sender=dying actor).
+
+3. **Monitors notified:** All monitoring actors receive an exit message (class=`HIVE_MSG_EXIT`).
+
+4. **Bus subscriptions removed:** Actor is unsubscribed from all buses.
+
+5. **Timers cancelled:** All timers owned by the actor are cancelled.
+
+6. **Resources freed:** Stack and actor table entry are released.
+
+### Exit Notification Ordering
+
+**When exit notifications are sent:**
+
+Exit notifications (steps 2-3 above) are enqueued in recipient mailboxes **during death processing**, following standard FIFO mailbox semantics.
+
+**Ordering guarantees:**
+
+1. **Tail-append semantics:**
+   - Exit notifications are enqueued at the **tail** of recipient mailboxes at the moment death processing occurs
+   - Any messages already in that mailbox before that point remain ahead of the exit notification
+   - Example: If B's mailbox contains [M1, M2] when A's death is processed, B receives: M1 -> M2 -> EXIT(A)
+
+2. **No global ordering guarantee:**
+   - The runtime does NOT guarantee ordering relative to concurrent events (timers, network I/O)
+   - If death processing and other enqueues occur in the same scheduling phase, ordering depends on processing order
+   - Example: If A dies and a timer fires for B in the same phase, the order of EXIT(A) vs timer tick in B's mailbox depends on event dispatch order
+
+3. **Messages in dying actor's mailbox:**
+   - Dying actor's mailbox is **cleared** (step 1)
+   - All pending messages are **discarded**
+   - Senders are **not** notified of message loss
+
+4. **Multiple recipients:**
+   - Each recipient's exit notification is enqueued independently
+   - No ordering guarantee across different recipients
+   - Example: A linked to B and C, dies. B and C both receive EXIT(A), but no guarantee which processes it first.
+
+**Consequences:**
+
+```c
+// Dying actor sends messages before death
+void actor_A(void *arg) {
+    hive_ipc_notify(B, 0, &msg1, sizeof(msg1));  // Enqueued in B's mailbox
+    hive_ipc_notify(C, 0, &msg2, sizeof(msg2));  // Enqueued in C's mailbox
+    hive_exit();  // Exit notifications sent to links/monitors
+}
+// Linked actor B will receive: msg1, then EXIT(A) (class=HIVE_MSG_EXIT)
+// Actor C will receive: msg2 (no exit notification, not linked)
+
+// Messages sent TO dying actor are lost
+void actor_B(void *arg) {
+    hive_ipc_notify(A, 0, &msg, sizeof(msg));  // Enqueued in A's mailbox
+}
+void actor_A(void *arg) {
+    // ... does some work ...
+    hive_exit();  // Mailbox cleared, msg from B is discarded
+}
+```
+
+**Design rationale:**
+- FIFO enqueuing = predictable, testable behavior
+- Messages before death delivered before exit = "happens-before" relationship
+- Mailbox clearing = simple cleanup, no orphaned messages
+- No sender notification = simpler implementation, sender must handle recipient death via links/monitors
+
+**Design choice:** Exit notifications follow standard FIFO mailbox ordering, enqueued at tail when death is processed. This provides simpler, more predictable semantics.
+
+## Scheduler Main Loop
+
+Pseudocode for the scheduler:
+
+```
+procedure hive_run():
+    epoll_fd = epoll_create1(0)
+
+    while not shutdown_requested and actors_alive > 0:
+        # 1. Pick highest-priority runnable actor
+        actor = pick_next_runnable()
+
+        if actor exists:
+            # 2. Context switch to actor
+            current_actor = actor
+            context_switch(scheduler_ctx, actor.ctx)
+            # Returns here when actor yields/blocks
+
+        else:
+            # 3. No runnable actors, wait for I/O events
+            events = epoll_wait(epoll_fd, timeout=10ms)  # Bounded timeout for defensive wakeup
+
+            # 4. Dispatch I/O events
+            for event in events:
+                source = event.data.ptr
+                if source.type == TIMER:
+                    read(timerfd, &expirations, 8)  # Clear level-triggered, get count
+                    send_timer_tick(source.owner)   # One tick regardless of count
+                    wake_actor(source.owner)
+                elif source.type == NETWORK:
+                    perform_io_operation(source)  # recv/send partial, connect checks SO_ERROR
+                    wake_actor(source.owner)
+```
+
+### Simulation Time Integration
+
+For integration with external event loops (e.g., Webots simulator), use `hive_advance_time()` and `hive_run_until_blocked()`:
+
+```
+procedure hive_advance_time(delta_us):
+    # Enable simulation time mode on first call
+    if not sim_mode:
+        sim_mode = true
+
+    # Advance simulation time
+    sim_time_us += delta_us
+
+    # Fire all timers that are now due
+    for timer in active_timers:
+        while timer.expiry_us <= sim_time_us:
+            send_timer_message(timer.owner, timer.id)
+            if timer.periodic:
+                timer.expiry_us += timer.interval_us
+            else:
+                remove_timer(timer)
+                break
+
+procedure hive_run_until_blocked():
+    # Run actors until all are blocked (WAITING) or dead
+    while not shutdown_requested and num_actors > 0:
+        # Poll for I/O events (non-blocking)
+        events = epoll_wait(epoll_fd, timeout=0)
+        dispatch_io_events(events)
+
+        # Find next ready actor (priority-based round-robin)
+        actor = find_next_runnable()
+        if actor is None:
+            break  # All actors blocked or dead
+
+        context_switch(scheduler_ctx, actor.ctx)
+
+    return HIVE_OK
+```
+
+**Use case:** Simulation integration where an external loop controls time:
+```c
+// All actors use timers (same code as production)
+void sensor_actor(void *arg) {
+    timer_id timer;
+    hive_timer_every(TIME_STEP_MS * 1000, &timer);  // Timer-driven
+    while (1) {
+        hive_message msg;
+        hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
+        read_sensors();
+        publish_to_bus();
+    }
+}
+
+// Main loop advances simulation time
+while (wb_robot_step(TIME_STEP_MS) != -1) {
+    hive_advance_time(TIME_STEP_MS * 1000);  // Fire due timers
+    hive_run_until_blocked();                 // Run until all blocked
+}
+```
+
+**Benefits of simulation time mode:**
+- Same actor code runs in simulation and production
+- Deterministic, reproducible behavior
+- Timer granularity matches simulation time step
+- No wall-clock dependencies in actors
+
+## Event Loop Architecture
+
+When all actors are blocked on I/O, the scheduler waits efficiently for I/O events using platform-specific event notification mechanisms.
+
+### Implementation
+
+**Linux (epoll):**
+```c
+// Scheduler event loop
+int epoll_fd = epoll_create1(0);
+
+// Timer creation - add timerfd to epoll
+int tfd = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK);
+timerfd_settime(tfd, 0, &its, NULL);
+struct epoll_event ev = {.events = EPOLLIN, .data.ptr = timer_source};
+epoll_ctl(epoll_fd, EPOLL_CTL_ADD, tfd, &ev);
+
+// Network I/O - add socket to epoll when would block
+int sock = socket(AF_INET, SOCK_STREAM, 0);
+fcntl(sock, F_SETFL, O_NONBLOCK);
+struct epoll_event ev = {.events = EPOLLIN, .data.ptr = net_source};
+epoll_ctl(epoll_fd, EPOLL_CTL_ADD, sock, &ev);
+
+// Scheduler waits when no actors are ready
+if (no_runnable_actors) {
+    struct epoll_event events[64];
+    // Bounded timeout provides defensive wakeup (guards against lost events)
+    int n = epoll_wait(epoll_fd, events, 64, 10);  // 10ms timeout
+    if (n < 0 && errno == EINTR) continue;  // Signal interrupted, retry
+    for (int i = 0; i < n; i++) {
+        io_source *source = events[i].data.ptr;
+        if (source->type == TIMER) {
+            uint64_t expirations;
+            read(source->fd, &expirations, sizeof(expirations));  // Clear timerfd
+            // expirations may be > 1 for periodic timers (coalesced)
+            // We send ONE tick message regardless of count
+        }
+        dispatch_io_event(source);  // Handle timer tick or network I/O
+    }
+}
+```
+
+**STM32 (bare metal with WFI):**
+```c
+// Interrupt handlers set flags
+volatile uint32_t pending_events = 0;
+#define EVENT_TIMER   (1 << 0)
+#define EVENT_NETWORK (1 << 1)
+
+void SysTick_Handler(void) {
+    pending_events |= EVENT_TIMER;
+}
+
+void ETH_IRQHandler(void) {
+    pending_events |= EVENT_NETWORK;
+}
+
+// Scheduler waits when no actors are ready
+if (no_runnable_actors) {
+    __disable_irq();
+    if (pending_events == 0) {
+        __WFI();  // Wait For Interrupt - CPU sleeps until interrupt
+    }
+    __enable_irq();
+
+    // Process pending events
+    if (pending_events & EVENT_TIMER) {
+        pending_events &= ~EVENT_TIMER;
+        handle_timer_event();
+    }
+    if (pending_events & EVENT_NETWORK) {
+        pending_events &= ~EVENT_NETWORK;
+        handle_network_event();
+    }
+}
+```
+
+### Semantics
+
+- **Single-threaded event loop**: All I/O is multiplexed in the scheduler thread
+- **Non-blocking I/O registration**: Timers create timerfds, network operations register sockets with epoll
+- **Event dispatching**: epoll_wait returns when any I/O source becomes ready
+- **Immediate handling**: Timer ticks and network I/O are processed immediately when ready
+
+### Event Loop Guarantees
+
+**Event processing order:**
+- epoll returns events in **kernel order** (arrival-dependent, not guaranteed FIFO)
+- All returned events are processed before next epoll_wait
+- No I/O events are lost
+
+**epoll_wait return handling:**
+- Returns > 0: Events ready, process them
+- Returns 0: Timeout expired (10ms), no events - scheduler retries (defensive wakeup)
+- Returns -1 with `errno=EINTR`: Signal interrupted syscall - scheduler retries
+- Note: Runtime APIs are not reentrant - signal handlers must not call runtime APIs
+
+**Lost event prevention:**
+- Timerfds are level-triggered (epoll reports ready until `read()` clears the event)
+- Scheduler **must** read timerfd to clear level-triggered state (otherwise epoll spins)
+- Sockets are level-triggered by default (readable until data consumed)
+- epoll guarantees: if I/O is ready, epoll_wait will return it
+
+**File I/O stalling:**
+- File operations (read, write, fsync) are **synchronous** and stall the entire scheduler
+- See "Scheduler-Stalling Calls" section for detailed semantics and consequences
+- On embedded systems: FATFS/littlefs operations are fast (< 1ms typical)
+- On Linux dev: Acceptable for development workloads
+
+### Advantages
+
+- **Standard pattern**: Used by Node.js, Tokio, libuv, asyncio
+- **Single-threaded**: No synchronization, no race conditions
+- **Efficient**: Kernel/hardware wakes scheduler only when I/O is ready
+- **Portable**: epoll (Linux), kqueue (BSD/macOS), WFI + interrupts (bare metal)
+- **Low overhead**: No context switches between threads, no queue copies
+
+## Platform Abstraction
+
+The runtime abstracts platform-specific functionality:
+
+| Component | Linux (dev) | STM32 bare metal (prod) |
+|-----------|-------------|-------------------------|
+| Context switch | x86-64 asm | ARM Cortex-M asm |
+| Event notification | epoll | WFI + interrupt flags |
+| Timer | timerfd + epoll | Software timer wheel (SysTick/TIM) |
+| Network | Non-blocking BSD sockets + epoll | lwIP NO_SYS mode (not yet implemented) |
+| File | Synchronous POSIX | Synchronous FATFS or littlefs |
+
+### Platform-Specific Source Files
+
+Platform-specific implementations use naming convention `*_linux.c` / `*_stm32.c`:
+
+| Component | Linux | STM32 |
+|-----------|-------|-------|
+| Scheduler | `hive_scheduler_linux.c` | `hive_scheduler_stm32.c` |
+| Timer | `hive_timer_linux.c` | `hive_timer_stm32.c` |
+| Context switch | `hive_context_x86_64.S` | `hive_context_arm_cm.S` |
+
+Shared code in `hive_context.c` handles platform-specific context initialization.
+
+### Building for Different Platforms
+
+```bash
+# Linux (default)
+make                           # Build for x86-64 Linux
+make PLATFORM=linux            # Explicit
+
+# STM32 (requires ARM cross-compiler)
+make PLATFORM=stm32 CC=arm-none-eabi-gcc
+
+# Feature toggles (disable network and file I/O)
+make ENABLE_NET=0 ENABLE_FILE=0
+
+# STM32 defaults to ENABLE_NET=0 ENABLE_FILE=0
+```
+
+Platform selection sets `HIVE_PLATFORM_LINUX` or `HIVE_PLATFORM_STM32` preprocessor defines.
+
+## Stack Overflow
+
+### No Runtime Detection
+
+The runtime does **not** perform stack overflow detection. Stack overflow results in **undefined behavior**.
+
+**Rationale:** Pattern-based guard detection (checking magic values on context switch) was removed because:
+1. Detection occurred too late - after memory corruption had already happened
+2. Severe overflows corrupt memory beyond the guard, causing crashes before detection
+3. The mechanism gave a false sense of security while not providing reliable protection
+4. Proper stack sizing is the only reliable solution
+
+### Behavior on Overflow
+
+**Undefined behavior.** Possible outcomes:
+- **Segfault** (most likely on Linux)
+- **Corruption of adjacent actor stacks** (arena allocator places stacks contiguously)
+- **Corruption of runtime state** (if overflow is severe)
+- **Silent data corruption** (worst case - no immediate crash)
+
+**Links/monitors are NOT notified.** The `HIVE_EXIT_CRASH_STACK` exit reason exists but is not currently triggered.
+
+### Required Mitigation
+
+Stack overflow prevention is the **application's responsibility**:
+
+1. **Size stacks conservatively** - Use 2-3x safety margin over measured worst-case
+2. **Profile stack usage** - Measure actual usage under worst-case conditions
+3. **Use static analysis** - Tools like `gcc -fstack-usage` report per-function stack use
+4. **Test thoroughly** - Include stress tests with deep call stacks
+5. **Use AddressSanitizer** - `-fsanitize=address` catches stack issues during development
+
+### System-Level Protection
+
+For production systems:
+- **Watchdog timer:** Detect hung system, trigger reboot/failsafe
+- **Actor monitoring:** Use links/monitors to detect failures, restart actors as needed
+- **Memory isolation:** Hardware MPU (ARM Cortex-M) can provide hardware-guaranteed protection
+
+### Future Considerations
+
+Hardware-based protection may be added in future versions:
+- **Linux:** `mprotect()` guard pages (immediate SIGSEGV on overflow)
+- **ARM Cortex-M:** MPU guard regions (immediate HardFault on overflow)
+
+These would provide immediate, hardware-guaranteed detection with zero runtime overhead.
+
+## Future Considerations
+
+Not in scope for first version, but noted for future:

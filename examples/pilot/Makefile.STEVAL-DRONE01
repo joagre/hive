@@ -124,7 +124,7 @@ include hive_config.mk
 CFLAGS += $(HIVE_CFLAGS)
 # Stack: 2KB per actor, Arena: 24KB (10 actors × 2KB + block headers)
 # STEVAL has only 64KB SRAM - very tight
-# Note: No HAL_HAS_RADIO on STEVAL, so telemetry actor not included
+# Note: No HAL_HAS_RADIO on STEVAL, so comms actor not included
 CFLAGS += -DHIVE_DEFAULT_STACK_SIZE=2048
 CFLAGS += '-DHIVE_STACK_ARENA_SIZE=(24*1024)'
 

@@ -60,7 +60,7 @@ endif
 include hive_config.mk
 CFLAGS += $(HIVE_CFLAGS)
 # Stack: 4KB per actor, Arena: 48KB (10 actors × 4KB + block headers)
-# Note: No HAL_HAS_RADIO on Webots, so telemetry actor not included
+# Note: No HAL_HAS_RADIO on Webots, so comms actor not included
 CFLAGS += -DHIVE_DEFAULT_STACK_SIZE=4096
 CFLAGS += '-DHIVE_STACK_ARENA_SIZE=(48*1024)'
 

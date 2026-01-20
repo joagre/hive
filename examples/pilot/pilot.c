@@ -3,7 +3,7 @@
 //
 // Demonstrates waypoint navigation for a quadcopter using the hive actor
 // runtime. Nine flight actors work together in a pipeline, supervised by one
-// supervisor actor. On platforms with radio (HAL_HAS_RADIO), a telemetry
+// supervisor actor. On platforms with radio (HAL_HAS_RADIO), a comms
 // actor is also included (10-11 actors total):
 //
 //   sensor_actor    - Reads raw sensors via HAL -> sensor bus
@@ -45,7 +45,7 @@
 // Supervision:
 //   All actors are supervised with ONE_FOR_ALL strategy.
 //   If any flight-critical actor crashes, all are restarted together.
-//   Telemetry uses TEMPORARY restart (not flight-critical, won't trigger restarts).
+//   Comms uses TEMPORARY restart (not flight-critical, won't trigger restarts).
 //
 // Hardware abstraction:
 //   All hardware access goes through the HAL (hal/hal.h).
@@ -154,11 +154,11 @@ int main(void) {
     }
 
     // clang-format off
-    // Define child specs for supervisor (9 flight actors + optional telemetry)
+    // Define child specs for supervisor (9 flight actors + optional comms)
     // Each actor's init function receives pilot_buses and extracts what it needs.
     // Control loop order: sensor -> estimator -> waypoint -> altitude ->
     //                     position -> attitude -> rate -> motor -> flight_manager
-    // Telemetry runs at LOW priority and uses TEMPORARY restart.
+    // Comms runs at LOW priority and uses TEMPORARY restart.
     // clang-format on
     hive_child_spec children[] = {
         {.start = sensor_actor,
@@ -240,17 +240,17 @@ int main(void) {
          .init = comms_actor_init,
          .init_args = &buses,
          .init_args_size = sizeof(buses),
-         .name = "telemetry",
+         .name = "comms",
          .auto_register = false,
          .restart = HIVE_CHILD_TEMPORARY, // Not flight-critical, don't restart
-         .actor_cfg = {.priority = HIVE_PRIORITY_LOW, .name = "telemetry"}},
+         .actor_cfg = {.priority = HIVE_PRIORITY_LOW, .name = "comms"}},
 #endif
     };
 
     // Configure supervisor with ONE_FOR_ALL strategy:
     // If any actor crashes, all are killed and restarted together.
     // This ensures consistent pipeline state after recovery.
-    // Note: telemetry is TEMPORARY so its exit won't trigger restarts.
+    // Note: comms is TEMPORARY so its exit won't trigger restarts.
     hive_supervisor_config sup_cfg = {
         .strategy = HIVE_STRATEGY_ONE_FOR_ALL,
         .max_restarts = 3,
@@ -269,7 +269,7 @@ int main(void) {
     }
     (void)supervisor;
 
-    // Log actor count (9 flight actors + optional telemetry + 1 supervisor)
+    // Log actor count (9 flight actors + optional comms + 1 supervisor)
 #ifdef HAL_HAS_RADIO
     HIVE_LOG_INFO("11 actors spawned (10 children + 1 supervisor)");
 #else
