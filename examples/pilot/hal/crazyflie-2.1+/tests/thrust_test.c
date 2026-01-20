@@ -39,7 +39,6 @@
 // Start at 0.15 (15%), increase in steps of 0.05 until drone lifts.
 // Values: 0.0 = off, 0.5 = 50%, 1.0 = full power
 // DANGER: High values will cause drone to take off!
-// Crazyflie motors are more powerful than STEVAL, start lower!
 #define TEST_THRUST 0.20f
 
 // Test duration in seconds

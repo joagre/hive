@@ -569,7 +569,7 @@ flash before continuing. Virtual file paths are hardcoded (`/log`, `/config`), e
 -DHIVE_FILE_RING_SIZE=4096         // RAM ring buffer size
 // Optional: -DHIVE_VFILE_CONFIG_BASE/SIZE/SECTOR enables "/config"
 ```
-See `examples/pilot/Makefile.STEVAL-DRONE01` for a complete example and SPEC.md for full platform differences.
+See `examples/pilot/Makefile.crazyflie-2.1+` for a complete example and SPEC.md for full platform differences.
 
 ### Logging
 

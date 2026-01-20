@@ -2,7 +2,7 @@
 
 ## Overview
 
-Flight data logging for post-mortem analysis on STEVAL-DRONE01 (STM32F401).
+Flight data logging for post-mortem analysis on STM32 platforms (e.g., Crazyflie 2.1+).
 Designed to be non-intrusive to flight-critical control loops.
 
 ### Goals

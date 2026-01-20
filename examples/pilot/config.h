@@ -18,11 +18,7 @@
 
 // Auto-select default profile based on platform if not specified
 #ifndef FLIGHT_PROFILE
-#ifdef PLATFORM_STEVAL_DRONE01
-#define FLIGHT_PROFILE FLIGHT_PROFILE_FIRST_TEST
-#else
 #define FLIGHT_PROFILE FLIGHT_PROFILE_FULL_3D
-#endif
 #endif
 
 // ----------------------------------------------------------------------------
@@ -85,7 +81,7 @@
 #define WAYPOINT_TOLERANCE_VEL 0.05f // m/s - must be nearly stopped
 
 // ----------------------------------------------------------------------------
-// Position control (mission parameters - no GPS on STEVAL anyway)
+// Position control
 // ----------------------------------------------------------------------------
 
 #define POS_KP 0.2f // Position gain: rad per meter error

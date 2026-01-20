@@ -139,7 +139,7 @@ On STM32, file I/O uses flash-backed virtual files with a ring buffer for effici
 .IP \(bu 2
 Virtual file paths map to flash sectors (board-defined via -D flags, e.g.,
 .B /log
-maps to Sector 5 on STEVAL-DRONE01)
+maps to Sector 5 on Crazyflie 2.1+)
 .IP \(bu 2
 .BR hive_file_write ()
 pushes to a RAM ring buffer (fast path). If the buffer is full, write blocks to flush

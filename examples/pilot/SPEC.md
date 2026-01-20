@@ -1,7 +1,7 @@
 # Pilot Example Specification
 
 A quadcopter autopilot example using the actor runtime. Supports Webots simulation
-(default) and STM32 hardware (Crazyflie 2.1+, STEVAL-DRONE01).
+(default) and STM32 hardware (Crazyflie 2.1+).
 
 ## Status
 
@@ -503,7 +503,6 @@ See `hal/<platform>/README.md` for platform-specific LED patterns.
 |----------|-------|---------|
 | Webots simulation | `make` | Uses `-DSIMULATED_TIME` |
 | Crazyflie 2.1+ | `make -f Makefile.crazyflie-2.1+` | See `hal/crazyflie-2.1+/README.md` |
-| STEVAL-DRONE01 | `make -f Makefile.STEVAL-DRONE01` | See `hal/STEVAL-DRONE01/README.md` |
 
 All hardware differences are encapsulated in the HAL. Actor code is identical
 across platforms. The only compile-time difference is `SIMULATED_TIME` which
@@ -558,7 +557,6 @@ examples/pilot/
         complementary_filter.c/h  # Portable attitude estimation
     Makefile                 # Webots simulation build
     Makefile.crazyflie-2.1+  # Crazyflie 2.1+ build
-    Makefile.STEVAL-DRONE01  # STEVAL-DRONE01 build
     hive_config.mk           # Shared Hive memory config
     SPEC.md              # This specification
     README.md            # Usage instructions
@@ -570,7 +568,6 @@ examples/pilot/
         hal.h                # Common HAL interface
         webots-crazyflie/    # Webots simulation HAL
         crazyflie-2.1+/      # Crazyflie 2.1+ HAL (STM32F405)
-        STEVAL-DRONE01/      # STEVAL-DRONE01 HAL (STM32F401)
 ```
 
 ---
@@ -909,7 +906,6 @@ pip install cflib
 | Platform | Flash | RAM | MCU |
 |----------|-------|-----|-----|
 | Crazyflie 2.1+ | ~57 KB | ~144 KB | STM32F405 (1 MB / 192 KB) |
-| STEVAL-DRONE01 | ~58 KB | ~64 KB | STM32F401 (256 KB / 64 KB) |
 
 ### Configuration Split
 

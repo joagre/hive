@@ -2,10 +2,9 @@
 
 Quadcopter waypoint navigation using hive actor runtime.
 
-Supports three platforms:
+Supports two platforms:
 - **Webots simulation** (default) - Crazyflie quadcopter in Webots simulator
 - **Crazyflie 2.1+** - Bitcraze nano quadcopter (~57 KB flash, ~144 KB RAM)
-- **STEVAL-DRONE01** - ST mini drone kit (~58 KB flash, ~64 KB RAM)
 
 ## What it does
 
@@ -32,9 +31,6 @@ by the supervisor at spawn time.
 Without Flow deck, hovers and changes altitude only. 60-second startup delay before flight.
 Radio telemetry enabled via Crazyradio 2.0 for real-time ground station logging.
 
-**STEVAL-DRONE01:** Hovers and changes altitude only (no GPS, so XY position fixed at origin).
-60-second startup delay before flight.
-
 **Safety features (all platforms):** Emergency cutoff on excessive tilt (>45°), excessive
 altitude (>2m), or touchdown. Flight duration limited by flight manager (10s/40s/60s per profile).
 
@@ -43,10 +39,10 @@ altitude (>2m), or touchdown. Flight duration limited by flight manager (10s/40s
 **For Webots simulation:**
 - Webots installed (https://cyberbotics.com/)
 
-**For Crazyflie 2.1+ / STEVAL-DRONE01:**
+**For Crazyflie 2.1+:**
 - ARM GCC: `apt install gcc-arm-none-eabi`
 - ST-Link: `apt install stlink-tools`
-- Debug adapter (Bitcraze debug adapter for Crazyflie, or ST-Link for STEVAL)
+- Debug adapter (Bitcraze debug adapter)
 
 ## Build and Run
 
@@ -60,7 +56,7 @@ make install
 
 Then open `worlds/hover_test.wbt` in Webots and start the simulation.
 
-### STM32 Hardware (Crazyflie 2.1+, STEVAL-DRONE01)
+### STM32 Hardware (Crazyflie 2.1+)
 
 ```bash
 make -f Makefile.<platform>        # Build firmware
@@ -101,7 +97,6 @@ See `hal/<platform>/README.md` for hardware details, pin mapping, and flight pro
 |------|-------------|
 | `Makefile` | Webots simulation build |
 | `Makefile.crazyflie-2.1+` | Crazyflie 2.1+ build (STM32F405, 168 MHz) |
-| `Makefile.STEVAL-DRONE01` | STEVAL-DRONE01 build (STM32F401, 84 MHz) |
 | `hive_config.mk` | Shared Hive memory config (included by all Makefiles) |
 
 ### Configuration

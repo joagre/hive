@@ -622,9 +622,6 @@ examples/pilot/
 │   │   ├── hal_crazyflie.c        # HAL implementation
 │   │   ├── platform_crazyflie.h   # Platform-specific functions
 │   │   └── Makefile
-│   ├── STEVAL-DRONE01/
-│   │   ├── hal_stm32.c
-│   │   └── ...
 │   └── webots-crazyflie/
 │       ├── hal_webots.c
 │       └── ...
@@ -685,7 +682,7 @@ control logic (see "Minimal Implementation for Hive" section above).
 Platforms without radio provide empty stubs or compile-time exclusion:
 
 ```c
-// hal/STEVAL-DRONE01/hal_stm32.c (no radio)
+// hal/webots-crazyflie/hal_webots.c (simulation, no radio)
 
 #ifdef HAL_HAS_RADIO
 // Not defined for this platform - radio functions excluded

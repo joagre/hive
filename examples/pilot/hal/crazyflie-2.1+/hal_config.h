@@ -11,7 +11,6 @@
 // ----------------------------------------------------------------------------
 
 // Base thrust for hover - needs calibration on actual hardware
-// Crazyflie is lighter than STEVAL-DRONE01, likely needs less thrust
 #define HAL_BASE_THRUST 0.35f
 
 // ----------------------------------------------------------------------------
@@ -19,7 +18,6 @@
 // ----------------------------------------------------------------------------
 
 // Altitude PID gains (position error -> thrust correction)
-// Initial values based on STEVAL, will need tuning
 #define HAL_ALT_PID_KP 0.25f
 #define HAL_ALT_PID_KI 0.05f
 #define HAL_ALT_PID_KD 0.0f

@@ -75,7 +75,7 @@ M4 = thrust + roll + pitch - yaw  (rear-right, CW)
 |---------|----------|-------------|
 | PID gains, thrust | `hal_config.h` | Platform-specific tuning |
 | Actors, buses, pools | `hive_config.mk` | Shared (pilot-determined) |
-| Stack sizes | `Makefile` | Platform-specific (matches STEVAL for realistic testing) |
+| Stack sizes | `Makefile` | Platform-specific (matches Crazyflie for realistic testing) |
 
 ## Differences from Hardware
 

@@ -52,7 +52,6 @@
 //   Supported platforms:
 //     - hal/webots-crazyflie/ - Webots simulation
 //     - hal/crazyflie-2.1+/   - Crazyflie 2.1+ hardware
-//     - hal/STEVAL-DRONE01/   - STEVAL-DRONE01 hardware
 // clang-format on
 
 #include "hal/hal.h"
