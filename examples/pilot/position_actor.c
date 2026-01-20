@@ -64,7 +64,13 @@ void position_actor(void *args, const hive_spawn_info *siblings,
         size_t len;
 
         // Block until state available
-        hive_bus_read_wait(state->state_bus, &est, sizeof(est), &len, -1);
+        status =
+            hive_bus_read_wait(state->state_bus, &est, sizeof(est), &len, -1);
+        if (HIVE_FAILED(status)) {
+            HIVE_LOG_ERROR("[POS] bus read_wait failed: %s",
+                           HIVE_ERR_STR(status));
+            return;
+        }
 
         // Read target from waypoint actor (non-blocking, use last known)
         if (hive_bus_read(state->position_target_bus, &new_target,
@@ -101,7 +107,9 @@ void position_actor(void *args, const hive_spawn_info *siblings,
         attitude_setpoint_t setpoint = {
             .roll = -roll_cmd, .pitch = pitch_cmd, .yaw = target.yaw};
 
-        hive_bus_publish(state->attitude_setpoint_bus, &setpoint,
-                         sizeof(setpoint));
+        if (HIVE_FAILED(hive_bus_publish(state->attitude_setpoint_bus,
+                                         &setpoint, sizeof(setpoint)))) {
+            HIVE_LOG_WARN("[POS] bus publish failed");
+        }
     }
 }

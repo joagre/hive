@@ -76,8 +76,13 @@ void waypoint_actor(void *args, const hive_spawn_info *siblings,
                   WAYPOINT_HOVER_TIME_US / 1000000.0f);
     HIVE_LOG_INFO("[WPT] Waiting for flight manager START signal");
     hive_message msg;
-    hive_ipc_recv_match(state->flight_manager, HIVE_MSG_NOTIFY,
-                        NOTIFY_FLIGHT_START, &msg, -1);
+    status = hive_ipc_recv_match(state->flight_manager, HIVE_MSG_NOTIFY,
+                                 NOTIFY_FLIGHT_START, &msg, -1);
+    if (HIVE_FAILED(status)) {
+        HIVE_LOG_ERROR("[WPT] recv_match START failed: %s",
+                       HIVE_ERR_STR(status));
+        return;
+    }
     HIVE_LOG_INFO("[WPT] START received - beginning flight sequence");
 
     int waypoint_index = 0;
@@ -93,7 +98,10 @@ void waypoint_actor(void *args, const hive_spawn_info *siblings,
         // Publish current target
         position_target_t target = {
             .x = wp->x, .y = wp->y, .z = wp->z, .yaw = wp->yaw};
-        hive_bus_publish(state->position_target_bus, &target, sizeof(target));
+        if (HIVE_FAILED(hive_bus_publish(state->position_target_bus, &target,
+                                         sizeof(target)))) {
+            HIVE_LOG_WARN("[WPT] bus publish failed");
+        }
 
         // Wait for state update OR hover timer (unified event waiting)
         hive_select_source sources[] = {
@@ -106,7 +114,11 @@ void waypoint_actor(void *args, const hive_spawn_info *siblings,
         hive_select_result result;
         // Only include hover timer source when hovering
         size_t num_sources = hovering ? 2 : 1;
-        hive_select(sources, num_sources, &result, -1);
+        status = hive_select(sources, num_sources, &result, -1);
+        if (HIVE_FAILED(status)) {
+            HIVE_LOG_ERROR("[WPT] select failed: %s", HIVE_ERR_STR(status));
+            return;
+        }
 
         if (result.index == SEL_HOVER_TIMER) {
             // Hover timer fired - advance to next waypoint (loops back to 0)
@@ -135,7 +147,10 @@ void waypoint_actor(void *args, const hive_spawn_info *siblings,
         if (!hovering && check_arrival(wp, &est)) {
             HIVE_LOG_INFO("[WPT] Arrived at waypoint %d - hovering",
                           waypoint_index);
-            hive_timer_after(WAYPOINT_HOVER_TIME_US, &hover_timer);
+            if (HIVE_FAILED(
+                    hive_timer_after(WAYPOINT_HOVER_TIME_US, &hover_timer))) {
+                HIVE_LOG_WARN("[WPT] timer_after failed");
+            }
             hovering = true;
         }
     }

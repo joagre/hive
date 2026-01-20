@@ -44,10 +44,19 @@ void sensor_actor(void *args, const hive_spawn_info *siblings,
 
     while (1) {
         hive_message msg;
-        hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
+        status = hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer,
+                                     &msg, -1);
+        if (HIVE_FAILED(status)) {
+            HIVE_LOG_ERROR("[SENSOR] recv_match failed: %s",
+                           HIVE_ERR_STR(status));
+            return;
+        }
 
         sensor_data_t sensors;
         hal_read_sensors(&sensors);
-        hive_bus_publish(state->sensor_bus, &sensors, sizeof(sensors));
+        if (HIVE_FAILED(hive_bus_publish(state->sensor_bus, &sensors,
+                                         sizeof(sensors)))) {
+            HIVE_LOG_WARN("[SENSOR] bus publish failed");
+        }
     }
 }

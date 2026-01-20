@@ -90,19 +90,31 @@ void flight_manager_actor(void *args, const hive_spawn_info *siblings,
 
     // Start periodic log sync timer (every 4 seconds)
     timer_id sync_timer;
-    hive_timer_every(LOG_SYNC_INTERVAL_US, &sync_timer);
+    hive_status status = hive_timer_every(LOG_SYNC_INTERVAL_US, &sync_timer);
+    if (HIVE_FAILED(status)) {
+        HIVE_LOG_ERROR("[FLM] sync timer_every failed: %s",
+                       HIVE_ERR_STR(status));
+        return;
+    }
 
     // === FLIGHT PHASE ===
     // Notify waypoint actor to begin flight sequence
     HIVE_LOG_INFO("[FLM] Sending START - flight authorized");
-    hive_ipc_notify(waypoint, NOTIFY_FLIGHT_START, NULL, 0);
+    if (HIVE_FAILED(hive_ipc_notify(waypoint, NOTIFY_FLIGHT_START, NULL, 0))) {
+        HIVE_LOG_WARN("[FLM] notify START failed");
+    }
 
     // Flight duration timer, then initiate controlled landing
     HIVE_LOG_INFO("[FLM] Flight duration: %.0f seconds",
                   FLIGHT_DURATION_US / 1000000.0f);
 
     timer_id flight_timer;
-    hive_timer_after(FLIGHT_DURATION_US, &flight_timer);
+    status = hive_timer_after(FLIGHT_DURATION_US, &flight_timer);
+    if (HIVE_FAILED(status)) {
+        HIVE_LOG_ERROR("[FLM] flight timer_after failed: %s",
+                       HIVE_ERR_STR(status));
+        return;
+    }
 
     // Event loop: handle sync timer and flight timer using hive_select()
     enum { SEL_SYNC_TIMER, SEL_FLIGHT_TIMER };
@@ -117,7 +129,12 @@ void flight_manager_actor(void *args, const hive_spawn_info *siblings,
     bool flight_timer_fired = false;
     while (!flight_timer_fired) {
         hive_select_result result;
-        hive_select(flight_sources, 2, &result, -1);
+        status = hive_select(flight_sources, 2, &result, -1);
+        if (HIVE_FAILED(status)) {
+            HIVE_LOG_ERROR("[FLM] select (flight) failed: %s",
+                           HIVE_ERR_STR(status));
+            return;
+        }
 
         if (result.index == SEL_SYNC_TIMER) {
             hive_log_file_sync();
@@ -129,7 +146,9 @@ void flight_manager_actor(void *args, const hive_spawn_info *siblings,
     HIVE_LOG_INFO("[FLM] Flight duration complete - initiating landing");
 
     // Notify altitude actor to begin landing
-    hive_ipc_notify(altitude, NOTIFY_LANDING, NULL, 0);
+    if (HIVE_FAILED(hive_ipc_notify(altitude, NOTIFY_LANDING, NULL, 0))) {
+        HIVE_LOG_WARN("[FLM] notify LANDING failed");
+    }
 
     // Wait for LANDED notification (keep syncing logs while waiting)
     enum { SEL_SYNC, SEL_LANDED };
@@ -143,7 +162,12 @@ void flight_manager_actor(void *args, const hive_spawn_info *siblings,
     bool landed = false;
     while (!landed) {
         hive_select_result result;
-        hive_select(landing_sources, 2, &result, -1);
+        status = hive_select(landing_sources, 2, &result, -1);
+        if (HIVE_FAILED(status)) {
+            HIVE_LOG_ERROR("[FLM] select (landing) failed: %s",
+                           HIVE_ERR_STR(status));
+            return;
+        }
 
         if (result.index == SEL_SYNC) {
             hive_log_file_sync();
@@ -155,7 +179,9 @@ void flight_manager_actor(void *args, const hive_spawn_info *siblings,
     HIVE_LOG_INFO("[FLM] Landing confirmed - stopping motors");
 
     // Send STOP to motor actor
-    hive_ipc_notify(motor, NOTIFY_FLIGHT_STOP, NULL, 0);
+    if (HIVE_FAILED(hive_ipc_notify(motor, NOTIFY_FLIGHT_STOP, NULL, 0))) {
+        HIVE_LOG_WARN("[FLM] notify STOP failed");
+    }
 
     // === DISARM PHASE: Close log file ===
     hive_timer_cancel(sync_timer);

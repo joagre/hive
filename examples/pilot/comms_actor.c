@@ -223,7 +223,13 @@ void comms_actor(void *args, const hive_spawn_info *siblings,
 
     while (1) {
         hive_message msg;
-        hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
+        hive_status status = hive_ipc_recv_match(
+            HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
+        if (HIVE_FAILED(status)) {
+            HIVE_LOG_ERROR("[COMMS] recv_match failed: %s",
+                           HIVE_ERR_STR(status));
+            return;
+        }
 
         // Increment tick counter (10ms per tick)
         state->tick_count++;

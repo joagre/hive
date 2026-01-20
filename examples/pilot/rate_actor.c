@@ -80,7 +80,13 @@ void rate_actor(void *args, const hive_spawn_info *siblings,
         size_t len;
 
         // Block until state available
-        hive_bus_read_wait(state->state_bus, &est, sizeof(est), &len, -1);
+        status =
+            hive_bus_read_wait(state->state_bus, &est, sizeof(est), &len, -1);
+        if (HIVE_FAILED(status)) {
+            HIVE_LOG_ERROR("[RATE] bus read_wait failed: %s",
+                           HIVE_ERR_STR(status));
+            return;
+        }
 
         // Measure actual dt
         uint64_t now = hive_get_time();
@@ -108,6 +114,9 @@ void rate_actor(void *args, const hive_spawn_info *siblings,
         cmd.pitch = pid_update(&pitch_pid, rate_sp.pitch, est.pitch_rate, dt);
         cmd.yaw = pid_update(&yaw_pid, rate_sp.yaw, est.yaw_rate, dt);
 
-        hive_bus_publish(state->torque_bus, &cmd, sizeof(cmd));
+        if (HIVE_FAILED(
+                hive_bus_publish(state->torque_bus, &cmd, sizeof(cmd)))) {
+            HIVE_LOG_WARN("[RATE] bus publish failed");
+        }
     }
 }

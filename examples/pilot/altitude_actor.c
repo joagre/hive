@@ -104,7 +104,11 @@ void altitude_actor(void *args, const hive_spawn_info *siblings,
 
         // Wait for state update OR landing command (unified event waiting)
         hive_select_result result;
-        hive_select(sources, 2, &result, -1);
+        status = hive_select(sources, 2, &result, -1);
+        if (HIVE_FAILED(status)) {
+            HIVE_LOG_ERROR("[ALT] select failed: %s", HIVE_ERR_STR(status));
+            return;
+        }
 
         if (result.index == SEL_LANDING) {
             // Landing command received - respond immediately
@@ -157,8 +161,11 @@ void altitude_actor(void *args, const hive_spawn_info *siblings,
             if (touchdown && !landed) {
                 landed = true;
                 HIVE_LOG_INFO("[ALT] Touchdown - notifying flight manager");
-                hive_ipc_notify(state->flight_manager, NOTIFY_FLIGHT_LANDED,
-                                NULL, 0);
+                if (HIVE_FAILED(hive_ipc_notify(state->flight_manager,
+                                                NOTIFY_FLIGHT_LANDED, NULL,
+                                                0))) {
+                    HIVE_LOG_WARN("[ALT] notify LANDED failed");
+                }
             }
         } else if (landing_mode) {
             // Landing mode: control descent rate, not altitude
@@ -192,7 +199,10 @@ void altitude_actor(void *args, const hive_spawn_info *siblings,
         }
 
         thrust_cmd_t cmd = {.thrust = thrust};
-        hive_bus_publish(state->thrust_bus, &cmd, sizeof(cmd));
+        if (HIVE_FAILED(
+                hive_bus_publish(state->thrust_bus, &cmd, sizeof(cmd)))) {
+            HIVE_LOG_WARN("[ALT] bus publish failed");
+        }
 
         if (++count % DEBUG_PRINT_INTERVAL == 0) {
             HIVE_LOG_DEBUG("[ALT] tgt=%.2f alt=%.2f vvel=%.2f thrust=%.3f %s",

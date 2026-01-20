@@ -66,7 +66,11 @@ void motor_actor(void *args, const hive_spawn_info *siblings,
 
         // Wait for torque command OR STOP notification (unified event waiting)
         hive_select_result result;
-        hive_select(sources, 2, &result, -1);
+        status = hive_select(sources, 2, &result, -1);
+        if (HIVE_FAILED(status)) {
+            HIVE_LOG_ERROR("[MOTOR] select failed: %s", HIVE_ERR_STR(status));
+            return;
+        }
 
         if (result.index == SEL_STOP) {
             // STOP received - respond immediately

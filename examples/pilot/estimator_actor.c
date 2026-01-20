@@ -80,8 +80,13 @@ void estimator_actor(void *args, const hive_spawn_info *siblings,
         size_t len;
 
         // Block until sensor data available
-        hive_bus_read_wait(state->sensor_bus, &sensors, sizeof(sensors), &len,
-                           -1);
+        status = hive_bus_read_wait(state->sensor_bus, &sensors,
+                                    sizeof(sensors), &len, -1);
+        if (HIVE_FAILED(status)) {
+            HIVE_LOG_ERROR("[EST] bus read_wait failed: %s",
+                           HIVE_ERR_STR(status));
+            return;
+        }
 
         // Measure actual dt
         uint64_t now = hive_get_time();
@@ -141,6 +146,9 @@ void estimator_actor(void *args, const hive_spawn_info *siblings,
         est.y_velocity = y_velocity;
         est.vertical_velocity = vertical_velocity;
 
-        hive_bus_publish(state->state_bus, &est, sizeof(est));
+        if (HIVE_FAILED(
+                hive_bus_publish(state->state_bus, &est, sizeof(est)))) {
+            HIVE_LOG_WARN("[EST] bus publish failed");
+        }
     }
 }
