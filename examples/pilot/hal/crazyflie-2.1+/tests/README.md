@@ -161,10 +161,12 @@ If rotation is wrong, the motor connector can be reversed (swap the two wires).
 ## Hardware Notes
 
 - **MCU:** STM32F405RG @ 168 MHz
-- **Motors:** Brushed coreless, TIM2 PWM at ~328 kHz
-- **Gyro:** BMI088 on SPI1 (PA5/PA6/PA7), CS on PB4
+- **Motors:** Brushed coreless, TIM2 PWM
+- **IMU:** BMI088 on SPI1 (PA5/PA6/PA7)
 - **LED:** Blue LED on PC4
 
 **Test categories:**
 - **thrust_test, sensor_motor_test**: Self-contained, direct register access (no HAL or Hive runtime)
 - **hal_test**: Uses libhal.a (validates the HAL layer, but no Hive runtime)
+
+See `../README.md` for detailed pin mappings and hardware specifications.

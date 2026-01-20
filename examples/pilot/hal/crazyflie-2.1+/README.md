@@ -19,19 +19,21 @@ make clean    # Remove build artifacts
 
 ## Hardware Validation Tests
 
-Before running the full pilot firmware, use the standalone test programs in
-`tests/` to verify hardware connectivity.
+Before running the full pilot firmware, use the test programs in `tests/` to
+verify hardware connectivity and HAL functionality.
 
 ```bash
 cd tests
-make thrust_test          # Build thrust calibration test
-make sensor_motor_test    # Build sensor/motor diagnostic
+make thrust_test          # Build thrust calibration test (standalone)
+make sensor_motor_test    # Build sensor/motor diagnostic (standalone)
+make hal_test             # Build HAL validation test (uses libhal.a)
 make flash-thrust         # Flash thrust_test
 make flash-sensor         # Flash sensor_motor_test
+make flash-hal            # Flash hal_test
 make clean                # Clean build
 ```
 
-See `tests/README.md` for detailed LED feedback patterns.
+See `tests/README.md` for detailed LED feedback patterns and test procedures.
 
 ## Integration with Pilot
 
@@ -269,6 +271,7 @@ hal_write_torque(&cmd);       // HAL applies mixer internally
 
 // Shutdown
 hal_disarm();
+hal_cleanup();    // Release hardware resources
 ```
 
 Key differences from Webots:
@@ -331,8 +334,8 @@ Before flight, `hal_calibrate()` performs:
 
 ## LED Feedback
 
-The blue LED on PC4 provides status during startup. The pattern is errors-only
-plus a slow blink during calibration to show the system is working:
+The blue LED on PC4 provides status during startup. Progress blinks (slow, 200ms)
+indicate successful stages, while error blinks (fast, 100ms) indicate failures:
 
 | Pattern | Stage | Meaning |
 |---------|-------|---------|
