@@ -782,6 +782,13 @@ make qemu-example-pingpong     # Run specific example
 Compatible tests exclude `net_test`, `file_test`, and `logging_test` (require ENABLE_NET/ENABLE_FILE).
 Compatible examples exclude `echo`, `fileio`, and `logging` (same reason).
 
+## License
+
+This project is licensed under the MIT License - see [LICENSE](LICENSE) for details.
+
+Third-party components included in this project have their own licenses documented in
+[THIRD_PARTY_LICENSES](THIRD_PARTY_LICENSES).
+
 ## Future Work
 
 - STM32: Network I/O (lwIP integration)
