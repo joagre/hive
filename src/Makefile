@@ -14,7 +14,10 @@ ENABLE_FILE ?= 1
 BUILD_DIR := ../build
 
 # Include path - always relative to this directory
-CPPFLAGS := -I../include -D_POSIX_C_SOURCE=200809L
+# lib/printf: lightweight printf for embedded (low stack usage)
+# -I../lib enables <printf/printf.h> include style
+CPPFLAGS := -I../include -I../lib -I../lib/printf -D_POSIX_C_SOURCE=200809L
+CPPFLAGS += -DPRINTF_INCLUDE_CONFIG_H
 DEPFLAGS = -MMD -MP
 
 # Platform-specific settings
@@ -48,6 +51,9 @@ CORE_SRCS := hive_actor.c hive_bus.c hive_context.c hive_ipc.c \
              hive_link.c hive_log.c hive_pool.c hive_runtime.c \
              hive_select.c hive_supervisor.c
 
+# Lightweight printf library (low stack usage for embedded)
+LIB_SRCS := ../lib/printf/printf.c
+
 # Feature-specific source files
 FEATURE_SRCS :=
 ifeq ($(ENABLE_NET),1)
@@ -65,7 +71,9 @@ endif
 SRCS := $(CORE_SRCS) $(PLATFORM_SRCS) $(FEATURE_SRCS)
 ASM_SRCS := $(PLATFORM_ASM)
 
+# Objects: hive sources + library sources
 OBJS := $(SRCS:%.c=$(BUILD_DIR)/%.o) $(ASM_SRCS:%.S=$(BUILD_DIR)/%.o)
+LIB_OBJS := $(BUILD_DIR)/printf.o
 DEPS := $(SRCS:%.c=$(BUILD_DIR)/%.d)
 
 # Library
@@ -87,14 +95,18 @@ $(BUILD_DIR)/%.o: %.c | $(BUILD_DIR)
 $(BUILD_DIR)/%.o: %.S | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) -c $< -o $@
 
+# Compile printf library (from lib/printf/)
+$(BUILD_DIR)/printf.o: ../lib/printf/printf.c | $(BUILD_DIR)
+	$(CC) $(CFLAGS) $(CPPFLAGS) $(DEPFLAGS) -c $< -o $@
+
 # Create static library
-$(LIB): $(OBJS)
+$(LIB): $(OBJS) $(LIB_OBJS)
 	ar rcs $@ $^
 
 # Clean library objects only
 .PHONY: clean
 clean:
-	rm -f $(OBJS) $(DEPS) $(LIB)
+	rm -f $(OBJS) $(LIB_OBJS) $(DEPS) $(LIB)
 
 .PHONY: help
 help:

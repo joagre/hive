@@ -29,6 +29,7 @@ CC = gcc
 CFLAGS = -std=c11 -Wall -Wextra -O2 -g
 CFLAGS += -D_POSIX_C_SOURCE=200809L
 CFLAGS += -I$(WEBOTS_INCLUDE) -I$(HIVE_INCLUDE) -I. -Ihal/webots-crazyflie
+CFLAGS += -I$(HIVE_ROOT)/lib -I$(HIVE_ROOT)/lib/printf -DPRINTF_INCLUDE_CONFIG_H
 CFLAGS += -MMD -MP
 
 # Webots simulation uses simulated time
@@ -47,8 +48,9 @@ endif
 CFLAGS += -DHIVE_PLATFORM_LINUX
 
 # Log level: INFO for simulation (hides 250Hz debug spam that slows Webots)
-# Use HIVE_LOG_LEVEL_DEBUG for detailed debugging, HIVE_LOG_LEVEL_NONE to disable all
-CFLAGS += -DHIVE_LOG_LEVEL=HIVE_LOG_LEVEL_INFO
+# Use: make LOG_LEVEL=NONE to disable, make LOG_LEVEL=DEBUG for detailed output
+LOG_LEVEL ?= INFO
+CFLAGS += -DHIVE_LOG_LEVEL=HIVE_LOG_LEVEL_$(LOG_LEVEL)
 
 # Stack profiling: enable watermarking to measure actual stack usage
 # Use: make STACK_PROFILE=1 to enable stack usage reporting
@@ -101,6 +103,9 @@ HIVE_OBJS = $(HIVE_CORE_SRCS:%.c=$(BUILD_DIR)/hive/%.o)
 HIVE_ASM_OBJS = $(HIVE_ASM:%.S=$(BUILD_DIR)/hive/%.o)
 HIVE_DEPS = $(HIVE_OBJS:.o=.d)
 
+# Lightweight printf library object
+PRINTF_OBJ = $(BUILD_DIR)/hive/printf.o
+
 LOCAL_HIVE_LIB = $(BUILD_DIR)/libhive.a
 
 # Webots controller directory (for install)
@@ -127,7 +132,12 @@ $(BUILD_DIR)/hive/%.o: $(HIVE_SRC_DIR)/%.S | $(BUILD_DIR)/hive
 	@echo "AS (hive) $<"
 	@$(CC) -g -c $< -o $@
 
-$(LOCAL_HIVE_LIB): $(HIVE_OBJS) $(HIVE_ASM_OBJS)
+# Compile lightweight printf library
+$(PRINTF_OBJ): $(HIVE_ROOT)/lib/printf/printf.c | $(BUILD_DIR)/hive
+	@echo "CC (printf) $<"
+	@$(CC) $(CFLAGS) -c $< -o $@
+
+$(LOCAL_HIVE_LIB): $(HIVE_OBJS) $(HIVE_ASM_OBJS) $(PRINTF_OBJ)
 	@echo "AR $@"
 	@ar rcs $@ $^
 

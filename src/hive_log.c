@@ -8,9 +8,14 @@
 #include "hive_log.h"
 #include "hive_internal.h"
 #include "hive_static_config.h"
-#include <stdarg.h>
+#include "printf.h" // Lightweight printf for embedded (low stack usage)
 #include <string.h>
 #include <stdbool.h>
+
+// Required by lightweight printf library - stub since we only use vsnprintf_()
+void putchar_(char c) {
+    (void)c;
+}
 
 #if HIVE_LOG_TO_STDOUT
 #include <stdio.h>
@@ -60,6 +65,12 @@ static const char *basename_simple(const char *path) {
     return slash ? slash + 1 : path;
 }
 
+// Output callback for fctprintf - writes to stderr
+static void stderr_putc(char c, void *arg) {
+    (void)arg;
+    fputc(c, stderr);
+}
+
 static void log_to_console(hive_log_level_t level, const char *file, int line,
                            const char *text) {
     // Check if stderr is a terminal for colored output
@@ -68,21 +79,21 @@ static void log_to_console(hive_log_level_t level, const char *file, int line,
         s_use_colors = isatty(fileno(stderr));
     }
 
-    // Print log level with optional color
+    // Print log level with optional color (using lightweight printf)
     if (s_use_colors) {
-        fprintf(stderr, "%s%-5s%s ", s_level_colors[level],
-                s_level_names[level], COLOR_RESET);
+        fctprintf(stderr_putc, NULL, "%s%-5s%s ", s_level_colors[level],
+                  s_level_names[level], COLOR_RESET);
     } else {
-        fprintf(stderr, "%-5s ", s_level_names[level]);
+        fctprintf(stderr_putc, NULL, "%-5s ", s_level_names[level]);
     }
 
     // Print file:line for DEBUG and TRACE
     if (level <= HIVE_LOG_LEVEL_DEBUG) {
-        fprintf(stderr, "%s:%d: ", basename_simple(file), line);
+        fctprintf(stderr_putc, NULL, "%s:%d: ", basename_simple(file), line);
     }
 
     // Print the message
-    fprintf(stderr, "%s\n", text);
+    fctprintf(stderr_putc, NULL, "%s\n", text);
 }
 
 #endif // HIVE_LOG_TO_STDOUT
@@ -217,7 +228,7 @@ void hive_log_write(hive_log_level_t level, const char *file, int line,
     char buf[HIVE_LOG_MAX_ENTRY_SIZE];
     va_list args;
     va_start(args, fmt);
-    int len = vsnprintf(buf, sizeof(buf), fmt, args);
+    int len = vsnprintf_(buf, sizeof(buf), fmt, args);
     va_end(args);
 
     // Clamp length to buffer size

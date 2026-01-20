@@ -24,7 +24,8 @@ ARM_CFLAGS := -std=c11 -Wall -Wextra -Wpedantic -O2 -g \
               -MMD -MP
 
 # QEMU test uses smaller config values suitable for 64KB RAM
-ARM_CPPFLAGS := -I../include -I. \
+# Include lightweight printf library for low stack usage
+ARM_CPPFLAGS := -I../include -I../lib -I../lib/printf -DPRINTF_INCLUDE_CONFIG_H -I. \
                 -DHIVE_PLATFORM_STM32 -DHIVE_ENABLE_NET=0 -DHIVE_ENABLE_FILE=0 \
                 -DHIVE_MAX_ACTORS=8 \
                 -DHIVE_MAX_BUSES=4 \
@@ -56,8 +57,12 @@ QEMU_SRCS := $(addprefix $(SRC_DIR)/,$(QEMU_CORE_SRCS))
 QEMU_ASM := $(SRC_DIR)/hive_context_arm_cm.S
 QEMU_TEST_SRCS := startup.S semihosting.c test_main.c
 
+# Lightweight printf library
+PRINTF_SRC := ../lib/printf/printf.c
+
 QEMU_OBJS := $(QEMU_SRCS:$(SRC_DIR)/%.c=$(BUILD_DIR)/%.o) \
              $(QEMU_ASM:$(SRC_DIR)/%.S=$(BUILD_DIR)/%.o) \
+             $(BUILD_DIR)/printf.o \
              $(BUILD_DIR)/startup.o \
              $(BUILD_DIR)/semihosting.o \
              $(BUILD_DIR)/test_main.o
@@ -98,6 +103,10 @@ $(BUILD_DIR)/%.o: $(SRC_DIR)/%.c | $(BUILD_DIR)
 
 # Compile ARM assembly from src/
 $(BUILD_DIR)/%.o: $(SRC_DIR)/%.S | $(BUILD_DIR)
+	$(ARM_CC) $(ARM_CFLAGS) $(ARM_CPPFLAGS) -c $< -o $@
+
+# Compile lightweight printf library
+$(BUILD_DIR)/printf.o: $(PRINTF_SRC) | $(BUILD_DIR)
 	$(ARM_CC) $(ARM_CFLAGS) $(ARM_CPPFLAGS) -c $< -o $@
 
 # Compile QEMU test sources

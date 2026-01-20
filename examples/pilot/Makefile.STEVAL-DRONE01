@@ -141,9 +141,10 @@ CFLAGS += -DHIVE_VFILE_LOG_SECTOR=5
 # Ring buffer: 4KB (reduced from 8KB default to save RAM)
 CFLAGS += '-DHIVE_FILE_RING_SIZE=(4*1024)'
 
-# Include paths
-PILOT_INCLUDES = -I. -I$(HAL_DIR) -I$(HIVE_INC_DIR)
-HIVE_INCLUDES = -I$(HAL_DIR) -I$(HIVE_INC_DIR)
+# Include paths (including lightweight printf library)
+PRINTF_INCLUDES = -I$(HIVE_ROOT)/lib -I$(HIVE_ROOT)/lib/printf -DPRINTF_INCLUDE_CONFIG_H
+PILOT_INCLUDES = -I. -I$(HAL_DIR) -I$(HIVE_INC_DIR) $(PRINTF_INCLUDES)
+HIVE_INCLUDES = -I$(HAL_DIR) -I$(HIVE_INC_DIR) $(PRINTF_INCLUDES)
 
 # Assembler flags
 ASFLAGS = $(MCU) -g3
@@ -172,6 +173,9 @@ PILOT_OBJS = $(PILOT_SRCS:%.c=$(BUILD_DIR)/pilot/%.o)
 # Hive objects (built into libhive.a)
 HIVE_OBJS = $(HIVE_CORE_SRCS:%.c=$(BUILD_DIR)/hive/%.o)
 HIVE_ASM_OBJS = $(HIVE_ASM:%.S=$(BUILD_DIR)/hive/%.o)
+
+# Lightweight printf library object
+PRINTF_OBJ = $(BUILD_DIR)/hive/printf.o
 
 # Hive library
 HIVE_LIB = $(BUILD_DIR)/libhive.a
@@ -203,8 +207,13 @@ $(BUILD_DIR)/hive/%.o: $(HIVE_SRC_DIR)/%.S | $(BUILD_DIR)/hive
 	@echo "AS (hive) $<"
 	@$(CC) $(ASFLAGS) $(HIVE_INCLUDES) -c $< -o $@
 
+# Compile lightweight printf library
+$(PRINTF_OBJ): $(HIVE_ROOT)/lib/printf/printf.c | $(BUILD_DIR)/hive
+	@echo "CC (printf) $<"
+	@$(CC) $(CFLAGS) $(PRINTF_INCLUDES) -c $< -o $@
+
 # Create libhive.a
-$(HIVE_LIB): $(HIVE_OBJS) $(HIVE_ASM_OBJS)
+$(HIVE_LIB): $(HIVE_OBJS) $(HIVE_ASM_OBJS) $(PRINTF_OBJ)
 	@echo "AR $@"
 	@$(AR) rcs $@ $^
 
