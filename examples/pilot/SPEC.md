@@ -484,18 +484,20 @@ If any step fails, the program aborts before starting the actor runtime.
 
 ### LED Feedback (Hardware Platforms)
 
-Real hardware platforms (Crazyflie) provide LED feedback during startup using an
-errors-only pattern. A slow blink during calibration shows the system is working:
+Real hardware platforms (Crazyflie) provide LED feedback during startup:
 
 | Pattern | Stage | Meaning |
 |---------|-------|---------|
-| Fast blinks (3-5) | init | Hardware init failed (count indicates component) |
-| Fast blinks (6-9) | self-test | Sensor self-test failed (count indicates sensor) |
-| 10 fast blinks | calibrate | Level warning (drone tilted) |
+| 1-3 slow blinks | init | Progress indicator (1=start, 2=IMU OK, 3=all OK) |
+| 3-5 fast blinks | init | Hardware init failed (count indicates component) |
+| 6-9 fast blinks | self-test | Sensor self-test failed (count indicates sensor) |
+| 10 fast blinks | calibrate | Level warning (drone tilted >6°) |
 | Slow blink | calibrate | Calibration in progress |
+| LED off | calibrate | Calibration complete |
 | LED on | armed | Ready to fly |
+| Slow continuous blink | any | Fatal error (stuck in loop) |
 
-See `hal/<platform>/README.md` for platform-specific LED patterns.
+See `hal/<platform>/README.md` for detailed LED patterns per platform.
 
 ### Supported Platforms
 
