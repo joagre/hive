@@ -11,6 +11,7 @@
 #include "pid.h"
 #include "hive_runtime.h"
 #include "hive_bus.h"
+#include "hive_log.h"
 #include "hive_timer.h"
 
 // Actor state - initialized by attitude_actor_init

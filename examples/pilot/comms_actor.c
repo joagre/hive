@@ -1,20 +1,21 @@
-// Telemetry actor - Radio transmission of flight data and log download
+// Comms actor - Ground station communication
 //
-// Two modes of operation:
-//   1. Flight mode: Sends binary telemetry at 100Hz for ground station logging
-//   2. Download mode: Transfers flash log file to ground station on request
+// Handles bidirectional radio communication with ground station:
+//   - Downlink: Telemetry at 100Hz (attitude, position packets)
+//   - Downlink: Log file transfer on request
+//   - Uplink: Commands from ground station
 //
 // Runs at LOW priority so control loops run first each cycle.
 // Radio send blocks ~370us (37 bytes * 10 bits/byte / 1Mbaud).
 //
 // Packet types:
-//   0x01: Attitude/rates (gyro, roll/pitch/yaw) - flight telemetry
-//   0x02: Position/altitude (height, velocities, thrust) - flight telemetry
+//   0x01: Attitude/rates (gyro, roll/pitch/yaw) - telemetry downlink
+//   0x02: Position/altitude (height, velocities, thrust) - telemetry downlink
 //   0x10: CMD_REQUEST_LOG - ground station requests log download
 //   0x11: LOG_CHUNK - drone sends log data chunk
 //   0x12: LOG_COMPLETE - drone signals end of log file
 
-#include "telemetry_actor.h"
+#include "comms_actor.h"
 #include "pilot_buses.h"
 #include "config.h"
 #include "hal/hal.h"
@@ -45,9 +46,9 @@
 
 // Operating modes
 typedef enum {
-    TELEM_MODE_FLIGHT,      // Normal telemetry transmission
-    TELEM_MODE_LOG_DOWNLOAD // Sending log file to ground station
-} telem_mode_t;
+    COMMS_MODE_FLIGHT,      // Normal telemetry transmission
+    COMMS_MODE_LOG_DOWNLOAD // Sending log file to ground station
+} comms_mode_t;
 
 // Scale factors for int16 encoding
 #define SCALE_ANGLE 1000   // rad -> millirad
@@ -130,15 +131,15 @@ typedef struct {
     bool next_is_attitude; // Alternate between packet types
     uint32_t tick_count;   // Tick counter for timestamps (10ms per tick)
     // Log download state
-    telem_mode_t mode;
+    comms_mode_t mode;
     int log_fd;
     uint32_t log_offset;
     uint16_t log_sequence;
-} telemetry_state;
+} comms_state;
 
 // RX callback - handles incoming commands from ground station
 static void radio_rx_callback(const void *data, size_t len, void *user_data) {
-    telemetry_state *state = (telemetry_state *)user_data;
+    comms_state *state = (comms_state *)user_data;
     if (len < 1 || !state) {
         return;
     }
@@ -153,67 +154,67 @@ static void radio_rx_callback(const void *data, size_t len, void *user_data) {
         hive_status s = hive_file_open("/log", HIVE_O_RDONLY, 0, &fd);
         if (HIVE_FAILED(s)) {
             HIVE_LOG_WARN(
-                "[TELEM] Log download request failed: cannot open /log");
+                "[COMMS] Log download request failed: cannot open /log");
             return;
         }
 
         state->log_fd = fd;
         state->log_offset = 0;
         state->log_sequence = 0;
-        state->mode = TELEM_MODE_LOG_DOWNLOAD;
-        HIVE_LOG_INFO("[TELEM] Log download started");
+        state->mode = COMMS_MODE_LOG_DOWNLOAD;
+        HIVE_LOG_INFO("[COMMS] Log download started");
     }
 }
 
-void *telemetry_actor_init(void *init_args) {
+void *comms_actor_init(void *init_args) {
     const pilot_buses *buses = init_args;
-    static telemetry_state state;
+    static comms_state state;
     state.state_bus = buses->state_bus;
     state.sensor_bus = buses->sensor_bus;
     state.thrust_bus = buses->thrust_bus;
     state.next_is_attitude = true;
     state.tick_count = 0;
-    state.mode = TELEM_MODE_FLIGHT;
+    state.mode = COMMS_MODE_FLIGHT;
     state.log_fd = -1;
     state.log_offset = 0;
     state.log_sequence = 0;
     return &state;
 }
 
-void telemetry_actor(void *args, const hive_spawn_info *siblings,
-                     size_t sibling_count) {
+void comms_actor(void *args, const hive_spawn_info *siblings,
+                 size_t sibling_count) {
     (void)siblings;
     (void)sibling_count;
 
-    telemetry_state *state = args;
+    comms_state *state = args;
 
     // Initialize radio
     if (hal_radio_init() != 0) {
-        HIVE_LOG_ERROR("[TELEM] Radio init failed");
+        HIVE_LOG_ERROR("[COMMS] Radio init failed");
         return; // No hive_exit() - supervisor sees CRASH
     }
 
     // Register RX callback for ground station commands
     hal_radio_set_rx_callback(radio_rx_callback, state);
 
-    HIVE_LOG_INFO("[TELEM] Radio initialized");
+    HIVE_LOG_INFO("[COMMS] Radio initialized");
 
     // Subscribe to buses
     if (HIVE_FAILED(hive_bus_subscribe(state->state_bus)) ||
         HIVE_FAILED(hive_bus_subscribe(state->sensor_bus)) ||
         HIVE_FAILED(hive_bus_subscribe(state->thrust_bus))) {
-        HIVE_LOG_ERROR("[TELEM] Bus subscribe failed");
+        HIVE_LOG_ERROR("[COMMS] Bus subscribe failed");
         return;
     }
 
     // Start telemetry timer
     timer_id timer;
     if (HIVE_FAILED(hive_timer_every(TELEMETRY_INTERVAL_US, &timer))) {
-        HIVE_LOG_ERROR("[TELEM] Timer setup failed");
+        HIVE_LOG_ERROR("[COMMS] Timer setup failed");
         return;
     }
 
-    HIVE_LOG_INFO("[TELEM] Started at 100Hz");
+    HIVE_LOG_INFO("[COMMS] Started at 100Hz");
 
     // Latest data from buses
     state_estimate_t latest_state = STATE_ESTIMATE_ZERO;
@@ -262,7 +263,7 @@ void telemetry_actor(void *args, const hive_spawn_info *siblings,
         }
 
         // Handle current mode
-        if (state->mode == TELEM_MODE_LOG_DOWNLOAD) {
+        if (state->mode == COMMS_MODE_LOG_DOWNLOAD) {
             // Log download mode: send next chunk or complete
             log_chunk_packet_t chunk = {
                 .type = PACKET_LOG_CHUNK,
@@ -286,8 +287,8 @@ void telemetry_actor(void *args, const hive_spawn_info *siblings,
                 // Close file and return to flight mode
                 hive_file_close(state->log_fd);
                 state->log_fd = -1;
-                state->mode = TELEM_MODE_FLIGHT;
-                HIVE_LOG_INFO("[TELEM] Log download complete: %u chunks",
+                state->mode = COMMS_MODE_FLIGHT;
+                HIVE_LOG_INFO("[COMMS] Log download complete: %u chunks",
                               state->log_sequence);
             } else {
                 // Pad remaining bytes with zeros if partial chunk

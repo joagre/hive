@@ -11,6 +11,7 @@
 #include "hive_bus.h"
 #include "hive_timer.h"
 #include "hive_ipc.h"
+#include "hive_log.h"
 
 #define SENSOR_INTERVAL_US (TIME_STEP_MS * 1000)
 

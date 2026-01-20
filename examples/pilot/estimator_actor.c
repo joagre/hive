@@ -11,6 +11,7 @@
 #include "fusion/complementary_filter.h"
 #include "hive_runtime.h"
 #include "hive_bus.h"
+#include "hive_log.h"
 #include "hive_timer.h"
 #include <stdbool.h>
 #include <math.h>

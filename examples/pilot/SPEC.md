@@ -18,7 +18,7 @@ A quadcopter autopilot example using the actor runtime. Supports Webots simulati
 - Step 6: Position actor (horizontal position hold + heading hold)
 - Step 7: Waypoint actor (waypoint navigation)
 - Step 8: Flight manager actor (startup coordination, safety cutoff)
-- Step 9: Telemetry actor (radio telemetry, Crazyflie only)
+- Step 9: Comms actor (radio telemetry, Crazyflie only)
 - Mixer moved to HAL (platform-specific, X-configuration)
 
 ## Goals
@@ -132,7 +132,7 @@ if (result.bus.len != sizeof(expected)) {
 - Supervisor sees CRASH and applies restart strategy (ONE_FOR_ALL in pilot)
 
 **Exception:** `_Static_assert` is used for compile-time checks (e.g., packet sizes
-in telemetry_actor.c) since these fail at build time, not runtime.
+in comms_actor.c) since these fail at build time, not runtime.
 
 **Logging configuration (Crazyflie):**
 
@@ -233,7 +233,7 @@ maintain code clarity. A production system would add these as first priorities.
 ## Architecture Overview
 
 Ten to eleven actors: nine flight-critical workers connected via buses, plus one
-supervisor, and an optional telemetry actor on radio-enabled platforms (Crazyflie):
+supervisor, and an optional comms actor on radio-enabled platforms (Crazyflie):
 
 **Supervision:** All actors are supervised with ONE_FOR_ALL strategy. Flight-critical
 actors use PERMANENT restart (crash triggers restart of all). Telemetry uses
@@ -312,7 +312,7 @@ Code is split into focused modules:
 | `rate_actor.c/h` | Rate PIDs → torque commands |
 | `motor_actor.c/h` | Output: torque → HAL → motors |
 | `flight_manager_actor.c/h` | Startup delay, flight window cutoff |
-| `telemetry_actor.c/h` | Radio telemetry (Crazyflie only) |
+| `comms_actor.c/h` | Radio telemetry (Crazyflie only) |
 | `pid.c/h` | Reusable PID controller |
 | `types.h` | Portable data types |
 | `config.h` | Configuration constants (timing, thresholds) |
@@ -442,7 +442,7 @@ void hal_read_sensors(sensor_data_t *sensors);
 // Motor interface (called by motor_actor)
 void hal_write_torque(const torque_cmd_t *cmd);
 
-// Radio interface (called by telemetry_actor, HAL_HAS_RADIO only)
+// Radio interface (called by comms_actor, HAL_HAS_RADIO only)
 int hal_radio_init(void);
 int hal_radio_send(const void *data, size_t len);
 bool hal_radio_tx_ready(void);
@@ -455,7 +455,7 @@ bool hal_step(void);  // Advance simulation, returns false when done
 Actors use the HAL directly - no function pointers needed:
 - `sensor_actor.c` calls `hal_read_sensors()`
 - `motor_actor.c` calls `hal_write_torque()`
-- `telemetry_actor.c` calls `hal_radio_*()` (Crazyflie only)
+- `comms_actor.c` calls `hal_radio_*()` (Crazyflie only)
 
 ### Supported Platforms
 
@@ -486,7 +486,7 @@ All actor code is platform-independent. Actors use:
 | `rate_actor.c/h` | Bus API only |
 | `motor_actor.c/h` | HAL (hal_write_torque) + IPC + bus API |
 | `flight_manager_actor.c/h` | IPC only (no bus) |
-| `telemetry_actor.c/h` | HAL (hal_radio_*) + bus API (Crazyflie only) |
+| `comms_actor.c/h` | HAL (hal_radio_*) + bus API (Crazyflie only) |
 | `pid.c/h` | Pure C, no runtime deps |
 | `types.h` | Data structures |
 | `config.h` | Tuning parameters |
@@ -507,7 +507,7 @@ examples/pilot/
     rate_actor.c/h       # Rate PIDs → torque commands
     motor_actor.c/h      # Output: torque → HAL → motors
     flight_manager_actor.c/h # Startup delay, flight window cutoff
-    telemetry_actor.c/h  # Radio telemetry (Crazyflie only)
+    comms_actor.c/h  # Radio telemetry (Crazyflie only)
     pid.c/h              # Reusable PID controller
     types.h              # Portable data types
     config.h             # Configuration constants

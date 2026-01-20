@@ -20,7 +20,7 @@ Demonstrates waypoint navigation with a quadcopter using 10-11 actors (9-10 work
 7. **Rate actor** runs rate PIDs, publishes torque commands
 8. **Motor actor** reads torque bus, writes to hardware via HAL (checks for STOP signal)
 9. **Flight manager actor** handles startup delay (60s), landing coordination, log file management
-10. **Telemetry actor** (Crazyflie only) sends flight data over radio at 100Hz for ground station logging
+10. **Comms actor** (Crazyflie only) sends flight data over radio at 100Hz for ground station logging
 11. **Supervisor actor** monitors all workers, restarts flight-critical actors on crash (ONE_FOR_ALL)
 
 Workers use `hive_find_sibling()` for IPC coordination via sibling info passed
@@ -86,7 +86,7 @@ See `hal/<platform>/README.md` for hardware details, pin mapping, and flight pro
 | `rate_actor.c/h` | Rate PIDs → torque commands |
 | `motor_actor.c/h` | Output: torque → HAL → motors |
 | `flight_manager_actor.c/h` | Startup delay, flight window cutoff |
-| `telemetry_actor.c/h` | Radio telemetry (Crazyflie only) |
+| `comms_actor.c/h` | Radio telemetry (Crazyflie only) |
 | `pid.c/h` | Reusable PID controller |
 | `fusion/complementary_filter.c/h` | Portable attitude estimation (accel+gyro fusion) |
 | `types.h` | Shared data types (sensor_data_t, state_estimate_t, etc.) |
@@ -137,7 +137,7 @@ sizes differ per platform based on available RAM.
 ## Architecture
 
 Ten to eleven actors: nine flight-critical workers connected via buses, one supervisor
-monitoring all workers, plus an optional telemetry actor on Crazyflie (radio-enabled platforms):
+monitoring all workers, plus an optional comms actor on Crazyflie (radio-enabled platforms):
 
 ```mermaid
 graph TB
@@ -155,7 +155,7 @@ graph TB
 Hardware Abstraction Layer (HAL) provides platform independence:
 - `hal_read_sensors()` - reads sensors (called by sensor_actor)
 - `hal_write_torque()` - writes motors with mixing (called by motor_actor)
-- `hal_radio_*()` - radio telemetry (Crazyflie only, called by telemetry_actor)
+- `hal_radio_*()` - radio telemetry (Crazyflie only, called by comms_actor)
 
 Actor code is identical across platforms. See `hal/<platform>/README.md` for
 hardware-specific details.
@@ -261,11 +261,11 @@ Measured on x86-64 Linux (Webots simulation). ARM Cortex-M may differ slightly
 due to calling conventions. All actors fit comfortably in 4KB with the highest
 usage at 78.9% (waypoint), leaving ~860 bytes headroom.
 
-Note: Telemetry actor (Crazyflie only) not included in Webots measurements.
+Note: Comms actor (Crazyflie only) not included in Webots measurements.
 
 ## Radio Telemetry (Crazyflie 2.1+ only)
 
-The Crazyflie build includes a telemetry actor that sends flight data over radio
+The Crazyflie build includes a comms actor that sends flight data over radio
 at 100Hz for real-time ground station logging. This uses the syslink protocol
 to the nRF51822 radio chip, which transmits via ESB to a Crazyradio 2.0 on the ground.
 
@@ -279,7 +279,7 @@ pip install cflib
 ./tools/telemetry_receiver.py -o flight.csv
 ```
 
-The telemetry actor runs at LOW priority so control loops run first each cycle.
+The comms actor runs at LOW priority so control loops run first each cycle.
 Radio send blocks ~370us (37 bytes * 10 bits/byte / 1Mbaud). It uses TEMPORARY restart type so crashes don't trigger restarts
 of flight-critical actors - telemetry simply stops if it fails.
 

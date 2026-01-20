@@ -15,7 +15,7 @@
 //   rate_actor      - Rate PIDs -> torque commands
 //   motor_actor     - Output to hardware via HAL
 //   flight_manager  - Flight authority and safety monitoring
-//   telemetry_actor - Radio transmission of flight data (optional)
+//   comms_actor - Radio transmission of flight data (optional)
 //
 // Data flows through buses:
 //
@@ -77,7 +77,7 @@
 #include "flight_manager_actor.h"
 #include "stack_profile.h"
 #ifdef HAL_HAS_RADIO
-#include "telemetry_actor.h"
+#include "comms_actor.h"
 #endif
 
 // Bus configuration from HAL (platform-specific)
@@ -236,8 +236,8 @@ int main(void) {
          .actor_cfg = {.priority = HIVE_PRIORITY_CRITICAL,
                        .name = "flight_mgr"}},
 #ifdef HAL_HAS_RADIO
-        {.start = telemetry_actor,
-         .init = telemetry_actor_init,
+        {.start = comms_actor,
+         .init = comms_actor_init,
          .init_args = &buses,
          .init_args_size = sizeof(buses),
          .name = "telemetry",

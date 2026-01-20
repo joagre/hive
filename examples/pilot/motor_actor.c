@@ -14,6 +14,7 @@
 #include "hive_runtime.h"
 #include "hive_bus.h"
 #include "hive_ipc.h"
+#include "hive_log.h"
 #include "hive_select.h"
 #include <string.h>
 

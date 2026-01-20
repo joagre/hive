@@ -16,6 +16,7 @@
 #include "math_utils.h"
 #include "hive_runtime.h"
 #include "hive_bus.h"
+#include "hive_log.h"
 #include <math.h>
 
 // Actor state - initialized by position_actor_init
