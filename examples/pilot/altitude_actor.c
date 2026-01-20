@@ -117,6 +117,8 @@ void altitude_actor(void *args, const hive_spawn_info *siblings,
 
         // SEL_STATE: Copy state data from select result
         if (result.bus.len != sizeof(est)) {
+            HIVE_LOG_WARN("[ALT] Invalid state bus message size: %zu",
+                          result.bus.len);
             continue;
         }
         memcpy(&est, result.bus.data, sizeof(est));

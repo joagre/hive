@@ -317,11 +317,13 @@ if (HIVE_FAILED(hive_bus_subscribe(state->sensor_bus))) {
 }
 ```
 
-**Hot path (main loop):** Just continue. The actor keeps running and processes
-the next iteration. No logging to avoid overhead in control loops.
+**Hot path (main loop):** Log warning and continue. The actor keeps running and
+processes the next iteration. In production (STM32), logging is compiled out
+via `HIVE_LOG_LEVEL=NONE`.
 
 ```c
 if (result.bus.len != sizeof(expected)) {
+    HIVE_LOG_WARN("[MOTOR] Invalid message size: %zu", result.bus.len);
     continue;
 }
 ```
