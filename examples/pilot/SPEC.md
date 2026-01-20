@@ -469,6 +469,34 @@ Actors use the HAL directly - no function pointers needed:
 - `motor_actor.c` calls `hal_write_torque()`
 - `comms_actor.c` calls `hal_radio_*()` (Crazyflie only)
 
+### Startup Sequence
+
+The HAL startup sequence in `pilot.c` is:
+
+```c
+hal_init();       // Initialize hardware
+hal_self_test();  // Verify sensors respond
+hal_calibrate();  // Calibrate sensors (keep drone still and level)
+hal_arm();        // Enable motor output
+```
+
+If any step fails, the program aborts before starting the actor runtime.
+
+### LED Feedback (Hardware Platforms)
+
+Real hardware platforms (Crazyflie) provide LED feedback during startup using an
+errors-only pattern. A slow blink during calibration shows the system is working:
+
+| Pattern | Stage | Meaning |
+|---------|-------|---------|
+| Fast blinks (3-5) | init | Hardware init failed (count indicates component) |
+| Fast blinks (6-9) | self-test | Sensor self-test failed (count indicates sensor) |
+| 10 fast blinks | calibrate | Level warning (drone tilted) |
+| Slow blink | calibrate | Calibration in progress |
+| LED on | armed | Ready to fly |
+
+See `hal/<platform>/README.md` for platform-specific LED patterns.
+
 ### Supported Platforms
 
 | Platform | Build | Details |

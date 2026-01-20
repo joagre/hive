@@ -453,9 +453,11 @@ bool platform_self_test(void) {
 
     // Required sensors: BMI088 (IMU) and BMP388 (barometer)
     if (!bmi088_is_ready()) {
+        init_blink(6, 100, 100); // 6 fast blinks = IMU self-test failed
         return false;
     }
     if (!bmp388_is_ready()) {
+        init_blink(7, 100, 100); // 7 fast blinks = baro self-test failed
         return false;
     }
 
@@ -463,9 +465,11 @@ bool platform_self_test(void) {
     // Only test if deck was detected during init
     if (s_flow_deck_present) {
         if (!pmw3901_is_ready()) {
+            init_blink(8, 100, 100); // 8 fast blinks = flow self-test failed
             return false;
         }
         if (!vl53l1x_is_ready()) {
+            init_blink(9, 100, 100); // 9 fast blinks = ToF self-test failed
             return false;
         }
     }
@@ -511,7 +515,7 @@ int platform_calibrate(void) {
         init_blink(10, 50, 50); // 10 fast blinks = level warning
     }
 
-    // Gyro bias calibration
+    // Gyro bias calibration (slow blink shows calibration in progress)
     float gyro_sum[3] = {0.0f, 0.0f, 0.0f};
     bmi088_data_t gyro;
 
@@ -520,6 +524,10 @@ int platform_calibrate(void) {
             gyro_sum[0] += gyro.x;
             gyro_sum[1] += gyro.y;
             gyro_sum[2] += gyro.z;
+        }
+        // Toggle LED every 50 samples (~100ms) for slow blink
+        if (i % 50 == 0) {
+            platform_led_toggle();
         }
         platform_delay_ms(2);
     }
@@ -536,6 +544,10 @@ int platform_calibrate(void) {
         if (bmp388_read(&baro)) {
             pressure_sum += baro.pressure_pa;
         }
+        // Toggle LED every 5 samples (~100ms) for slow blink
+        if (i % 5 == 0) {
+            platform_led_toggle();
+        }
         platform_delay_ms(20);
     }
 
@@ -549,6 +561,10 @@ int platform_calibrate(void) {
         int height_attempts = 20;
 
         for (int i = 0; i < height_attempts; i++) {
+            // Toggle LED every 2 attempts (~100ms) for slow blink
+            if (i % 2 == 0) {
+                platform_led_toggle();
+            }
             platform_delay_ms(50); // Wait for new measurement
             if (vl53l1x_data_ready()) {
                 uint16_t height = vl53l1x_read_distance();
@@ -563,6 +579,9 @@ int platform_calibrate(void) {
             s_height_offset_mm = (uint16_t)(height_sum / height_samples);
         }
     }
+
+    // Turn LED off after calibration (will turn on when armed)
+    platform_led_off();
 
     s_calibrated = true;
     return 0;

@@ -331,18 +331,26 @@ Before flight, `hal_calibrate()` performs:
 
 ## LED Feedback
 
-The blue LED on PC4 provides status during initialization and calibration:
+The blue LED on PC4 provides status during startup. The pattern is errors-only
+plus a slow blink during calibration to show the system is working:
 
-| Pattern | Meaning |
-|---------|---------|
-| 1 blink | Starting initialization |
-| 2 blinks | IMU initialized |
-| 3 blinks | All hardware initialized |
-| 3 fast blinks | IMU initialization failed |
-| 4 fast blinks | Barometer initialization failed |
-| 5 fast blinks | Motor initialization failed |
-| 10 fast blinks | Level warning (drone not level during calibration) |
-| Slow continuous blink | Fatal error |
+| Pattern | Stage | Meaning |
+|---------|-------|---------|
+| 1 blink | init | Starting initialization |
+| 2 blinks | init | IMU initialized |
+| 3 blinks | init | All hardware initialized |
+| 3 fast blinks | init | IMU initialization failed |
+| 4 fast blinks | init | Barometer initialization failed |
+| 5 fast blinks | init | Motor initialization failed |
+| 6 fast blinks | self-test | IMU self-test failed |
+| 7 fast blinks | self-test | Barometer self-test failed |
+| 8 fast blinks | self-test | Flow sensor self-test failed |
+| 9 fast blinks | self-test | ToF sensor self-test failed |
+| 10 fast blinks | calibrate | Level warning (drone tilted >6 deg) |
+| Slow blink | calibrate | Calibration in progress (keep still!) |
+| LED off | calibrate | Calibration complete |
+| LED on | armed | Motors armed, ready to fly |
+| Slow continuous blink | any | Fatal error |
 
 ## Flight Profiles
 
