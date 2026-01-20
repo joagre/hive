@@ -45,9 +45,9 @@ LDFLAGS += --specs=nosys.specs
 LDFLAGS += -lm -lc
 
 # Targets
-.PHONY: all clean thrust_test sensor_motor_test flash-thrust flash-sensor help
+.PHONY: all clean thrust_test sensor_motor_test baro_test flow_test flash-thrust flash-sensor flash-baro flash-flow help
 
-all: thrust_test sensor_motor_test
+all: thrust_test sensor_motor_test baro_test flow_test
 
 # Create build directory
 $(BUILD_DIR):
@@ -81,6 +81,34 @@ $(BUILD_DIR)/sensor_motor_test.bin: $(BUILD_DIR)/sensor_motor_test.elf
 	@echo "BIN sensor_motor_test.bin"
 	@$(CP) -O binary $< $@
 
+# Barometer test
+baro_test: $(BUILD_DIR)/baro_test.bin
+	@echo ""
+	@echo "Built: $(BUILD_DIR)/baro_test.bin"
+	@$(SZ) $(BUILD_DIR)/baro_test.elf
+
+$(BUILD_DIR)/baro_test.elf: baro_test.c | $(BUILD_DIR)
+	@echo "CC baro_test.c"
+	@$(CC) $(CFLAGS) $< $(LDFLAGS) -o $@
+
+$(BUILD_DIR)/baro_test.bin: $(BUILD_DIR)/baro_test.elf
+	@echo "BIN baro_test.bin"
+	@$(CP) -O binary $< $@
+
+# Flow deck test
+flow_test: $(BUILD_DIR)/flow_test.bin
+	@echo ""
+	@echo "Built: $(BUILD_DIR)/flow_test.bin"
+	@$(SZ) $(BUILD_DIR)/flow_test.elf
+
+$(BUILD_DIR)/flow_test.elf: flow_test.c | $(BUILD_DIR)
+	@echo "CC flow_test.c"
+	@$(CC) $(CFLAGS) $< $(LDFLAGS) -o $@
+
+$(BUILD_DIR)/flow_test.bin: $(BUILD_DIR)/flow_test.elf
+	@echo "BIN flow_test.bin"
+	@$(CP) -O binary $< $@
+
 # Flash targets
 flash-thrust: $(BUILD_DIR)/thrust_test.bin
 	@echo "Flashing thrust_test..."
@@ -88,6 +116,14 @@ flash-thrust: $(BUILD_DIR)/thrust_test.bin
 
 flash-sensor: $(BUILD_DIR)/sensor_motor_test.bin
 	@echo "Flashing sensor_motor_test..."
+	st-flash write $< 0x8000000
+
+flash-baro: $(BUILD_DIR)/baro_test.bin
+	@echo "Flashing baro_test..."
+	st-flash write $< 0x8000000
+
+flash-flow: $(BUILD_DIR)/flow_test.bin
+	@echo "Flashing flow_test..."
 	st-flash write $< 0x8000000
 
 # Clean
@@ -104,11 +140,15 @@ help:
 	@echo "Build targets:"
 	@echo "  thrust_test        - Build thrust calibration test"
 	@echo "  sensor_motor_test  - Build sensor/motor diagnostic"
+	@echo "  baro_test          - Build BMP388 barometer test"
+	@echo "  flow_test          - Build Flow Deck v2 test (PMW3901 + VL53L1x)"
 	@echo "  all                - Build all tests"
 	@echo ""
 	@echo "Flash targets:"
 	@echo "  flash-thrust       - Flash thrust_test via ST-Link"
 	@echo "  flash-sensor       - Flash sensor_motor_test via ST-Link"
+	@echo "  flash-baro         - Flash baro_test via ST-Link"
+	@echo "  flash-flow         - Flash flow_test via ST-Link"
 	@echo ""
 	@echo "Other:"
 	@echo "  clean              - Remove build artifacts"
@@ -139,10 +179,33 @@ help:
 	@echo "      3 slow blinks = Net CW rotation"
 	@echo "    Continuous slow = Test complete"
 	@echo ""
+	@echo "  baro_test:"
+	@echo "    2 slow blinks   = Starting"
+	@echo "    3 quick blinks  = I2C initialized"
+	@echo "    4 quick blinks  = BMP388 chip ID verified"
+	@echo "    5 quick blinks  = Calibration data read"
+	@echo "    Fast blink      = Reading sensor data"
+	@echo "    LED on 1s       = Valid pressure readings"
+	@echo "    Continuous slow = Test complete"
+	@echo ""
+	@echo "  flow_test:"
+	@echo "    2 slow blinks   = Starting"
+	@echo "    3 quick blinks  = SPI initialized"
+	@echo "    4 quick blinks  = PMW3901 chip ID verified"
+	@echo "    5 quick blinks  = I2C initialized"
+	@echo "    6 quick blinks  = VL53L1x chip ID verified"
+	@echo "    Fast blink      = Reading sensors"
+	@echo "    7 blinks        = PMW3901 passed"
+	@echo "    8 blinks        = VL53L1x passed"
+	@echo "    9 blinks        = Both sensors passed"
+	@echo "    Continuous slow = Test complete"
+	@echo ""
 	@echo "  Errors:"
-	@echo "    Continuous fast blink  = Motor init failed"
-	@echo "    Continuous medium blink = Gyro init failed"
+	@echo "    Continuous fast blink   = Init failed"
+	@echo "    Continuous medium blink = Chip ID mismatch"
+	@echo "    Double blink            = VL53L1x not detected"
 
 # Include dependency files
-DEPS = $(BUILD_DIR)/thrust_test.d $(BUILD_DIR)/sensor_motor_test.d
+DEPS = $(BUILD_DIR)/thrust_test.d $(BUILD_DIR)/sensor_motor_test.d \
+       $(BUILD_DIR)/baro_test.d $(BUILD_DIR)/flow_test.d
 -include $(DEPS)
