@@ -78,7 +78,7 @@ make -f Makefile.crazyflie-2.1+
 | Flow sensor | PMW3901 | SPI1 | Optical flow (Flow deck v2) |
 | ToF sensor | VL53L1x | I2C3 | Height measurement (Flow deck v2) |
 | Motors | 7x16mm | TIM2 PWM | Brushed coreless, x4 |
-| LED | Blue | PC4 | Status indicator |
+| LED | Blue | PD2 | Status indicator |
 
 ## Specifications
 
@@ -208,7 +208,7 @@ VL53L1x ToF: 0x29
 PA5  - SPI1_SCK
 PA6  - SPI1_MISO
 PA7  - SPI1_MOSI
-PB12 - PMW3901_CS (Flow deck v2)
+PB4  - PMW3901_CS (Flow deck v2, DECK_GPIO_IO3)
 ```
 
 ### TIM2 PWM (Motors)
@@ -221,7 +221,7 @@ PA3  - TIM2_CH4 (M4, rear-left, CW)
 
 ### Misc
 ```
-PC4  - Blue LED
+PD2  - Blue LED
 ```
 
 ## Differences from Webots Simulation
@@ -355,7 +355,7 @@ Before flight, `hal_calibrate()` performs:
 
 ## LED Feedback
 
-The blue LED on PC4 provides status during startup. Progress blinks (slow, 200ms)
+The blue LED on PD2 provides status during startup. Progress blinks (slow, 200ms)
 indicate successful stages, while error blinks (fast, 100ms) indicate failures:
 
 | Pattern | Stage | Meaning |

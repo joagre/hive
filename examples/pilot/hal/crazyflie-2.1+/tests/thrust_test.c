@@ -55,16 +55,16 @@
 
 // GPIO
 #define GPIOA_BASE (AHB1PERIPH_BASE + 0x0000UL)
-#define GPIOC_BASE (AHB1PERIPH_BASE + 0x0800UL)
+#define GPIOD_BASE (AHB1PERIPH_BASE + 0x0C00UL)
 
 #define GPIOA_MODER (*(volatile uint32_t *)(GPIOA_BASE + 0x00))
 #define GPIOA_OSPEEDR (*(volatile uint32_t *)(GPIOA_BASE + 0x08))
 #define GPIOA_PUPDR (*(volatile uint32_t *)(GPIOA_BASE + 0x0C))
 #define GPIOA_AFR0 (*(volatile uint32_t *)(GPIOA_BASE + 0x20))
 
-#define GPIOC_MODER (*(volatile uint32_t *)(GPIOC_BASE + 0x00))
-#define GPIOC_OSPEEDR (*(volatile uint32_t *)(GPIOC_BASE + 0x08))
-#define GPIOC_ODR (*(volatile uint32_t *)(GPIOC_BASE + 0x14))
+#define GPIOD_MODER (*(volatile uint32_t *)(GPIOD_BASE + 0x00))
+#define GPIOD_OSPEEDR (*(volatile uint32_t *)(GPIOD_BASE + 0x08))
+#define GPIOD_ODR (*(volatile uint32_t *)(GPIOD_BASE + 0x14))
 
 // RCC
 #define RCC_BASE (AHB1PERIPH_BASE + 0x3800UL)
@@ -101,8 +101,8 @@
 #define PWM_PRESCALER 0
 #define PWM_PERIOD 255
 
-// LED (PC4)
-#define LED_PIN (1 << 4)
+// LED Blue (PD2) - directly on STM32, active high
+#define LED_PIN (1 << 2)
 
 // ============================================================================
 // Global State
@@ -129,13 +129,13 @@ static void delay_ms(uint32_t ms) {
 }
 
 static void led_on(void) {
-    GPIOC_ODR |= LED_PIN;
+    GPIOD_ODR |= LED_PIN;
 }
 static void led_off(void) {
-    GPIOC_ODR &= ~LED_PIN;
+    GPIOD_ODR &= ~LED_PIN;
 }
 static void led_toggle(void) {
-    GPIOC_ODR ^= LED_PIN;
+    GPIOD_ODR ^= LED_PIN;
 }
 
 static void blink_n(int n, int on_ms, int off_ms) {
@@ -192,18 +192,18 @@ static void systick_init(void) {
 }
 
 static void gpio_init(void) {
-    // Enable GPIOA and GPIOC clocks
-    RCC_AHB1ENR |= (1 << 0) | (1 << 2); // GPIOAEN | GPIOCEN
+    // Enable GPIOA and GPIOD clocks
+    RCC_AHB1ENR |= (1 << 0) | (1 << 3); // GPIOAEN | GPIODEN
 
     // Small delay for clock to stabilize
     for (volatile int i = 0; i < 100; i++)
         ;
 
-    // Configure PC4 as output (LED)
-    GPIOC_MODER &= ~(3 << 8);  // Clear
-    GPIOC_MODER |= (1 << 8);   // Output mode
-    GPIOC_OSPEEDR |= (3 << 8); // High speed
-    GPIOC_ODR &= ~LED_PIN;     // LED off
+    // Configure PD2 as output (Blue LED)
+    GPIOD_MODER &= ~(3 << 4);  // Clear bits for pin 2
+    GPIOD_MODER |= (1 << 4);   // Output mode
+    GPIOD_OSPEEDR |= (3 << 4); // High speed
+    GPIOD_ODR &= ~LED_PIN;     // LED off
 }
 
 static bool motors_init(void) {

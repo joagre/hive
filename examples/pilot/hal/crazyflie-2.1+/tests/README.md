@@ -82,7 +82,7 @@ make flash-flow           # Flash flow_test
 
 ## LED Feedback
 
-The blue LED on PC4 provides status feedback (no serial output needed).
+The blue LED on PD2 provides status feedback (no serial output needed).
 
 ### thrust_test
 
@@ -177,8 +177,8 @@ If rotation is wrong, the motor connector can be reversed (swap the two wires).
 - **IMU:** BMI088 on I2C3 (PA8/PC9, accel addr: 0x18, gyro addr: 0x68)
 - **Barometer:** BMP388 on I2C3 (PA8/PC9, addr: 0x77)
 - **Flow Deck v2 (optional):**
-  - PMW3901 optical flow on SPI1 (PA5/PA6/PA7, CS: PB12)
+  - PMW3901 optical flow on SPI1 (PA5/PA6/PA7, CS: PB4 = DECK_GPIO_IO3)
   - VL53L1x ToF on I2C3 (addr: 0x29)
-- **LED:** Blue LED on PC4
+- **LED:** Blue LED on PD2
 
 See `../README.md` for detailed pin mappings and hardware specifications.

@@ -27,7 +27,7 @@
  *   Continuous med    = PMW3901 not detected
  *   Double blink      = VL53L1x not detected
  *
- * PMW3901 is on SPI1: PB12 (CS), PA5 (SCK), PA6 (MISO), PA7 (MOSI)
+ * PMW3901 is on SPI1: PB4 (CS = DECK_GPIO_IO3), PA5 (SCK), PA6 (MISO), PA7 (MOSI)
  * VL53L1x is on I2C3: PA8 (SCL), PC9 (SDA)
  */
 
@@ -56,6 +56,7 @@
 #define GPIOA_BASE (AHB1PERIPH_BASE + 0x0000UL)
 #define GPIOB_BASE (AHB1PERIPH_BASE + 0x0400UL)
 #define GPIOC_BASE (AHB1PERIPH_BASE + 0x0800UL)
+#define GPIOD_BASE (AHB1PERIPH_BASE + 0x0C00UL)
 
 #define GPIOA_MODER (*(volatile uint32_t *)(GPIOA_BASE + 0x00))
 #define GPIOA_OTYPER (*(volatile uint32_t *)(GPIOA_BASE + 0x04))
@@ -73,8 +74,11 @@
 #define GPIOC_OTYPER (*(volatile uint32_t *)(GPIOC_BASE + 0x04))
 #define GPIOC_OSPEEDR (*(volatile uint32_t *)(GPIOC_BASE + 0x08))
 #define GPIOC_PUPDR (*(volatile uint32_t *)(GPIOC_BASE + 0x0C))
-#define GPIOC_ODR (*(volatile uint32_t *)(GPIOC_BASE + 0x14))
 #define GPIOC_AFR1 (*(volatile uint32_t *)(GPIOC_BASE + 0x24))
+
+#define GPIOD_MODER (*(volatile uint32_t *)(GPIOD_BASE + 0x00))
+#define GPIOD_OSPEEDR (*(volatile uint32_t *)(GPIOD_BASE + 0x08))
+#define GPIOD_ODR (*(volatile uint32_t *)(GPIOD_BASE + 0x14))
 
 // RCC
 #define RCC_BASE (AHB1PERIPH_BASE + 0x3800UL)
@@ -110,11 +114,11 @@
 #define FLASH_BASE (AHB1PERIPH_BASE + 0x3C00UL)
 #define FLASH_ACR (*(volatile uint32_t *)(FLASH_BASE + 0x00))
 
-// LED (PC4)
-#define LED_PIN (1 << 4)
+// LED Blue (PD2) - directly on STM32, active high
+#define LED_PIN (1 << 2)
 
-// PMW3901 chip select (PB12 on expansion connector)
-#define PMW3901_CS_PIN (1 << 12)
+// PMW3901 chip select (PB4 = DECK_GPIO_IO3)
+#define PMW3901_CS_PIN (1 << 4)
 
 // PMW3901 registers
 #define PMW3901_REG_PRODUCT_ID 0x00
@@ -179,13 +183,13 @@ static void delay_us(uint32_t us) {
 }
 
 static void led_on(void) {
-    GPIOC_ODR |= LED_PIN;
+    GPIOD_ODR |= LED_PIN;
 }
 static void led_off(void) {
-    GPIOC_ODR &= ~LED_PIN;
+    GPIOD_ODR &= ~LED_PIN;
 }
 static void led_toggle(void) {
-    GPIOC_ODR ^= LED_PIN;
+    GPIOD_ODR ^= LED_PIN;
 }
 
 static void blink_n(int n, int on_ms, int off_ms) {
@@ -253,21 +257,22 @@ static void systick_init(void) {
 }
 
 static void gpio_init(void) {
-    // Enable GPIO clocks
-    RCC_AHB1ENR |= (1 << 0) | (1 << 1) | (1 << 2); // GPIOA, GPIOB, GPIOC
+    // Enable GPIO clocks (GPIOA for SPI/I2C, GPIOB for CS, GPIOC for I2C SDA, GPIOD for LED)
+    RCC_AHB1ENR |=
+        (1 << 0) | (1 << 1) | (1 << 2) | (1 << 3); // GPIOA, GPIOB, GPIOC, GPIOD
     for (volatile int i = 0; i < 100; i++)
         ;
 
-    // Configure PC4 as output (LED)
-    GPIOC_MODER &= ~(3 << 8);
-    GPIOC_MODER |= (1 << 8);
-    GPIOC_OSPEEDR |= (3 << 8);
-    GPIOC_ODR &= ~LED_PIN;
+    // Configure PD2 as output (Blue LED)
+    GPIOD_MODER &= ~(3 << 4);  // Clear bits for pin 2
+    GPIOD_MODER |= (1 << 4);   // Output mode
+    GPIOD_OSPEEDR |= (3 << 4); // High speed
+    GPIOD_ODR &= ~LED_PIN;     // LED off
 
-    // Configure PB12 as output (PMW3901 CS)
-    GPIOB_MODER &= ~(3 << 24);
-    GPIOB_MODER |= (1 << 24);
-    GPIOB_OSPEEDR |= (3 << 24);
+    // Configure PB4 as output (PMW3901 CS = DECK_GPIO_IO3)
+    GPIOB_MODER &= ~(3 << 8);    // Clear bits for pin 4
+    GPIOB_MODER |= (1 << 8);     // Output mode
+    GPIOB_OSPEEDR |= (3 << 8);   // High speed
     GPIOB_ODR |= PMW3901_CS_PIN; // CS high (inactive)
 }
 
@@ -290,13 +295,13 @@ static void spi_init(void) {
     GPIOA_AFR0 &= ~((0xF << 20) | (0xF << 24) | (0xF << 28));
     GPIOA_AFR0 |= ((5 << 20) | (5 << 24) | (5 << 28));
 
-    // Configure SPI1: Master, 8-bit, CPOL=0, CPHA=0 (SPI mode 0 for PMW3901)
-    // BR = 84MHz/32 = 2.625 MHz (PMW3901 max is 2 MHz, so use /64)
+    // Configure SPI1: Master, 8-bit, CPOL=1, CPHA=1 (SPI mode 3 for PMW3901)
+    // BR = 84MHz/64 = 1.3 MHz (PMW3901 max is 2 MHz)
     SPI1_CR1 = 0;
     SPI1_CR1 = (1 << 2)    // MSTR (Master)
                | (5 << 3)  // BR = /64 (84MHz APB2 / 64 = 1.3 MHz)
-               | (0 << 1)  // CPOL = 0
-               | (0 << 0)  // CPHA = 0
+               | (1 << 1)  // CPOL = 1 (clock idle high)
+               | (1 << 0)  // CPHA = 1 (data sampled on trailing edge)
                | (1 << 9)  // SSM (Software slave management)
                | (1 << 8); // SSI (Internal slave select high)
 
