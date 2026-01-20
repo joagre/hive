@@ -190,8 +190,7 @@ void telemetry_actor(void *args, const hive_spawn_info *siblings,
     // Initialize radio
     if (hal_radio_init() != 0) {
         HIVE_LOG_ERROR("[TELEM] Radio init failed");
-        hive_exit();
-        return; // Never reached, but silences compiler warning
+        return; // No hive_exit() - supervisor sees CRASH
     }
 
     // Register RX callback for ground station commands
@@ -200,13 +199,19 @@ void telemetry_actor(void *args, const hive_spawn_info *siblings,
     HIVE_LOG_INFO("[TELEM] Radio initialized");
 
     // Subscribe to buses
-    hive_bus_subscribe(state->state_bus);
-    hive_bus_subscribe(state->sensor_bus);
-    hive_bus_subscribe(state->thrust_bus);
+    if (HIVE_FAILED(hive_bus_subscribe(state->state_bus)) ||
+        HIVE_FAILED(hive_bus_subscribe(state->sensor_bus)) ||
+        HIVE_FAILED(hive_bus_subscribe(state->thrust_bus))) {
+        HIVE_LOG_ERROR("[TELEM] Bus subscribe failed");
+        return;
+    }
 
     // Start telemetry timer
     timer_id timer;
-    hive_timer_every(TELEMETRY_INTERVAL_US, &timer);
+    if (HIVE_FAILED(hive_timer_every(TELEMETRY_INTERVAL_US, &timer))) {
+        HIVE_LOG_ERROR("[TELEM] Timer setup failed");
+        return;
+    }
 
     HIVE_LOG_INFO("[TELEM] Started at 100Hz");
 
