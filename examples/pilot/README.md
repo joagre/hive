@@ -4,8 +4,8 @@ Quadcopter waypoint navigation using hive actor runtime.
 
 Supports three platforms:
 - **Webots simulation** (default) - Crazyflie quadcopter in Webots simulator
-- **Crazyflie 2.1+** - Bitcraze nano quadcopter (~39 KB flash, ~140 KB RAM)
-- **STEVAL-DRONE01** - ST mini drone kit (~60 KB flash, ~57 KB RAM)
+- **Crazyflie 2.1+** - Bitcraze nano quadcopter (~55 KB flash, ~144 KB RAM)
+- **STEVAL-DRONE01** - ST mini drone kit (~58 KB flash, ~64 KB RAM)
 
 ## What it does
 
@@ -163,10 +163,10 @@ hardware-specific details.
 ## Supervision and Spawn Order
 
 All actors are supervised with **ONE_FOR_ALL** strategy. Flight-critical actors
-use PERMANENT restart (crash triggers restart of all). Telemetry uses TEMPORARY
-restart (crash/exit doesn't trigger restarts, just stops telemetry).
+use PERMANENT restart (crash triggers restart of all). Comms uses TEMPORARY
+restart (crash/exit doesn't trigger restarts, just stops comms).
 
-Workers run at CRITICAL priority (telemetry at LOW). Spawn order determines
+Workers run at CRITICAL priority (comms at LOW). Spawn order determines
 execution order within the same priority level (round-robin). Workers are spawned
 in data-flow order, with flight_manager last so all siblings are available via
 `hive_find_sibling()`:
@@ -182,7 +182,7 @@ in data-flow order, with flight_manager last so all siblings are available via
 | 7     | rate      | CRITICAL | PERMANENT | Needs state + thrust + rate setpoints |
 | 8     | motor     | CRITICAL | PERMANENT | Needs torque + STOP signal, writes hardware last |
 | 9     | flight_mgr| CRITICAL | TRANSIENT | Normal exit = mission complete |
-| 10    | telemetry | LOW      | TEMPORARY | Crazyflie only, not flight-critical |
+| 10    | comms     | LOW      | TEMPORARY | Crazyflie only, not flight-critical |
 
 Workers use **sibling info** for IPC coordination:
 - Supervisor passes sibling info (actor IDs and names) at spawn time
@@ -276,12 +276,12 @@ to the nRF51822 radio chip, which transmits via ESB to a Crazyradio 2.0 on the g
 **Ground station receiver:**
 ```bash
 pip install cflib
-./tools/telemetry_receiver.py -o flight.csv
+./tools/ground_station.py -o flight.csv
 ```
 
 The comms actor runs at LOW priority so control loops run first each cycle.
 Radio send blocks ~370us (37 bytes * 10 bits/byte / 1Mbaud). It uses TEMPORARY restart type so crashes don't trigger restarts
-of flight-critical actors - telemetry simply stops if it fails.
+of flight-critical actors - comms simply stops if it fails.
 
 ## Log Download (Crazyflie 2.1+ only)
 
@@ -291,7 +291,7 @@ LOG_CHUNK packets (28 bytes each) until the entire file is transferred.
 
 **Download log file:**
 ```bash
-./tools/telemetry_receiver.py --download-log flight.bin
+./tools/ground_station.py --download-log flight.bin
 ```
 
 **Decode binary log:**

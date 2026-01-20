@@ -236,8 +236,8 @@ Ten to eleven actors: nine flight-critical workers connected via buses, plus one
 supervisor, and an optional comms actor on radio-enabled platforms (Crazyflie):
 
 **Supervision:** All actors are supervised with ONE_FOR_ALL strategy. Flight-critical
-actors use PERMANENT restart (crash triggers restart of all). Telemetry uses
-TEMPORARY restart (crash/exit doesn't trigger restarts, just stops telemetry).
+actors use PERMANENT restart (crash triggers restart of all). Comms uses
+TEMPORARY restart (crash/exit doesn't trigger restarts, just stops comms).
 
 **Sibling Info:** Workers use `hive_find_sibling()` to look up sibling actor IDs
 for IPC communication. The supervisor passes sibling info at spawn time.
@@ -604,7 +604,7 @@ graph LR
 | **Rate** | State + Thrust + Rate SP | Torque Bus | CRITICAL | Rate PIDs (250Hz) |
 | **Motor** | Torque Bus + STOP notification | Hardware | CRITICAL | Output to hardware via HAL |
 | **Flight Manager** | LANDED notification | START/LANDING/STOP notifications | CRITICAL | Startup delay, landing coordination |
-| **Telemetry** | Sensor + State + Thrust Bus | Radio (HAL) | LOW | Radio telemetry (Crazyflie only, TEMPORARY restart) |
+| **Comms** | Sensor + State + Thrust Bus | Radio (HAL) | LOW | Radio telemetry (Crazyflie only, TEMPORARY restart) |
 
 **Why CRITICAL for flight actors?** Flight-critical actors share the same priority so execution
 order follows spawn order (round-robin within priority level). This ensures the data pipeline
@@ -805,7 +805,7 @@ Flight Manager ──► START ──► Waypoint Actor
 - Waypoint actor blocks until flight manager authorizes flight
 - Easy to add pre-flight checks in one place
 
-### Step 9: Telemetry Actor ✓
+### Step 9: Comms Actor ✓
 
 Add radio telemetry for ground station logging (Crazyflie only).
 
@@ -816,8 +816,8 @@ No real-time flight data logging during flight
 
 **After:**
 ```
-State Bus ──┬──► Telemetry Actor ──► HAL Radio ──► Crazyradio 2.0 ──► Ground Station
-Sensor Bus ─┤         (100Hz)
+State Bus ──┬──► Comms Actor ──► HAL Radio ──► Crazyradio 2.0 ──► Ground Station
+Sensor Bus ─┤      (100Hz)
 Thrust Bus ─┘
 ```
 
@@ -841,9 +841,9 @@ Thrust Bus ─┘
 **Ground station commands (from examples/pilot directory):**
 ```bash
 pip install cflib
-./tools/telemetry_receiver.py -o flight.csv        # Receive telemetry
-./tools/telemetry_receiver.py --download-log log.bin  # Download log file
-../../tools/decode_log.py log.bin > log.txt        # Decode binary log
+./tools/ground_station.py -o flight.csv        # Receive telemetry
+./tools/ground_station.py --download-log log.bin  # Download log file
+../../tools/decode_log.py log.bin > log.txt    # Decode binary log
 ```
 
 **Benefits:**
@@ -868,8 +868,8 @@ pip install cflib
 
 | Platform | Flash | RAM | MCU |
 |----------|-------|-----|-----|
-| Crazyflie 2.1+ | ~39 KB | ~140 KB | STM32F405 (1 MB / 192 KB) |
-| STEVAL-DRONE01 | ~60 KB | ~57 KB | STM32F401 (256 KB / 64 KB) |
+| Crazyflie 2.1+ | ~55 KB | ~144 KB | STM32F405 (1 MB / 192 KB) |
+| STEVAL-DRONE01 | ~58 KB | ~64 KB | STM32F401 (256 KB / 64 KB) |
 
 ### Configuration Split
 
