@@ -115,13 +115,24 @@ if (HIVE_FAILED(hive_bus_subscribe(state->sensor_bus))) {
 }
 ```
 
-**Hot path (main loop):** Log warning and continue. The actor keeps running and
-processes the next iteration.
+**Hot path - blocking calls** (`hive_select`, `hive_bus_read_wait`, `hive_ipc_recv_match`):
+Log error and return. These failures indicate a fundamental runtime problem that the
+actor cannot recover from.
 
 ```c
-if (result.bus.len != sizeof(expected)) {
-    HIVE_LOG_WARN("[MOTOR] Invalid message size: %zu", result.bus.len);
-    continue;
+status = hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
+if (HIVE_FAILED(status)) {
+    HIVE_LOG_ERROR("[SENSOR] recv_match failed: %s", HIVE_ERR_STR(status));
+    return;
+}
+```
+
+**Hot path - non-blocking calls** (`hive_bus_publish`, `hive_ipc_notify`, `hive_timer_after`):
+Log warning and continue. The actor keeps running and processes the next iteration.
+
+```c
+if (HIVE_FAILED(hive_bus_publish(state->sensor_bus, &sensors, sizeof(sensors)))) {
+    HIVE_LOG_WARN("[SENSOR] bus publish failed");
 }
 ```
 
@@ -592,19 +603,19 @@ graph LR
 
 ### Actor Responsibilities (Current)
 
-| Actor | Input | Output | Priority | Responsibility |
-|-------|-------|--------|----------|----------------|
-| **Supervisor** | Child exit notifications | (internal) | CRITICAL | Monitors 9 workers, ONE_FOR_ALL restart |
-| **Sensor** | Hardware | Sensor Bus | CRITICAL | Read raw sensors, publish |
-| **Estimator** | Sensor Bus | State Bus | CRITICAL | Complementary filter fusion, state estimate |
-| **Waypoint** | State Bus + START notification | Position Target Bus | CRITICAL | Waypoint navigation (3D on Webots, altitude-only on STM32) |
-| **Altitude** | State + Position Target Bus + LANDING | Thrust Bus + LANDED | CRITICAL | Altitude PID (250Hz), landing detection |
-| **Position** | Position Target + State Bus | Attitude Setpoint Bus | CRITICAL | Position PD (250Hz) |
-| **Attitude** | Attitude Setpoint + State | Rate Setpoint Bus | CRITICAL | Attitude PIDs (250Hz) |
-| **Rate** | State + Thrust + Rate SP | Torque Bus | CRITICAL | Rate PIDs (250Hz) |
-| **Motor** | Torque Bus + STOP notification | Hardware | CRITICAL | Output to hardware via HAL |
-| **Flight Manager** | LANDED notification | START/LANDING/STOP notifications | CRITICAL | Startup delay, landing coordination |
-| **Comms** | Sensor + State + Thrust Bus | Radio (HAL) | LOW | Radio telemetry (Crazyflie only, TEMPORARY restart) |
+| Actor | Input | Output | Priority | Restart | Responsibility |
+|-------|-------|--------|----------|---------|----------------|
+| **Supervisor** | Child exit notifications | (internal) | CRITICAL | - | Monitors workers, ONE_FOR_ALL restart |
+| **Sensor** | Hardware | Sensor Bus | CRITICAL | PERMANENT | Read raw sensors, publish |
+| **Estimator** | Sensor Bus | State Bus | CRITICAL | PERMANENT | Complementary filter fusion, state estimate |
+| **Waypoint** | State Bus + START notification | Position Target Bus | CRITICAL | PERMANENT | Waypoint navigation (3D on Webots, altitude-only on STM32) |
+| **Altitude** | State + Position Target Bus + LANDING | Thrust Bus + LANDED | CRITICAL | PERMANENT | Altitude PID (250Hz), landing detection |
+| **Position** | Position Target + State Bus | Attitude Setpoint Bus | CRITICAL | PERMANENT | Position PD (250Hz) |
+| **Attitude** | Attitude Setpoint + State | Rate Setpoint Bus | CRITICAL | PERMANENT | Attitude PIDs (250Hz) |
+| **Rate** | State + Thrust + Rate SP | Torque Bus | CRITICAL | PERMANENT | Rate PIDs (250Hz) |
+| **Motor** | Torque Bus + STOP notification | Hardware | CRITICAL | PERMANENT | Output to hardware via HAL |
+| **Flight Manager** | LANDED notification | START/LANDING/STOP notifications | CRITICAL | TRANSIENT | Startup delay, landing coordination (normal exit = mission complete) |
+| **Comms** | Sensor + State + Thrust Bus | Radio (HAL) | LOW | TEMPORARY | Radio telemetry (Crazyflie only, not flight-critical) |
 
 **Why CRITICAL for flight actors?** Flight-critical actors share the same priority so execution
 order follows spawn order (round-robin within priority level). This ensures the data pipeline
@@ -868,7 +879,7 @@ pip install cflib
 
 | Platform | Flash | RAM | MCU |
 |----------|-------|-----|-----|
-| Crazyflie 2.1+ | ~55 KB | ~144 KB | STM32F405 (1 MB / 192 KB) |
+| Crazyflie 2.1+ | ~57 KB | ~144 KB | STM32F405 (1 MB / 192 KB) |
 | STEVAL-DRONE01 | ~58 KB | ~64 KB | STM32F401 (256 KB / 64 KB) |
 
 ### Configuration Split

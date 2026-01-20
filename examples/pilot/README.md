@@ -4,7 +4,7 @@ Quadcopter waypoint navigation using hive actor runtime.
 
 Supports three platforms:
 - **Webots simulation** (default) - Crazyflie quadcopter in Webots simulator
-- **Crazyflie 2.1+** - Bitcraze nano quadcopter (~55 KB flash, ~144 KB RAM)
+- **Crazyflie 2.1+** - Bitcraze nano quadcopter (~57 KB flash, ~144 KB RAM)
 - **STEVAL-DRONE01** - ST mini drone kit (~58 KB flash, ~64 KB RAM)
 
 ## What it does
@@ -317,13 +317,23 @@ if (HIVE_FAILED(hive_bus_subscribe(state->sensor_bus))) {
 }
 ```
 
-**Hot path (main loop):** Log warning and continue. The actor keeps running and
-processes the next iteration.
+**Hot path - blocking calls** (`hive_select`, `hive_bus_read_wait`, `hive_ipc_recv_match`):
+Log error and return. These failures indicate a fundamental runtime problem.
 
 ```c
-if (result.bus.len != sizeof(expected)) {
-    HIVE_LOG_WARN("[MOTOR] Invalid message size: %zu", result.bus.len);
-    continue;
+status = hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
+if (HIVE_FAILED(status)) {
+    HIVE_LOG_ERROR("[SENSOR] recv_match failed: %s", HIVE_ERR_STR(status));
+    return;
+}
+```
+
+**Hot path - non-blocking calls** (`hive_bus_publish`, `hive_ipc_notify`, `hive_timer_after`):
+Log warning and continue. The actor keeps running and processes the next iteration.
+
+```c
+if (HIVE_FAILED(hive_bus_publish(state->sensor_bus, &sensors, sizeof(sensors)))) {
+    HIVE_LOG_WARN("[SENSOR] bus publish failed");
 }
 ```
 
