@@ -559,11 +559,13 @@ graph LR
 | **Flight Manager** | LANDED notification | START/LANDING/STOP notifications | CRITICAL | Startup delay, landing coordination |
 | **Telemetry** | Sensor + State + Thrust Bus | Radio (HAL) | LOW | Radio telemetry (Crazyflie only, TEMPORARY restart) |
 
-**Why all CRITICAL?** All workers use the same priority so execution order follows spawn order
-(round-robin within priority level). This ensures the data pipeline executes correctly:
-sensor → estimator → waypoint → altitude → position → attitude → rate → motor → flight_manager.
-Differentiated priorities would break this—higher priority actors run first regardless of
-spawn order, causing motor to output before controllers have computed new values.
+**Why CRITICAL for flight actors?** Flight-critical actors share the same priority so execution
+order follows spawn order (round-robin within priority level). This ensures the data pipeline
+executes correctly: sensor → estimator → waypoint → altitude → position → attitude → rate →
+motor → flight_manager. Differentiated priorities would break this—higher priority actors run
+first regardless of spawn order, causing motor to output before controllers have computed new
+values. Telemetry runs at LOW priority since it's not flight-critical and shouldn't delay
+control loops.
 
 ### Step 1: Motor Actor ✓
 
