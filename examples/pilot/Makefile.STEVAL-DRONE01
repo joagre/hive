@@ -65,7 +65,8 @@ PILOT_SRCS = \
 	rate_actor.c \
 	motor_actor.c \
 	flight_manager_actor.c \
-	fusion/complementary_filter.c
+	fusion/complementary_filter.c \
+	stack_profile.c
 
 # Hive runtime (STM32 platform - no net, with flash file support)
 HIVE_CORE_SRCS = \
@@ -122,11 +123,11 @@ CFLAGS += -DHIVE_ENABLE_FILE=1
 # Hive memory configuration (shared pilot settings + platform stack sizes)
 include hive_config.mk
 CFLAGS += $(HIVE_CFLAGS)
-# Stack: 2KB per actor, Arena: 24KB (10 actors × 2KB + block headers)
+# Stack: 2KB per actor, Arena: 22KB (10 actors × 2KB + block headers)
 # STEVAL has only 64KB SRAM - very tight
 # Note: No HAL_HAS_RADIO on STEVAL, so comms actor not included
 CFLAGS += -DHIVE_DEFAULT_STACK_SIZE=2048
-CFLAGS += '-DHIVE_STACK_ARENA_SIZE=(24*1024)'
+CFLAGS += '-DHIVE_STACK_ARENA_SIZE=(22*1024)'
 
 # Log level: NONE to minimize stack usage (sprintf is very stack-heavy)
 CFLAGS += -DHIVE_LOG_LEVEL=HIVE_LOG_LEVEL_NONE
@@ -138,8 +139,8 @@ CFLAGS += -DHIVE_LOG_LEVEL=HIVE_LOG_LEVEL_NONE
 CFLAGS += -DHIVE_VFILE_LOG_BASE=0x08020000
 CFLAGS += -DHIVE_VFILE_LOG_SIZE=131072
 CFLAGS += -DHIVE_VFILE_LOG_SECTOR=5
-# Ring buffer: 4KB (reduced from 8KB default to save RAM)
-CFLAGS += '-DHIVE_FILE_RING_SIZE=(4*1024)'
+# Ring buffer: 1KB (minimal - no radio for log download anyway)
+CFLAGS += '-DHIVE_FILE_RING_SIZE=(1*1024)'
 
 # Include paths (including lightweight printf library)
 PRINTF_INCLUDES = -I$(HIVE_ROOT)/lib -I$(HIVE_ROOT)/lib/printf -DPRINTF_INCLUDE_CONFIG_H
