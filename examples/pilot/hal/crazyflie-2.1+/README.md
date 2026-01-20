@@ -28,11 +28,21 @@ Standalone tests using direct register access (in `tests/`):
 
 ```bash
 cd tests
-make thrust_test          # Build thrust calibration test
-make sensor_motor_test    # Build sensor/motor diagnostic
-make flash-thrust         # Flash thrust_test
+make baro_test            # Build barometer test (safest - no motors)
+make flow_test            # Build Flow Deck test (requires Flow Deck v2)
+make sensor_motor_test    # Build sensor/motor diagnostic (REMOVE PROPELLERS!)
+make thrust_test          # Build thrust calibration test (REMOVE PROPELLERS!)
+make flash-baro           # Flash baro_test
+make flash-flow           # Flash flow_test
 make flash-sensor         # Flash sensor_motor_test
+make flash-thrust         # Flash thrust_test
 ```
+
+**Recommended test order:**
+1. `baro_test` - Verify I2C and barometer (no motors, safest)
+2. `flow_test` - Verify Flow Deck sensors (if installed)
+3. `sensor_motor_test` - Verify motor wiring and rotation
+4. `thrust_test` - Calibrate hover thrust
 
 See `tests/README.md` for LED feedback patterns and procedures.
 
@@ -63,8 +73,8 @@ make -f Makefile.crazyflie-2.1+
 | Component | Part Number | Interface | Description |
 |-----------|-------------|-----------|-------------|
 | MCU | STM32F405RG | - | ARM Cortex-M4, 168 MHz, DSP+FPU |
-| IMU | BMI088 | SPI1 | 6-axis accel + gyro |
-| Barometer | BMP388 | I2C3 | Pressure/altitude |
+| IMU | BMI088 | I2C3 | 6-axis accel + gyro (addr: 0x18/0x68) |
+| Barometer | BMP388 | I2C3 | Pressure/altitude (addr: 0x77) |
 | Flow sensor | PMW3901 | SPI1 | Optical flow (Flow deck v2) |
 | ToF sensor | VL53L1x | I2C3 | Height measurement (Flow deck v2) |
 | Motors | 7x16mm | TIM2 PWM | Brushed coreless, x4 |
@@ -79,8 +89,8 @@ make -f Makefile.crazyflie-2.1+
 - 8 MHz HSE crystal
 
 **Sensors:**
-- BMI088: 16-bit accel (+/-24g) + 16-bit gyro (+/-2000 dps) on SPI1
-- BMP388: 24-bit barometer on I2C3
+- BMI088: 16-bit accel (+/-24g) + 16-bit gyro (+/-2000 dps) on I2C3 (addr: 0x18/0x68)
+- BMP388: 24-bit barometer on I2C3 (addr: 0x77)
 
 **Optional Flow Deck v2:**
 - PMW3901: Optical flow sensor (80x80 pixels)
@@ -182,19 +192,23 @@ make -f Makefile.crazyflie-2.1+
 
 ## Pin Mapping
 
-### SPI1 (BMI088 IMU)
+### I2C3 (BMI088, BMP388, VL53L1x)
+```
+PA8  - I2C3_SCL
+PC9  - I2C3_SDA
+
+BMI088 Accelerometer: 0x18
+BMI088 Gyroscope: 0x68
+BMP388 Barometer: 0x77
+VL53L1x ToF: 0x29
+```
+
+### SPI1 (PMW3901 Flow Sensor)
 ```
 PA5  - SPI1_SCK
 PA6  - SPI1_MISO
 PA7  - SPI1_MOSI
-PB0  - BMI088_GYRO_CS
-PB1  - BMI088_ACC_CS
-```
-
-### I2C3 (BMP388, VL53L1x)
-```
-PA8  - I2C3_SCL
-PC9  - I2C3_SDA
+PB12 - PMW3901_CS (Flow deck v2)
 ```
 
 ### TIM2 PWM (Motors)
@@ -203,12 +217,6 @@ PA0  - TIM2_CH1 (M1, front-left, CCW)
 PA1  - TIM2_CH2 (M2, front-right, CW)
 PA2  - TIM2_CH3 (M3, rear-right, CCW)
 PA3  - TIM2_CH4 (M4, rear-left, CW)
-```
-
-### Flow Deck v2 (optional)
-```
-PB12 - PMW3901_CS (expansion connector)
-      VL53L1x uses I2C3 (shared with BMP388)
 ```
 
 ### Misc

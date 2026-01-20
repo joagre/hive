@@ -34,11 +34,11 @@
  *          Rear
  *
  * TIM2 PWM: PA0=M1, PA1=M2, PA2=M3, PA3=M4
- * BMI088: SPI1 (PA5=SCK, PA6=MISO, PA7=MOSI), PB4=Gyro CS, PB5=Accel CS
+ * BMI088: I2C3 (PA8=SCL, PC9=SDA), Gyro addr=0x68
  */
 
-#include <stdint.h>
 #include <stdbool.h>
+#include <stdint.h>
 
 // ============================================================================
 // Test Configuration
@@ -60,29 +60,26 @@
 
 // GPIO
 #define GPIOA_BASE (AHB1PERIPH_BASE + 0x0000UL)
-#define GPIOB_BASE (AHB1PERIPH_BASE + 0x0400UL)
 #define GPIOC_BASE (AHB1PERIPH_BASE + 0x0800UL)
 
 #define GPIOA_MODER (*(volatile uint32_t *)(GPIOA_BASE + 0x00))
+#define GPIOA_OTYPER (*(volatile uint32_t *)(GPIOA_BASE + 0x04))
 #define GPIOA_OSPEEDR (*(volatile uint32_t *)(GPIOA_BASE + 0x08))
 #define GPIOA_PUPDR (*(volatile uint32_t *)(GPIOA_BASE + 0x0C))
 #define GPIOA_AFR0 (*(volatile uint32_t *)(GPIOA_BASE + 0x20))
-
-#define GPIOB_MODER (*(volatile uint32_t *)(GPIOB_BASE + 0x00))
-#define GPIOB_OSPEEDR (*(volatile uint32_t *)(GPIOB_BASE + 0x08))
-#define GPIOB_PUPDR (*(volatile uint32_t *)(GPIOB_BASE + 0x0C))
-#define GPIOB_ODR (*(volatile uint32_t *)(GPIOB_BASE + 0x14))
-#define GPIOB_BSRR (*(volatile uint32_t *)(GPIOB_BASE + 0x18))
+#define GPIOA_AFR1 (*(volatile uint32_t *)(GPIOA_BASE + 0x24))
 
 #define GPIOC_MODER (*(volatile uint32_t *)(GPIOC_BASE + 0x00))
+#define GPIOC_OTYPER (*(volatile uint32_t *)(GPIOC_BASE + 0x04))
 #define GPIOC_OSPEEDR (*(volatile uint32_t *)(GPIOC_BASE + 0x08))
+#define GPIOC_PUPDR (*(volatile uint32_t *)(GPIOC_BASE + 0x0C))
 #define GPIOC_ODR (*(volatile uint32_t *)(GPIOC_BASE + 0x14))
+#define GPIOC_AFR1 (*(volatile uint32_t *)(GPIOC_BASE + 0x24))
 
 // RCC
 #define RCC_BASE (AHB1PERIPH_BASE + 0x3800UL)
 #define RCC_AHB1ENR (*(volatile uint32_t *)(RCC_BASE + 0x30))
 #define RCC_APB1ENR (*(volatile uint32_t *)(RCC_BASE + 0x40))
-#define RCC_APB2ENR (*(volatile uint32_t *)(RCC_BASE + 0x44))
 
 // TIM2
 #define TIM2_BASE (APB1PERIPH_BASE + 0x0000UL)
@@ -98,12 +95,16 @@
 #define TIM2_CCR4 (*(volatile uint32_t *)(TIM2_BASE + 0x40))
 #define TIM2_EGR (*(volatile uint32_t *)(TIM2_BASE + 0x14))
 
-// SPI1
-#define SPI1_BASE (APB2PERIPH_BASE + 0x3000UL)
-#define SPI1_CR1 (*(volatile uint32_t *)(SPI1_BASE + 0x00))
-#define SPI1_CR2 (*(volatile uint32_t *)(SPI1_BASE + 0x04))
-#define SPI1_SR (*(volatile uint32_t *)(SPI1_BASE + 0x08))
-#define SPI1_DR (*(volatile uint32_t *)(SPI1_BASE + 0x0C))
+// I2C3
+#define I2C3_BASE (APB1PERIPH_BASE + 0x5C00UL)
+#define I2C3_CR1 (*(volatile uint32_t *)(I2C3_BASE + 0x00))
+#define I2C3_CR2 (*(volatile uint32_t *)(I2C3_BASE + 0x04))
+#define I2C3_OAR1 (*(volatile uint32_t *)(I2C3_BASE + 0x08))
+#define I2C3_DR (*(volatile uint32_t *)(I2C3_BASE + 0x10))
+#define I2C3_SR1 (*(volatile uint32_t *)(I2C3_BASE + 0x14))
+#define I2C3_SR2 (*(volatile uint32_t *)(I2C3_BASE + 0x18))
+#define I2C3_CCR (*(volatile uint32_t *)(I2C3_BASE + 0x1C))
+#define I2C3_TRISE (*(volatile uint32_t *)(I2C3_BASE + 0x20))
 
 // SysTick
 #define SYSTICK_BASE 0xE000E010UL
@@ -122,9 +123,8 @@
 // LED (PC4)
 #define LED_PIN (1 << 4)
 
-// BMI088 chip selects (directly on STM32)
-#define BMI088_GYRO_CS_PIN (1 << 4)  // PB4
-#define BMI088_ACCEL_CS_PIN (1 << 5) // PB5
+// BMI088 I2C address (gyroscope)
+#define BMI088_GYRO_I2C_ADDR 0x68
 
 // BMI088 registers
 #define BMI088_GYRO_CHIP_ID 0x00
@@ -227,7 +227,7 @@ static void systick_init(void) {
 
 static void gpio_init(void) {
     // Enable GPIO clocks
-    RCC_AHB1ENR |= (1 << 0) | (1 << 1) | (1 << 2); // GPIOA, GPIOB, GPIOC
+    RCC_AHB1ENR |= (1 << 0) | (1 << 2); // GPIOA, GPIOC
     for (volatile int i = 0; i < 100; i++)
         ;
 
@@ -236,13 +236,6 @@ static void gpio_init(void) {
     GPIOC_MODER |= (1 << 8);
     GPIOC_OSPEEDR |= (3 << 8);
     GPIOC_ODR &= ~LED_PIN;
-
-    // Configure PB4, PB5 as output (BMI088 CS pins)
-    GPIOB_MODER &= ~((3 << 8) | (3 << 10));
-    GPIOB_MODER |= ((1 << 8) | (1 << 10));
-    GPIOB_OSPEEDR |= ((3 << 8) | (3 << 10));
-    // Set CS high (inactive)
-    GPIOB_ODR |= BMI088_GYRO_CS_PIN | BMI088_ACCEL_CS_PIN;
 }
 
 static bool motors_init(void) {
@@ -303,73 +296,140 @@ static void motors_stop_all(void) {
 }
 
 // ============================================================================
-// SPI Functions
+// I2C Functions (I2C3: PA8=SCL, PC9=SDA)
 // ============================================================================
 
-static void spi_init(void) {
-    // Enable SPI1 clock
-    RCC_APB2ENR |= (1 << 12);
+static void i2c_init(void) {
+    // Enable I2C3 clock
+    RCC_APB1ENR |= (1 << 23);
     for (volatile int i = 0; i < 100; i++)
         ;
 
-    // Configure PA5 (SCK), PA6 (MISO), PA7 (MOSI) as AF5 (SPI1)
-    GPIOA_MODER &= ~((3 << 10) | (3 << 12) | (3 << 14));
-    GPIOA_MODER |= ((2 << 10) | (2 << 12) | (2 << 14));
-    GPIOA_OSPEEDR |= ((3 << 10) | (3 << 12) | (3 << 14));
+    // Configure PA8 as AF4 (I2C3_SCL), open-drain, pull-up
+    GPIOA_MODER &= ~(3 << 16);
+    GPIOA_MODER |= (2 << 16);   // AF mode
+    GPIOA_OTYPER |= (1 << 8);   // Open-drain
+    GPIOA_OSPEEDR |= (3 << 16); // High speed
+    GPIOA_PUPDR &= ~(3 << 16);
+    GPIOA_PUPDR |= (1 << 16); // Pull-up
+    GPIOA_AFR1 &= ~(0xF << 0);
+    GPIOA_AFR1 |= (4 << 0); // AF4 = I2C3
 
-    // Set AF5 for PA5, PA6, PA7 (bits 20-31 of AFRL)
-    GPIOA_AFR0 &= ~((0xF << 20) | (0xF << 24) | (0xF << 28));
-    GPIOA_AFR0 |= ((5 << 20) | (5 << 24) | (5 << 28));
+    // Configure PC9 as AF4 (I2C3_SDA), open-drain, pull-up
+    GPIOC_MODER &= ~(3 << 18);
+    GPIOC_MODER |= (2 << 18);   // AF mode
+    GPIOC_OTYPER |= (1 << 9);   // Open-drain
+    GPIOC_OSPEEDR |= (3 << 18); // High speed
+    GPIOC_PUPDR &= ~(3 << 18);
+    GPIOC_PUPDR |= (1 << 18); // Pull-up
+    GPIOC_AFR1 &= ~(0xF << 4);
+    GPIOC_AFR1 |= (4 << 4); // AF4 = I2C3
 
-    // Configure SPI1: Master, 8-bit, CPOL=1, CPHA=1, BR=84MHz/16=5.25MHz
-    // For BMI088: CPOL=1, CPHA=1 (SPI mode 3)
-    SPI1_CR1 = 0;
-    SPI1_CR1 = (1 << 2)    // MSTR (Master)
-               | (3 << 3)  // BR = /16 (84MHz APB2 / 16 = 5.25 MHz)
-               | (1 << 1)  // CPOL = 1
-               | (1 << 0)  // CPHA = 1
-               | (1 << 9)  // SSM (Software slave management)
-               | (1 << 8); // SSI (Internal slave select high)
+    // Reset I2C3
+    I2C3_CR1 = (1 << 15); // SWRST
+    I2C3_CR1 = 0;
 
-    // Enable SPI
-    SPI1_CR1 |= (1 << 6); // SPE
+    // Configure I2C3: 400 kHz (APB1 = 42 MHz)
+    I2C3_CR2 = 42;       // FREQ = 42 MHz
+    I2C3_CCR = 35;       // CCR for 400 kHz fast mode
+    I2C3_TRISE = 13;     // Maximum rise time
+    I2C3_CR1 = (1 << 0); // PE = enable I2C
 }
 
-static uint8_t spi_transfer(uint8_t data) {
-    // Wait for TXE
-    while (!(SPI1_SR & (1 << 1)))
+static bool i2c_start(void) {
+    I2C3_CR1 |= (1 << 8); // START
+    uint32_t timeout = 10000;
+    while (!(I2C3_SR1 & (1 << 0)) && timeout--)
         ;
-    SPI1_DR = data;
-    // Wait for RXNE
-    while (!(SPI1_SR & (1 << 0)))
-        ;
-    return (uint8_t)SPI1_DR;
+    return timeout > 0;
 }
 
-static void gyro_cs_low(void) {
-    GPIOB_ODR &= ~BMI088_GYRO_CS_PIN;
+static bool i2c_send_addr(uint8_t addr, bool read) {
+    I2C3_DR = (addr << 1) | (read ? 1 : 0);
+    uint32_t timeout = 10000;
+    while (!(I2C3_SR1 & (1 << 1)) && timeout--)
+        ;
+    if (timeout == 0)
+        return false;
+    (void)I2C3_SR2; // Clear ADDR by reading SR2
+    return true;
 }
-static void gyro_cs_high(void) {
-    GPIOB_ODR |= BMI088_GYRO_CS_PIN;
+
+static void i2c_stop(void) {
+    I2C3_CR1 |= (1 << 9); // STOP
+}
+
+static bool i2c_write_byte(uint8_t data) {
+    uint32_t timeout = 10000;
+    while (!(I2C3_SR1 & (1 << 7)) && timeout--)
+        ; // TXE
+    if (timeout == 0)
+        return false;
+    I2C3_DR = data;
+    timeout = 10000;
+    while (!(I2C3_SR1 & (1 << 2)) && timeout--)
+        ; // BTF
+    return timeout > 0;
+}
+
+static uint8_t i2c_read_byte(bool ack) {
+    if (ack) {
+        I2C3_CR1 |= (1 << 10); // ACK
+    } else {
+        I2C3_CR1 &= ~(1 << 10); // NACK
+    }
+    uint32_t timeout = 10000;
+    while (!(I2C3_SR1 & (1 << 6)) && timeout--)
+        ; // RXNE
+    return I2C3_DR;
 }
 
 static uint8_t gyro_read_reg(uint8_t reg) {
-    gyro_cs_low();
-    spi_transfer(reg | 0x80); // Read bit
-    uint8_t val = spi_transfer(0x00);
-    gyro_cs_high();
+    if (!i2c_start())
+        return 0;
+    if (!i2c_send_addr(BMI088_GYRO_I2C_ADDR, false)) {
+        i2c_stop();
+        return 0;
+    }
+    if (!i2c_write_byte(reg)) {
+        i2c_stop();
+        return 0;
+    }
+
+    // Repeated start for read
+    if (!i2c_start())
+        return 0;
+    if (!i2c_send_addr(BMI088_GYRO_I2C_ADDR, true)) {
+        i2c_stop();
+        return 0;
+    }
+
+    uint8_t val = i2c_read_byte(false); // NACK for single byte
+    i2c_stop();
     return val;
 }
 
-static void gyro_write_reg(uint8_t reg, uint8_t val) {
-    gyro_cs_low();
-    spi_transfer(reg & 0x7F); // Write bit
-    spi_transfer(val);
-    gyro_cs_high();
+static bool gyro_write_reg(uint8_t reg, uint8_t val) {
+    if (!i2c_start())
+        return false;
+    if (!i2c_send_addr(BMI088_GYRO_I2C_ADDR, false)) {
+        i2c_stop();
+        return false;
+    }
+    if (!i2c_write_byte(reg)) {
+        i2c_stop();
+        return false;
+    }
+    if (!i2c_write_byte(val)) {
+        i2c_stop();
+        return false;
+    }
+    i2c_stop();
+    return true;
 }
 
 static bool gyro_init(void) {
-    spi_init();
+    i2c_init();
 
     // Small delay
     delay_ms(10);

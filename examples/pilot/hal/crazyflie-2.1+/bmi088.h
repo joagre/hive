@@ -1,7 +1,10 @@
 // BMI088 IMU Driver for Crazyflie 2.1+
 //
 // The BMI088 has separate accelerometer and gyroscope with independent
-// SPI interfaces (separate chip selects). This driver handles both.
+// I2C addresses. This driver handles both.
+//
+// Crazyflie 2.1/2.1+ uses I2C3 for the BMI088 (not SPI like the Bolt).
+// Default I2C addresses: Accelerometer=0x18, Gyroscope=0x68
 //
 // Accelerometer: 16-bit, +/-3/6/12/24g
 // Gyroscope: 16-bit, +/-125/250/500/1000/2000 dps
@@ -126,15 +129,29 @@ bool bmi088_self_test(void);
 void bmi088_reset(void);
 
 // ----------------------------------------------------------------------------
-// Low-Level SPI Interface (to be implemented by platform)
+// I2C Addresses
+// ----------------------------------------------------------------------------
+
+// Default I2C addresses (directly on Crazyflie 2.1+)
+// These can be changed via SDO1/SDO2 pins:
+//   Accelerometer: 0x18 (SDO1=GND) or 0x19 (SDO1=VDD)
+//   Gyroscope: 0x68 (SDO2=GND) or 0x69 (SDO2=VDD)
+#define BMI088_ACC_I2C_ADDR 0x18
+#define BMI088_GYRO_I2C_ADDR 0x68
+
+// ----------------------------------------------------------------------------
+// Low-Level I2C Interface (to be implemented by platform)
 // ----------------------------------------------------------------------------
 
 // These functions must be implemented by the platform layer
-extern void bmi088_acc_cs_low(void);
-extern void bmi088_acc_cs_high(void);
-extern void bmi088_gyro_cs_low(void);
-extern void bmi088_gyro_cs_high(void);
-extern uint8_t bmi088_spi_transfer(uint8_t data);
+// addr: 7-bit I2C address
+// reg: register address
+// data: buffer for read/write
+// len: number of bytes
+extern bool bmi088_i2c_read(uint8_t addr, uint8_t reg, uint8_t *data,
+                            uint8_t len);
+extern bool bmi088_i2c_write(uint8_t addr, uint8_t reg, uint8_t *data,
+                             uint8_t len);
 extern void bmi088_delay_us(uint32_t us);
 extern void bmi088_delay_ms(uint32_t ms);
 

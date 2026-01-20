@@ -174,10 +174,10 @@ If rotation is wrong, the motor connector can be reversed (swap the two wires).
 
 - **MCU:** STM32F405RG @ 168 MHz
 - **Motors:** Brushed coreless, TIM2 PWM (PA0-PA3)
-- **IMU:** BMI088 on SPI1 (PA5/PA6/PA7, CS: PB4/PB5)
+- **IMU:** BMI088 on I2C3 (PA8/PC9, accel addr: 0x18, gyro addr: 0x68)
 - **Barometer:** BMP388 on I2C3 (PA8/PC9, addr: 0x77)
 - **Flow Deck v2 (optional):**
-  - PMW3901 optical flow on SPI1 (CS: PB12)
+  - PMW3901 optical flow on SPI1 (PA5/PA6/PA7, CS: PB12)
   - VL53L1x ToF on I2C3 (addr: 0x29)
 - **LED:** Blue LED on PC4
 

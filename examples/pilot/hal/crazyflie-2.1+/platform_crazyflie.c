@@ -33,18 +33,16 @@
 #define LED_PIN GPIO_ODR_OD4 // PC4 blue LED on Crazyflie
 #define LED_PORT GPIOC
 
-// SPI pins for BMI088 (SPI1)
-#define SPI1_SCK_PIN 5       // PA5
-#define SPI1_MISO_PIN 6      // PA6
-#define SPI1_MOSI_PIN 7      // PA7
-#define BMI088_ACC_CS_PIN 1  // PB1
-#define BMI088_GYRO_CS_PIN 0 // PB0
-
-// I2C pins (I2C3)
+// I2C pins (I2C3) - used by BMI088, BMP388, VL53L1x
 #define I2C3_SCL_PIN 8 // PA8
 #define I2C3_SDA_PIN 9 // PC9
 
-// SPI pins for PMW3901 on Flow deck (directly on expansion connector)
+// SPI1 pins - used by PMW3901 on Flow deck
+#define SPI1_SCK_PIN 5  // PA5
+#define SPI1_MISO_PIN 6 // PA6
+#define SPI1_MOSI_PIN 7 // PA7
+
+// SPI chip select for PMW3901 on Flow deck (expansion connector)
 #define FLOW_SPI_CS_PIN 12 // PB12 (expansion deck)
 
 // ----------------------------------------------------------------------------
@@ -135,7 +133,7 @@ static void gpio_init(void) {
 }
 
 // ----------------------------------------------------------------------------
-// SPI Interface for BMI088
+// SPI Interface for PMW3901 (Flow deck)
 // ----------------------------------------------------------------------------
 
 static void spi1_init(void) {
@@ -152,12 +150,11 @@ static void spi1_init(void) {
     GPIOA->OSPEEDR |= (GPIO_OSPEEDER_OSPEEDR5 | GPIO_OSPEEDER_OSPEEDR6 |
                        GPIO_OSPEEDER_OSPEEDR7);
 
-    // Configure CS pins (PB0, PB1) as outputs
-    GPIOB->MODER &= ~(GPIO_MODER_MODER0 | GPIO_MODER_MODER1);
-    GPIOB->MODER |= (GPIO_MODER_MODER0_0 | GPIO_MODER_MODER1_0);
-    GPIOB->OSPEEDR |= (GPIO_OSPEEDER_OSPEEDR0 | GPIO_OSPEEDER_OSPEEDR1);
-    GPIOB->ODR |=
-        (1 << BMI088_ACC_CS_PIN) | (1 << BMI088_GYRO_CS_PIN); // CS high
+    // Configure PMW3901 CS pin (PB12) as output
+    GPIOB->MODER &= ~(3U << (FLOW_SPI_CS_PIN * 2));
+    GPIOB->MODER |= (1U << (FLOW_SPI_CS_PIN * 2));
+    GPIOB->OSPEEDR |= (3U << (FLOW_SPI_CS_PIN * 2));
+    GPIOB->ODR |= (1 << FLOW_SPI_CS_PIN); // CS high (deselected)
 
     // Configure SPI1: Master, 8-bit, CPOL=0, CPHA=0, ~10 MHz (84/8)
     SPI1->CR1 = SPI_CR1_MSTR | // Master mode
@@ -177,31 +174,8 @@ static uint8_t spi1_transfer(uint8_t data) {
     return SPI1->DR;
 }
 
-// BMI088 SPI callbacks
-void bmi088_acc_cs_low(void) {
-    GPIOB->ODR &= ~(1 << BMI088_ACC_CS_PIN);
-}
-void bmi088_acc_cs_high(void) {
-    GPIOB->ODR |= (1 << BMI088_ACC_CS_PIN);
-}
-void bmi088_gyro_cs_low(void) {
-    GPIOB->ODR &= ~(1 << BMI088_GYRO_CS_PIN);
-}
-void bmi088_gyro_cs_high(void) {
-    GPIOB->ODR |= (1 << BMI088_GYRO_CS_PIN);
-}
-uint8_t bmi088_spi_transfer(uint8_t data) {
-    return spi1_transfer(data);
-}
-void bmi088_delay_us(uint32_t us) {
-    platform_delay_us(us);
-}
-void bmi088_delay_ms(uint32_t ms) {
-    platform_delay_ms(ms);
-}
-
 // ----------------------------------------------------------------------------
-// I2C Interface for BMP388 and VL53L1x
+// I2C Interface for BMI088, BMP388, and VL53L1x
 // ----------------------------------------------------------------------------
 
 static void i2c3_init(void) {
@@ -285,6 +259,29 @@ static bool i2c3_read(uint8_t addr, uint8_t *data, uint16_t len) {
     I2C3->CR1 |= I2C_CR1_STOP;
 
     return true;
+}
+
+// BMI088 I2C callbacks (BMI088 is on I2C3, not SPI, on Crazyflie 2.1+)
+bool bmi088_i2c_read(uint8_t addr, uint8_t reg, uint8_t *data, uint8_t len) {
+    if (!i2c3_write(addr, &reg, 1))
+        return false;
+    return i2c3_read(addr, data, len);
+}
+
+bool bmi088_i2c_write(uint8_t addr, uint8_t reg, uint8_t *data, uint8_t len) {
+    uint8_t buf[len + 1];
+    buf[0] = reg;
+    for (uint8_t i = 0; i < len; i++)
+        buf[i + 1] = data[i];
+    return i2c3_write(addr, buf, len + 1);
+}
+
+void bmi088_delay_us(uint32_t us) {
+    platform_delay_us(us);
+}
+
+void bmi088_delay_ms(uint32_t ms) {
+    platform_delay_ms(ms);
 }
 
 // BMP388 I2C callbacks
@@ -400,13 +397,13 @@ int platform_init(void) {
     // 1 blink = starting
     init_blink(1, 200, 200);
 
-    // Initialize SPI1 for BMI088
-    spi1_init();
-
-    // Initialize I2C3 for BMP388 and VL53L1x
+    // Initialize I2C3 for BMI088, BMP388, and VL53L1x
     i2c3_init();
 
-    // Initialize BMI088 IMU
+    // Initialize SPI1 for PMW3901 (Flow deck only)
+    spi1_init();
+
+    // Initialize BMI088 IMU (on I2C3)
     if (!bmi088_init(NULL)) {
         init_blink(3, 100, 100); // 3 fast blinks = IMU failed
         error_blink_forever();

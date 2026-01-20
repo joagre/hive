@@ -1,7 +1,10 @@
-// BMI088 IMU Driver Implementation
+// BMI088 IMU Driver Implementation (I2C version for Crazyflie 2.1+)
 //
 // Reference: Bosch BMI088 Datasheet (BST-BMI088-DS001)
 // Reference: Crazyflie firmware (sensors_bmi088_bmp3xx.c)
+//
+// Note: Crazyflie 2.1/2.1+ uses I2C for the BMI088. Only the Crazyflie Bolt
+// uses SPI. This driver is specific to the I2C interface.
 
 #include "bmi088.h"
 #include <math.h>
@@ -62,10 +65,6 @@
 #define BMI088_ACC_SOFTRESET_CMD 0xB6
 #define BMI088_GYRO_SOFTRESET_CMD 0xB6
 
-// SPI read/write flags
-#define BMI088_SPI_READ 0x80
-#define BMI088_SPI_WRITE 0x00
-
 // Constants
 #define GRAVITY_MSS 9.80665f
 #define DEG_TO_RAD 0.017453292519943295f
@@ -82,63 +81,31 @@ static float s_acc_scale = 0.0f;  // LSB to m/s^2
 static float s_gyro_scale = 0.0f; // LSB to rad/s
 
 // ----------------------------------------------------------------------------
-// Low-Level SPI Functions
+// Low-Level I2C Functions
 // ----------------------------------------------------------------------------
 
-static uint8_t acc_read_reg(uint8_t reg) {
-    bmi088_acc_cs_low();
-    bmi088_spi_transfer(reg | BMI088_SPI_READ);
-    bmi088_spi_transfer(0x00); // Dummy byte for accelerometer
-    uint8_t value = bmi088_spi_transfer(0x00);
-    bmi088_acc_cs_high();
-    bmi088_delay_us(2);
-    return value;
+static bool acc_read_reg(uint8_t reg, uint8_t *value) {
+    return bmi088_i2c_read(BMI088_ACC_I2C_ADDR, reg, value, 1);
 }
 
-static void acc_write_reg(uint8_t reg, uint8_t value) {
-    bmi088_acc_cs_low();
-    bmi088_spi_transfer(reg | BMI088_SPI_WRITE);
-    bmi088_spi_transfer(value);
-    bmi088_acc_cs_high();
-    bmi088_delay_us(2);
+static bool acc_write_reg(uint8_t reg, uint8_t value) {
+    return bmi088_i2c_write(BMI088_ACC_I2C_ADDR, reg, &value, 1);
 }
 
-static void acc_read_burst(uint8_t reg, uint8_t *data, uint8_t len) {
-    bmi088_acc_cs_low();
-    bmi088_spi_transfer(reg | BMI088_SPI_READ);
-    bmi088_spi_transfer(0x00); // Dummy byte
-    for (uint8_t i = 0; i < len; i++) {
-        data[i] = bmi088_spi_transfer(0x00);
-    }
-    bmi088_acc_cs_high();
-    bmi088_delay_us(2);
+static bool acc_read_burst(uint8_t reg, uint8_t *data, uint8_t len) {
+    return bmi088_i2c_read(BMI088_ACC_I2C_ADDR, reg, data, len);
 }
 
-static uint8_t gyro_read_reg(uint8_t reg) {
-    bmi088_gyro_cs_low();
-    bmi088_spi_transfer(reg | BMI088_SPI_READ);
-    uint8_t value = bmi088_spi_transfer(0x00);
-    bmi088_gyro_cs_high();
-    bmi088_delay_us(2);
-    return value;
+static bool gyro_read_reg(uint8_t reg, uint8_t *value) {
+    return bmi088_i2c_read(BMI088_GYRO_I2C_ADDR, reg, value, 1);
 }
 
-static void gyro_write_reg(uint8_t reg, uint8_t value) {
-    bmi088_gyro_cs_low();
-    bmi088_spi_transfer(reg | BMI088_SPI_WRITE);
-    bmi088_spi_transfer(value);
-    bmi088_gyro_cs_high();
-    bmi088_delay_us(2);
+static bool gyro_write_reg(uint8_t reg, uint8_t value) {
+    return bmi088_i2c_write(BMI088_GYRO_I2C_ADDR, reg, &value, 1);
 }
 
-static void gyro_read_burst(uint8_t reg, uint8_t *data, uint8_t len) {
-    bmi088_gyro_cs_low();
-    bmi088_spi_transfer(reg | BMI088_SPI_READ);
-    for (uint8_t i = 0; i < len; i++) {
-        data[i] = bmi088_spi_transfer(0x00);
-    }
-    bmi088_gyro_cs_high();
-    bmi088_delay_us(2);
+static bool gyro_read_burst(uint8_t reg, uint8_t *data, uint8_t len) {
+    return bmi088_i2c_read(BMI088_GYRO_I2C_ADDR, reg, data, len);
 }
 
 // ----------------------------------------------------------------------------
@@ -202,67 +169,83 @@ bool bmi088_init(const bmi088_config_t *config) {
     // Accelerometer Initialization
     // -------------------------------------------------------------------------
 
-    // Perform dummy read to switch accelerometer to SPI mode
-    acc_read_reg(BMI088_ACC_CHIP_ID);
-    bmi088_delay_ms(1);
-
     // Soft reset accelerometer
-    acc_write_reg(BMI088_ACC_SOFTRESET, BMI088_ACC_SOFTRESET_CMD);
+    if (!acc_write_reg(BMI088_ACC_SOFTRESET, BMI088_ACC_SOFTRESET_CMD)) {
+        return false;
+    }
     bmi088_delay_ms(50);
 
-    // Dummy read again after reset
-    acc_read_reg(BMI088_ACC_CHIP_ID);
-    bmi088_delay_ms(1);
-
     // Verify accelerometer chip ID
-    uint8_t acc_id = acc_read_reg(BMI088_ACC_CHIP_ID);
+    uint8_t acc_id;
+    if (!acc_read_reg(BMI088_ACC_CHIP_ID, &acc_id)) {
+        return false;
+    }
     if (acc_id != BMI088_ACC_CHIP_ID_VALUE) {
         return false;
     }
 
     // Configure accelerometer
     // PWR_CONF: disable suspend mode (active mode)
-    acc_write_reg(BMI088_ACC_PWR_CONF, 0x00);
+    if (!acc_write_reg(BMI088_ACC_PWR_CONF, 0x00)) {
+        return false;
+    }
     bmi088_delay_ms(1);
 
     // PWR_CTRL: enable accelerometer
-    acc_write_reg(BMI088_ACC_PWR_CTRL, 0x04);
+    if (!acc_write_reg(BMI088_ACC_PWR_CTRL, 0x04)) {
+        return false;
+    }
     bmi088_delay_ms(50);
 
     // ACC_CONF: set ODR and bandwidth
     // BWP = normal (bits 7:4), ODR (bits 3:0)
-    acc_write_reg(BMI088_ACC_CONF, (0x0A << 4) | s_config.acc_odr);
-    bmi088_delay_us(2);
+    if (!acc_write_reg(BMI088_ACC_CONF, (0x0A << 4) | s_config.acc_odr)) {
+        return false;
+    }
+    bmi088_delay_us(450); // Wait for config to take effect
 
     // ACC_RANGE: set measurement range
-    acc_write_reg(BMI088_ACC_RANGE, s_config.acc_range);
-    bmi088_delay_us(2);
+    if (!acc_write_reg(BMI088_ACC_RANGE, s_config.acc_range)) {
+        return false;
+    }
+    bmi088_delay_us(450);
 
     // -------------------------------------------------------------------------
     // Gyroscope Initialization
     // -------------------------------------------------------------------------
 
     // Soft reset gyroscope
-    gyro_write_reg(BMI088_GYRO_SOFTRESET, BMI088_GYRO_SOFTRESET_CMD);
+    if (!gyro_write_reg(BMI088_GYRO_SOFTRESET, BMI088_GYRO_SOFTRESET_CMD)) {
+        return false;
+    }
     bmi088_delay_ms(50);
 
     // Verify gyroscope chip ID
-    uint8_t gyro_id = gyro_read_reg(BMI088_GYRO_CHIP_ID);
+    uint8_t gyro_id;
+    if (!gyro_read_reg(BMI088_GYRO_CHIP_ID, &gyro_id)) {
+        return false;
+    }
     if (gyro_id != BMI088_GYRO_CHIP_ID_VALUE) {
         return false;
     }
 
     // Configure gyroscope
     // GYRO_RANGE: set measurement range
-    gyro_write_reg(BMI088_GYRO_RANGE, s_config.gyro_range);
-    bmi088_delay_us(2);
+    if (!gyro_write_reg(BMI088_GYRO_RANGE, s_config.gyro_range)) {
+        return false;
+    }
+    bmi088_delay_us(450);
 
     // GYRO_BANDWIDTH: set ODR and bandwidth
-    gyro_write_reg(BMI088_GYRO_BANDWIDTH, s_config.gyro_odr);
-    bmi088_delay_us(2);
+    if (!gyro_write_reg(BMI088_GYRO_BANDWIDTH, s_config.gyro_odr)) {
+        return false;
+    }
+    bmi088_delay_us(450);
 
     // GYRO_LPM1: normal power mode
-    gyro_write_reg(BMI088_GYRO_LPM1, 0x00);
+    if (!gyro_write_reg(BMI088_GYRO_LPM1, 0x00)) {
+        return false;
+    }
     bmi088_delay_ms(1);
 
     s_initialized = true;
@@ -275,8 +258,13 @@ bool bmi088_is_ready(void) {
     }
 
     // Check both chip IDs
-    uint8_t acc_id = acc_read_reg(BMI088_ACC_CHIP_ID);
-    uint8_t gyro_id = gyro_read_reg(BMI088_GYRO_CHIP_ID);
+    uint8_t acc_id, gyro_id;
+    if (!acc_read_reg(BMI088_ACC_CHIP_ID, &acc_id)) {
+        return false;
+    }
+    if (!gyro_read_reg(BMI088_GYRO_CHIP_ID, &gyro_id)) {
+        return false;
+    }
 
     return (acc_id == BMI088_ACC_CHIP_ID_VALUE) &&
            (gyro_id == BMI088_GYRO_CHIP_ID_VALUE);
@@ -288,7 +276,9 @@ bool bmi088_read_accel_raw(bmi088_raw_t *data) {
     }
 
     uint8_t buf[6];
-    acc_read_burst(BMI088_ACC_X_LSB, buf, 6);
+    if (!acc_read_burst(BMI088_ACC_X_LSB, buf, 6)) {
+        return false;
+    }
 
     data->x = (int16_t)((buf[1] << 8) | buf[0]);
     data->y = (int16_t)((buf[3] << 8) | buf[2]);
@@ -303,7 +293,9 @@ bool bmi088_read_gyro_raw(bmi088_raw_t *data) {
     }
 
     uint8_t buf[6];
-    gyro_read_burst(BMI088_GYRO_X_LSB, buf, 6);
+    if (!gyro_read_burst(BMI088_GYRO_X_LSB, buf, 6)) {
+        return false;
+    }
 
     data->x = (int16_t)((buf[1] << 8) | buf[0]);
     data->y = (int16_t)((buf[3] << 8) | buf[2]);
@@ -348,7 +340,9 @@ bool bmi088_read_temp(float *temp_c) {
     }
 
     uint8_t buf[2];
-    acc_read_burst(BMI088_ACC_TEMP_MSB, buf, 2);
+    if (!acc_read_burst(BMI088_ACC_TEMP_MSB, buf, 2)) {
+        return false;
+    }
 
     // Temperature is 11-bit signed, MSB first
     int16_t raw = (int16_t)((buf[0] << 3) | (buf[1] >> 5));
@@ -365,8 +359,8 @@ bool bmi088_read_temp(float *temp_c) {
 }
 
 bool bmi088_self_test(void) {
-    // TODO: Implement self-test routine
-    // For now, just verify chip IDs
+    // TODO: Implement full self-test routine per datasheet
+    // For now, just verify chip IDs respond correctly
     return bmi088_is_ready();
 }
 
