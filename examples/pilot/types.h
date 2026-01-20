@@ -26,9 +26,10 @@ typedef struct sensor_data {
     bool mag_valid; // false if not available
 
     // Barometer - optional
-    float pressure_hpa; // hectopascals
-    float baro_temp_c;  // temperature in Celsius
-    bool baro_valid;    // false if not available
+    float pressure_hpa;  // hectopascals (raw reading)
+    float baro_altitude; // meters, relative to calibrated ground level
+    float baro_temp_c;   // temperature in Celsius
+    bool baro_valid;     // false if not available
 
     // GPS - optional
     float gps_x, gps_y, gps_z; // meters, world frame
@@ -39,8 +40,8 @@ typedef struct sensor_data {
     {                                                                        \
         .accel = {0.0f, 0.0f, 0.0f}, .gyro = {0.0f, 0.0f, 0.0f},             \
         .mag = {0.0f, 0.0f, 0.0f}, .mag_valid = false, .pressure_hpa = 0.0f, \
-        .baro_temp_c = 0.0f, .baro_valid = false, .gps_x = 0.0f,             \
-        .gps_y = 0.0f, .gps_z = 0.0f, .gps_valid = false                     \
+        .baro_altitude = 0.0f, .baro_temp_c = 0.0f, .baro_valid = false,     \
+        .gps_x = 0.0f, .gps_y = 0.0f, .gps_z = 0.0f, .gps_valid = false      \
     }
 
 // State estimate from estimator actor.

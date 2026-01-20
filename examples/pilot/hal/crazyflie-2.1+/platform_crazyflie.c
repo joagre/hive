@@ -608,8 +608,18 @@ void platform_read_sensors(sensor_data_t *sensors) {
     if (bmp388_read(&baro)) {
         sensors->pressure_hpa = baro.pressure_pa / 100.0f;
         sensors->baro_temp_c = baro.temperature_c;
+        // Compute altitude relative to calibrated ground level
+        // Formula: altitude = 44330 * (1 - (P/P0)^0.19029)
+        if (s_ref_pressure > 0.0f) {
+            float pressure_ratio = baro.pressure_pa / s_ref_pressure;
+            sensors->baro_altitude =
+                44330.0f * (1.0f - powf(pressure_ratio, 0.19029f));
+        } else {
+            sensors->baro_altitude = 0.0f;
+        }
         sensors->baro_valid = true;
     } else {
+        sensors->baro_altitude = 0.0f;
         sensors->baro_valid = false;
     }
 

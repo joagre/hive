@@ -16,16 +16,6 @@
 #include <stdbool.h>
 #include <math.h>
 
-// Barometric altitude conversion (simplified, sea-level reference)
-// altitude = 44330 * (1 - (pressure/1013.25)^0.19029)
-static float pressure_to_altitude(float pressure_hpa, float ref_pressure) {
-    if (pressure_hpa <= 0.0f || ref_pressure <= 0.0f) {
-        return 0.0f;
-    }
-    // Use reference pressure for relative altitude
-    return 44330.0f * (1.0f - powf(pressure_hpa / ref_pressure, 0.19029f));
-}
-
 // Actor state - initialized by estimator_actor_init
 typedef struct {
     bus_id sensor_bus;
@@ -68,9 +58,6 @@ void estimator_actor(void *args, const hive_spawn_info *siblings,
     float vertical_velocity = 0.0f;
     bool first_sample = true;
 
-    // Barometer reference (set from first reading)
-    float baro_ref_pressure = 0.0f;
-
     // For measuring dt
     uint64_t prev_time = hive_get_time();
 
@@ -104,7 +91,7 @@ void estimator_actor(void *args, const hive_spawn_info *siblings,
         est.pitch_rate = sensors.gyro[1];
         est.yaw_rate = sensors.gyro[2];
 
-        // Position from GPS (if available)
+        // Position from GPS (if available), otherwise use barometer for altitude
         if (sensors.gps_valid) {
             est.x = sensors.gps_x;
             est.y = sensors.gps_y;
@@ -112,13 +99,9 @@ void estimator_actor(void *args, const hive_spawn_info *siblings,
         } else {
             est.x = 0.0f;
             est.y = 0.0f;
-            // Altitude from barometer
+            // Altitude from barometer (HAL computes from calibrated reference)
             if (sensors.baro_valid) {
-                if (baro_ref_pressure == 0.0f) {
-                    baro_ref_pressure = sensors.pressure_hpa;
-                }
-                est.altitude = pressure_to_altitude(sensors.pressure_hpa,
-                                                    baro_ref_pressure);
+                est.altitude = sensors.baro_altitude;
             } else {
                 est.altitude = 0.0f;
             }

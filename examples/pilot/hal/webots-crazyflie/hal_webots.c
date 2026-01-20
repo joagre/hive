@@ -208,8 +208,9 @@ void hal_read_sensors(sensor_data_t *sensors) {
     sensors->mag[2] = 0.0f;
     sensors->mag_valid = false;
 
-    // No barometer - use GPS altitude
+    // No barometer - use GPS altitude instead
     sensors->pressure_hpa = 0.0f;
+    sensors->baro_altitude = 0.0f;
     sensors->baro_temp_c = 0.0f;
     sensors->baro_valid = false;
 
