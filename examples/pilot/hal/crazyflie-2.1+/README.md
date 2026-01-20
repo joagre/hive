@@ -19,21 +19,34 @@ make clean    # Remove build artifacts
 
 ## Hardware Validation Tests
 
-Before running the full pilot firmware, use the test programs in `tests/` to
-verify hardware connectivity and HAL functionality.
+Before running the full pilot firmware, use the test programs to verify
+hardware connectivity.
+
+### Bare-Metal Hardware Tests
+
+Standalone tests using direct register access (in `tests/`):
 
 ```bash
 cd tests
-make thrust_test          # Build thrust calibration test (standalone)
-make sensor_motor_test    # Build sensor/motor diagnostic (standalone)
-make hal_test             # Build HAL validation test (uses libhal.a)
+make thrust_test          # Build thrust calibration test
+make sensor_motor_test    # Build sensor/motor diagnostic
 make flash-thrust         # Flash thrust_test
 make flash-sensor         # Flash sensor_motor_test
-make flash-hal            # Flash hal_test
-make clean                # Clean build
 ```
 
-See `tests/README.md` for detailed LED feedback patterns and test procedures.
+See `tests/README.md` for LED feedback patterns and procedures.
+
+### HAL Validation Tests
+
+Platform-independent HAL tests (in `examples/pilot/tests/`):
+
+```bash
+cd ../../tests
+make PLATFORM=crazyflie   # Build HAL test for Crazyflie
+make flash-crazyflie      # Flash HAL test
+```
+
+See `examples/pilot/tests/README.md` for details.
 
 ## Integration with Pilot
 

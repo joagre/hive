@@ -20,6 +20,7 @@
 #include "../config.h"
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdint.h>
 
 // ----------------------------------------------------------------------------
 // Platform Lifecycle
@@ -79,6 +80,25 @@ void hal_write_torque(const torque_cmd_t *cmd);
 //   hal/webots-crazyflie/hal_config.h
 // The appropriate file is included via the platform-specific Makefile.
 // This keeps platform constants in platform directories (no #ifdefs here).
+
+// ----------------------------------------------------------------------------
+// Platform Utilities
+// ----------------------------------------------------------------------------
+
+// Delay for specified milliseconds.
+// On real hardware: busy-wait or timer-based delay.
+// On simulation: advances simulation time.
+void hal_delay_ms(uint32_t ms);
+
+// Get current time in milliseconds.
+// On real hardware: system tick counter.
+// On simulation: simulation time.
+uint32_t hal_get_time_ms(void);
+
+// Debug LED control (optional, may be no-op on some platforms).
+void hal_led_on(void);
+void hal_led_off(void);
+void hal_led_toggle(void);
 
 // ----------------------------------------------------------------------------
 // Radio Interface (optional, for telemetry)

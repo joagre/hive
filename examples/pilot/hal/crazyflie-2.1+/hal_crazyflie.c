@@ -98,9 +98,25 @@ void hal_write_torque(const torque_cmd_t *cmd) {
 }
 
 // ----------------------------------------------------------------------------
-// Debug
+// Platform Utilities
 // ----------------------------------------------------------------------------
 
-void hal_debug_toggle_led(void) {
+void hal_delay_ms(uint32_t ms) {
+    platform_delay_ms(ms);
+}
+
+uint32_t hal_get_time_ms(void) {
+    return platform_get_time_ms();
+}
+
+void hal_led_on(void) {
+    platform_led_on();
+}
+
+void hal_led_off(void) {
+    platform_led_off();
+}
+
+void hal_led_toggle(void) {
     platform_led_toggle();
 }
