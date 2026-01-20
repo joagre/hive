@@ -77,8 +77,6 @@ void motor_actor(void *args, const hive_spawn_info *siblings,
 
         // SEL_TORQUE: Copy torque data from select result
         if (result.bus.len != sizeof(torque)) {
-            HIVE_LOG_WARN("[MOTOR] unexpected torque data size: %zu",
-                          result.bus.len);
             continue;
         }
         memcpy(&torque, result.bus.data, sizeof(torque));

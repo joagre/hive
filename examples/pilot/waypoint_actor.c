@@ -125,9 +125,6 @@ void waypoint_actor(void *args, const hive_spawn_info *siblings,
         // SEL_STATE: Copy state data from select result
         state_estimate_t est;
         if (result.bus.len != sizeof(est)) {
-            HIVE_LOG_WARN(
-                "[WPT] Unexpected state bus message size: %zu (expected %zu)",
-                result.bus.len, sizeof(est));
             continue;
         }
         memcpy(&est, result.bus.data, sizeof(est));

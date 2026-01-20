@@ -317,12 +317,11 @@ if (HIVE_FAILED(hive_bus_subscribe(state->sensor_bus))) {
 }
 ```
 
-**Hot path (main loop):** Log warning and continue. The actor keeps running and processes
-the next iteration.
+**Hot path (main loop):** Just continue. The actor keeps running and processes
+the next iteration. No logging to avoid overhead in control loops.
 
 ```c
 if (result.bus.len != sizeof(expected)) {
-    HIVE_LOG_WARN("[MOTOR] unexpected data size");
     continue;
 }
 ```
