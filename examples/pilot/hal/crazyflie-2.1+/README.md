@@ -322,14 +322,16 @@ Returns `true` if all required sensors pass, `false` otherwise.
 
 Before flight, `hal_calibrate()` performs:
 
-1. **Gyro bias** - Average 500 samples while stationary
-2. **Barometer reference** - Average 50 samples for ground level
+1. **Level check** - Verify accelerometer reads approximately level (warns if tilted >6°)
+2. **Gyro bias** - Average 500 samples while stationary
+3. **Barometer reference** - Average 50 samples for ground level
+4. **Height offset** (Flow deck only) - Measure ground clearance for accurate height
 
-**Important:** Keep the drone still and level during calibration!
+**Important:** Keep the drone still and level on a flat surface during calibration!
 
 ## LED Feedback
 
-The blue LED on PC4 provides status during initialization:
+The blue LED on PC4 provides status during initialization and calibration:
 
 | Pattern | Meaning |
 |---------|---------|
@@ -339,6 +341,7 @@ The blue LED on PC4 provides status during initialization:
 | 3 fast blinks | IMU initialization failed |
 | 4 fast blinks | Barometer initialization failed |
 | 5 fast blinks | Motor initialization failed |
+| 10 fast blinks | Level warning (drone not level during calibration) |
 | Slow continuous blink | Fatal error |
 
 ## Flight Profiles

@@ -62,6 +62,9 @@ static float s_gyro_bias[3] = {0.0f, 0.0f, 0.0f};
 // Barometer reference pressure (Pa)
 static float s_ref_pressure = 0.0f;
 
+// VL53L1x height offset (mm) - ground clearance when on flat surface
+static uint16_t s_height_offset_mm = 0;
+
 // System tick counter
 static volatile uint32_t s_sys_tick_ms = 0;
 
@@ -475,6 +478,39 @@ int platform_calibrate(void) {
         return -1;
     }
 
+    // Accelerometer level check
+    // Verify drone is approximately level before calibration
+    bmi088_data_t accel;
+    float accel_sum[3] = {0.0f, 0.0f, 0.0f};
+    int accel_samples = 50;
+
+    for (int i = 0; i < accel_samples; i++) {
+        if (bmi088_read_accel(&accel)) {
+            accel_sum[0] += accel.x;
+            accel_sum[1] += accel.y;
+            accel_sum[2] += accel.z;
+        }
+        platform_delay_ms(2);
+    }
+
+    float accel_avg[3] = {accel_sum[0] / accel_samples,
+                          accel_sum[1] / accel_samples,
+                          accel_sum[2] / accel_samples};
+
+    // Check if level: X and Y should be near 0, Z should be near -9.8 m/s^2
+    // (negative because gravity points down, accelerometer measures reaction)
+    float xy_tolerance = 1.0f; // m/s^2 (~6 deg tilt)
+    float z_expected = -GRAVITY;
+    float z_tolerance = 1.5f; // m/s^2
+
+    if (fabsf(accel_avg[0]) > xy_tolerance ||
+        fabsf(accel_avg[1]) > xy_tolerance ||
+        fabsf(accel_avg[2] - z_expected) > z_tolerance) {
+        // Not level - blink warning but continue
+        // (calibration will still work, just suboptimal)
+        init_blink(10, 50, 50); // 10 fast blinks = level warning
+    }
+
     // Gyro bias calibration
     float gyro_sum[3] = {0.0f, 0.0f, 0.0f};
     bmi088_data_t gyro;
@@ -504,6 +540,29 @@ int platform_calibrate(void) {
     }
 
     s_ref_pressure = pressure_sum / BARO_CALIBRATION_SAMPLES;
+
+    // VL53L1x height offset calibration (if Flow deck present)
+    // Measures ground clearance when drone is on flat surface
+    if (s_flow_deck_present) {
+        uint32_t height_sum = 0;
+        int height_samples = 0;
+        int height_attempts = 20;
+
+        for (int i = 0; i < height_attempts; i++) {
+            platform_delay_ms(50); // Wait for new measurement
+            if (vl53l1x_data_ready()) {
+                uint16_t height = vl53l1x_read_distance();
+                if (height > 0 && height < 200) { // Sanity check: 0-200mm
+                    height_sum += height;
+                    height_samples++;
+                }
+            }
+        }
+
+        if (height_samples > 0) {
+            s_height_offset_mm = (uint16_t)(height_sum / height_samples);
+        }
+    }
 
     s_calibrated = true;
     return 0;
@@ -645,6 +704,17 @@ bool platform_read_height(uint16_t *height_mm) {
         return false;
     }
 
-    *height_mm = vl53l1x_read_distance();
-    return *height_mm > 0;
+    uint16_t raw_height = vl53l1x_read_distance();
+    if (raw_height == 0) {
+        return false;
+    }
+
+    // Subtract ground offset (saturate at 0)
+    if (raw_height > s_height_offset_mm) {
+        *height_mm = raw_height - s_height_offset_mm;
+    } else {
+        *height_mm = 0;
+    }
+
+    return true;
 }
