@@ -11,7 +11,6 @@
 #include "hive_bus.h"
 #include "hive_timer.h"
 #include "hive_ipc.h"
-#include <assert.h>
 
 #define SENSOR_INTERVAL_US (TIME_STEP_MS * 1000)
 
@@ -36,7 +35,11 @@ void sensor_actor(void *args, const hive_spawn_info *siblings,
 
     timer_id timer;
     hive_status status = hive_timer_every(SENSOR_INTERVAL_US, &timer);
-    assert(HIVE_SUCCEEDED(status));
+    if (HIVE_FAILED(status)) {
+        HIVE_LOG_ERROR("[SENSOR] Failed to create periodic timer: %s",
+                       HIVE_ERR_STR(status));
+        return;
+    }
 
     while (1) {
         hive_message msg;

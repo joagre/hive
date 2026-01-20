@@ -20,7 +20,6 @@
 #include "hive_select.h"
 #include "hive_timer.h"
 #include "hive_log.h"
-#include <assert.h>
 #include <math.h>
 #include <string.h>
 
@@ -56,12 +55,23 @@ void altitude_actor(void *args, const hive_spawn_info *siblings,
     // Look up flight_manager from sibling info
     state->flight_manager =
         hive_find_sibling(siblings, sibling_count, "flight_manager");
-    assert(state->flight_manager != ACTOR_ID_INVALID);
+    if (state->flight_manager == ACTOR_ID_INVALID) {
+        HIVE_LOG_ERROR("[ALT] Failed to find flight_manager sibling");
+        return;
+    }
 
     hive_status status = hive_bus_subscribe(state->state_bus);
-    assert(HIVE_SUCCEEDED(status));
+    if (HIVE_FAILED(status)) {
+        HIVE_LOG_ERROR("[ALT] Failed to subscribe to state bus: %s",
+                       HIVE_ERR_STR(status));
+        return;
+    }
     status = hive_bus_subscribe(state->position_target_bus);
-    assert(HIVE_SUCCEEDED(status));
+    if (HIVE_FAILED(status)) {
+        HIVE_LOG_ERROR("[ALT] Failed to subscribe to position target bus: %s",
+                       HIVE_ERR_STR(status));
+        return;
+    }
 
     pid_state_t alt_pid;
     pid_init_full(&alt_pid, HAL_ALT_PID_KP, HAL_ALT_PID_KI, HAL_ALT_PID_KD,
@@ -106,7 +116,11 @@ void altitude_actor(void *args, const hive_spawn_info *siblings,
         }
 
         // SEL_STATE: Copy state data from select result
-        assert(result.bus.len == sizeof(est));
+        if (result.bus.len != sizeof(est)) {
+            HIVE_LOG_WARN("[ALT] Invalid state bus message size: %zu",
+                          result.bus.len);
+            continue;
+        }
         memcpy(&est, result.bus.data, sizeof(est));
 
         // Measure dt

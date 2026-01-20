@@ -23,7 +23,6 @@
 #include "hive_log.h"
 #include "hive_static_config.h"
 #include "stack_profile.h"
-#include <assert.h>
 
 // Flight duration per profile (flight manager decides when to land)
 #if FLIGHT_PROFILE == FLIGHT_PROFILE_FIRST_TEST
@@ -53,8 +52,11 @@ void flight_manager_actor(void *args, const hive_spawn_info *siblings,
     actor_id waypoint = hive_find_sibling(siblings, sibling_count, "waypoint");
     actor_id altitude = hive_find_sibling(siblings, sibling_count, "altitude");
     actor_id motor = hive_find_sibling(siblings, sibling_count, "motor");
-    assert(waypoint != ACTOR_ID_INVALID && altitude != ACTOR_ID_INVALID &&
-           motor != ACTOR_ID_INVALID);
+    if (waypoint == ACTOR_ID_INVALID || altitude == ACTOR_ID_INVALID ||
+        motor == ACTOR_ID_INVALID) {
+        HIVE_LOG_ERROR("[FLM] Failed to find required siblings");
+        return;
+    }
 
 #ifndef SIMULATED_TIME
     // Real hardware: wait for startup delay before allowing flight

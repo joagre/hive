@@ -12,7 +12,6 @@
 #include "hive_runtime.h"
 #include "hive_bus.h"
 #include "hive_timer.h"
-#include <assert.h>
 
 // Actor state - initialized by rate_actor_init
 typedef struct {
@@ -40,11 +39,23 @@ void rate_actor(void *args, const hive_spawn_info *siblings,
     rate_state *state = args;
 
     hive_status status = hive_bus_subscribe(state->state_bus);
-    assert(HIVE_SUCCEEDED(status));
+    if (HIVE_FAILED(status)) {
+        HIVE_LOG_ERROR("[RATE] Failed to subscribe to state bus: %s",
+                       HIVE_ERR_STR(status));
+        return;
+    }
     status = hive_bus_subscribe(state->thrust_bus);
-    assert(HIVE_SUCCEEDED(status));
+    if (HIVE_FAILED(status)) {
+        HIVE_LOG_ERROR("[RATE] Failed to subscribe to thrust bus: %s",
+                       HIVE_ERR_STR(status));
+        return;
+    }
     status = hive_bus_subscribe(state->rate_setpoint_bus);
-    assert(HIVE_SUCCEEDED(status));
+    if (HIVE_FAILED(status)) {
+        HIVE_LOG_ERROR("[RATE] Failed to subscribe to rate setpoint bus: %s",
+                       HIVE_ERR_STR(status));
+        return;
+    }
 
     pid_state_t roll_pid, pitch_pid, yaw_pid;
     // Note: Different output limits per axis (yaw needs more authority)

@@ -15,7 +15,6 @@
 #include "hive_bus.h"
 #include "hive_ipc.h"
 #include "hive_select.h"
-#include <assert.h>
 #include <string.h>
 
 // Actor state - initialized by motor_actor_init
@@ -39,10 +38,16 @@ void motor_actor(void *args, const hive_spawn_info *siblings,
     // Look up flight_manager from sibling info
     state->flight_manager =
         hive_find_sibling(siblings, sibling_count, "flight_manager");
-    assert(state->flight_manager != ACTOR_ID_INVALID);
+    if (state->flight_manager == ACTOR_ID_INVALID) {
+        HIVE_LOG_ERROR("[MOTOR] flight_manager sibling not found");
+        return;
+    }
 
     hive_status status = hive_bus_subscribe(state->torque_bus);
-    assert(HIVE_SUCCEEDED(status));
+    if (HIVE_FAILED(status)) {
+        HIVE_LOG_ERROR("[MOTOR] failed to subscribe to torque bus");
+        return;
+    }
 
     bool stopped = false;
 
@@ -71,7 +76,11 @@ void motor_actor(void *args, const hive_spawn_info *siblings,
         }
 
         // SEL_TORQUE: Copy torque data from select result
-        assert(result.bus.len == sizeof(torque));
+        if (result.bus.len != sizeof(torque)) {
+            HIVE_LOG_WARN("[MOTOR] unexpected torque data size: %zu",
+                          result.bus.len);
+            continue;
+        }
         memcpy(&torque, result.bus.data, sizeof(torque));
 
         if (stopped) {

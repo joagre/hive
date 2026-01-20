@@ -302,3 +302,34 @@ LOG_CHUNK packets (28 bytes each) until the entire file is transferred.
 Log download operates at the same 100Hz rate as telemetry. A typical 8KB log file
 downloads in about 3 seconds (8192 bytes / 28 bytes per chunk / 100 chunks per second).
 
+## Error Handling
+
+Actors use a consistent error handling pattern that avoids `assert()` in favor of
+explicit error checking. This enables the supervisor to detect and restart failed actors.
+
+**Cold path (initialization):** Log error and return. The supervisor sees this as a CRASH
+and can attempt restart.
+
+```c
+if (HIVE_FAILED(hive_bus_subscribe(state->sensor_bus))) {
+    HIVE_LOG_ERROR("[SENSOR] bus subscribe failed");
+    return;
+}
+```
+
+**Hot path (main loop):** Log warning and continue. The actor keeps running and processes
+the next iteration.
+
+```c
+if (result.bus.len != sizeof(expected)) {
+    HIVE_LOG_WARN("[MOTOR] unexpected data size");
+    continue;
+}
+```
+
+**Why no `assert()`:**
+- `assert()` terminates the entire process - supervisor cannot recover
+- On STM32, `assert()` behavior is platform-dependent (hang, reset, undefined)
+- Log + return gives consistent behavior across platforms
+- `_Static_assert` is still used for compile-time checks (packet sizes, etc.)
+

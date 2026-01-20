@@ -80,8 +80,6 @@
 #include "telemetry_actor.h"
 #endif
 
-#include <assert.h>
-
 // Bus configuration from HAL (platform-specific)
 #define PILOT_BUS_CONFIG HAL_BUS_CONFIG
 
@@ -114,13 +112,46 @@ int main(void) {
     // All actors share these via pilot_buses struct passed through init_args
     static pilot_buses buses;
     hive_bus_config cfg = PILOT_BUS_CONFIG;
-    assert(HIVE_SUCCEEDED(hive_bus_create(&cfg, &buses.sensor_bus)));
-    assert(HIVE_SUCCEEDED(hive_bus_create(&cfg, &buses.state_bus)));
-    assert(HIVE_SUCCEEDED(hive_bus_create(&cfg, &buses.thrust_bus)));
-    assert(HIVE_SUCCEEDED(hive_bus_create(&cfg, &buses.position_target_bus)));
-    assert(HIVE_SUCCEEDED(hive_bus_create(&cfg, &buses.attitude_setpoint_bus)));
-    assert(HIVE_SUCCEEDED(hive_bus_create(&cfg, &buses.rate_setpoint_bus)));
-    assert(HIVE_SUCCEEDED(hive_bus_create(&cfg, &buses.torque_bus)));
+    hive_status status;
+
+    status = hive_bus_create(&cfg, &buses.sensor_bus);
+    if (HIVE_FAILED(status)) {
+        HIVE_LOG_ERROR("Failed to create sensor_bus: %s", HIVE_ERR_STR(status));
+        return 1;
+    }
+    status = hive_bus_create(&cfg, &buses.state_bus);
+    if (HIVE_FAILED(status)) {
+        HIVE_LOG_ERROR("Failed to create state_bus: %s", HIVE_ERR_STR(status));
+        return 1;
+    }
+    status = hive_bus_create(&cfg, &buses.thrust_bus);
+    if (HIVE_FAILED(status)) {
+        HIVE_LOG_ERROR("Failed to create thrust_bus: %s", HIVE_ERR_STR(status));
+        return 1;
+    }
+    status = hive_bus_create(&cfg, &buses.position_target_bus);
+    if (HIVE_FAILED(status)) {
+        HIVE_LOG_ERROR("Failed to create position_target_bus: %s",
+                       HIVE_ERR_STR(status));
+        return 1;
+    }
+    status = hive_bus_create(&cfg, &buses.attitude_setpoint_bus);
+    if (HIVE_FAILED(status)) {
+        HIVE_LOG_ERROR("Failed to create attitude_setpoint_bus: %s",
+                       HIVE_ERR_STR(status));
+        return 1;
+    }
+    status = hive_bus_create(&cfg, &buses.rate_setpoint_bus);
+    if (HIVE_FAILED(status)) {
+        HIVE_LOG_ERROR("Failed to create rate_setpoint_bus: %s",
+                       HIVE_ERR_STR(status));
+        return 1;
+    }
+    status = hive_bus_create(&cfg, &buses.torque_bus);
+    if (HIVE_FAILED(status)) {
+        HIVE_LOG_ERROR("Failed to create torque_bus: %s", HIVE_ERR_STR(status));
+        return 1;
+    }
 
     // clang-format off
     // Define child specs for supervisor (9 flight actors + optional telemetry)
@@ -231,8 +262,11 @@ int main(void) {
     };
 
     actor_id supervisor;
-    hive_status status = hive_supervisor_start(&sup_cfg, NULL, &supervisor);
-    assert(HIVE_SUCCEEDED(status));
+    status = hive_supervisor_start(&sup_cfg, NULL, &supervisor);
+    if (HIVE_FAILED(status)) {
+        HIVE_LOG_ERROR("Failed to start supervisor: %s", HIVE_ERR_STR(status));
+        return 1;
+    }
     (void)supervisor;
 
     // Log actor count (9 flight actors + optional telemetry + 1 supervisor)

@@ -12,7 +12,6 @@
 #include "hive_runtime.h"
 #include "hive_bus.h"
 #include "hive_timer.h"
-#include <assert.h>
 
 // Actor state - initialized by attitude_actor_init
 typedef struct {
@@ -38,9 +37,17 @@ void attitude_actor(void *args, const hive_spawn_info *siblings,
     attitude_state *state = args;
 
     hive_status status = hive_bus_subscribe(state->state_bus);
-    assert(HIVE_SUCCEEDED(status));
+    if (HIVE_FAILED(status)) {
+        HIVE_LOG_ERROR("[ATT] Failed to subscribe to state bus: %s",
+                       HIVE_ERR_STR(status));
+        return;
+    }
     status = hive_bus_subscribe(state->attitude_setpoint_bus);
-    assert(HIVE_SUCCEEDED(status));
+    if (HIVE_FAILED(status)) {
+        HIVE_LOG_ERROR("[ATT] Failed to subscribe to attitude setpoint bus: %s",
+                       HIVE_ERR_STR(status));
+        return;
+    }
 
     pid_state_t roll_pid, pitch_pid, yaw_pid;
     pid_init_full(&roll_pid, HAL_ATTITUDE_PID_KP, HAL_ATTITUDE_PID_KI,

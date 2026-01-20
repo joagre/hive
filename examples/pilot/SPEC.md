@@ -100,6 +100,40 @@ motor sees the new data.
 - Synchronous snapshotting would add complexity with minimal benefit
 - Controllers use rate damping terms that compensate for small latencies
 
+### Error Handling Pattern
+
+Actors use explicit error checking instead of `assert()`. This enables the supervisor
+to detect and recover from failed actors.
+
+**Cold path (initialization):** Log error and return without calling `hive_exit()`.
+The supervisor sees this as a CRASH and can attempt restart per the restart strategy.
+
+```c
+if (HIVE_FAILED(hive_bus_subscribe(state->sensor_bus))) {
+    HIVE_LOG_ERROR("[SENSOR] bus subscribe failed");
+    return;
+}
+```
+
+**Hot path (main loop):** Log warning and continue. The actor keeps running and
+processes the next iteration. This handles transient errors like malformed data.
+
+```c
+if (result.bus.len != sizeof(expected)) {
+    HIVE_LOG_WARN("[MOTOR] unexpected data size");
+    continue;
+}
+```
+
+**Why no `assert()`:**
+- `assert()` terminates the entire process - supervisor cannot recover
+- On STM32, `assert()` behavior is platform-dependent (hang, reset, undefined)
+- Log + return gives consistent behavior across platforms
+- Supervisor sees CRASH and applies restart strategy (ONE_FOR_ALL in pilot)
+
+**Exception:** `_Static_assert` is used for compile-time checks (e.g., packet sizes
+in telemetry_actor.c) since these fail at build time, not runtime.
+
 ## Non-Goals (Future Work)
 
 - Full state estimation (Kalman filter)

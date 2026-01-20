@@ -12,7 +12,6 @@
 #include "hive_runtime.h"
 #include "hive_bus.h"
 #include "hive_timer.h"
-#include <assert.h>
 #include <stdbool.h>
 #include <math.h>
 
@@ -48,7 +47,10 @@ void estimator_actor(void *args, const hive_spawn_info *siblings,
     estimator_state *state = args;
 
     hive_status status = hive_bus_subscribe(state->sensor_bus);
-    assert(HIVE_SUCCEEDED(status));
+    if (HIVE_FAILED(status)) {
+        HIVE_LOG_ERROR("[EST] bus subscribe failed: %s", HIVE_ERR_STR(status));
+        return;
+    }
 
     // Initialize complementary filter
     cf_state_t filter;

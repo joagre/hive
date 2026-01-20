@@ -16,7 +16,6 @@
 #include "hive_select.h"
 #include "hive_timer.h"
 #include "hive_log.h"
-#include <assert.h>
 #include <stdbool.h>
 #include <math.h>
 #include <string.h>
@@ -59,10 +58,17 @@ void waypoint_actor(void *args, const hive_spawn_info *siblings,
     // Look up flight_manager from sibling info
     state->flight_manager =
         hive_find_sibling(siblings, sibling_count, "flight_manager");
-    assert(state->flight_manager != ACTOR_ID_INVALID);
+    if (state->flight_manager == ACTOR_ID_INVALID) {
+        HIVE_LOG_ERROR("[WPT] Failed to find flight_manager sibling");
+        return;
+    }
 
     hive_status status = hive_bus_subscribe(state->state_bus);
-    assert(HIVE_SUCCEEDED(status));
+    if (HIVE_FAILED(status)) {
+        HIVE_LOG_ERROR("[WPT] Failed to subscribe to state bus: %s",
+                       HIVE_ERR_STR(status));
+        return;
+    }
 
     // Wait for START signal from flight manager before beginning flight
     HIVE_LOG_INFO("[WPT] Flight profile: %s (%d waypoints, %.0fs hover)",
@@ -118,7 +124,12 @@ void waypoint_actor(void *args, const hive_spawn_info *siblings,
 
         // SEL_STATE: Copy state data from select result
         state_estimate_t est;
-        assert(result.bus.len == sizeof(est));
+        if (result.bus.len != sizeof(est)) {
+            HIVE_LOG_WARN(
+                "[WPT] Unexpected state bus message size: %zu (expected %zu)",
+                result.bus.len, sizeof(est));
+            continue;
+        }
         memcpy(&est, result.bus.data, sizeof(est));
 
         // Check arrival and start hover timer
