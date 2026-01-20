@@ -130,9 +130,9 @@ CFLAGS += $(HIVE_CFLAGS)
 CFLAGS += -DHIVE_DEFAULT_STACK_SIZE=6144
 CFLAGS += '-DHIVE_STACK_ARENA_SIZE=(72*1024)'
 
-# Log level: WARN to capture errors for post-flight download via radio
-# (TRACE/DEBUG/INFO compiled out, only WARN/ERROR remain)
-CFLAGS += -DHIVE_LOG_LEVEL=HIVE_LOG_LEVEL_WARN
+# Log level: INFO for post-flight download via radio
+# (TRACE/DEBUG compiled out, INFO/WARN/ERROR captured to flash)
+CFLAGS += -DHIVE_LOG_LEVEL=HIVE_LOG_LEVEL_INFO
 
 # STM32 Flash File I/O Configuration
 # STM32F405RG: 1MB flash (sectors 0-11)

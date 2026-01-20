@@ -318,8 +318,7 @@ if (HIVE_FAILED(hive_bus_subscribe(state->sensor_bus))) {
 ```
 
 **Hot path (main loop):** Log warning and continue. The actor keeps running and
-processes the next iteration. In production (STM32), logging is compiled out
-via `HIVE_LOG_LEVEL=NONE`.
+processes the next iteration.
 
 ```c
 if (result.bus.len != sizeof(expected)) {
@@ -333,4 +332,15 @@ if (result.bus.len != sizeof(expected)) {
 - On STM32, `assert()` behavior is platform-dependent (hang, reset, undefined)
 - Log + return gives consistent behavior across platforms
 - `_Static_assert` is still used for compile-time checks (packet sizes, etc.)
+
+**Logging configuration (Crazyflie):**
+
+| Level | Status | Rationale |
+|-------|--------|-----------|
+| TRACE, DEBUG | Compiled out | Chatty, development only |
+| INFO | Captured to flash | Important events (waypoint reached, flight started) |
+| WARN, ERROR | Captured to flash | Problems that need attention |
+
+Logs are written to flash and can be downloaded over radio after flight (see Log Download section).
+This provides a complete flight record without the overhead of TRACE/DEBUG messages.
 

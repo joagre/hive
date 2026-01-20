@@ -116,8 +116,7 @@ if (HIVE_FAILED(hive_bus_subscribe(state->sensor_bus))) {
 ```
 
 **Hot path (main loop):** Log warning and continue. The actor keeps running and
-processes the next iteration. In production (STM32), logging is compiled out
-via `HIVE_LOG_LEVEL=NONE`, so there's zero overhead.
+processes the next iteration.
 
 ```c
 if (result.bus.len != sizeof(expected)) {
@@ -134,6 +133,19 @@ if (result.bus.len != sizeof(expected)) {
 
 **Exception:** `_Static_assert` is used for compile-time checks (e.g., packet sizes
 in telemetry_actor.c) since these fail at build time, not runtime.
+
+**Logging configuration (Crazyflie):**
+
+The Crazyflie build uses `HIVE_LOG_LEVEL=INFO`:
+
+| Level | Status | Rationale |
+|-------|--------|-----------|
+| TRACE, DEBUG | Compiled out | Verbose, development only |
+| INFO | Captured to flash | Important events (waypoint reached, flight started) |
+| WARN, ERROR | Captured to flash | Problems that need attention |
+
+Logs are written to flash and downloaded over radio after flight. This provides a
+complete flight record for debugging without the overhead of TRACE/DEBUG messages.
 
 ## Non-Goals (Future Work)
 
