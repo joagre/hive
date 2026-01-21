@@ -42,6 +42,12 @@
 #
 # Links: 0 used, 8 configured
 #
+# Supervisors (1 used, 1 configured):
+#   pipeline supervisor for all flight actors
+#
+# Supervisor children (10 used, 12 configured):
+#   9 flight actors + optional telemetry
+#
 # Mailbox entries: ~7 peak, 16 configured
 #   IPC: START, LANDING, LANDED, STOP notifications
 #   Timer messages: up to 5 concurrent
@@ -70,3 +76,8 @@ HIVE_CFLAGS += -DHIVE_MAX_BUS_ENTRIES=4
 
 # Message size - enough for sensor_data_t (~64 bytes)
 HIVE_CFLAGS += -DHIVE_MAX_MESSAGE_SIZE=128
+
+# Supervisor configuration - pilot uses 1 supervisor with 10 children
+# This significantly reduces RAM (default 8 supervisors × 16 children = ~25 KB)
+HIVE_CFLAGS += -DHIVE_MAX_SUPERVISORS=1
+HIVE_CFLAGS += -DHIVE_MAX_SUPERVISOR_CHILDREN=12
