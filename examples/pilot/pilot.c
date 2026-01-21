@@ -24,26 +24,30 @@
 //
 // Data flow through buses:
 //
-//   HAL ──► Sensor ──► Sensor Bus ──► Estimator ──► State Bus ──┬──────────┐
-//                           │                           │       │          │
-//                           │         ┌─────────────────┼───────┼──────────┤
-//                           │         │                 │       │          │
-//                           │         v                 v       v          v
-//                           │     Waypoint          Altitude Position  Attitude
-//                           │         │                 │       │          │
-//                           │         v                 v       v          v
-//                           │   Pos Target Bus ──► Thrust Bus  Att SP ──► Rate SP
-//                           │         │                 │                  │
-//                           │         └─────────────────┼──────────────────┘
-//                           │                           v
-//                           │                         Rate
-//                           │                           │
-//                           │                           v
-//                           │                      Torque Bus ──► Motor ──► HAL
-//                           │                           │
-//                           v                           v
-//                    Telemetry Logger           Comms (radio)
-//                    (Webots, 25Hz)           (Crazyflie, 100Hz)
+//   HAL ──► Sensor ──► Sensor Bus ──► Estimator ──► State Bus ───┐
+//                                                      │         │
+//                  ┌───────────────────────────────────┼─────────┤
+//                  │                                   │         │
+//                  v                                   v         v
+//              Waypoint ──► Pos Target Bus ──►     Altitude   Position
+//                  │               │                   │         │
+//                  │               v                   v         v
+//                  │           Altitude ──►       Thrust Bus  Att SP Bus
+//                  │                                   │         │
+//                  │                                   v         v
+//                  │                                 Rate ◄── Attitude
+//                  │                                   │
+//                  │                                   v
+//                  │                              Torque Bus ──► Motor ──► HAL
+//                  │                                   │
+//                  v                                   v
+//           Telemetry Logger                    Comms (radio)
+//           (Webots, 25Hz)                    (Crazyflie, 100Hz)
+//           reads: Sensor, State,             reads: Sensor, State,
+//                  Thrust, Pos Target                Thrust
+//
+// Note: Telemetry logger captures position targets for PID tuning analysis.
+//       Comms omits targets due to 31-byte ESB packet size limit.
 //
 // Supervision:
 //   All actors are supervised with ONE_FOR_ALL strategy.
