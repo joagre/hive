@@ -66,6 +66,35 @@ make -f Makefile.crazyflie-2.1+
 - LiPo 3.7V / 250mAh
 - Weight: ~27g (without Flow deck)
 
+## Flash Layout
+
+The STM32F405RG has 1 MB flash organized in sectors of varying sizes:
+
+| Sector | Size | Address | Usage |
+|--------|------|---------|-------|
+| 0 | 16 KB | 0x08000000 | Firmware |
+| 1 | 16 KB | 0x08004000 | Firmware |
+| 2 | 16 KB | 0x08008000 | Firmware |
+| 3 | 16 KB | 0x0800C000 | Firmware |
+| 4 | 64 KB | 0x08010000 | Firmware |
+| 5 | 128 KB | 0x08020000 | Firmware |
+| 6 | 128 KB | 0x08040000 | Firmware |
+| 7 | 128 KB | 0x08060000 | Firmware |
+| **8** | **128 KB** | **0x08080000** | **Flight log (`/log`)** |
+| 9-11 | 384 KB | 0x080A0000 | Reserved |
+
+**Firmware region:** Sectors 0-7 (512 KB) - Limited by linker script
+**Data region:** Sector 8 (128 KB) - Flight log written during flight
+
+The linker script (`stm32f405_flash.ld`) limits firmware to 512 KB to prevent
+accidentally overwriting the log sector. Current firmware is ~63 KB.
+
+**Log file lifecycle:**
+1. `hive_log_file_open("/log")` erases sector 8 (takes ~1 second)
+2. Writes go to an 8 KB ring buffer, flushed to flash periodically
+3. `hive_log_file_close()` flushes remaining data
+4. After flight, download via radio using `ground_station.py --download-log`
+
 ## Architecture
 
 ```
