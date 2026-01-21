@@ -84,8 +84,8 @@
 // Position control
 // ----------------------------------------------------------------------------
 
-#define POS_KP 0.2f // Position gain: rad per meter error
-#define POS_KD 0.1f // Velocity damping: rad per m/s
+#define POS_KP 0.12f // Reduced from 0.2 to decrease overshoot
+#define POS_KD 0.18f // Increased from 0.1 for better damping
 
 // Maximum tilt angle for position control (safety limit)
 #define MAX_TILT_ANGLE 0.35f // ~20 degrees
