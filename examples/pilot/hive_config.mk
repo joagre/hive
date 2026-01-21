@@ -16,41 +16,43 @@
 # Actors (10-11 used, 13 configured):
 #   Base (10): supervisor, sensor, estimator, waypoint, altitude,
 #              position, attitude, rate, motor, flight_manager
-#   Optional: telemetry (only on platforms with HAL_HAS_RADIO)
+#   Optional: comms (HAL_HAS_RADIO), telemetry_logger (SIMULATED_TIME)
 #
 # Buses (7 used, 8 configured):
 #   sensor_bus, state_bus, thrust_bus, position_target_bus,
 #   attitude_setpoint_bus, rate_setpoint_bus, torque_bus
 #
 # Bus subscribers (max 6 per bus on state_bus, 7 configured):
-#   sensor_bus:           estimator, [telemetry] (1-2)
-#   state_bus:            altitude, attitude, position, rate, waypoint, [telemetry] (5-6)
-#   thrust_bus:           rate, [telemetry] (1-2)
-#   position_target_bus:  altitude, position (2)
+#   sensor_bus:           estimator, [tlog] (1-2)
+#   state_bus:            altitude, attitude, position, rate, waypoint, [tlog] (5-6)
+#   thrust_bus:           rate, [tlog] (1-2)
+#   position_target_bus:  altitude, position, [tlog] (2-3)
 #   attitude_setpoint_bus: attitude (1)
 #   rate_setpoint_bus:    rate (1)
 #   torque_bus:           motor (1)
+#   [tlog] = telemetry_logger (only with SIMULATED_TIME, i.e. Webots)
 #
-# Timers (4-5 concurrent peak, 10 configured):
+# Timers (4-6 concurrent peak, 10 configured):
 #   sensor: tick timer (1 periodic)
 #   flight_manager: sync_timer (1 periodic) + flight_timer (1 one-shot)
 #   waypoint: hover_timer (1 one-shot, on demand)
-#   [telemetry]: tick timer (1 periodic, only with HAL_HAS_RADIO)
+#   [tlog]: tick timer (1 periodic, only with SIMULATED_TIME)
 #
-# Monitors (9 used, 12 configured):
-#   supervisor monitors 9 children
+# Monitors (9-11 used, 12 configured):
+#   supervisor monitors 9-11 children (depending on comms/tlog)
 #
 # Links: 0 used, 8 configured
 #
 # Supervisors (1 used, 1 configured):
 #   pipeline supervisor for all flight actors
 #
-# Supervisor children (10 used, 12 configured):
-#   9 flight actors + optional telemetry
+# Supervisor children (9-11 used, 12 configured):
+#   9 flight actors + optional comms + optional tlog (all supervised)
+#   comms: HAL_HAS_RADIO, tlog: SIMULATED_TIME (both TEMPORARY)
 #
 # Mailbox entries: ~7 peak, 16 configured
 #   IPC: START, LANDING, LANDED, STOP notifications
-#   Timer messages: up to 5 concurrent
+#   Timer messages: up to 6 concurrent
 #
 # Message data pool: ~14 peak, 32 configured
 #   7 bus entries + ~7 IPC messages in flight

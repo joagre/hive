@@ -39,22 +39,10 @@ void rate_actor(void *args, const hive_spawn_info *siblings,
 
     rate_state *state = args;
 
-    hive_status status = hive_bus_subscribe(state->state_bus);
-    if (HIVE_FAILED(status)) {
-        HIVE_LOG_ERROR("[RATE] Failed to subscribe to state bus: %s",
-                       HIVE_ERR_STR(status));
-        return;
-    }
-    status = hive_bus_subscribe(state->thrust_bus);
-    if (HIVE_FAILED(status)) {
-        HIVE_LOG_ERROR("[RATE] Failed to subscribe to thrust bus: %s",
-                       HIVE_ERR_STR(status));
-        return;
-    }
-    status = hive_bus_subscribe(state->rate_setpoint_bus);
-    if (HIVE_FAILED(status)) {
-        HIVE_LOG_ERROR("[RATE] Failed to subscribe to rate setpoint bus: %s",
-                       HIVE_ERR_STR(status));
+    if (HIVE_FAILED(hive_bus_subscribe(state->state_bus)) ||
+        HIVE_FAILED(hive_bus_subscribe(state->thrust_bus)) ||
+        HIVE_FAILED(hive_bus_subscribe(state->rate_setpoint_bus))) {
+        HIVE_LOG_ERROR("[RATE] Bus subscribe failed");
         return;
     }
 
@@ -78,6 +66,7 @@ void rate_actor(void *args, const hive_spawn_info *siblings,
         thrust_cmd_t thrust_cmd;
         rate_setpoint_t new_rate_sp;
         size_t len;
+        hive_status status;
 
         // Block until state available
         status =

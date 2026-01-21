@@ -8,7 +8,7 @@ Supports two platforms:
 
 ## What it does
 
-Demonstrates waypoint navigation with a quadcopter using 10-11 actors (9-10 workers + 1 supervisor):
+Demonstrates waypoint navigation with a quadcopter using 10-12 actors (9-11 workers + 1 supervisor):
 
 1. **Sensor actor** reads raw sensors via HAL, publishes to sensor bus
 2. **Estimator actor** runs complementary filter, computes velocities, publishes to state bus
@@ -20,7 +20,8 @@ Demonstrates waypoint navigation with a quadcopter using 10-11 actors (9-10 work
 8. **Motor actor** reads torque bus, writes to hardware via HAL (checks for STOP signal)
 9. **Flight manager actor** handles startup delay (60s), landing coordination, log file management
 10. **Comms actor** (Crazyflie only) sends flight data over radio at 100Hz for ground station logging
-11. **Supervisor actor** monitors all workers, restarts flight-critical actors on crash (ONE_FOR_ALL)
+11. **Telemetry logger actor** (Webots only) writes CSV at 25Hz for PID tuning analysis
+12. **Supervisor actor** monitors all workers, restarts flight-critical actors on crash (ONE_FOR_ALL)
 
 Workers use `hive_find_sibling()` for IPC coordination via sibling info passed
 by the supervisor at spawn time.
@@ -83,6 +84,7 @@ See `hal/<platform>/README.md` for hardware details, pin mapping, and flight pro
 | `motor_actor.c/h` | Output: torque → HAL → motors |
 | `flight_manager_actor.c/h` | Startup delay, flight window cutoff |
 | `comms_actor.c/h` | Radio telemetry (Crazyflie only) |
+| `telemetry_logger_actor.c/h` | CSV logging for PID tuning (Webots only) |
 | `pid.c/h` | Reusable PID controller |
 | `fusion/complementary_filter.c/h` | Portable attitude estimation (accel+gyro fusion) |
 | `types.h` | Shared data types (sensor_data_t, state_estimate_t, etc.) |
@@ -133,8 +135,8 @@ sizes differ per platform based on available RAM.
 
 ## Architecture
 
-Ten to eleven actors: nine flight-critical workers connected via buses, one supervisor
-monitoring all workers, plus an optional comms actor on Crazyflie (radio-enabled platforms):
+Ten to twelve actors: nine flight-critical workers connected via buses, one supervisor
+monitoring all workers, plus optional telemetry actors (comms on Crazyflie, telemetry_logger on Webots):
 
 ```mermaid
 graph TB
@@ -185,6 +187,7 @@ in data-flow order, with flight_manager last so all siblings are available via
 | 8     | motor     | CRITICAL | PERMANENT | Needs torque + STOP signal, writes hardware last |
 | 9     | flight_mgr| CRITICAL | TRANSIENT | Normal exit = mission complete |
 | 10    | comms     | LOW      | TEMPORARY | Crazyflie only, not flight-critical |
+| 11    | tlog      | LOW      | TEMPORARY | Webots only, CSV logging for PID tuning |
 
 Workers use **sibling info** for IPC coordination:
 - Supervisor passes sibling info (actor IDs and names) at spawn time
@@ -303,6 +306,38 @@ LOG_CHUNK packets (28 bytes each) until the entire file is transferred.
 
 Log download operates at the same 100Hz rate as telemetry. A typical 8KB log file
 downloads in about 3 seconds (8192 bytes / 28 bytes per chunk / 100 chunks per second).
+
+## CSV Telemetry Logging (Webots only)
+
+The Webots build includes a telemetry logger actor that writes flight data to CSV
+at 25Hz for PID tuning and flight analysis. The log file is written to `/tmp/pilot_telemetry.csv`.
+
+**CSV columns:**
+- `time_ms`: Timestamp since flight start
+- `roll,pitch,yaw`: Attitude angles (rad)
+- `roll_rate,pitch_rate,yaw_rate`: Angular rates (rad/s)
+- `x,y,altitude`: Position (m)
+- `vx,vy,vz`: Velocities (m/s)
+- `thrust`: Thrust command (normalized)
+- `target_x,target_y,target_z,target_yaw`: Position targets
+- `gyro_x,gyro_y,gyro_z`: Raw gyro (rad/s)
+- `accel_x,accel_y,accel_z`: Raw accel (m/s²)
+
+**Usage:**
+```bash
+# Run simulation
+make && make install
+webots worlds/hover_test.wbt
+
+# View CSV data
+head /tmp/pilot_telemetry.csv
+
+# Plot with your favorite tool
+python3 -c "import pandas as pd; pd.read_csv('/tmp/pilot_telemetry.csv').plot(x='time_ms', y=['altitude','target_z']); import matplotlib.pyplot as plt; plt.show()"
+```
+
+The telemetry logger runs at LOW priority and uses TEMPORARY restart type, so it
+doesn't affect flight-critical control loops and won't trigger restarts if it fails.
 
 ## Error Handling
 

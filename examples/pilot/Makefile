@@ -61,10 +61,11 @@ endif
 # Hive memory configuration (shared pilot settings + platform stack sizes)
 include hive_config.mk
 CFLAGS += $(HIVE_CFLAGS)
-# Stack: 4KB per actor, Arena: 48KB (10 actors × 4KB + block headers)
+# Stack: 4KB per actor, Arena: 52KB (11 actors × 4KB + block headers)
 # Note: No HAL_HAS_RADIO on Webots, so comms actor not included
+# Telemetry logger adds one more actor when ENABLE_TELEMETRY_LOG=1 (default in sim)
 CFLAGS += -DHIVE_DEFAULT_STACK_SIZE=4096
-CFLAGS += '-DHIVE_STACK_ARENA_SIZE=(48*1024)'
+CFLAGS += '-DHIVE_STACK_ARENA_SIZE=(52*1024)'
 
 LDFLAGS = -L$(WEBOTS_LIB) -L$(BUILD_DIR)
 LDLIBS = -lController -lm
@@ -79,7 +80,7 @@ TARGET = pilot
 # Pilot application code
 ACTOR_SRCS = sensor_actor.c estimator_actor.c altitude_actor.c waypoint_actor.c \
              position_actor.c attitude_actor.c rate_actor.c motor_actor.c \
-             flight_manager_actor.c
+             flight_manager_actor.c telemetry_logger_actor.c
 HAL_SRCS = hal/webots-crazyflie/hal_webots.c
 FUSION_SRCS = fusion/complementary_filter.c
 UTIL_SRCS = stack_profile.c

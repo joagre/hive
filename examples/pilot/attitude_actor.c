@@ -37,16 +37,9 @@ void attitude_actor(void *args, const hive_spawn_info *siblings,
 
     attitude_state *state = args;
 
-    hive_status status = hive_bus_subscribe(state->state_bus);
-    if (HIVE_FAILED(status)) {
-        HIVE_LOG_ERROR("[ATT] Failed to subscribe to state bus: %s",
-                       HIVE_ERR_STR(status));
-        return;
-    }
-    status = hive_bus_subscribe(state->attitude_setpoint_bus);
-    if (HIVE_FAILED(status)) {
-        HIVE_LOG_ERROR("[ATT] Failed to subscribe to attitude setpoint bus: %s",
-                       HIVE_ERR_STR(status));
+    if (HIVE_FAILED(hive_bus_subscribe(state->state_bus)) ||
+        HIVE_FAILED(hive_bus_subscribe(state->attitude_setpoint_bus))) {
+        HIVE_LOG_ERROR("[ATT] Bus subscribe failed");
         return;
     }
 
@@ -71,6 +64,7 @@ void attitude_actor(void *args, const hive_spawn_info *siblings,
         state_estimate_t est;
         attitude_setpoint_t new_attitude_sp;
         size_t len;
+        hive_status status;
 
         // Block until state available
         status =

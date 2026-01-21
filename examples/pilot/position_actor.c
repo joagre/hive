@@ -42,16 +42,9 @@ void position_actor(void *args, const hive_spawn_info *siblings,
 
     position_state *state = args;
 
-    hive_status status = hive_bus_subscribe(state->state_bus);
-    if (HIVE_FAILED(status)) {
-        HIVE_LOG_ERROR("[POS] Failed to subscribe to state bus: %s",
-                       HIVE_ERR_STR(status));
-        return;
-    }
-    status = hive_bus_subscribe(state->position_target_bus);
-    if (HIVE_FAILED(status)) {
-        HIVE_LOG_ERROR("[POS] Failed to subscribe to position target bus: %s",
-                       HIVE_ERR_STR(status));
+    if (HIVE_FAILED(hive_bus_subscribe(state->state_bus)) ||
+        HIVE_FAILED(hive_bus_subscribe(state->position_target_bus))) {
+        HIVE_LOG_ERROR("[POS] Bus subscribe failed");
         return;
     }
 
@@ -62,6 +55,7 @@ void position_actor(void *args, const hive_spawn_info *siblings,
         state_estimate_t est;
         position_target_t new_target;
         size_t len;
+        hive_status status;
 
         // Block until state available
         status =

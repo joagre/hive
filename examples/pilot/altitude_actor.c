@@ -60,16 +60,9 @@ void altitude_actor(void *args, const hive_spawn_info *siblings,
         return;
     }
 
-    hive_status status = hive_bus_subscribe(state->state_bus);
-    if (HIVE_FAILED(status)) {
-        HIVE_LOG_ERROR("[ALT] Failed to subscribe to state bus: %s",
-                       HIVE_ERR_STR(status));
-        return;
-    }
-    status = hive_bus_subscribe(state->position_target_bus);
-    if (HIVE_FAILED(status)) {
-        HIVE_LOG_ERROR("[ALT] Failed to subscribe to position target bus: %s",
-                       HIVE_ERR_STR(status));
+    if (HIVE_FAILED(hive_bus_subscribe(state->state_bus)) ||
+        HIVE_FAILED(hive_bus_subscribe(state->position_target_bus))) {
+        HIVE_LOG_ERROR("[ALT] Bus subscribe failed");
         return;
     }
 
@@ -101,6 +94,7 @@ void altitude_actor(void *args, const hive_spawn_info *siblings,
         state_estimate_t est;
         position_target_t target;
         size_t len;
+        hive_status status;
 
         // Wait for state update OR landing command (unified event waiting)
         hive_select_result result;

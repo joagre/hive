@@ -19,6 +19,7 @@ A quadcopter autopilot example using the actor runtime. Supports Webots simulati
 - Step 7: Waypoint actor (waypoint navigation)
 - Step 8: Flight manager actor (startup coordination, safety cutoff)
 - Step 9: Comms actor (radio telemetry, Crazyflie only)
+- Step 10: Telemetry logger actor (CSV logging, Webots only)
 - Mixer moved to HAL (platform-specific, X-configuration)
 
 ## Goals
@@ -243,8 +244,8 @@ maintain code clarity. A production system would add these as first priorities.
 
 ## Architecture Overview
 
-Ten to eleven actors: nine flight-critical workers connected via buses, plus one
-supervisor, and an optional comms actor on radio-enabled platforms (Crazyflie):
+Ten to twelve actors: nine flight-critical workers connected via buses, plus one
+supervisor, and optional telemetry actors (comms on Crazyflie, telemetry_logger on Webots):
 
 **Supervision:** All actors are supervised with ONE_FOR_ALL strategy. Flight-critical
 actors use PERMANENT restart (crash triggers restart of all). Comms uses
@@ -331,6 +332,7 @@ Code is split into focused modules:
 | `motor_actor.c/h` | Output: torque → HAL → motors |
 | `flight_manager_actor.c/h` | Startup delay, flight window cutoff |
 | `comms_actor.c/h` | Radio telemetry (Crazyflie only) |
+| `telemetry_logger_actor.c/h` | CSV logging for PID tuning (Webots only) |
 | `pid.c/h` | Reusable PID controller |
 | `types.h` | Portable data types |
 | `config.h` | Configuration constants (timing, thresholds) |
@@ -665,6 +667,7 @@ graph LR
 | **Motor** | Torque Bus + STOP notification | Hardware | CRITICAL | PERMANENT | Output to hardware via HAL |
 | **Flight Manager** | LANDED notification | START/LANDING/STOP notifications | CRITICAL | TRANSIENT | Startup delay, landing coordination (normal exit = mission complete) |
 | **Comms** | Sensor + State + Thrust Bus | Radio (HAL) | LOW | TEMPORARY | Radio telemetry (Crazyflie only, not flight-critical) |
+| **Telemetry Logger** | Sensor + State + Thrust + Position Target Bus | CSV file | LOW | TEMPORARY | CSV logging for PID tuning (Webots only, not flight-critical) |
 
 **Why CRITICAL for flight actors?** Flight-critical actors share the same priority so execution
 order follows spawn order (round-robin within priority level). This ensures the data pipeline
@@ -912,7 +915,59 @@ pip install cflib
 - Separate from flash logging (higher rate, no flash wear)
 - Non-intrusive (LOW priority doesn't affect control loops)
 
-### Step 10 (Future): RC Input / Mode Switching
+### Step 10: Telemetry Logger Actor ✓
+
+Add CSV logging for PID tuning and flight analysis (Webots only).
+
+**Before:**
+```
+No structured data export for analysis
+```
+
+**After:**
+```
+State Bus ──┬──► Telemetry Logger ──► /tmp/pilot_telemetry.csv
+Sensor Bus ─┤      (25Hz)
+Thrust Bus ─┤
+Position Target Bus ─┘
+```
+
+**Implementation:**
+- Subscribes to sensor, state, thrust, and position target buses
+- Writes CSV at 25Hz with all flight data
+- Enabled by default for Webots (`SIMULATED_TIME`), disabled for Crazyflie
+- Log path passed via `telemetry_logger_config` struct at spawn time
+- Runs at LOW priority, TEMPORARY restart (not flight-critical)
+- Flushes to disk every second (25 samples)
+
+**CSV columns:**
+- `time_ms`: Timestamp since flight start
+- `roll,pitch,yaw`: Attitude angles (rad)
+- `roll_rate,pitch_rate,yaw_rate`: Angular rates (rad/s)
+- `x,y,altitude`: Position (m)
+- `vx,vy,vz`: Velocities (m/s)
+- `thrust`: Thrust command (normalized)
+- `target_x,target_y,target_z,target_yaw`: Position targets
+- `gyro_x,gyro_y,gyro_z`: Raw gyro (rad/s)
+- `accel_x,accel_y,accel_z`: Raw accel (m/s²)
+
+**Usage:**
+```bash
+# Run simulation
+make && make install
+webots worlds/hover_test.wbt
+
+# Analyze data
+python3 tools/plot_telemetry.py /tmp/pilot_telemetry.csv
+```
+
+**Benefits:**
+- Data-driven PID tuning (vs blind iteration)
+- Visualize oscillations, overshoot, settling time
+- Compare before/after gain changes
+- Non-intrusive (LOW priority doesn't affect control loops)
+
+### Step 11 (Future): RC Input / Mode Switching
 
 **Future extensions:**
 - RC input handling (manual override)

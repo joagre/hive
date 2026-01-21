@@ -81,9 +81,19 @@
 #ifdef HAL_HAS_RADIO
 #include "comms_actor.h"
 #endif
+#include "telemetry_logger_actor.h"
 
 // Bus configuration from HAL (platform-specific)
 #define PILOT_BUS_CONFIG HAL_BUS_CONFIG
+
+// Telemetry log path (platform-specific)
+#if ENABLE_TELEMETRY_LOG
+#ifdef SIMULATED_TIME
+#define TELEMETRY_LOG_PATH "/tmp/pilot_telemetry.csv"
+#else
+#define TELEMETRY_LOG_PATH "/var/tmp/pilot_telemetry.csv"
+#endif
+#endif
 
 // ============================================================================
 // SUPERVISOR CALLBACK
@@ -158,6 +168,14 @@ int main(void) {
         HIVE_LOG_ERROR("Failed to create torque_bus: %s", HIVE_ERR_STR(status));
         return 1;
     }
+
+    // Telemetry logger configuration
+#if ENABLE_TELEMETRY_LOG
+    static telemetry_logger_config tlog_config = {
+        .buses = &buses,
+        .log_path = TELEMETRY_LOG_PATH,
+    };
+#endif
 
     // clang-format off
     // Define child specs for supervisor (9 flight actors + optional comms)
@@ -250,6 +268,16 @@ int main(void) {
          .auto_register = false,
          .restart = HIVE_CHILD_TEMPORARY, // Not flight-critical, don't restart
          .actor_cfg = {.priority = HIVE_PRIORITY_LOW, .name = "comms"}},
+#endif
+#if ENABLE_TELEMETRY_LOG
+        {.start = telemetry_logger_actor,
+         .init = telemetry_logger_init,
+         .init_args = &tlog_config,
+         .init_args_size = sizeof(tlog_config),
+         .name = "tlog",
+         .auto_register = false,
+         .restart = HIVE_CHILD_TEMPORARY, // Not flight-critical, don't restart
+         .actor_cfg = {.priority = HIVE_PRIORITY_LOW, .name = "tlog"}},
 #endif
     };
 
