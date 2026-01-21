@@ -562,6 +562,7 @@ examples/pilot/
     hive_config.mk           # Shared Hive memory config
     SPEC.md              # This specification
     README.md            # Usage instructions
+    FIRST_FLIGHT_CHECKLIST.md  # Hardware bring-up and flight checklist
     worlds/
         hover_test.wbt   # Webots world file
     controllers/
@@ -570,6 +571,7 @@ examples/pilot/
         hal.h                # Common HAL interface
         webots-crazyflie/    # Webots simulation HAL
         crazyflie-2.1+/      # Crazyflie 2.1+ HAL (STM32F405)
+            bringup/         # Hardware bring-up test firmware
 ```
 
 ---
@@ -907,7 +909,7 @@ pip install cflib
 
 | Platform | Flash | RAM | MCU |
 |----------|-------|-----|-----|
-| Crazyflie 2.1+ | ~57 KB | ~144 KB | STM32F405 (1 MB / 192 KB) |
+| Crazyflie 2.1+ | ~63 KB | ~120 KB | STM32F405 (1 MB / 192 KB) |
 
 ### Configuration Split
 
@@ -915,12 +917,16 @@ Hive memory settings are split between shared and platform-specific files:
 
 | File | Contents |
 |------|----------|
-| `hive_config.mk` | Shared settings: actors, buses, pools, message size |
+| `hive_config.mk` | Shared settings: actors, buses, pools, message size, supervisor limits |
 | `Makefile.<platform>` | Platform-specific: stack sizes, flash layout |
 
 The shared settings in `hive_config.mk` are determined by the pilot application
-(10 actors, 7 buses, pool sizes for supervision) and are identical across all
+(10-11 actors, 7 buses, pool sizes for supervision) and are identical across all
 platforms. Only stack sizes vary based on available RAM.
+
+Key memory optimizations in `hive_config.mk`:
+- Supervisor pool reduced to 1 supervisor with 12 children (saves ~23 KB vs default)
+- Pool sizes tuned for pilot's actual usage patterns
 
 ### Measured Stack Usage
 

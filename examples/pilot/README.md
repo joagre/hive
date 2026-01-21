@@ -4,7 +4,7 @@ Quadcopter waypoint navigation using hive actor runtime.
 
 Supports two platforms:
 - **Webots simulation** (default) - Crazyflie quadcopter in Webots simulator
-- **Crazyflie 2.1+** - Bitcraze nano quadcopter (~57 KB flash, ~144 KB RAM)
+- **Crazyflie 2.1+** - Bitcraze nano quadcopter (~63 KB flash, ~120 KB RAM)
 
 ## What it does
 
@@ -120,12 +120,14 @@ sizes differ per platform based on available RAM.
 |------|-------------|
 | `README.md` | This file |
 | `SPEC.md` | Detailed design specification |
+| `FIRST_FLIGHT_CHECKLIST.md` | Hardware bring-up and first flight guide |
 
 ### Directories
 
 | Directory | Description |
 |-----------|-------------|
 | `hal/` | Hardware abstraction layer (see `hal/<platform>/README.md`) |
+| `hal/crazyflie-2.1+/bringup/` | Hardware bring-up test firmware |
 | `controllers/pilot/` | Webots controller (symlink created by `make install`) |
 | `worlds/` | Webots world files |
 
