@@ -19,23 +19,26 @@
 //
 // Data flows through buses:
 //
-//   Sensor --> Sensor Bus --> Estimator --> State Bus
-//                                              |
-//        +------------------+------------------+
-//        |                  |                  |
-//        v                  v                  v
-//    Waypoint           Altitude           Position
-//        |                  |                  |
-//        v                  v                  v
-//   Pos Target Bus      Thrust Bus       Att SP Bus
-//        |                  |                  |
-//        +-------+----------+                  v
-//                |                         Attitude
-//                v                             |
-//              Rate  <-------- Rate SP Bus <---+
-//                |
-//                v
-//           Torque Bus --> Motor <-- Thrust Bus
+//   Sensor --> Sensor Bus --> Estimator --> State Bus -----.
+//                  :                            |           :
+//        +---------:---------+------------------+           :
+//        |         :         |                  |           :
+//        v         :         v                  v           :
+//    Waypoint      :      Altitude           Position       :
+//        |         :         |                  |           :
+//        v         :         v                  v           :
+//   Pos Target Bus :     Thrust Bus -.    Att SP Bus        :
+//        |         :         |       :          |           :
+//        +-------+-:---------+       :          v           :
+//                |  :                :      Attitude        :
+//                v  :                :          |           :
+//              Rate  <-------- Rate SP Bus <----+           :
+//                |                   :                      :
+//                v                   :                      :
+//           Torque Bus --> Motor     :                      :
+//                                    :                      :
+//                                    v                      v
+//                              Comms (telemetry, optional) <-
 //
 // Actor initialization:
 //   All actors receive pilot_buses via init_args
