@@ -55,7 +55,8 @@ C_SOURCES = \
     hal_radio.c \
     platform_crazyflie.c \
     motors.c \
-    syscalls.c
+    syscalls.c \
+    system_stm32f4xx.c
 
 # Source files - vendor drivers
 C_SOURCES += \

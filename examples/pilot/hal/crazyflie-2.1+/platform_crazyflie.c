@@ -97,42 +97,8 @@ void SysTick_Handler(void) {
 // Low-Level Platform Functions
 // ----------------------------------------------------------------------------
 
-static void system_clock_init(void) {
-    // Configure flash latency for 168 MHz
-    FLASH->ACR = FLASH_ACR_LATENCY_5WS | FLASH_ACR_PRFTEN | FLASH_ACR_ICEN |
-                 FLASH_ACR_DCEN;
-
-    // Enable HSE
-    RCC->CR |= RCC_CR_HSEON;
-    while (!(RCC->CR & RCC_CR_HSERDY))
-        ;
-
-    // Configure PLL: HSE (8MHz) * 336 / 2 = 168 MHz
-    RCC->PLLCFGR = (8 << RCC_PLLCFGR_PLLM_Pos) |   // PLLM = 8
-                   (336 << RCC_PLLCFGR_PLLN_Pos) | // PLLN = 336
-                   (0 << RCC_PLLCFGR_PLLP_Pos) |   // PLLP = 2 (0 = /2)
-                   RCC_PLLCFGR_PLLSRC_HSE |        // HSE as source
-                   (7 << RCC_PLLCFGR_PLLQ_Pos);    // PLLQ = 7 (for USB)
-
-    // Enable PLL
-    RCC->CR |= RCC_CR_PLLON;
-    while (!(RCC->CR & RCC_CR_PLLRDY))
-        ;
-
-    // Configure AHB, APB1, APB2 prescalers
-    // AHB = 168 MHz, APB1 = 42 MHz, APB2 = 84 MHz
-    RCC->CFGR = RCC_CFGR_HPRE_DIV1 |  // AHB = SYSCLK
-                RCC_CFGR_PPRE1_DIV4 | // APB1 = AHB/4
-                RCC_CFGR_PPRE2_DIV2;  // APB2 = AHB/2
-
-    // Switch to PLL
-    RCC->CFGR |= RCC_CFGR_SW_PLL;
-    while ((RCC->CFGR & RCC_CFGR_SWS) != RCC_CFGR_SWS_PLL)
-        ;
-
-    // Update SystemCoreClock
-    SystemCoreClock = 168000000;
-}
+// Note: System clock initialization moved to system_stm32f4xx.c (SystemInit)
+// Called by startup code before main(), enabling early debug output.
 
 static void systick_init(void) {
     // Configure SysTick for 1ms interrupts
@@ -768,8 +734,7 @@ static bool init_pmw3901(void) {
 // ----------------------------------------------------------------------------
 
 int platform_init(void) {
-    // Initialize system clock (168 MHz)
-    system_clock_init();
+    // Note: System clock (168 MHz) already configured by SystemInit() before main()
 
     // Initialize SysTick (1ms)
     systick_init();
