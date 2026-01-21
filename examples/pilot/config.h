@@ -84,11 +84,18 @@
 // Position control
 // ----------------------------------------------------------------------------
 
-#define POS_KP 0.12f // Reduced from 0.2 to decrease overshoot
-#define POS_KD 0.18f // Increased from 0.1 for better damping
-
-// Maximum tilt angle for position control (safety limit)
+#ifdef SIMULATED_TIME
+// Webots-tuned values (good sim performance)
+#define POS_KP 0.12f
+#define POS_KD 0.18f
 #define MAX_TILT_ANGLE 0.35f // ~20 degrees
+#else
+// Conservative first-flight values for real hardware
+// Optical flow is noisy; start sluggish and tune up gradually
+#define POS_KP 0.08f         // Conservative (Webots: 0.12)
+#define POS_KD 0.10f         // Reduced D for noise (Webots: 0.18)
+#define MAX_TILT_ANGLE 0.25f // ~14 degrees (safer limit)
+#endif
 
 // ----------------------------------------------------------------------------
 // Platform-specific control parameters

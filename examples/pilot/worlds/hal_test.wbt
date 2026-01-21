@@ -1,0 +1,32 @@
+#VRML_SIM R2025a utf8
+
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/objects/backgrounds/protos/TexturedBackground.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/objects/backgrounds/protos/TexturedBackgroundLight.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/objects/floors/protos/RectangleArena.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/robots/bitcraze/crazyflie/protos/Crazyflie.proto"
+
+WorldInfo {
+  info [
+    "HAL test for validating hardware abstraction layer"
+  ]
+  title "HAL Test"
+  basicTimeStep 4
+  defaultDamping Damping {
+  }
+}
+Viewpoint {
+  orientation -0.19984019174435785 0.19984019174435785 0.9592329203729176 1.6
+  position 0.5026599832572946 -1.2949099494818956 0.9112692791226891
+  follow "Crazyflie"
+  followType "None"
+}
+TexturedBackground {
+}
+TexturedBackgroundLight {
+}
+RectangleArena {
+  floorSize 4 4
+}
+Crazyflie {
+  controller "hal_test"
+}
