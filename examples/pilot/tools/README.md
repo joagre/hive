@@ -1,12 +1,13 @@
 # Pilot Telemetry Tools
 
-Python scripts for analyzing flight telemetry and tuning PID controllers.
+Python scripts for analyzing flight telemetry, tuning PID controllers, and communicating with Crazyflie hardware.
 
 ## Requirements
 
 - Python 3
 - numpy
 - matplotlib
+- cflib (for ground_station.py only - `pip install cflib`)
 
 ## Tools
 
@@ -94,7 +95,36 @@ python3 plot_flight.py /tmp/pilot_telemetry.csv --stats
 python3 plot_flight.py /tmp/pilot_telemetry.csv --title "Waypoint Test"
 ```
 
+### ground_station.py
+
+Receive real-time telemetry and download flight logs from Crazyflie hardware via Crazyradio 2.0. Decodes binary telemetry packets (attitude/rates and position/altitude) and optionally logs to CSV.
+
+```bash
+# Display real-time telemetry to stdout
+python3 ground_station.py
+
+# Log telemetry to CSV file
+python3 ground_station.py -o flight.csv
+
+# Quiet mode (log only, no console output)
+python3 ground_station.py -o flight.csv --quiet
+
+# Download binary flight log from drone flash storage
+python3 ground_station.py --download-log log.bin
+
+# Use custom radio URI (default: radio://0/80/2M)
+python3 ground_station.py --uri radio://0/80/2M
+```
+
+**Telemetry packet types:**
+- Attitude (0x01): timestamp, gyro XYZ, roll/pitch/yaw
+- Position (0x02): timestamp, altitude, vz, vx, vy, thrust
+
+**Log download:** Sends CMD_REQUEST_LOG command to drone, receives binary log chunks, and saves to file. Use with `tools/decode_log.py` (in hive root) to decode the binary log format.
+
 ## PID Tuning Workflow
+
+### Webots Simulation
 
 1. Run a flight test in Webots (telemetry logged to `/tmp/pilot_telemetry.csv`)
 
@@ -117,6 +147,28 @@ python3 plot_flight.py /tmp/pilot_telemetry.csv --title "Waypoint Test"
    ```
 
 6. Repeat until satisfied with response characteristics
+
+### Crazyflie Hardware
+
+1. Flash the drone and connect Crazyradio 2.0
+
+2. Start telemetry logging:
+   ```bash
+   python3 tools/ground_station.py -o flight.csv
+   ```
+
+3. Perform flight test, then Ctrl+C to stop logging
+
+4. Analyze and visualize (same as Webots workflow):
+   ```bash
+   python3 tools/analyze_pid.py flight.csv
+   python3 tools/plot_telemetry.py flight.csv
+   ```
+
+5. Alternatively, download the onboard flash log after flight:
+   ```bash
+   python3 tools/ground_station.py --download-log flight.bin
+   ```
 
 ## Telemetry CSV Format
 
