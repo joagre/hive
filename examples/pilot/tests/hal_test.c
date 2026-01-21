@@ -164,9 +164,10 @@ int main(void) {
     LOG("Read %d sensor samples", read_count);
 
     // Verify we got reasonable data
-    // Accel Z should be approximately -9.8 m/s^2 (gravity)
+    // Accel Z should be approximately +9.8 m/s^2 when level
+    // (accelerometer measures reaction force against gravity)
     // Gyro should be near zero if stationary
-    bool accel_ok = (sensors.accel[2] < -5.0f && sensors.accel[2] > -15.0f);
+    bool accel_ok = (sensors.accel[2] > 5.0f && sensors.accel[2] < 15.0f);
     bool gyro_ok = (sensors.gyro[0] > -1.0f && sensors.gyro[0] < 1.0f &&
                     sensors.gyro[1] > -1.0f && sensors.gyro[1] < 1.0f &&
                     sensors.gyro[2] > -1.0f && sensors.gyro[2] < 1.0f);
