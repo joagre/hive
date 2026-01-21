@@ -4,9 +4,13 @@
 # Builds its own libhive.a with tight memory limits matching STM32 production.
 #
 # Usage:
-#   make              - Build the controller
+#   make              - Build and install to Webots (always use this)
+#   make build        - Build only (without install)
 #   make clean        - Remove build artifacts
-#   make install      - Copy controller to Webots project
+#
+# NOTE: Always use 'make' (not 'make build') to ensure Webots runs the latest
+# controller. Webots caches the controller binary and won't see changes unless
+# you install to the controllers/ directory.
 #
 # Requirements:
 #   - WEBOTS_HOME environment variable set
@@ -119,9 +123,13 @@ CONTROLLER_DIR = controllers/pilot
 # Build Rules
 # ------------------------------------------------------------------------------
 
-.PHONY: all clean install check-webots clean-emacs
+.PHONY: all build clean install check-webots clean-emacs
 
-all: check-webots $(TARGET)
+# Default target: build AND install (so Webots always runs latest code)
+all: install
+
+# Build only (use 'make' instead to ensure Webots gets updated)
+build: check-webots $(TARGET)
 
 # --- Hive library ---
 
@@ -163,9 +171,10 @@ clean:
 clean-emacs:
 	find . -name '*~' -delete
 
-install: $(TARGET)
+install: check-webots $(TARGET)
 	@mkdir -p $(CONTROLLER_DIR)
-	cp $(TARGET) $(CONTROLLER_DIR)/
+	@cp $(TARGET) $(CONTROLLER_DIR)/
+	@echo "Installed to $(CONTROLLER_DIR)/$(TARGET)"
 
 check-webots:
 	@if [ ! -d "$(WEBOTS_HOME)" ]; then \
