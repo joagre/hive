@@ -894,7 +894,8 @@ Thrust Bus ─┘
 ```
 
 **Implementation:**
-- Subscribes to sensor, state, and thrust buses
+- Subscribes to sensor, state, and thrust buses (not position target bus)
+- Position targets omitted due to 31-byte ESB packet size limit
 - Sends binary packets at 100Hz over syslink protocol
 - Two operating modes:
   - Flight mode: Sends telemetry packets at 100Hz

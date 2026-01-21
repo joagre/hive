@@ -293,6 +293,11 @@ to the nRF51822 radio chip, which transmits via ESB to a Crazyradio 2.0 on the g
 - Type 0x01: Attitude/rates (gyro XYZ, roll/pitch/yaw)
 - Type 0x02: Position (altitude, velocities, thrust)
 
+**Note:** Position targets (waypoints) are not included in radio telemetry due to the
+31-byte packet size limit. This means radio telemetry is suitable for tuning altitude,
+attitude, and rate control loops, but not position control. For position control tuning,
+use Webots CSV telemetry which includes full position targets.
+
 **Ground station receiver:**
 ```bash
 pip install cflib
@@ -326,6 +331,10 @@ downloads in about 3 seconds (8192 bytes / 28 bytes per chunk / 100 chunks per s
 
 The Webots build includes a telemetry logger actor that writes flight data to CSV
 at 25Hz for PID tuning and flight analysis. The log file is written to `/tmp/pilot_telemetry.csv`.
+
+Unlike radio telemetry, CSV logging includes position targets (waypoints), making it
+the right tool for tuning position control. Use Webots to tune position gains, then
+transfer to hardware with conservative adjustments (see hal_config.h).
 
 **CSV columns:**
 - `time_ms`: Timestamp since flight start
