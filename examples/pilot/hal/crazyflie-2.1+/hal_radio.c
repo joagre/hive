@@ -3,8 +3,8 @@
 // Implements radio communication via syslink protocol to the nRF51822.
 // The nRF51 handles ESB radio protocol to Crazyradio PA on the ground.
 //
-// UART: USART2 at 1Mbaud (PA2=TX, PA3=RX)
-// Flow control: PC4 (TXEN) indicates nRF51 ready to receive
+// UART: USART6 at 1Mbaud (PC6=TX, PC7=RX)
+// Flow control: PA4 (TXEN) indicates nRF51 ready to receive
 //
 // Protocol: After receiving one RADIO_RAW packet from nRF51, we may send one.
 // The nRF51 periodically sends empty packets to enable TX.
@@ -29,20 +29,20 @@
 #define RADIO_MTU 31 // Max payload for ESB packet
 
 // ----------------------------------------------------------------------------
-// UART Configuration (USART2)
+// UART Configuration (USART6)
 // ----------------------------------------------------------------------------
 
-// USART2 is on APB1 (42 MHz after our clock setup)
+// USART6 is on APB2 (84 MHz after our clock setup)
 // Baud rate = 1,000,000
-// BRR = APB1_CLK / BAUD = 42,000,000 / 1,000,000 = 42
+// BRR = APB2_CLK / BAUD = 84,000,000 / 1,000,000 = 84
 
-#define SYSLINK_USART USART2
-#define SYSLINK_BAUD_DIV 42
+#define SYSLINK_USART USART6
+#define SYSLINK_BAUD_DIV 84
 
-// GPIO pins
-#define SYSLINK_TX_PIN 2   // PA2
-#define SYSLINK_RX_PIN 3   // PA3
-#define SYSLINK_TXEN_PIN 4 // PC4 (flow control from nRF51)
+// GPIO pins (matching Bitcraze firmware)
+#define SYSLINK_TX_PIN 6   // PC6
+#define SYSLINK_RX_PIN 7   // PC7
+#define SYSLINK_TXEN_PIN 4 // PA4 (flow control from nRF51)
 
 // ----------------------------------------------------------------------------
 // State
@@ -79,25 +79,25 @@ static uint8_t s_rx_ck_a, s_rx_ck_b;
 // ----------------------------------------------------------------------------
 
 static void uart_init(void) {
-    // Enable USART2 clock (APB1)
-    RCC->APB1ENR |= RCC_APB1ENR_USART2EN;
+    // Enable USART6 clock (APB2)
+    RCC->APB2ENR |= RCC_APB2ENR_USART6EN;
 
-    // Enable GPIOA clock (already done in platform_crazyflie.c, but be safe)
+    // Enable GPIO clocks
     RCC->AHB1ENR |= RCC_AHB1ENR_GPIOAEN | RCC_AHB1ENR_GPIOCEN;
 
-    // Configure PA2 (TX) and PA3 (RX) for USART2 (AF7)
-    GPIOA->MODER &= ~(GPIO_MODER_MODER2 | GPIO_MODER_MODER3);
-    GPIOA->MODER |= (GPIO_MODER_MODER2_1 | GPIO_MODER_MODER3_1); // AF mode
-    GPIOA->AFR[0] &= ~((0xFU << (2 * 4)) | (0xFU << (3 * 4)));
-    GPIOA->AFR[0] |= (7U << (2 * 4)) | (7U << (3 * 4)); // AF7 = USART2
-    GPIOA->OSPEEDR |= GPIO_OSPEEDER_OSPEEDR2 | GPIO_OSPEEDER_OSPEEDR3;
+    // Configure PC6 (TX) and PC7 (RX) for USART6 (AF8)
+    GPIOC->MODER &= ~(GPIO_MODER_MODER6 | GPIO_MODER_MODER7);
+    GPIOC->MODER |= (GPIO_MODER_MODER6_1 | GPIO_MODER_MODER7_1); // AF mode
+    GPIOC->AFR[0] &= ~((0xFU << (6 * 4)) | (0xFU << (7 * 4)));
+    GPIOC->AFR[0] |= (8U << (6 * 4)) | (8U << (7 * 4)); // AF8 = USART6
+    GPIOC->OSPEEDR |= GPIO_OSPEEDER_OSPEEDR6 | GPIO_OSPEEDER_OSPEEDR7;
 
-    // Configure PC4 (TXEN) as input with pull-down
-    GPIOC->MODER &= ~GPIO_MODER_MODER4; // Input mode
-    GPIOC->PUPDR &= ~GPIO_PUPDR_PUPDR4;
-    GPIOC->PUPDR |= GPIO_PUPDR_PUPDR4_1; // Pull-down
+    // Configure PA4 (TXEN) as input with pull-down
+    GPIOA->MODER &= ~GPIO_MODER_MODER4; // Input mode
+    GPIOA->PUPDR &= ~GPIO_PUPDR_PUPDR4;
+    GPIOA->PUPDR |= GPIO_PUPDR_PUPDR4_1; // Pull-down
 
-    // Configure USART2: 1Mbaud, 8N1
+    // Configure USART6: 1Mbaud, 8N1
     SYSLINK_USART->CR1 = 0; // Disable USART first
     SYSLINK_USART->BRR = SYSLINK_BAUD_DIV;
     SYSLINK_USART->CR2 = 0; // 1 stop bit
@@ -122,7 +122,7 @@ static inline uint8_t uart_getc(void) {
 }
 
 static inline bool txen_ready(void) {
-    return (GPIOC->IDR & (1U << SYSLINK_TXEN_PIN)) != 0;
+    return (GPIOA->IDR & (1U << SYSLINK_TXEN_PIN)) != 0;
 }
 
 // ----------------------------------------------------------------------------
@@ -184,7 +184,9 @@ static void syslink_process_packet(void) {
     case SYSLINK_PM_BATTERY:
         // Battery packet: flags (1 byte) + voltage (4 bytes float)
         if (s_rx_length >= 5) {
-            memcpy(&s_battery_voltage, &s_rx_data[1], sizeof(float));
+            float voltage;
+            memcpy(&voltage, &s_rx_data[1], sizeof(float));
+            s_battery_voltage = voltage;
         }
         break;
 

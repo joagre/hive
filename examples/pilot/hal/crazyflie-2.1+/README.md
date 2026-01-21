@@ -17,47 +17,6 @@ make          # Build libhal.a
 make clean    # Remove build artifacts
 ```
 
-## Hardware Validation Tests
-
-Before running the full pilot firmware, use the test programs to verify
-hardware connectivity.
-
-### Bare-Metal Hardware Tests
-
-Standalone tests using direct register access (in `tests/`):
-
-```bash
-cd tests
-make baro_test            # Build barometer test (safest - no motors)
-make flow_test            # Build Flow Deck test (requires Flow Deck v2)
-make sensor_motor_test    # Build sensor/motor diagnostic (REMOVE PROPELLERS!)
-make thrust_test          # Build thrust calibration test (REMOVE PROPELLERS!)
-make flash-baro           # Flash baro_test
-make flash-flow           # Flash flow_test
-make flash-sensor         # Flash sensor_motor_test
-make flash-thrust         # Flash thrust_test
-```
-
-**Recommended test order:**
-1. `baro_test` - Verify I2C and barometer (no motors, safest)
-2. `flow_test` - Verify Flow Deck sensors (if installed)
-3. `sensor_motor_test` - Verify motor wiring and rotation
-4. `thrust_test` - Calibrate hover thrust
-
-See `tests/README.md` for LED feedback patterns and procedures.
-
-### HAL Validation Tests
-
-Platform-independent HAL tests (in `examples/pilot/tests/`):
-
-```bash
-cd ../../tests
-make PLATFORM=crazyflie   # Build HAL test for Crazyflie
-make flash-crazyflie      # Flash HAL test
-```
-
-See `examples/pilot/tests/README.md` for details.
-
 ## Integration with Pilot
 
 This HAL links with `pilot.c` and the hive runtime. The platform API
@@ -78,6 +37,7 @@ make -f Makefile.crazyflie-2.1+
 | Flow sensor | PMW3901 | SPI1 | Optical flow (Flow deck v2) |
 | ToF sensor | VL53L1x | I2C3 | Height measurement (Flow deck v2) |
 | Motors | 7x16mm | TIM2 PWM | Brushed coreless, x4 |
+| Radio | nRF51822 | USART6 | Syslink to Crazyradio PA |
 | LED | Blue | PD2 | Status indicator |
 
 ## Specifications
@@ -124,10 +84,15 @@ make -f Makefile.crazyflie-2.1+
                               v
 +---------------------------------------------------------------+
 |                  platform_crazyflie.c                         |
-|        (Platform layer with direct register access)           |
+|        (Platform layer with I2C/SPI callbacks)                |
++---------------------------------------------------------------+
+                              |
+                              v
++---------------------------------------------------------------+
+|                    Vendor Drivers                             |
 |  +----------+  +----------+  +----------+  +----------+       |
-|  |  BMI088  |  |  BMP388  |  | PMW3901  |  |  motors  |       |
-|  |  (SPI1)  |  |  (I2C3)  |  |  (SPI1)  |  |  (TIM2)  |       |
+|  | BMI08x   |  |   BMP3   |  | PMW3901  |  | VL53L1x  |       |
+|  |  Bosch   |  |   Bosch  |  | Bitcraze |  |    ST    |       |
 |  +----------+  +----------+  +----------+  +----------+       |
 +---------------------------------------------------------------+
                               |
@@ -148,6 +113,7 @@ make -f Makefile.crazyflie-2.1+
 | File | Description |
 |------|-------------|
 | `hal_crazyflie.c` | HAL interface (hal_read_sensors, hal_write_torque) |
+| `hal_radio.c` | Radio communication via syslink to nRF51822 |
 | `hal_config.h` | Platform-specific PID gains and thrust |
 | `platform_crazyflie.h/c` | Platform-specific sensor reading and motor control |
 
@@ -159,14 +125,17 @@ make -f Makefile.crazyflie-2.1+
 | Actors, buses, pools | `hive_config.mk` | Shared (pilot-determined) |
 | Stack sizes | `Makefile.crazyflie-2.1+` | Platform-specific (RAM-dependent) |
 
-### Sensor Drivers
+### Vendor Drivers (vendor/)
 
-| File | Description |
-|------|-------------|
-| `bmi088.h/c` | BMI088 IMU driver (SPI) |
-| `bmp388.h/c` | BMP388 barometer driver (I2C) |
-| `pmw3901.h/c` | PMW3901 optical flow driver (SPI) |
-| `vl53l1x.h/c` | VL53L1x ToF ranging driver (I2C) |
+Uses official vendor APIs for reliability. All under permissive licenses
+(BSD-3-Clause or MIT). See `THIRD_PARTY_LICENSES.md` for details.
+
+| Directory | Driver | License | Description |
+|-----------|--------|---------|-------------|
+| `vendor/bosch/bmi08x/` | BMI08x API | BSD-3-Clause | BMI088 IMU (accel + gyro) |
+| `vendor/bosch/bmp3/` | BMP3 API | BSD-3-Clause | BMP388 barometer |
+| `vendor/st/vl53l1x/` | VL53L1x ULD | BSD-3-Clause | ToF ranging sensor |
+| `vendor/bitcraze/pmw3901/` | PMW3901 | MIT | Optical flow sensor |
 
 ### Motor Driver
 
@@ -217,6 +186,13 @@ PA0  - TIM2_CH1 (M1, front-left, CCW)
 PA1  - TIM2_CH2 (M2, front-right, CW)
 PA2  - TIM2_CH3 (M3, rear-right, CCW)
 PA3  - TIM2_CH4 (M4, rear-left, CW)
+```
+
+### USART6 (nRF51 Syslink)
+```
+PC6  - USART6_TX
+PC7  - USART6_RX
+PA4  - TXEN (flow control from nRF51)
 ```
 
 ### Misc

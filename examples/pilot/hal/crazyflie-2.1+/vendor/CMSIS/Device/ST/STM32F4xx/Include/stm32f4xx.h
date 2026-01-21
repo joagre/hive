@@ -1,370 +1,301 @@
-// STM32F4xx Device Header (Minimal for Crazyflie HAL)
-//
-// This is a minimal device header with only the peripherals used by the HAL.
-// For full functionality, use the official ST CMSIS headers.
+/**
+  ******************************************************************************
+  * @file    stm32f4xx.h
+  * @author  MCD Application Team
+  * @brief   CMSIS STM32F4xx Device Peripheral Access Layer Header File.
+  *
+  *          The file is the unique include file that the application programmer
+  *          is using in the C source code, usually in main.c. This file contains:
+  *           - Configuration section that allows to select:
+  *              - The STM32F4xx device used in the target application
+  *              - To use or not the peripheral's drivers in application code(i.e.
+  *                code will be based on direct access to peripheral's registers
+  *                rather than drivers API), this option is controlled by
+  *                "#define USE_HAL_DRIVER"
+  *
+  ******************************************************************************
+  * @attention
+  *
+  * Copyright (c) 2017 STMicroelectronics.
+  * All rights reserved.
+  *
+  * This software is licensed under terms that can be found in the LICENSE file
+  * in the root directory of this software component.
+  * If no LICENSE file comes with this software, it is provided AS-IS.
+  *
+  ******************************************************************************
+  */
 
-#ifndef STM32F4XX_H
-#define STM32F4XX_H
+/** @addtogroup CMSIS
+  * @{
+  */
+
+/** @addtogroup stm32f4xx
+  * @{
+  */
+
+#ifndef __STM32F4xx_H
+#define __STM32F4xx_H
 
 #ifdef __cplusplus
 extern "C" {
+#endif /* __cplusplus */
+
+/** @addtogroup Library_configuration_section
+  * @{
+  */
+
+/**
+  * @brief STM32 Family
+  */
+#if !defined  (STM32F4)
+#define STM32F4
+#endif /* STM32F4 */
+
+/* Uncomment the line below according to the target STM32 device used in your
+   application
+  */
+#if !defined (STM32F405xx) && !defined (STM32F415xx) && !defined (STM32F407xx) && !defined (STM32F417xx) && \
+    !defined (STM32F427xx) && !defined (STM32F437xx) && !defined (STM32F429xx) && !defined (STM32F439xx) && \
+    !defined (STM32F401xC) && !defined (STM32F401xE) && !defined (STM32F410Tx) && !defined (STM32F410Cx) && \
+    !defined (STM32F410Rx) && !defined (STM32F411xE) && !defined (STM32F446xx) && !defined (STM32F469xx) && \
+    !defined (STM32F479xx) && !defined (STM32F412Cx) && !defined (STM32F412Rx) && !defined (STM32F412Vx) && \
+    !defined (STM32F412Zx) && !defined (STM32F413xx) && !defined (STM32F423xx)
+/* #define STM32F405xx */   /*!< STM32F405RG, STM32F405VG and STM32F405ZG Devices */
+/* #define STM32F415xx */   /*!< STM32F415RG, STM32F415VG and STM32F415ZG Devices */
+/* #define STM32F407xx */   /*!< STM32F407VG, STM32F407VE, STM32F407ZG, STM32F407ZE, STM32F407IG  and STM32F407IE Devices */
+/* #define STM32F417xx */   /*!< STM32F417VG, STM32F417VE, STM32F417ZG, STM32F417ZE, STM32F417IG and STM32F417IE Devices */
+/* #define STM32F427xx */   /*!< STM32F427VG, STM32F427VI, STM32F427ZG, STM32F427ZI, STM32F427IG and STM32F427II Devices */
+/* #define STM32F437xx */   /*!< STM32F437VG, STM32F437VI, STM32F437ZG, STM32F437ZI, STM32F437IG and STM32F437II Devices */
+/* #define STM32F429xx */   /*!< STM32F429VG, STM32F429VI, STM32F429ZG, STM32F429ZI, STM32F429BG, STM32F429BI, STM32F429NG,
+                                 STM32F439NI, STM32F429IG  and STM32F429II Devices */
+/* #define STM32F439xx */   /*!< STM32F439VG, STM32F439VI, STM32F439ZG, STM32F439ZI, STM32F439BG, STM32F439BI, STM32F439NG,
+                                 STM32F439NI, STM32F439IG and STM32F439II Devices */
+/* #define STM32F401xC */   /*!< STM32F401CB, STM32F401CC, STM32F401RB, STM32F401RC, STM32F401VB and STM32F401VC Devices */
+/* #define STM32F401xE */   /*!< STM32F401CD, STM32F401RD, STM32F401VD, STM32F401CE, STM32F401RE and STM32F401VE Devices */
+/* #define STM32F410Tx */   /*!< STM32F410T8 and STM32F410TB Devices */
+/* #define STM32F410Cx */   /*!< STM32F410C8 and STM32F410CB Devices */
+/* #define STM32F410Rx */   /*!< STM32F410R8 and STM32F410RB Devices */
+/* #define STM32F411xE */   /*!< STM32F411CC, STM32F411RC, STM32F411VC, STM32F411CE, STM32F411RE and STM32F411VE Devices */
+/* #define STM32F446xx */   /*!< STM32F446MC, STM32F446ME, STM32F446RC, STM32F446RE, STM32F446VC, STM32F446VE, STM32F446ZC,
+                                 and STM32F446ZE Devices */
+/* #define STM32F469xx */   /*!< STM32F469AI, STM32F469II, STM32F469BI, STM32F469NI, STM32F469AG, STM32F469IG, STM32F469BG,
+                                 STM32F469NG, STM32F469AE, STM32F469IE, STM32F469BE and STM32F469NE Devices */
+/* #define STM32F479xx */   /*!< STM32F479AI, STM32F479II, STM32F479BI, STM32F479NI, STM32F479AG, STM32F479IG, STM32F479BG
+                                 and STM32F479NG Devices */
+/* #define STM32F412Cx */   /*!< STM32F412CEU and STM32F412CGU Devices */
+/* #define STM32F412Zx */   /*!< STM32F412ZET, STM32F412ZGT, STM32F412ZEJ and STM32F412ZGJ Devices */
+/* #define STM32F412Vx */   /*!< STM32F412VET, STM32F412VGT, STM32F412VEH and STM32F412VGH Devices */
+/* #define STM32F412Rx */   /*!< STM32F412RET, STM32F412RGT, STM32F412REY and STM32F412RGY Devices */
+/* #define STM32F413xx */   /*!< STM32F413CH, STM32F413MH, STM32F413RH, STM32F413VH, STM32F413ZH, STM32F413CG, STM32F413MG,
+                                 STM32F413RG, STM32F413VG and STM32F413ZG Devices */
+/* #define STM32F423xx */   /*!< STM32F423CH, STM32F423RH, STM32F423VH and STM32F423ZH Devices */
 #endif
 
-#include <stdint.h>
+/*  Tip: To avoid modifying this file each time you need to switch between these
+        devices, you can define the device in your toolchain compiler preprocessor.
+  */
+#if !defined  (USE_HAL_DRIVER)
+/**
+ * @brief Comment the line below if you will not use the peripherals drivers.
+   In this case, these drivers will not be included and the application code will
+   be based on direct access to peripherals registers
+   */
+/*#define USE_HAL_DRIVER */
+#endif /* USE_HAL_DRIVER */
 
-// Include core definitions
-#include "core_cm4.h"
+/**
+  * @brief CMSIS version number V2.6.11
+  */
+#define __STM32F4xx_CMSIS_VERSION_MAIN   (0x02U) /*!< [31:24] main version */
+#define __STM32F4xx_CMSIS_VERSION_SUB1   (0x06U) /*!< [23:16] sub1 version */
+#define __STM32F4xx_CMSIS_VERSION_SUB2   (0x0BU) /*!< [15:8]  sub2 version */
+#define __STM32F4xx_CMSIS_VERSION_RC     (0x00U) /*!< [7:0]  release candidate */
+#define __STM32F4xx_CMSIS_VERSION        ((__STM32F4xx_CMSIS_VERSION_MAIN << 24)\
+                                         |(__STM32F4xx_CMSIS_VERSION_SUB1 << 16)\
+                                         |(__STM32F4xx_CMSIS_VERSION_SUB2 << 8 )\
+                                         |(__STM32F4xx_CMSIS_VERSION_RC))
 
-// ----------------------------------------------------------------------------
-// Peripheral Memory Map
-// ----------------------------------------------------------------------------
+/**
+  * @}
+  */
 
-#define PERIPH_BASE       0x40000000UL
-#define APB1PERIPH_BASE   PERIPH_BASE
-#define APB2PERIPH_BASE   (PERIPH_BASE + 0x00010000UL)
-#define AHB1PERIPH_BASE   (PERIPH_BASE + 0x00020000UL)
+/** @addtogroup Device_Included
+  * @{
+  */
 
-// APB1 Peripherals
-#define TIM2_BASE         (APB1PERIPH_BASE + 0x0000UL)
-#define TIM3_BASE         (APB1PERIPH_BASE + 0x0400UL)
-#define TIM4_BASE         (APB1PERIPH_BASE + 0x0800UL)
-#define USART2_BASE       (APB1PERIPH_BASE + 0x4400UL)
-#define SPI2_BASE         (APB1PERIPH_BASE + 0x3800UL)
-#define SPI3_BASE         (APB1PERIPH_BASE + 0x3C00UL)
-#define I2C1_BASE         (APB1PERIPH_BASE + 0x5400UL)
-#define I2C2_BASE         (APB1PERIPH_BASE + 0x5800UL)
-#define I2C3_BASE         (APB1PERIPH_BASE + 0x5C00UL)
+#if defined(STM32F405xx)
+#include "stm32f405xx.h"
+#elif defined(STM32F415xx)
+#include "stm32f415xx.h"
+#elif defined(STM32F407xx)
+#include "stm32f407xx.h"
+#elif defined(STM32F417xx)
+#include "stm32f417xx.h"
+#elif defined(STM32F427xx)
+#include "stm32f427xx.h"
+#elif defined(STM32F437xx)
+#include "stm32f437xx.h"
+#elif defined(STM32F429xx)
+#include "stm32f429xx.h"
+#elif defined(STM32F439xx)
+#include "stm32f439xx.h"
+#elif defined(STM32F401xC)
+#include "stm32f401xc.h"
+#elif defined(STM32F401xE)
+#include "stm32f401xe.h"
+#elif defined(STM32F410Tx)
+#include "stm32f410tx.h"
+#elif defined(STM32F410Cx)
+#include "stm32f410cx.h"
+#elif defined(STM32F410Rx)
+#include "stm32f410rx.h"
+#elif defined(STM32F411xE)
+#include "stm32f411xe.h"
+#elif defined(STM32F446xx)
+#include "stm32f446xx.h"
+#elif defined(STM32F469xx)
+#include "stm32f469xx.h"
+#elif defined(STM32F479xx)
+#include "stm32f479xx.h"
+#elif defined(STM32F412Cx)
+#include "stm32f412cx.h"
+#elif defined(STM32F412Zx)
+#include "stm32f412zx.h"
+#elif defined(STM32F412Rx)
+#include "stm32f412rx.h"
+#elif defined(STM32F412Vx)
+#include "stm32f412vx.h"
+#elif defined(STM32F413xx)
+#include "stm32f413xx.h"
+#elif defined(STM32F423xx)
+#include "stm32f423xx.h"
+#else
+#error "Please select first the target STM32F4xx device used in your application (in stm32f4xx.h file)"
+#endif
 
-// APB2 Peripherals
-#define SPI1_BASE         (APB2PERIPH_BASE + 0x3000UL)
-#define USART1_BASE       (APB2PERIPH_BASE + 0x1000UL)
+/**
+  * @}
+  */
 
-// AHB1 Peripherals
-#define GPIOA_BASE        (AHB1PERIPH_BASE + 0x0000UL)
-#define GPIOB_BASE        (AHB1PERIPH_BASE + 0x0400UL)
-#define GPIOC_BASE        (AHB1PERIPH_BASE + 0x0800UL)
-#define GPIOD_BASE        (AHB1PERIPH_BASE + 0x0C00UL)
-#define RCC_BASE          (AHB1PERIPH_BASE + 0x3800UL)
-#define FLASH_R_BASE      (AHB1PERIPH_BASE + 0x3C00UL)
+/** @addtogroup Exported_types
+  * @{
+  */
+typedef enum
+{
+  RESET = 0U,
+  SET = !RESET
+} FlagStatus, ITStatus;
 
-// ----------------------------------------------------------------------------
-// GPIO Registers
-// ----------------------------------------------------------------------------
+typedef enum
+{
+  DISABLE = 0U,
+  ENABLE = !DISABLE
+} FunctionalState;
+#define IS_FUNCTIONAL_STATE(STATE) (((STATE) == DISABLE) || ((STATE) == ENABLE))
 
-typedef struct {
-    volatile uint32_t MODER;
-    volatile uint32_t OTYPER;
-    volatile uint32_t OSPEEDR;
-    volatile uint32_t PUPDR;
-    volatile uint32_t IDR;
-    volatile uint32_t ODR;
-    volatile uint32_t BSRR;
-    volatile uint32_t LCKR;
-    volatile uint32_t AFR[2];
-} GPIO_TypeDef;
+typedef enum
+{
+  SUCCESS = 0U,
+  ERROR = !SUCCESS
+} ErrorStatus;
 
-#define GPIOA  ((GPIO_TypeDef *)GPIOA_BASE)
-#define GPIOB  ((GPIO_TypeDef *)GPIOB_BASE)
-#define GPIOC  ((GPIO_TypeDef *)GPIOC_BASE)
-#define GPIOD  ((GPIO_TypeDef *)GPIOD_BASE)
+/**
+  * @}
+  */
 
-// GPIO bit definitions
-#define GPIO_MODER_MODER0     (0x3UL << 0)
-#define GPIO_MODER_MODER0_0   (0x1UL << 0)
-#define GPIO_MODER_MODER0_1   (0x2UL << 0)
-#define GPIO_MODER_MODER1     (0x3UL << 2)
-#define GPIO_MODER_MODER1_0   (0x1UL << 2)
-#define GPIO_MODER_MODER1_1   (0x2UL << 2)
-#define GPIO_MODER_MODER2     (0x3UL << 4)
-#define GPIO_MODER_MODER2_0   (0x1UL << 4)
-#define GPIO_MODER_MODER2_1   (0x2UL << 4)
-#define GPIO_MODER_MODER3     (0x3UL << 6)
-#define GPIO_MODER_MODER3_0   (0x1UL << 6)
-#define GPIO_MODER_MODER3_1   (0x2UL << 6)
-#define GPIO_MODER_MODER4     (0x3UL << 8)
-#define GPIO_MODER_MODER4_0   (0x1UL << 8)
-#define GPIO_MODER_MODER4_1   (0x2UL << 8)
-#define GPIO_MODER_MODER5     (0x3UL << 10)
-#define GPIO_MODER_MODER5_0   (0x1UL << 10)
-#define GPIO_MODER_MODER5_1   (0x2UL << 10)
-#define GPIO_MODER_MODER6     (0x3UL << 12)
-#define GPIO_MODER_MODER6_0   (0x1UL << 12)
-#define GPIO_MODER_MODER6_1   (0x2UL << 12)
-#define GPIO_MODER_MODER7     (0x3UL << 14)
-#define GPIO_MODER_MODER7_0   (0x1UL << 14)
-#define GPIO_MODER_MODER7_1   (0x2UL << 14)
-#define GPIO_MODER_MODER8     (0x3UL << 16)
-#define GPIO_MODER_MODER8_0   (0x1UL << 16)
-#define GPIO_MODER_MODER8_1   (0x2UL << 16)
-#define GPIO_MODER_MODER9     (0x3UL << 18)
-#define GPIO_MODER_MODER9_0   (0x1UL << 18)
-#define GPIO_MODER_MODER9_1   (0x2UL << 18)
 
-#define GPIO_OTYPER_OT8       (1UL << 8)
-#define GPIO_OTYPER_OT9       (1UL << 9)
+/** @addtogroup Exported_macro
+  * @{
+  */
+#define SET_BIT(REG, BIT)     ((REG) |= (BIT))
 
-#define GPIO_OSPEEDER_OSPEEDR0 (0x3UL << 0)
-#define GPIO_OSPEEDER_OSPEEDR1 (0x3UL << 2)
-#define GPIO_OSPEEDER_OSPEEDR2 (0x3UL << 4)
-#define GPIO_OSPEEDER_OSPEEDR3 (0x3UL << 6)
-#define GPIO_OSPEEDER_OSPEEDR4 (0x3UL << 8)
-#define GPIO_OSPEEDER_OSPEEDR5 (0x3UL << 10)
-#define GPIO_OSPEEDER_OSPEEDR6 (0x3UL << 12)
-#define GPIO_OSPEEDER_OSPEEDR7 (0x3UL << 14)
+#define CLEAR_BIT(REG, BIT)   ((REG) &= ~(BIT))
 
-#define GPIO_PUPDR_PUPDR0     (0x3UL << 0)
-#define GPIO_PUPDR_PUPDR1     (0x3UL << 2)
-#define GPIO_PUPDR_PUPDR2     (0x3UL << 4)
-#define GPIO_PUPDR_PUPDR3     (0x3UL << 6)
-#define GPIO_PUPDR_PUPDR4     (0x3UL << 8)
-#define GPIO_PUPDR_PUPDR4_0   (0x1UL << 8)
-#define GPIO_PUPDR_PUPDR4_1   (0x2UL << 8)
-#define GPIO_PUPDR_PUPDR5     (0x3UL << 10)
-#define GPIO_PUPDR_PUPDR6     (0x3UL << 12)
-#define GPIO_PUPDR_PUPDR7     (0x3UL << 14)
-#define GPIO_PUPDR_PUPDR8     (0x3UL << 16)
-#define GPIO_PUPDR_PUPDR8_0   (0x1UL << 16)
-#define GPIO_PUPDR_PUPDR9     (0x3UL << 18)
-#define GPIO_PUPDR_PUPDR9_0   (0x1UL << 18)
+#define READ_BIT(REG, BIT)    ((REG) & (BIT))
 
-#define GPIO_ODR_OD4          (1UL << 4)
+#define CLEAR_REG(REG)        ((REG) = (0x0))
 
-// GPIO alternate function definitions
-#define GPIO_AFRL_AFRL0       (0xFUL << 0)
-#define GPIO_AFRL_AFRL1       (0xFUL << 4)
-#define GPIO_AFRL_AFRL2       (0xFUL << 8)
-#define GPIO_AFRL_AFRL3       (0xFUL << 12)
-#define GPIO_AFRL_AFRL4       (0xFUL << 16)
-#define GPIO_AFRL_AFRL5       (0xFUL << 20)
-#define GPIO_AFRL_AFRL6       (0xFUL << 24)
-#define GPIO_AFRL_AFRL7       (0xFUL << 28)
-#define GPIO_AFRH_AFRH8       (0xFUL << 0)
-#define GPIO_AFRH_AFRH9       (0xFUL << 4)
-#define GPIO_AFRH_AFRH10      (0xFUL << 8)
-#define GPIO_AFRH_AFRH11      (0xFUL << 12)
-#define GPIO_AFRH_AFRH12      (0xFUL << 16)
-#define GPIO_AFRH_AFRH13      (0xFUL << 20)
-#define GPIO_AFRH_AFRH14      (0xFUL << 24)
-#define GPIO_AFRH_AFRH15      (0xFUL << 28)
+#define WRITE_REG(REG, VAL)   ((REG) = (VAL))
 
-// ----------------------------------------------------------------------------
-// RCC Registers
-// ----------------------------------------------------------------------------
+#define READ_REG(REG)         ((REG))
 
-typedef struct {
-    volatile uint32_t CR;
-    volatile uint32_t PLLCFGR;
-    volatile uint32_t CFGR;
-    volatile uint32_t CIR;
-    volatile uint32_t AHB1RSTR;
-    volatile uint32_t AHB2RSTR;
-    volatile uint32_t AHB3RSTR;
-    uint32_t RESERVED0;
-    volatile uint32_t APB1RSTR;
-    volatile uint32_t APB2RSTR;
-    uint32_t RESERVED1[2];
-    volatile uint32_t AHB1ENR;
-    volatile uint32_t AHB2ENR;
-    volatile uint32_t AHB3ENR;
-    uint32_t RESERVED2;
-    volatile uint32_t APB1ENR;
-    volatile uint32_t APB2ENR;
-} RCC_TypeDef;
+#define MODIFY_REG(REG, CLEARMASK, SETMASK)  WRITE_REG((REG), (((READ_REG(REG)) & (~(CLEARMASK))) | (SETMASK)))
 
-#define RCC  ((RCC_TypeDef *)RCC_BASE)
+#define POSITION_VAL(VAL)     (__CLZ(__RBIT(VAL)))
 
-// RCC bit definitions
-#define RCC_CR_HSEON          (1UL << 16)
-#define RCC_CR_HSERDY         (1UL << 17)
-#define RCC_CR_PLLON          (1UL << 24)
-#define RCC_CR_PLLRDY         (1UL << 25)
+/* Use of CMSIS compiler intrinsics for register exclusive access */
+/* Atomic 32-bit register access macro to set one or several bits */
+#define ATOMIC_SET_BIT(REG, BIT)                             \
+  do {                                                       \
+    uint32_t val;                                            \
+    do {                                                     \
+      val = __LDREXW((__IO uint32_t *)&(REG)) | (BIT);       \
+    } while ((__STREXW(val,(__IO uint32_t *)&(REG))) != 0U); \
+  } while(0)
 
-#define RCC_PLLCFGR_PLLM_Pos  0
-#define RCC_PLLCFGR_PLLN_Pos  6
-#define RCC_PLLCFGR_PLLP_Pos  16
-#define RCC_PLLCFGR_PLLSRC_HSE (1UL << 22)
-#define RCC_PLLCFGR_PLLQ_Pos  24
+/* Atomic 32-bit register access macro to clear one or several bits */
+#define ATOMIC_CLEAR_BIT(REG, BIT)                           \
+  do {                                                       \
+    uint32_t val;                                            \
+    do {                                                     \
+      val = __LDREXW((__IO uint32_t *)&(REG)) & ~(BIT);      \
+    } while ((__STREXW(val,(__IO uint32_t *)&(REG))) != 0U); \
+  } while(0)
 
-#define RCC_CFGR_SW_PLL       (2UL << 0)
-#define RCC_CFGR_SWS          (3UL << 2)
-#define RCC_CFGR_SWS_PLL      (2UL << 2)
-#define RCC_CFGR_HPRE_DIV1    (0UL << 4)
-#define RCC_CFGR_PPRE1_DIV4   (5UL << 10)
-#define RCC_CFGR_PPRE2_DIV2   (4UL << 13)
+/* Atomic 32-bit register access macro to clear and set one or several bits */
+#define ATOMIC_MODIFY_REG(REG, CLEARMSK, SETMASK)                          \
+  do {                                                                     \
+    uint32_t val;                                                          \
+    do {                                                                   \
+      val = (__LDREXW((__IO uint32_t *)&(REG)) & ~(CLEARMSK)) | (SETMASK); \
+    } while ((__STREXW(val,(__IO uint32_t *)&(REG))) != 0U);               \
+  } while(0)
 
-#define RCC_AHB1ENR_GPIOAEN   (1UL << 0)
-#define RCC_AHB1ENR_GPIOBEN   (1UL << 1)
-#define RCC_AHB1ENR_GPIOCEN   (1UL << 2)
+/* Atomic 16-bit register access macro to set one or several bits */
+#define ATOMIC_SETH_BIT(REG, BIT)                            \
+  do {                                                       \
+    uint16_t val;                                            \
+    do {                                                     \
+      val = __LDREXH((__IO uint16_t *)&(REG)) | (BIT);       \
+    } while ((__STREXH(val,(__IO uint16_t *)&(REG))) != 0U); \
+  } while(0)
 
-#define RCC_APB1ENR_TIM2EN    (1UL << 0)
-#define RCC_APB1ENR_USART2EN  (1UL << 17)
-#define RCC_APB1ENR_I2C3EN    (1UL << 23)
+/* Atomic 16-bit register access macro to clear one or several bits */
+#define ATOMIC_CLEARH_BIT(REG, BIT)                          \
+  do {                                                       \
+    uint16_t val;                                            \
+    do {                                                     \
+      val = __LDREXH((__IO uint16_t *)&(REG)) & ~(BIT);      \
+    } while ((__STREXH(val,(__IO uint16_t *)&(REG))) != 0U); \
+  } while(0)
 
-#define RCC_APB2ENR_SPI1EN    (1UL << 12)
+/* Atomic 16-bit register access macro to clear and set one or several bits */
+#define ATOMIC_MODIFYH_REG(REG, CLEARMSK, SETMASK)                         \
+  do {                                                                     \
+    uint16_t val;                                                          \
+    do {                                                                   \
+      val = (__LDREXH((__IO uint16_t *)&(REG)) & ~(CLEARMSK)) | (SETMASK); \
+    } while ((__STREXH(val,(__IO uint16_t *)&(REG))) != 0U);               \
+  } while(0)
 
-// ----------------------------------------------------------------------------
-// FLASH Registers
-// ----------------------------------------------------------------------------
+/**
+  * @}
+  */
 
-typedef struct {
-    volatile uint32_t ACR;
-    volatile uint32_t KEYR;
-    volatile uint32_t OPTKEYR;
-    volatile uint32_t SR;
-    volatile uint32_t CR;
-    volatile uint32_t OPTCR;
-} FLASH_TypeDef;
-
-#define FLASH  ((FLASH_TypeDef *)FLASH_R_BASE)
-
-#define FLASH_ACR_LATENCY_5WS (5UL << 0)
-#define FLASH_ACR_PRFTEN      (1UL << 8)
-#define FLASH_ACR_ICEN        (1UL << 9)
-#define FLASH_ACR_DCEN        (1UL << 10)
-
-// ----------------------------------------------------------------------------
-// TIM Registers
-// ----------------------------------------------------------------------------
-
-typedef struct {
-    volatile uint32_t CR1;
-    volatile uint32_t CR2;
-    volatile uint32_t SMCR;
-    volatile uint32_t DIER;
-    volatile uint32_t SR;
-    volatile uint32_t EGR;
-    volatile uint32_t CCMR1;
-    volatile uint32_t CCMR2;
-    volatile uint32_t CCER;
-    volatile uint32_t CNT;
-    volatile uint32_t PSC;
-    volatile uint32_t ARR;
-    uint32_t RESERVED1;
-    volatile uint32_t CCR1;
-    volatile uint32_t CCR2;
-    volatile uint32_t CCR3;
-    volatile uint32_t CCR4;
-} TIM_TypeDef;
-
-#define TIM2  ((TIM_TypeDef *)TIM2_BASE)
-#define TIM3  ((TIM_TypeDef *)TIM3_BASE)
-#define TIM4  ((TIM_TypeDef *)TIM4_BASE)
-
-#define TIM_CR1_CEN           (1UL << 0)
-#define TIM_CR1_ARPE          (1UL << 7)
-
-#define TIM_EGR_UG            (1UL << 0)
-
-#define TIM_CCMR1_OC1M_Pos    4
-#define TIM_CCMR1_OC1PE       (1UL << 3)
-#define TIM_CCMR1_OC2M_Pos    12
-#define TIM_CCMR1_OC2PE       (1UL << 11)
-#define TIM_CCMR2_OC3M_Pos    4
-#define TIM_CCMR2_OC3PE       (1UL << 3)
-#define TIM_CCMR2_OC4M_Pos    12
-#define TIM_CCMR2_OC4PE       (1UL << 11)
-
-#define TIM_CCER_CC1E         (1UL << 0)
-#define TIM_CCER_CC2E         (1UL << 4)
-#define TIM_CCER_CC3E         (1UL << 8)
-#define TIM_CCER_CC4E         (1UL << 12)
-
-// ----------------------------------------------------------------------------
-// SPI Registers
-// ----------------------------------------------------------------------------
-
-typedef struct {
-    volatile uint32_t CR1;
-    volatile uint32_t CR2;
-    volatile uint32_t SR;
-    volatile uint32_t DR;
-    volatile uint32_t CRCPR;
-    volatile uint32_t RXCRCR;
-    volatile uint32_t TXCRCR;
-    volatile uint32_t I2SCFGR;
-    volatile uint32_t I2SPR;
-} SPI_TypeDef;
-
-#define SPI1  ((SPI_TypeDef *)SPI1_BASE)
-#define SPI2  ((SPI_TypeDef *)SPI2_BASE)
-#define SPI3  ((SPI_TypeDef *)SPI3_BASE)
-
-#define SPI_CR1_MSTR          (1UL << 2)
-#define SPI_CR1_BR_0          (1UL << 3)
-#define SPI_CR1_BR_1          (1UL << 4)
-#define SPI_CR1_SPE           (1UL << 6)
-#define SPI_CR1_SSI           (1UL << 8)
-#define SPI_CR1_SSM           (1UL << 9)
-
-#define SPI_SR_RXNE           (1UL << 0)
-#define SPI_SR_TXE            (1UL << 1)
-
-// ----------------------------------------------------------------------------
-// I2C Registers
-// ----------------------------------------------------------------------------
-
-typedef struct {
-    volatile uint32_t CR1;
-    volatile uint32_t CR2;
-    volatile uint32_t OAR1;
-    volatile uint32_t OAR2;
-    volatile uint32_t DR;
-    volatile uint32_t SR1;
-    volatile uint32_t SR2;
-    volatile uint32_t CCR;
-    volatile uint32_t TRISE;
-    volatile uint32_t FLTR;
-} I2C_TypeDef;
-
-#define I2C1  ((I2C_TypeDef *)I2C1_BASE)
-#define I2C2  ((I2C_TypeDef *)I2C2_BASE)
-#define I2C3  ((I2C_TypeDef *)I2C3_BASE)
-
-#define I2C_CR1_PE            (1UL << 0)
-#define I2C_CR1_START         (1UL << 8)
-#define I2C_CR1_STOP          (1UL << 9)
-#define I2C_CR1_ACK           (1UL << 10)
-
-#define I2C_SR1_SB            (1UL << 0)
-#define I2C_SR1_ADDR          (1UL << 1)
-#define I2C_SR1_BTF           (1UL << 2)
-#define I2C_SR1_RXNE          (1UL << 6)
-#define I2C_SR1_TXE           (1UL << 7)
-
-// ----------------------------------------------------------------------------
-// USART Registers
-// ----------------------------------------------------------------------------
-
-typedef struct {
-    volatile uint32_t SR;
-    volatile uint32_t DR;
-    volatile uint32_t BRR;
-    volatile uint32_t CR1;
-    volatile uint32_t CR2;
-    volatile uint32_t CR3;
-    volatile uint32_t GTPR;
-} USART_TypeDef;
-
-#define USART1  ((USART_TypeDef *)USART1_BASE)
-#define USART2  ((USART_TypeDef *)USART2_BASE)
-
-// USART CR1 bit definitions
-#define USART_CR1_UE          (1UL << 13)
-#define USART_CR1_TE          (1UL << 3)
-#define USART_CR1_RE          (1UL << 2)
-
-// USART SR bit definitions
-#define USART_SR_TXE          (1UL << 7)
-#define USART_SR_RXNE         (1UL << 5)
-
-// ----------------------------------------------------------------------------
-// System Variables
-// ----------------------------------------------------------------------------
-
-extern uint32_t SystemCoreClock;
+#if defined (USE_HAL_DRIVER)
+#include "stm32f4xx_hal.h"
+#endif /* USE_HAL_DRIVER */
 
 #ifdef __cplusplus
 }
-#endif
+#endif /* __cplusplus */
 
-#endif // STM32F4XX_H
+#endif /* __STM32F4xx_H */
+/**
+  * @}
+  */
+
+/**
+  * @}
+  */

@@ -69,7 +69,7 @@
 // Flow sensor scaling - converts raw flow to m/s at 1m height
 #define HAL_FLOW_SCALE 0.0005f
 
-// ToF sensor max range (mm)
-#define HAL_TOF_MAX_RANGE_MM 4000
+// ToF sensor max range (mm) - using short distance mode for indoor flight
+#define HAL_TOF_MAX_RANGE_MM 1300
 
 #endif // HAL_CONFIG_H

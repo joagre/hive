@@ -40,21 +40,30 @@ CFLAGS += -I../..
 CFLAGS += -I../../include
 CFLAGS += -Ivendor/CMSIS/Include
 CFLAGS += -Ivendor/CMSIS/Device/ST/STM32F4xx/Include
+CFLAGS += -Ivendor/bosch/bmi08x
+CFLAGS += -Ivendor/bosch/bmp3
+CFLAGS += -Ivendor/st/vl53l1x
+CFLAGS += -Ivendor/bitcraze/pmw3901
 
 # Assembler flags
 ASFLAGS = $(MCU) -g
 
-# Source files
+# Source files - platform
 C_SOURCES = \
     hal_crazyflie.c \
     hal_radio.c \
     platform_crazyflie.c \
     motors.c \
-    bmi088.c \
-    bmp388.c \
-    pmw3901.c \
-    vl53l1x.c \
     syscalls.c
+
+# Source files - vendor drivers
+C_SOURCES += \
+    vendor/bosch/bmi08x/bmi08a.c \
+    vendor/bosch/bmi08x/bmi08g.c \
+    vendor/bosch/bmi08x/bmi08xa.c \
+    vendor/bosch/bmp3/bmp3.c \
+    vendor/st/vl53l1x/vl53l1x_uld.c \
+    vendor/bitcraze/pmw3901/pmw3901.c
 
 ASM_SOURCES = \
     startup_stm32f405.s
@@ -78,6 +87,7 @@ $(TARGET): $(OBJECTS)
 
 # C compilation
 $(BUILD_DIR)/%.o: %.c | $(BUILD_DIR)
+	@mkdir -p $(dir $@)
 	@echo "CC $<"
 	@$(CC) $(CFLAGS) -c $< -o $@
 
