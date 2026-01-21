@@ -5,13 +5,23 @@
  *   SRAM:  128 KB (0x20000000 - 0x2001FFFF) - Main SRAM
  *   CCM:   64 KB (0x10000000 - 0x1000FFFF) - Core Coupled Memory
  *
+ * Flash sector layout (STM32F405RG):
+ *   Sectors 0-3:  16 KB each  (0x08000000 - 0x0800FFFF) =  64 KB
+ *   Sector 4:     64 KB       (0x08010000 - 0x0801FFFF) =  64 KB
+ *   Sectors 5-7: 128 KB each  (0x08020000 - 0x0807FFFF) = 384 KB
+ *   Sectors 8-11: 128 KB each (0x08080000 - 0x080FFFFF) = 512 KB (DATA)
+ *
+ * Firmware: Sectors 0-7 (512 KB)
+ * Data:     Sector 8 = /log (128 KB flight log)
+ *           Sectors 9-11 reserved for future use
+ *
  * Note: CCM is only accessible by the CPU (no DMA access).
  *       Use CCM for stack and performance-critical data.
  */
 
 MEMORY
 {
-    FLASH (rx)  : ORIGIN = 0x08000000, LENGTH = 1024K
+    FLASH (rx)  : ORIGIN = 0x08000000, LENGTH = 512K   /* Sectors 0-7 (firmware) */
     RAM (rwx)   : ORIGIN = 0x20000000, LENGTH = 128K
     CCM (rwx)   : ORIGIN = 0x10000000, LENGTH = 64K
 }
