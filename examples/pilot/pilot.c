@@ -2,53 +2,53 @@
 // Pilot example - Quadcopter waypoint navigation using actor runtime
 //
 // Demonstrates waypoint navigation for a quadcopter using the hive actor
-// runtime. Nine flight actors work together in a pipeline, supervised by one
-// supervisor actor. On platforms with radio (HAL_HAS_RADIO), a comms
-// actor is also included (10-11 actors total):
+// runtime. Nine flight-critical actors work together in a control pipeline,
+// supervised by one supervisor. Optional telemetry actors add logging:
+//   - Crazyflie: comms_actor sends radio telemetry at 100Hz
+//   - Webots: telemetry_logger_actor writes CSV at 25Hz
 //
-//   sensor_actor    - Reads raw sensors via HAL -> sensor bus
-//   estimator_actor - Complementary filter fusion -> state bus
-//   altitude_actor  - Altitude PID -> thrust command
-//   waypoint_actor  - Waypoint manager -> position target bus
-//   position_actor  - Position PD -> attitude setpoints
-//   attitude_actor  - Attitude PIDs -> rate setpoints
-//   rate_actor      - Rate PIDs -> torque commands
-//   motor_actor     - Output to hardware via HAL
-//   flight_manager  - Flight authority and safety monitoring
-//   comms_actor - Radio transmission of flight data (optional)
+// Actor list (10-12 actors depending on platform):
 //
-// Data flows through buses:
+//   sensor_actor          - Reads raw sensors via HAL -> sensor bus
+//   estimator_actor       - Complementary filter fusion -> state bus
+//   waypoint_actor        - Waypoint manager -> position target bus
+//   altitude_actor        - Altitude PID -> thrust command
+//   position_actor        - Position PD -> attitude setpoints
+//   attitude_actor        - Attitude PIDs -> rate setpoints
+//   rate_actor            - Rate PIDs -> torque commands
+//   motor_actor           - Output to hardware via HAL
+//   flight_manager_actor  - Flight authority and safety monitoring
+//   comms_actor           - Radio telemetry (Crazyflie only)
+//   telemetry_logger_actor- CSV logging (Webots only)
+//   supervisor            - Monitors all workers (ONE_FOR_ALL restart)
 //
-//   Sensor --> Sensor Bus --> Estimator --> State Bus -----.
-//                  :                            |           :
-//        +---------:---------+------------------+           :
-//        |         :         |                  |           :
-//        v         :         v                  v           :
-//    Waypoint      :      Altitude           Position       :
-//        |         :         |                  |           :
-//        v         :         v                  v           :
-//   Pos Target Bus :     Thrust Bus -.    Att SP Bus        :
-//        |         :         |       :          |           :
-//        +-------+-:---------+       :          v           :
-//                |  :                :      Attitude        :
-//                v  :                :          |           :
-//              Rate  <-------- Rate SP Bus <----+           :
-//                |                   :                      :
-//                v                   :                      :
-//           Torque Bus --> Motor     :                      :
-//                                    :                      :
-//                                    v                      v
-//                              Comms (telemetry, optional) <-
+// Data flow through buses:
 //
-// Actor initialization:
-//   All actors receive pilot_buses via init_args
-//   Each actor's init function extracts the buses it needs
-//   Actors use hive_find_sibling() to look up sibling actor IDs for IPC
+//   HAL ──► Sensor ──► Sensor Bus ──► Estimator ──► State Bus ──┬──────────┐
+//                           │                           │       │          │
+//                           │         ┌─────────────────┼───────┼──────────┤
+//                           │         │                 │       │          │
+//                           │         v                 v       v          v
+//                           │     Waypoint          Altitude Position  Attitude
+//                           │         │                 │       │          │
+//                           │         v                 v       v          v
+//                           │   Pos Target Bus ──► Thrust Bus  Att SP ──► Rate SP
+//                           │         │                 │                  │
+//                           │         └─────────────────┼──────────────────┘
+//                           │                           v
+//                           │                         Rate
+//                           │                           │
+//                           │                           v
+//                           │                      Torque Bus ──► Motor ──► HAL
+//                           │                           │
+//                           v                           v
+//                    Telemetry Logger           Comms (radio)
+//                    (Webots, 25Hz)           (Crazyflie, 100Hz)
 //
 // Supervision:
 //   All actors are supervised with ONE_FOR_ALL strategy.
-//   If any flight-critical actor crashes, all are restarted together.
-//   Comms uses TEMPORARY restart (not flight-critical, won't trigger restarts).
+//   Flight-critical actors use PERMANENT restart (crash restarts all).
+//   Telemetry actors use TEMPORARY restart (not flight-critical).
 //
 // Hardware abstraction:
 //   All hardware access goes through the HAL (hal/hal.h).

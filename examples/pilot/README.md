@@ -51,11 +51,13 @@ altitude (>2m), or touchdown. Flight duration limited by flight manager (10s/40s
 
 ```bash
 export WEBOTS_HOME=/usr/local/webots  # adjust path
-make
-make install
+make                                   # builds and auto-installs to Webots
 ```
 
 Then open `worlds/hover_test.wbt` in Webots and start the simulation.
+
+Note: `make` automatically installs to the Webots controllers/ directory. This ensures
+Webots always runs the latest controller (Webots caches the binary otherwise).
 
 ### STM32 Hardware (Crazyflie 2.1+)
 
@@ -116,6 +118,16 @@ Hive memory settings (actors, buses, pool sizes) are determined by the pilot
 application and shared across all platforms via `hive_config.mk`. Only stack
 sizes differ per platform based on available RAM.
 
+### Analysis Tools
+
+| File | Description |
+|------|-------------|
+| `tools/analyze_pid.py` | PID metrics analysis (overshoot, rise time, settling time) |
+| `tools/plot_telemetry.py` | 6-panel telemetry visualization |
+| `tools/plot_flight.py` | Full flight summary with 3D trajectory |
+| `tools/ground_station.py` | Radio telemetry receiver (Crazyflie only) |
+| `tools/README.md` | Tools documentation and PID tuning workflow |
+
 ### Documentation
 
 | File | Description |
@@ -130,8 +142,11 @@ sizes differ per platform based on available RAM.
 |-----------|-------------|
 | `hal/` | Hardware abstraction layer (see `hal/<platform>/README.md`) |
 | `hal/crazyflie-2.1+/bringup/` | Hardware bring-up test firmware |
-| `controllers/pilot/` | Webots controller (symlink created by `make install`) |
+| `hal/crazyflie-2.1+/tests/` | HAL test firmware |
+| `tools/` | PID tuning and telemetry analysis tools |
+| `controllers/pilot/` | Webots controller (installed by `make`) |
 | `worlds/` | Webots world files |
+| `fusion/` | Portable sensor fusion algorithms |
 
 ## Architecture
 
@@ -326,15 +341,20 @@ at 25Hz for PID tuning and flight analysis. The log file is written to `/tmp/pil
 **Usage:**
 ```bash
 # Run simulation
-make && make install
+make
 webots worlds/hover_test.wbt
 
-# View CSV data
-head /tmp/pilot_telemetry.csv
+# Analyze PID performance (overshoot, rise time, settling time)
+python3 tools/analyze_pid.py /tmp/pilot_telemetry.csv
 
-# Plot with your favorite tool
-python3 -c "import pandas as pd; pd.read_csv('/tmp/pilot_telemetry.csv').plot(x='time_ms', y=['altitude','target_z']); import matplotlib.pyplot as plt; plt.show()"
+# Visualize telemetry (6-panel plot)
+python3 tools/plot_telemetry.py /tmp/pilot_telemetry.csv
+
+# Full flight summary with 3D trajectory
+python3 tools/plot_flight.py /tmp/pilot_telemetry.csv
 ```
+
+See `tools/README.md` for the full PID tuning workflow.
 
 The telemetry logger runs at LOW priority and uses TEMPORARY restart type, so it
 doesn't affect flight-critical control loops and won't trigger restarts if it fails.

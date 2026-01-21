@@ -339,6 +339,7 @@ Code is split into focused modules:
 | `math_utils.h` | Math macros (CLAMPF, LPF, NORMALIZE_ANGLE) |
 | `notifications.h` | IPC notification tags (NOTIFY_FLIGHT_START, etc.) |
 | `flight_profiles.h` | Waypoint definitions per flight profile |
+| `tools/*.py` | PID tuning and telemetry analysis tools |
 
 ### Data Flow
 
@@ -564,7 +565,8 @@ examples/pilot/
     rate_actor.c/h       # Rate PIDs → torque commands
     motor_actor.c/h      # Output: torque → HAL → motors
     flight_manager_actor.c/h # Startup delay, flight window cutoff
-    comms_actor.c/h  # Radio telemetry (Crazyflie only)
+    comms_actor.c/h      # Radio telemetry (Crazyflie only)
+    telemetry_logger_actor.c/h # CSV logging (Webots only)
     pid.c/h              # Reusable PID controller
     types.h              # Portable data types
     config.h             # Configuration constants
@@ -573,6 +575,12 @@ examples/pilot/
     flight_profiles.h    # Waypoint definitions
     fusion/
         complementary_filter.c/h  # Portable attitude estimation
+    tools/
+        analyze_pid.py       # PID metrics analysis (overshoot, settling time)
+        plot_telemetry.py    # 6-panel telemetry visualization
+        plot_flight.py       # Full flight summary with 3D trajectory
+        ground_station.py    # Radio telemetry receiver (Crazyflie)
+        README.md            # Tools documentation
     Makefile                 # Webots simulation build
     Makefile.crazyflie-2.1+  # Crazyflie 2.1+ build
     hive_config.mk           # Shared Hive memory config
@@ -588,6 +596,7 @@ examples/pilot/
         webots-crazyflie/    # Webots simulation HAL
         crazyflie-2.1+/      # Crazyflie 2.1+ HAL (STM32F405)
             bringup/         # Hardware bring-up test firmware
+            tests/           # HAL test firmware
 ```
 
 ---
@@ -953,17 +962,24 @@ Position Target Bus ─┘
 
 **Usage:**
 ```bash
-# Run simulation
-make && make install
+# Run simulation (make now auto-installs to Webots)
+make
 webots worlds/hover_test.wbt
 
-# Analyze data
+# Analyze PID performance
+python3 tools/analyze_pid.py /tmp/pilot_telemetry.csv
+
+# Visualize telemetry (6-panel plot)
 python3 tools/plot_telemetry.py /tmp/pilot_telemetry.csv
+
+# Full flight summary with 3D trajectory
+python3 tools/plot_flight.py /tmp/pilot_telemetry.csv
 ```
 
 **Benefits:**
 - Data-driven PID tuning (vs blind iteration)
 - Visualize oscillations, overshoot, settling time
+- Quantitative metrics: rise time, settling time, RMS error
 - Compare before/after gain changes
 - Non-intrusive (LOW priority doesn't affect control loops)
 
