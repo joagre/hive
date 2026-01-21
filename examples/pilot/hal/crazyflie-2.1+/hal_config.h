@@ -18,14 +18,15 @@
 // ----------------------------------------------------------------------------
 
 // Altitude PID gains (position error -> thrust correction)
-#define HAL_ALT_PID_KP 0.25f
-#define HAL_ALT_PID_KI 0.05f
-#define HAL_ALT_PID_KD 0.0f
-#define HAL_ALT_PID_IMAX 0.2f
-#define HAL_ALT_PID_OMAX 0.15f
+// Tuned in Webots simulation - may need adjustment on hardware
+#define HAL_ALT_PID_KP 0.18f   // Reduced from 0.25 to decrease overshoot
+#define HAL_ALT_PID_KI 0.03f   // Reduced from 0.05 to decrease integral windup
+#define HAL_ALT_PID_KD 0.0f    // Using velocity feedback instead
+#define HAL_ALT_PID_IMAX 0.2f  // Integral limit
+#define HAL_ALT_PID_OMAX 0.15f // Output limit
 
 // Vertical velocity damping (measured velocity -> thrust correction)
-#define HAL_VVEL_DAMPING_GAIN 0.25f
+#define HAL_VVEL_DAMPING_GAIN 0.35f // Increased from 0.25 for better damping
 
 // ----------------------------------------------------------------------------
 // Attitude Control
