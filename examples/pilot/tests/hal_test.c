@@ -141,11 +141,16 @@ int main(void) {
     // ========================================================================
 
     LOG("Phase 4: Sensor read test (%d ms)", SENSOR_TEST_DURATION_MS);
-    // Read sensors for SENSOR_TEST_DURATION_MS, fast blink LED
+
+    // Read first sample while drone is still level/stationary
+    sensor_data_t first_sensors;
+    hal_read_sensors(&first_sensors);
+
+    // Continue reading for SENSOR_TEST_DURATION_MS to test sustained operation
     sensor_data_t sensors;
     uint32_t start_time = hal_get_time_ms();
     uint32_t last_blink = start_time;
-    int read_count = 0;
+    int read_count = 1; // Already read one
 
     while ((hal_get_time_ms() - start_time) < SENSOR_TEST_DURATION_MS) {
         hal_read_sensors(&sensors);
@@ -163,18 +168,22 @@ int main(void) {
     hal_led_off();
     LOG("Read %d sensor samples", read_count);
 
-    // Verify we got reasonable data
+    // Verify FIRST sample (when drone was still level/stationary)
     // Accel Z should be approximately +9.8 m/s^2 when level
     // (accelerometer measures reaction force against gravity)
     // Gyro should be near zero if stationary
-    bool accel_ok = (sensors.accel[2] > 5.0f && sensors.accel[2] < 15.0f);
-    bool gyro_ok = (sensors.gyro[0] > -1.0f && sensors.gyro[0] < 1.0f &&
-                    sensors.gyro[1] > -1.0f && sensors.gyro[1] < 1.0f &&
-                    sensors.gyro[2] > -1.0f && sensors.gyro[2] < 1.0f);
+    bool accel_ok =
+        (first_sensors.accel[2] > 5.0f && first_sensors.accel[2] < 15.0f);
+    bool gyro_ok =
+        (first_sensors.gyro[0] > -1.0f && first_sensors.gyro[0] < 1.0f &&
+         first_sensors.gyro[1] > -1.0f && first_sensors.gyro[1] < 1.0f &&
+         first_sensors.gyro[2] > -1.0f && first_sensors.gyro[2] < 1.0f);
 
-    LOG("Accel Z: %.2f m/s^2 (%s)", sensors.accel[2], accel_ok ? "OK" : "FAIL");
-    LOG("Gyro: [%.3f, %.3f, %.3f] rad/s (%s)", sensors.gyro[0], sensors.gyro[1],
-        sensors.gyro[2], gyro_ok ? "OK" : "FAIL");
+    LOG("First sample - Accel Z: %.2f m/s^2 (%s)", first_sensors.accel[2],
+        accel_ok ? "OK" : "FAIL");
+    LOG("First sample - Gyro: [%.3f, %.3f, %.3f] rad/s (%s)",
+        first_sensors.gyro[0], first_sensors.gyro[1], first_sensors.gyro[2],
+        gyro_ok ? "OK" : "FAIL");
 
     if (!accel_ok || !gyro_ok) {
         LOG("FAIL: Sensor data out of range");
