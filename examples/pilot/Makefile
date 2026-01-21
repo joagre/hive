@@ -35,6 +35,9 @@ CFLAGS += -MMD -MP
 # Webots simulation uses simulated time
 CFLAGS += -DSIMULATED_TIME
 
+# Enable telemetry logging for Webots (disabled by default on Crazyflie)
+CFLAGS += -DENABLE_TELEMETRY_LOG=1
+
 # Flight profile selection (see waypoint_actor.c for details)
 #   FLIGHT_PROFILE_FIRST_TEST (1) - First flight test: hover at 0.5m, land
 #   FLIGHT_PROFILE_ALTITUDE   (2) - Altitude-only waypoints (no lateral movement)
