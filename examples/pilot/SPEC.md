@@ -265,6 +265,7 @@ graph TB
     subgraph HAL["HARDWARE ABSTRACTION LAYER (hal/)"]
         ReadSensors[hal_read_sensors]
         WriteTorque[hal_write_torque]
+        RadioTx[hal_radio_send]
     end
 
     subgraph RUNTIME["ACTOR RUNTIME"]
@@ -284,6 +285,7 @@ graph TB
         Rate[RATE ACTOR<br/>rate PIDs]
         TorqueBus([Torque Bus])
         Motor[MOTOR ACTOR<br/>output]
+        Comms[COMMS ACTOR<br/>telemetry]
     end
 
     IMU --> ReadSensors
@@ -301,6 +303,11 @@ graph TB
     StateBus --> Attitude --> RateSPBus --> Rate --> TorqueBus --> Motor
 
     Motor --> WriteTorque
+
+    SensorBus -.-> Comms
+    StateBus -.-> Comms
+    ThrustBus -.-> Comms
+    Comms -.-> RadioTx
 ```
 
 ---
@@ -338,10 +345,12 @@ graph TB
     subgraph HW["Hardware"]
         Sensors[Sensors]
         Motors[Motors]
+        Radio[Radio]
     end
 
     ReadSensors[hal_read_sensors]
     WriteTorque[hal_write_torque]
+    RadioTx[hal_radio_send]
 
     Sensors --> ReadSensors --> Sensor[Sensor Actor]
     Sensor --> SensorBus([Sensor Bus])
@@ -368,6 +377,11 @@ graph TB
     TorqueBus --> Motor[Motor Actor<br/>output]
 
     Motor --> WriteTorque --> Motors
+
+    SensorBus -.-> Comms[Comms Actor<br/>telemetry]
+    StateBus -.-> Comms
+    ThrustBus -.-> Comms
+    Comms -.-> RadioTx --> Radio
 ```
 
 ---
@@ -626,9 +640,14 @@ graph LR
         Motor[Motor Actor<br/>Safety + Write HW]
     end
 
+    subgraph Telemetry
+        Comms[Comms Actor<br/>Radio TX]
+    end
+
     Sensor --> Estimator --> StateBus([State Bus])
     Setpoint --> Altitude
     StateBus --> Altitude --> Attitude --> Rate --> Motor
+    StateBus -.-> Comms
 ```
 
 ### Actor Responsibilities (Current)

@@ -147,6 +147,11 @@ graph TB
     StateBus --> Position --> AttitudeSP([Attitude SP Bus]) --> Attitude[Attitude]
     StateBus --> Attitude --> RateSP([Rate SP Bus]) --> Rate
     Rate --> TorqueBus([Torque Bus]) --> Motor[Motor]
+
+    SensorBus -.-> Comms[Comms]
+    StateBus -.-> Comms
+    ThrustBus -.-> Comms
+    Comms -.-> Radio([Radio])
 ```
 
 Hardware Abstraction Layer (HAL) provides platform independence:
