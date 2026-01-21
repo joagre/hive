@@ -50,6 +50,7 @@ ASFLAGS = $(MCU) -g
 
 # Source files - platform
 C_SOURCES = \
+    debug_uart.c \
     hal_crazyflie.c \
     hal_radio.c \
     platform_crazyflie.c \

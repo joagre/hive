@@ -100,6 +100,13 @@ void hal_led_on(void);
 void hal_led_off(void);
 void hal_led_toggle(void);
 
+// Debug output (UART on hardware, printf on simulation).
+// hal_debug_init() must be called before hal_printf().
+// On Webots: No-op init, uses standard printf.
+// On Crazyflie: Initializes USART1 at 115200 baud (PA9/PA10 via ST-Link VCP).
+void hal_debug_init(void);
+void hal_printf(const char *fmt, ...);
+
 // ----------------------------------------------------------------------------
 // Radio Interface (optional, for telemetry)
 // ----------------------------------------------------------------------------

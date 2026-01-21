@@ -11,7 +11,9 @@
 #include <webots/gps.h>
 #define _USE_MATH_DEFINES
 #include <math.h>
+#include <stdarg.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <time.h>
 
 #ifndef M_PI
@@ -284,6 +286,21 @@ void hal_led_off(void) {
 
 void hal_led_toggle(void) {
     // No LED in Webots simulation - no-op
+}
+
+// ----------------------------------------------------------------------------
+// Debug Output
+// ----------------------------------------------------------------------------
+
+void hal_debug_init(void) {
+    // No-op for Webots, printf always works
+}
+
+void hal_printf(const char *fmt, ...) {
+    va_list args;
+    va_start(args, fmt);
+    vprintf(fmt, args);
+    va_end(args);
 }
 
 // ----------------------------------------------------------------------------

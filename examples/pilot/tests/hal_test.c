@@ -42,14 +42,6 @@
 
 #include <stdbool.h>
 #include <stdint.h>
-#include <stdio.h>
-
-// Console output for platforms without LED (Webots)
-#ifdef SIMULATED_TIME
-#define LOG(fmt, ...) printf("[HAL_TEST] " fmt "\n", ##__VA_ARGS__)
-#else
-#define LOG(fmt, ...) ((void)0)
-#endif
 
 // ============================================================================
 // Test Configuration
@@ -84,6 +76,9 @@ static void error_blink_forever(int on_ms, int off_ms) {
 // ============================================================================
 
 int main(void) {
+    // Initialize debug output first (before hal_init for early debug messages)
+    hal_debug_init();
+
     // ========================================================================
     // Phase 1: hal_init()
     // ========================================================================
@@ -91,13 +86,13 @@ int main(void) {
     // Note: We can't blink before hal_init() since GPIO isn't initialized yet.
     // hal_init() will show its own LED feedback (1-3 blinks for progress).
 
-    LOG("Phase 1: hal_init()");
+    hal_printf("[HAL_TEST] Phase 1: hal_init()\n");
     if (hal_init() != 0) {
-        LOG("FAIL: hal_init() returned error");
+        hal_printf("[HAL_TEST] FAIL: hal_init() returned error\n");
         // hal_init() already showed error blinks, just loop forever
         error_blink_forever(100, 100);
     }
-    LOG("PASS: hal_init()");
+    hal_printf("[HAL_TEST] PASS: hal_init()\n");
 
     // 2 blinks = init passed, starting self-test
     hal_delay_ms(500);
@@ -108,13 +103,13 @@ int main(void) {
     // Phase 2: hal_self_test()
     // ========================================================================
 
-    LOG("Phase 2: hal_self_test()");
+    hal_printf("[HAL_TEST] Phase 2: hal_self_test()\n");
     if (!hal_self_test()) {
-        LOG("FAIL: hal_self_test() returned false");
+        hal_printf("[HAL_TEST] FAIL: hal_self_test() returned false\n");
         // hal_self_test() already showed error blinks (6-9)
         error_blink_forever(100, 100);
     }
-    LOG("PASS: hal_self_test()");
+    hal_printf("[HAL_TEST] PASS: hal_self_test()\n");
 
     // 3 blinks = self-test passed, starting calibration
     hal_delay_ms(500);
@@ -125,11 +120,11 @@ int main(void) {
     // Phase 3: hal_calibrate()
     // ========================================================================
 
-    LOG("Phase 3: hal_calibrate()");
+    hal_printf("[HAL_TEST] Phase 3: hal_calibrate()\n");
     // hal_calibrate() will show slow blink during calibration
     // IMPORTANT: Keep drone still and level during this phase!
     hal_calibrate();
-    LOG("PASS: hal_calibrate()");
+    hal_printf("[HAL_TEST] PASS: hal_calibrate()\n");
 
     // 4 blinks = calibration done, starting sensor test
     hal_delay_ms(500);
@@ -140,7 +135,8 @@ int main(void) {
     // Phase 4: Sensor Read Test
     // ========================================================================
 
-    LOG("Phase 4: Sensor read test (%d ms)", SENSOR_TEST_DURATION_MS);
+    hal_printf("[HAL_TEST] Phase 4: Sensor read test (%d ms)\n",
+               SENSOR_TEST_DURATION_MS);
 
     // Read first sample while drone is still level/stationary
     sensor_data_t first_sensors;
@@ -166,7 +162,7 @@ int main(void) {
     }
 
     hal_led_off();
-    LOG("Read %d sensor samples", read_count);
+    hal_printf("[HAL_TEST] Read %d sensor samples\n", read_count);
 
     // Verify FIRST sample (when drone was still level/stationary)
     // Accel Z should be approximately +9.8 m/s^2 when level
@@ -179,19 +175,20 @@ int main(void) {
          first_sensors.gyro[1] > -1.0f && first_sensors.gyro[1] < 1.0f &&
          first_sensors.gyro[2] > -1.0f && first_sensors.gyro[2] < 1.0f);
 
-    LOG("First sample - Accel Z: %.2f m/s^2 (%s)", first_sensors.accel[2],
-        accel_ok ? "OK" : "FAIL");
-    LOG("First sample - Gyro: [%.3f, %.3f, %.3f] rad/s (%s)",
+    hal_printf("[HAL_TEST] First sample - Accel Z: %.2f m/s^2 (%s)\n",
+               first_sensors.accel[2], accel_ok ? "OK" : "FAIL");
+    hal_printf(
+        "[HAL_TEST] First sample - Gyro: [%.3f, %.3f, %.3f] rad/s (%s)\n",
         first_sensors.gyro[0], first_sensors.gyro[1], first_sensors.gyro[2],
         gyro_ok ? "OK" : "FAIL");
 
     if (!accel_ok || !gyro_ok) {
-        LOG("FAIL: Sensor data out of range");
+        hal_printf("[HAL_TEST] FAIL: Sensor data out of range\n");
         // Sensor values out of range - show error
         test_blink(10, 50, 50); // 10 fast blinks = sensor data error
         error_blink_forever(300, 300);
     }
-    LOG("PASS: Sensor read test");
+    hal_printf("[HAL_TEST] PASS: Sensor read test\n");
 
     // 5 blinks = sensor test passed, starting motor test
     hal_delay_ms(500);
@@ -202,8 +199,8 @@ int main(void) {
     // Phase 5: Motor Test
     // ========================================================================
 
-    LOG("Phase 5: Motor test (%d ms at %.0f%% thrust)", MOTOR_TEST_DURATION_MS,
-        MOTOR_TEST_THRUST * 100);
+    hal_printf("[HAL_TEST] Phase 5: Motor test (%d ms at %.0f%% thrust)\n",
+               MOTOR_TEST_DURATION_MS, MOTOR_TEST_THRUST * 100);
     hal_arm();
 
     // Run motors at low thrust for MOTOR_TEST_DURATION_MS
@@ -231,7 +228,7 @@ int main(void) {
     hal_disarm();
 
     hal_led_off();
-    LOG("PASS: Motor test");
+    hal_printf("[HAL_TEST] PASS: Motor test\n");
 
     // 6 blinks = motor test done
     hal_delay_ms(500);
@@ -241,16 +238,16 @@ int main(void) {
     // Phase 6: Cleanup
     // ========================================================================
 
-    LOG("Phase 6: hal_cleanup()");
+    hal_printf("[HAL_TEST] Phase 6: hal_cleanup()\n");
     hal_cleanup();
 
     // ========================================================================
     // All Tests Passed!
     // ========================================================================
 
-    LOG("========================================");
-    LOG("ALL TESTS PASSED!");
-    LOG("========================================");
+    hal_printf("[HAL_TEST] ========================================\n");
+    hal_printf("[HAL_TEST] ALL TESTS PASSED!\n");
+    hal_printf("[HAL_TEST] ========================================\n");
 
     // Solid LED = success
     hal_led_on();

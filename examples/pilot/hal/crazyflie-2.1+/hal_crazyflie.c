@@ -4,7 +4,9 @@
 // Wraps platform functions and adds common HAL interface.
 
 #include "../hal.h"
+#include "debug_uart.h"
 #include "platform_crazyflie.h"
+#include <stdarg.h>
 
 // ----------------------------------------------------------------------------
 // Platform Lifecycle
@@ -119,4 +121,19 @@ void hal_led_off(void) {
 
 void hal_led_toggle(void) {
     platform_led_toggle();
+}
+
+// ----------------------------------------------------------------------------
+// Debug Output
+// ----------------------------------------------------------------------------
+
+void hal_debug_init(void) {
+    debug_uart_init();
+}
+
+void hal_printf(const char *fmt, ...) {
+    va_list args;
+    va_start(args, fmt);
+    debug_uart_vprintf(fmt, args);
+    va_end(args);
 }
