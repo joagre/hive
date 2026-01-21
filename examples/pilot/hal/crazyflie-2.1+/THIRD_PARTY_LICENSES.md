@@ -3,6 +3,24 @@
 This directory contains vendor sensor drivers. Each is licensed under a permissive
 open-source license as documented below.
 
+## Summary
+
+| Directory | Type | License | Source |
+|-----------|------|---------|--------|
+| `CMSIS/Include/` | Unmodified | Apache-2.0 | ARM CMSIS-Core |
+| `CMSIS/Device/ST/` | Unmodified | BSD-3-Clause | STMicroelectronics |
+| `bosch/bmi08x/` | Unmodified | BSD-3-Clause | Bosch Sensortec GitHub |
+| `bosch/bmp3/` | Unmodified | BSD-3-Clause | Bosch Sensortec GitHub |
+| `st/vl53l1x/` | **C port** | BSD-3-Clause | ST Arduino library |
+| `bitcraze/pmw3901/` | **C port** | MIT | Bitcraze Arduino library |
+
+**C ports:** The VL53L1x and PMW3901 drivers are C ports of the original C++/Arduino
+libraries. The original `.cpp` files are included for reference. The C ports implement
+the same register-level logic but use plain C with platform I2C/SPI callbacks instead
+of Arduino Wire/SPI classes.
+
+---
+
 ## Bosch BMI08x (vendor/bosch/bmi08x/)
 
 **License:** BSD-3-Clause
@@ -128,3 +146,24 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
+
+## ARM CMSIS-Core (vendor/CMSIS/Include/)
+
+**License:** Apache-2.0
+**Source:** https://github.com/ARM-software/CMSIS_5
+**Copyright:** (c) 2009-2023 ARM Limited
+
+ARM Cortex Microcontroller Software Interface Standard (CMSIS) provides
+standardized access to processor and peripherals.
+
+Files: `core_cm4.h`, `cmsis_gcc.h`, `cmsis_compiler.h`, `cmsis_version.h`, `mpu_armv7.h`
+
+## STMicroelectronics CMSIS Device (vendor/CMSIS/Device/ST/)
+
+**License:** BSD-3-Clause
+**Source:** https://github.com/STMicroelectronics/cmsis_device_f4
+**Copyright:** (c) 2017 STMicroelectronics
+
+STM32F4 device-specific CMSIS headers providing register definitions.
+
+Files: `stm32f4xx.h`, `stm32f405xx.h`, `system_stm32f4xx.h`
