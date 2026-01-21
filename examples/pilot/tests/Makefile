@@ -23,6 +23,7 @@ help:
 	@echo "  make PLATFORM=crazyflie     Build for Crazyflie 2.1+ hardware"
 	@echo "  make PLATFORM=webots        Build for Webots simulation"
 	@echo "  make flash-crazyflie        Flash to Crazyflie via ST-Link"
+	@echo "  make install-webots         Install to controllers/hal_test/"
 	@echo "  make clean                  Remove all build artifacts"
 	@echo ""
 	@echo "Test sequence:"
@@ -186,9 +187,16 @@ flash-crazyflie: $(BUILD_DIR_CF)/hal_test.bin
 	@echo "Flashing hal_test to Crazyflie..."
 	st-flash write $< 0x8000000
 
-run-webots: $(BUILD_DIR_WB)/hal_test
-	@echo "Note: Open a Webots world first, then run the controller"
-	@echo "Or copy $(BUILD_DIR_WB)/hal_test to controllers/hal_test/"
+install-webots: $(BUILD_DIR_WB)/hal_test
+	@mkdir -p $(PILOT_DIR)/controllers/hal_test
+	@cp $< $(PILOT_DIR)/controllers/hal_test/
+	@echo "Installed: $(PILOT_DIR)/controllers/hal_test/hal_test"
+	@echo ""
+	@echo "To run in Webots:"
+	@echo "  1. Open worlds/hover_test.wbt"
+	@echo "  2. Select Crazyflie robot in scene tree"
+	@echo "  3. Change controller to 'hal_test'"
+	@echo "  4. Run simulation"
 
 # ==============================================================================
 # Clean
