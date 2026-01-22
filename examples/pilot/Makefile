@@ -27,8 +27,11 @@ CFLAGS += -I$(HIVE_SRC_DIR)/hal/linux
 CFLAGS += -I$(HIVE_ROOT)/lib -I$(HIVE_ROOT)/lib/printf -DPRINTF_INCLUDE_CONFIG_H
 CFLAGS += -MMD -MP
 CFLAGS += -DSIMULATED_TIME
-CFLAGS += -DENABLE_TELEMETRY_LOG=1
 CFLAGS += -DHIVE_PLATFORM_LINUX
+
+# Telemetry CSV logging (default: enabled)
+TELEMETRY ?= 1
+CFLAGS += -DENABLE_TELEMETRY_LOG=$(TELEMETRY)
 
 # Flight profile (default: FULL_3D for simulation)
 ifdef FLIGHT_PROFILE
@@ -174,10 +177,13 @@ help:
 	@echo ""
 	@echo "  STACK_PROFILE=1           Enable stack watermark profiling"
 	@echo ""
+	@echo "  TELEMETRY=<0|1>           Telemetry CSV logging (default: 1)"
+	@echo "      Writes flight data to telemetry_*.csv files"
+	@echo ""
 	@echo "Examples:"
 	@echo "  make FLIGHT_PROFILE=FLIGHT_PROFILE_FIRST_TEST"
 	@echo "  make SENSOR_NOISE=0 LOG_LEVEL=DEBUG"
-	@echo "  make LOG_TO_STDOUT=0                        # Quiet console"
+	@echo "  make LOG_TO_STDOUT=0 TELEMETRY=0            # Minimal output"
 	@echo "  make MOTOR_LAG=50 STACK_PROFILE=1"
 
 -include $(PILOT_DEPS)
