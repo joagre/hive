@@ -53,6 +53,15 @@ ifdef FLIGHT_PROFILE
 CFLAGS += -DFLIGHT_PROFILE=$(FLIGHT_PROFILE)
 endif
 
+# Sensor noise level (see hal/webots-crazyflie/hal_webots.c for details)
+#   0 - No noise (clean simulation)
+#   1 - Low noise (intrinsic sensor noise only, default)
+#   2 - Moderate noise (realistic vibration levels)
+# Example: make SENSOR_NOISE=2
+ifdef SENSOR_NOISE
+CFLAGS += -DSENSOR_NOISE=$(SENSOR_NOISE)
+endif
+
 # Platform identification (enables platform-specific defaults in hive_static_config.h)
 CFLAGS += -DHIVE_PLATFORM_LINUX
 
