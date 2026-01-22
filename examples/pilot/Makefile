@@ -63,6 +63,14 @@ ifdef SENSOR_NOISE
 CFLAGS += -DSENSOR_NOISE=$(SENSOR_NOISE)
 endif
 
+# Motor response time constant in milliseconds (default: 20ms)
+# Simulates electrical and mechanical lag of real motors.
+# Set to 0 for instant response (ideal simulation).
+# Example: make MOTOR_LAG=30
+ifdef MOTOR_LAG
+CFLAGS += -DMOTOR_TIME_CONSTANT_MS=$(MOTOR_LAG)
+endif
+
 # Platform identification (enables platform-specific defaults in hive_static_config.h)
 CFLAGS += -DHIVE_PLATFORM_LINUX
 

@@ -77,6 +77,18 @@
 #define GPS_XY_NOISE_STDDEV 0.002f  // meters - flow deck is quite accurate
 #endif
 
+// ----------------------------------------------------------------------------
+// Motor Response Simulation
+// ----------------------------------------------------------------------------
+// Real motors have electrical and mechanical lag. This affects rate controller
+// tuning - gains that work in simulation may be too aggressive on real hardware.
+// Crazyflie coreless brushed motors have ~15-30ms response time.
+
+#ifndef MOTOR_TIME_CONSTANT_MS
+#define MOTOR_TIME_CONSTANT_MS \
+    20.0f // milliseconds - typical for Crazyflie motors
+#endif
+
 // Xorshift32 PRNG state (seeded at init for variety)
 static uint32_t g_rng_state = 1; // Will be seeded in hal_init()
 
@@ -86,6 +98,9 @@ static float g_gyro_bias[3] = {0.0f, 0.0f, 0.0f};
 // Previous GPS for velocity computation
 static float g_prev_gps[3] = {0.0f, 0.0f, 0.0f};
 static bool g_prev_gps_valid = false;
+
+// Current motor state for response lag simulation
+static float g_motor_state[NUM_MOTORS] = {0.0f, 0.0f, 0.0f, 0.0f};
 
 // Xorshift32 PRNG - fast, deterministic, good distribution
 static uint32_t xorshift32(void) {
@@ -299,11 +314,22 @@ void hal_write_torque(const torque_cmd_t *cmd) {
     motors[2] = cmd->thrust + cmd->roll - pitch + cmd->yaw; // M3 (front-right)
     motors[3] = cmd->thrust + cmd->roll + pitch - cmd->yaw; // M4 (rear-right)
 
-    // Clamp and output to Webots motors
+    // Apply motor response lag (first-order filter)
+    // This simulates the electrical and mechanical time constant of real motors.
+    // alpha = dt / (tau + dt), where tau is the time constant
+    float dt = TIME_STEP_MS;
+    float tau = MOTOR_TIME_CONSTANT_MS;
+    float alpha = dt / (tau + dt);
+
+    // Clamp, filter, and output to Webots motors
     for (int i = 0; i < NUM_MOTORS; i++) {
-        float clamped = CLAMPF(motors[i], 0.0f, 1.0f);
-        wb_motor_set_velocity(g_motors[i],
-                              MOTOR_SIGNS[i] * clamped * MOTOR_MAX_VELOCITY);
+        float cmd_clamped = CLAMPF(motors[i], 0.0f, 1.0f);
+
+        // First-order lag filter: state += alpha * (command - state)
+        g_motor_state[i] += alpha * (cmd_clamped - g_motor_state[i]);
+
+        wb_motor_set_velocity(g_motors[i], MOTOR_SIGNS[i] * g_motor_state[i] *
+                                               MOTOR_MAX_VELOCITY);
     }
 }
 
