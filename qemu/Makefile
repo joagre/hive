@@ -49,17 +49,12 @@ ARM_LDFLAGS := -Tlm3s6965.ld \
                -Wl,--gc-sections \
                -nostartfiles -specs=nosys.specs
 
-# Runtime source files
-QEMU_CORE_SRCS := hive_actor.c hive_bus.c hive_ipc.c \
-                  hive_link.c hive_log.c hive_pool.c hive_runtime.c \
-                  hive_select.c hive_supervisor.c hive_scheduler.c
+# Source files (from shared definitions)
+include $(SRC_DIR)/hive_sources.mk
 
-# HAL source files (STM32)
-QEMU_HAL_SRCS := hal/stm32/hive_hal_timer_stm32.c \
-                 hal/stm32/hive_hal_stm32.c hal/stm32/hive_hal_context_stm32.c
-
-QEMU_SRCS := $(addprefix $(SRC_DIR)/,$(QEMU_CORE_SRCS)) $(addprefix $(SRC_DIR)/,$(QEMU_HAL_SRCS))
-QEMU_ASM := $(SRC_DIR)/hal/stm32/hive_context_arm_cm.S
+QEMU_SRCS := $(addprefix $(SRC_DIR)/,$(HIVE_CORE_SRCS)) \
+             $(addprefix $(SRC_DIR)/,$(HIVE_HAL_STM32_SRCS))
+QEMU_ASM := $(addprefix $(SRC_DIR)/,$(HIVE_HAL_STM32_ASM))
 QEMU_TEST_SRCS := startup.S semihosting.c test_main.c
 
 # Lightweight printf library
