@@ -54,10 +54,11 @@ CFLAGS += -DFLIGHT_PROFILE=$(FLIGHT_PROFILE)
 endif
 
 # Sensor noise level (see hal/webots-crazyflie/hal_webots.c for details)
-#   0 - No noise (clean simulation)
-#   1 - Low noise (intrinsic sensor noise only, default)
-#   2 - Moderate noise (realistic vibration levels)
-# Example: make SENSOR_NOISE=2
+#   0 - No noise (clean debugging)
+#   1 - Low noise with drift (general testing)
+#   2 - Moderate noise with drift (stress testing)
+#   3 - Flow deck realistic (default) - measurement noise, no drift
+# Example: make SENSOR_NOISE=1
 ifdef SENSOR_NOISE
 CFLAGS += -DSENSOR_NOISE=$(SENSOR_NOISE)
 endif

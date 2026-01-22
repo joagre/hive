@@ -32,32 +32,50 @@
 #include "config.h"     // For FLIGHT_PROFILE
 #include "math_utils.h" // For CLAMPF
 
-// Noise level: 0=off, 1=low (10%), 2=full (100%)
-// Default: full noise for all profiles (realistic simulation)
-// Override with -DSENSOR_NOISE=0 or -DSENSOR_NOISE=1 if needed
+// Noise levels for simulation testing:
+//   0 - No noise (clean debugging)
+//   1 - Low noise with drift (default)
+//   2 - Moderate noise with drift (stress test)
+//   3 - Flow deck realistic (measurement noise, no drift - for pre-hardware testing)
 #ifndef SENSOR_NOISE
-#define SENSOR_NOISE 1 // Low noise - intrinsic sensor noise only
+#define SENSOR_NOISE 3 // Flow deck realistic - default for Crazyflie testing
 #endif
 
 #if SENSOR_NOISE == 0
+// Clean simulation - no noise at all
 #define ACCEL_NOISE_STDDEV 0.0f
 #define GYRO_NOISE_STDDEV 0.0f
 #define ALTITUDE_NOISE_STDDEV 0.0f
+#define GYRO_BIAS_DRIFT 0.0f
+#define GPS_XY_NOISE_STDDEV 0.0f
+
 #elif SENSOR_NOISE == 1
-// Low noise - intrinsic sensor noise only (no vibration)
+// Low noise with slow drift - general testing
 #define ACCEL_NOISE_STDDEV 0.02f    // m/s^2 - BMI088 intrinsic
 #define GYRO_NOISE_STDDEV 0.001f    // rad/s - BMI088 intrinsic
-#define ALTITUDE_NOISE_STDDEV 0.01f // meters - clean rangefinder
-#else
-// Moderate noise - between clean sim and full realistic
-// Testing what level the current tuning can handle
+#define ALTITUDE_NOISE_STDDEV 0.01f // meters - VL53L1x typical
+#define GYRO_BIAS_DRIFT 0.00001f    // rad/s per step - slow drift
+#define GPS_XY_NOISE_STDDEV 0.005f  // meters - position noise
+
+#elif SENSOR_NOISE == 2
+// Moderate noise with drift - stress testing
 #define ACCEL_NOISE_STDDEV 0.05f    // m/s^2 - moderate vibration
 #define GYRO_NOISE_STDDEV 0.003f    // rad/s - moderate (~0.17 deg/s)
-#define ALTITUDE_NOISE_STDDEV 0.01f // meters - clean rangefinder
+#define ALTITUDE_NOISE_STDDEV 0.01f // meters - VL53L1x typical
+#define GYRO_BIAS_DRIFT 0.00001f    // rad/s per step - slow drift
+#define GPS_XY_NOISE_STDDEV 0.01f   // meters - more position noise
+
+#else                               // SENSOR_NOISE == 3
+// Flow deck realistic - matches real Crazyflie behavior
+// Measurement noise present but no artificial drift accumulation.
+// Real flow deck provides ground-referenced velocity that doesn't
+// accumulate gyro bias errors like dead-reckoning would.
+#define ACCEL_NOISE_STDDEV 0.02f    // m/s^2 - BMI088 intrinsic
+#define GYRO_NOISE_STDDEV 0.001f    // rad/s - BMI088 intrinsic
+#define ALTITUDE_NOISE_STDDEV 0.01f // meters - VL53L1x typical
+#define GYRO_BIAS_DRIFT 0.0f        // No drift - flow deck is ground-referenced
+#define GPS_XY_NOISE_STDDEV 0.002f  // meters - flow deck is quite accurate
 #endif
-#define GYRO_BIAS_DRIFT 0.00001f // rad/s per step - slow drift
-// GPS position noise (simulates integrated flow deck drift on real hardware)
-#define GPS_XY_NOISE_STDDEV 0.005f // meters - position noise
 
 // Xorshift32 PRNG state (seeded at init for variety)
 static uint32_t g_rng_state = 1; // Will be seeded in hal_init()
