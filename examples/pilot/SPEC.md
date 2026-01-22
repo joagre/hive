@@ -556,23 +556,28 @@ All actor code is platform-independent. Actors use:
 ```
 examples/pilot/
     pilot.c              # Main loop, bus setup, supervisor config
-    sensor_actor.c/h     # Reads sensors via HAL → sensor bus
-    estimator_actor.c/h  # Sensor fusion → state bus
-    altitude_actor.c/h   # Altitude PID → thrust
-    waypoint_actor.c/h   # Waypoint navigation → position target bus
-    position_actor.c/h   # Position PD → attitude setpoints
-    attitude_actor.c/h   # Attitude PIDs → rate setpoints
-    rate_actor.c/h       # Rate PIDs → torque commands
-    motor_actor.c/h      # Output: torque → HAL → motors
-    flight_manager_actor.c/h # Startup delay, flight window cutoff
-    comms_actor.c/h      # Radio telemetry (Crazyflie only)
-    telemetry_logger_actor.c/h # CSV logging (Webots only)
-    pid.c/h              # Reusable PID controller
-    types.h              # Portable data types
-    config.h             # Configuration constants
-    math_utils.h         # Math macros
-    notifications.h      # IPC notification tags
-    flight_profiles.h    # Waypoint definitions
+    sensor_actor.c       # Reads sensors via HAL → sensor bus
+    estimator_actor.c    # Sensor fusion → state bus
+    altitude_actor.c     # Altitude PID → thrust
+    waypoint_actor.c     # Waypoint navigation → position target bus
+    position_actor.c     # Position PD → attitude setpoints
+    attitude_actor.c     # Attitude PIDs → rate setpoints
+    rate_actor.c         # Rate PIDs → torque commands
+    motor_actor.c        # Output: torque → HAL → motors
+    flight_manager_actor.c # Startup delay, flight window cutoff
+    comms_actor.c        # Radio telemetry (Crazyflie only)
+    telemetry_logger_actor.c # CSV logging (Webots only)
+    pid.c                # Reusable PID controller
+    stack_profile.c      # Stack usage profiling
+    include/             # Header files
+        *_actor.h        # Actor interfaces
+        types.h          # Portable data types
+        config.h         # Configuration constants
+        math_utils.h     # Math macros
+        notifications.h  # IPC notification tags
+        flight_profiles.h # Waypoint definitions
+        pid.h            # PID controller interface
+        pilot_buses.h    # Bus handle struct
     fusion/
         complementary_filter.c/h  # Portable attitude estimation
     tools/

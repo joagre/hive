@@ -71,29 +71,38 @@ See `hal/<platform>/README.md` for hardware details, pin mapping, and flight pro
 
 ## Files
 
-### Application Code
+### Actor Implementations
 
 | File | Description |
 |------|-------------|
 | `pilot.c` | Main entry point, bus setup, supervisor config |
-| `sensor_actor.c/h` | Reads sensors via HAL → sensor bus |
-| `estimator_actor.c/h` | Sensor fusion → state bus |
-| `altitude_actor.c/h` | Altitude PID → thrust |
-| `waypoint_actor.c/h` | Waypoint manager → position target bus |
-| `position_actor.c/h` | Position PD → attitude setpoints |
-| `attitude_actor.c/h` | Attitude PIDs → rate setpoints |
-| `rate_actor.c/h` | Rate PIDs → torque commands |
-| `motor_actor.c/h` | Output: torque → HAL → motors |
-| `flight_manager_actor.c/h` | Startup delay, flight window cutoff |
-| `comms_actor.c/h` | Radio telemetry (Crazyflie only) |
-| `telemetry_logger_actor.c/h` | CSV logging for PID tuning (Webots only) |
-| `pid.c/h` | Reusable PID controller |
-| `fusion/complementary_filter.c/h` | Portable attitude estimation (accel+gyro fusion) |
-| `types.h` | Shared data types (sensor_data_t, state_estimate_t, etc.) |
-| `config.h` | Configuration constants (timing, thresholds, bus config) |
-| `math_utils.h` | Math macros (CLAMPF, LPF, NORMALIZE_ANGLE) |
-| `notifications.h` | IPC notification tags (NOTIFY_FLIGHT_START, etc.) |
-| `flight_profiles.h` | Waypoint definitions per flight profile |
+| `sensor_actor.c` | Reads sensors via HAL → sensor bus |
+| `estimator_actor.c` | Sensor fusion → state bus |
+| `altitude_actor.c` | Altitude PID → thrust |
+| `waypoint_actor.c` | Waypoint manager → position target bus |
+| `position_actor.c` | Position PD → attitude setpoints |
+| `attitude_actor.c` | Attitude PIDs → rate setpoints |
+| `rate_actor.c` | Rate PIDs → torque commands |
+| `motor_actor.c` | Output: torque → HAL → motors |
+| `flight_manager_actor.c` | Startup delay, flight window cutoff |
+| `comms_actor.c` | Radio telemetry (Crazyflie only) |
+| `telemetry_logger_actor.c` | CSV logging for PID tuning (Webots only) |
+| `pid.c` | Reusable PID controller |
+| `stack_profile.c` | Stack usage profiling |
+| `fusion/complementary_filter.c` | Portable attitude estimation (accel+gyro fusion) |
+
+### Headers (in `include/`)
+
+| File | Description |
+|------|-------------|
+| `include/*_actor.h` | Actor interfaces |
+| `include/types.h` | Shared data types (sensor_data_t, state_estimate_t, etc.) |
+| `include/config.h` | Configuration constants (timing, thresholds, bus config) |
+| `include/pilot_buses.h` | Bus handle struct passed to actors |
+| `include/pid.h` | PID controller interface |
+| `include/math_utils.h` | Math macros (CLAMPF, LPF, NORMALIZE_ANGLE) |
+| `include/notifications.h` | IPC notification tags (NOTIFY_FLIGHT_START, etc.) |
+| `include/flight_profiles.h` | Waypoint definitions per flight profile |
 
 ### Build System
 
@@ -107,10 +116,8 @@ See `hal/<platform>/README.md` for hardware details, pin mapping, and flight pro
 
 | File | Description |
 |------|-------------|
-| `config.h` | Configuration constants (timing, thresholds, bus config) |
-| `math_utils.h` | Math macros (CLAMPF, LPF, NORMALIZE_ANGLE) |
-| `notifications.h` | IPC notification tags (NOTIFY_FLIGHT_START, etc.) |
-| `flight_profiles.h` | Waypoint definitions per flight profile |
+| `include/config.h` | Configuration constants (timing, thresholds, bus config) |
+| `include/flight_profiles.h` | Waypoint definitions per flight profile |
 | `hive_config.mk` | Shared Hive memory limits (actors, buses, pools) |
 | `hal/<platform>/hal_config.h` | Platform-specific PID gains and thrust |
 
@@ -140,9 +147,9 @@ sizes differ per platform based on available RAM.
 
 | Directory | Description |
 |-----------|-------------|
+| `include/` | Header files (types, config, actor interfaces) |
 | `hal/` | Hardware abstraction layer (see `hal/<platform>/README.md`) |
 | `hal/crazyflie-2.1+/bringup/` | Hardware bring-up test firmware |
-| `hal/crazyflie-2.1+/tests/` | HAL test firmware |
 | `tools/` | PID tuning and telemetry analysis tools |
 | `controllers/pilot/` | Webots controller (installed by `make`) |
 | `worlds/` | Webots world files |
