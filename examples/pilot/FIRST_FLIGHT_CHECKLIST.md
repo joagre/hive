@@ -140,10 +140,10 @@ Only proceed if tethered flight was stable.
 # Conservative hover test
 make -f Makefile.crazyflie-2.1+ FLIGHT_PROFILE=1  # 10s at 0.5m
 
-# Altitude changes
-make -f Makefile.crazyflie-2.1+ FLIGHT_PROFILE=2  # 0.5m → 1.0m → 1.5m
+# Altitude changes (max 1.2m, within flow deck range)
+make -f Makefile.crazyflie-2.1+ FLIGHT_PROFILE=2  # 0.5m → 0.8m → 1.2m → 0.8m
 
-# Full 3D (requires Flow deck)
+# Full 3D (requires Flow deck, max 1.2m)
 make -f Makefile.crazyflie-2.1+ FLIGHT_PROFILE=3  # Waypoint navigation
 ```
 
@@ -200,13 +200,13 @@ First flight is successful if:
 
 ## PID Tuning Reference
 
-Default values in `hal_config.h`:
+Default values in `hal_config.h` (tuned in Webots with 20ms motor lag):
 
 ```c
-// Rate (innermost loop)
-HAL_RATE_PID_KP     0.015
-HAL_RATE_PID_KI     0.0
-HAL_RATE_PID_KD     0.002
+// Rate (innermost loop) - tuned for motor response lag
+HAL_RATE_PID_KP     0.028
+HAL_RATE_PID_KI     0.002
+HAL_RATE_PID_KD     0.003
 
 // Attitude (middle loop)
 HAL_ATTITUDE_PID_KP 2.5
@@ -214,13 +214,20 @@ HAL_ATTITUDE_PID_KI 0.0
 HAL_ATTITUDE_PID_KD 0.15
 
 // Altitude
-HAL_ALT_PID_KP      0.25
-HAL_ALT_PID_KI      0.05
+HAL_ALT_PID_KP      0.18
+HAL_ALT_PID_KI      0.03
 HAL_ALT_PID_KD      0.0
 
-// Base thrust (hover point)
-HAL_BASE_THRUST     0.35
+// Vertical velocity damping
+HAL_VVEL_DAMPING_GAIN 0.35
+
+// Base thrust (hover point) - MUST BE CALIBRATED on actual hardware
+HAL_BASE_THRUST     0.38
 ```
+
+**Note:** Only HAL_BASE_THRUST typically needs calibration on real hardware.
+Start at 0.38 and adjust until stable hover is achieved. Other gains were
+tuned in Webots with realistic motor lag simulation and should transfer well.
 
 Adjust in 10-20% increments. Reflash after each change.
 
