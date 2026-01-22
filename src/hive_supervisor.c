@@ -194,10 +194,12 @@ static hive_status spawn_child(supervisor_state *sup, size_t index) {
     // Monitor the child
     status = hive_monitor(state->id, &state->monitor_ref);
     if (HIVE_FAILED(status)) {
-        // Child spawned but monitor failed - child will run but we won't track it
+        // Can't supervise a child we can't monitor - kill it and fail
         HIVE_LOG_ERROR("[SUP] Failed to monitor child \"%s\": %s", spec->name,
                        HIVE_ERR_STR(status));
-        state->running = true;
+        hive_kill(state->id);
+        state->id = ACTOR_ID_INVALID;
+        state->running = false;
         return status;
     }
 
@@ -256,6 +258,16 @@ static hive_status spawn_all_children_two_phase(supervisor_state *sup) {
         if (HIVE_FAILED(status)) {
             HIVE_LOG_ERROR("[SUP] Failed to monitor child \"%s\": %s",
                            sup->children[i].name, HIVE_ERR_STR(status));
+            // Rollback: cancel monitors and kill all children
+            for (size_t j = 0; j < i; j++) {
+                hive_monitor_cancel(sup->child_states[j].monitor_ref);
+            }
+            for (size_t j = 0; j < sup->num_children; j++) {
+                hive_kill(sup->child_states[j].id);
+                sup->child_states[j].id = ACTOR_ID_INVALID;
+                sup->child_states[j].running = false;
+            }
+            return status;
         }
 
         HIVE_LOG_DEBUG("[SUP] Child \"%s\" spawned (actor %u)",
