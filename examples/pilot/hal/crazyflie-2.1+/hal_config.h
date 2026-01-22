@@ -2,17 +2,18 @@
 //
 // Platform-specific constants for Crazyflie 2.1+ hardware.
 //
-// FIRST FLIGHT GAINS - Conservative values for initial hardware testing.
-// These are deliberately sluggish for safety. After successful hover:
-//   1. Use ground_station.py to capture telemetry
-//   2. Analyze with tools/analyze_pid.py
+// Rate controller gains are tuned in Webots with realistic motor lag (20ms).
+// Altitude and attitude controllers remain conservative for first flights.
+//
+// After successful hover, tune remaining controllers using:
+//   1. tools/ground_station.py to capture telemetry
+//   2. tools/analyze_pid.py to analyze performance
 //   3. Gradually increase gains toward Webots-tuned values
 //
-// Webots reference values (for comparison):
+// Webots reference values (tuned with motor lag):
 //   Altitude: Kp=0.18, Ki=0.03, Vvel=0.35
 //   Attitude: Kp=2.5, Kd=0.15
-//   Rate: Kp=0.015, Kd=0.002
-//   Position: Kp=0.12, Kd=0.18
+//   Rate: Kp=0.028, Ki=0.002, Kd=0.003 (motor lag compensated)
 
 #ifndef HAL_CONFIG_H
 #define HAL_CONFIG_H
@@ -55,18 +56,18 @@
 #define HAL_ATTITUDE_PID_OMAX 1.5f // Reduced max rate setpoint (rad/s)
 
 // ----------------------------------------------------------------------------
-// Rate Control (conservative first-flight)
+// Rate Control (tuned for motor response lag)
 // ----------------------------------------------------------------------------
 
 // Rate PID gains (rate error -> torque)
-// Innermost loop - most sensitive to noise, be conservative
-#define HAL_RATE_PID_KP 0.010f       // Conservative (Webots: 0.015)
-#define HAL_RATE_PID_KI 0.0f         // Disabled for first flight
-#define HAL_RATE_PID_KD 0.001f       // Reduced D (noise sensitive)
-#define HAL_RATE_PID_IMAX 0.3f       // Integral limit (when Ki enabled)
-#define HAL_RATE_PID_OMAX_ROLL 0.06f // Reduced for smoother control
-#define HAL_RATE_PID_OMAX_PITCH 0.06f
-#define HAL_RATE_PID_OMAX_YAW 0.08f
+// Tuned in Webots with 20ms motor lag simulation - should transfer to hardware
+#define HAL_RATE_PID_KP 0.028f       // Compensates for motor lag
+#define HAL_RATE_PID_KI 0.002f       // Small integral for steady-state tracking
+#define HAL_RATE_PID_KD 0.003f       // Predictive damping
+#define HAL_RATE_PID_IMAX 0.3f       // Integral limit
+#define HAL_RATE_PID_OMAX_ROLL 0.12f // Motor lag limits actual response
+#define HAL_RATE_PID_OMAX_PITCH 0.12f
+#define HAL_RATE_PID_OMAX_YAW 0.15f
 
 // ----------------------------------------------------------------------------
 // Flow Deck Configuration
