@@ -397,6 +397,7 @@ The runtime uses a HAL to isolate platform-specific code. Porters implement HAL 
 include/hal/
   hive_hal_time.h      - Time + critical sections (3 functions)
   hive_hal_event.h     - Event loop primitives (5 functions)
+  hive_hal_timer.h     - Timer operations (6 functions)
   hive_hal_context.h   - Context switching (1 function + struct)
   hive_hal_file.h      - File I/O (8 functions, optional)
   hive_hal_net.h       - Network I/O (10 functions, optional)
