@@ -55,6 +55,10 @@ benchmarks: $(LIB)
 examples: $(LIB)
 	$(MAKE) -C examples
 
+.PHONY: run-examples
+run-examples: $(LIB)
+	$(MAKE) -C examples run-all
+
 .PHONY: test
 test: $(LIB)
 	$(MAKE) -C tests test
@@ -139,6 +143,7 @@ help:
 	@echo "  clean             - Remove build artifacts"
 	@echo "  clean-emacs       - Remove Emacs backup files (*~, #*#, .#*)"
 	@echo "  test              - Build and run all tests"
+	@echo "  run-examples      - Build and run all examples"
 	@echo "  bench             - Build and run benchmark suite"
 	@echo "  install-man       - Install man pages to $(MANPREFIX)/man3"
 	@echo "  uninstall-man     - Remove installed man pages"

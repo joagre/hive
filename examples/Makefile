@@ -69,18 +69,72 @@ $(BUILD_DIR):
 $(BUILD_DIR)/%: %.c $(LIB) | $(BUILD_DIR)
 	$(CC) $(CFLAGS) $(CPPFLAGS) $(DEPFLAGS) $< -o $@ -L$(BUILD_DIR) -lhive
 
-# Run targets
-.PHONY: run-pingpong
+# Individual run targets
+.PHONY: run-pingpong run-bus run-echo run-fileio run-link_demo run-logging
+.PHONY: run-priority run-registry run-request_reply run-select
+.PHONY: run-supervisor run-supervisor_manual run-timer
+
 run-pingpong: $(BUILD_DIR)/pingpong
-	./$(BUILD_DIR)/pingpong
+	@./$(BUILD_DIR)/pingpong
 
-.PHONY: run-fileio
-run-fileio: $(BUILD_DIR)/fileio
-	./$(BUILD_DIR)/fileio
+run-bus: $(BUILD_DIR)/bus
+	@./$(BUILD_DIR)/bus
 
-.PHONY: run-echo
 run-echo: $(BUILD_DIR)/echo
-	./$(BUILD_DIR)/echo
+	@./$(BUILD_DIR)/echo
+
+run-fileio: $(BUILD_DIR)/fileio
+	@./$(BUILD_DIR)/fileio
+
+run-link_demo: $(BUILD_DIR)/link_demo
+	@./$(BUILD_DIR)/link_demo
+
+run-logging: $(BUILD_DIR)/logging
+	@./$(BUILD_DIR)/logging
+
+run-priority: $(BUILD_DIR)/priority
+	@./$(BUILD_DIR)/priority
+
+run-registry: $(BUILD_DIR)/registry
+	@./$(BUILD_DIR)/registry
+
+run-request_reply: $(BUILD_DIR)/request_reply
+	@./$(BUILD_DIR)/request_reply
+
+run-select: $(BUILD_DIR)/select
+	@./$(BUILD_DIR)/select
+
+run-supervisor: $(BUILD_DIR)/supervisor
+	@./$(BUILD_DIR)/supervisor
+
+run-supervisor_manual: $(BUILD_DIR)/supervisor_manual
+	@./$(BUILD_DIR)/supervisor_manual
+
+run-timer: $(BUILD_DIR)/timer
+	@./$(BUILD_DIR)/timer
+
+# Run all examples
+.PHONY: run-all
+run-all: $(EXAMPLES)
+	@echo "=== Running all examples ==="
+	@failed=0; \
+	for ex in $(EXAMPLES); do \
+		name=$$(basename $$ex); \
+		printf "%-20s " "$$name..."; \
+		if $$ex >/dev/null 2>&1; then \
+			echo "OK"; \
+		else \
+			echo "FAIL"; \
+			failed=$$((failed + 1)); \
+		fi; \
+	done; \
+	echo ""; \
+	if [ $$failed -eq 0 ]; then \
+		echo "All examples passed!"; \
+	else \
+		echo "$$failed example(s) failed"; \
+		exit 1; \
+	fi
 
 # Clean example binaries and deps
 .PHONY: clean
@@ -91,10 +145,14 @@ clean:
 help:
 	@echo "examples/Makefile targets:"
 	@echo "  all          - Build all examples"
-	@echo "  run-pingpong - Run ping-pong example"
-	@echo "  run-fileio   - Run file I/O example"
-	@echo "  run-echo     - Run echo server/client example"
+	@echo "  run-all      - Run all examples (summary output)"
+	@echo "  run-<name>   - Run specific example (e.g., run-pingpong)"
 	@echo "  clean        - Remove example binaries"
+	@echo ""
+	@echo "Available examples:"
+	@echo "  bus, echo, fileio, link_demo, logging, pingpong,"
+	@echo "  priority, registry, request_reply, select,"
+	@echo "  supervisor, supervisor_manual, timer"
 
 # Auto-generated dependencies
 -include $(DEPS)
