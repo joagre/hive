@@ -13,66 +13,69 @@ BUILD_DIR ?= ../build/qemu
 
 # ARM cross-compiler
 ARM_CC := arm-none-eabi-gcc
+ARM_AR := arm-none-eabi-ar
 ARM_OBJCOPY := arm-none-eabi-objcopy
 ARM_SIZE := arm-none-eabi-size
 
-# ARM compiler flags for Cortex-M3
-ARM_CFLAGS := -std=c11 -Wall -Wextra -Wpedantic -O2 -g \
-              -mcpu=cortex-m3 -mthumb -mfloat-abi=soft \
-              -ffunction-sections -fdata-sections -fno-common \
-              -ffreestanding -nostdlib \
-              -MMD -MP
+# MCU flags for Cortex-M3
+MCU := -mcpu=cortex-m3 -mthumb -mfloat-abi=soft
 
-# QEMU test uses smaller config values suitable for 64KB RAM
-# Include lightweight printf library for low stack usage
-# Include STM32 HAL for platform-specific headers
-ARM_CPPFLAGS := -I../include -I../lib -I../lib/printf -DPRINTF_INCLUDE_CONFIG_H -I. \
-                -I../src/hal/stm32 \
-                -DHIVE_PLATFORM_STM32 -DHIVE_ENABLE_NET=0 -DHIVE_ENABLE_FILE=0 \
-                -DHIVE_MAX_ACTORS=8 \
-                -DHIVE_MAX_BUSES=4 \
-                -DHIVE_MAILBOX_ENTRY_POOL_SIZE=32 \
-                -DHIVE_MESSAGE_DATA_POOL_SIZE=32 \
-                -DHIVE_LINK_ENTRY_POOL_SIZE=16 \
-                -DHIVE_MONITOR_ENTRY_POOL_SIZE=16 \
-                -DHIVE_TIMER_ENTRY_POOL_SIZE=16 \
-                -DHIVE_MAX_BUS_SUBSCRIBERS=4 \
-                -DHIVE_MAX_BUS_ENTRIES=8 \
-                -DHIVE_MAX_MESSAGE_SIZE=128 \
-                -DHIVE_DEFAULT_STACK_SIZE=2048 \
-                '-DHIVE_STACK_ARENA_SIZE=(16*1024)' \
-                -DHIVE_MAX_SUPERVISORS=2 \
-                -DHIVE_MAX_SUPERVISOR_CHILDREN=4
+# ============================================================================
+# QEMU Memory Configuration (smaller values for 64KB RAM)
+# ============================================================================
+HIVE_CFLAGS := -DHIVE_MAX_ACTORS=8
+HIVE_CFLAGS += -DHIVE_MAX_BUSES=4
+HIVE_CFLAGS += -DHIVE_MAILBOX_ENTRY_POOL_SIZE=32
+HIVE_CFLAGS += -DHIVE_MESSAGE_DATA_POOL_SIZE=32
+HIVE_CFLAGS += -DHIVE_LINK_ENTRY_POOL_SIZE=16
+HIVE_CFLAGS += -DHIVE_MONITOR_ENTRY_POOL_SIZE=16
+HIVE_CFLAGS += -DHIVE_TIMER_ENTRY_POOL_SIZE=16
+HIVE_CFLAGS += -DHIVE_MAX_BUS_SUBSCRIBERS=4
+HIVE_CFLAGS += -DHIVE_MAX_BUS_ENTRIES=8
+HIVE_CFLAGS += -DHIVE_MAX_MESSAGE_SIZE=128
+HIVE_CFLAGS += -DHIVE_DEFAULT_STACK_SIZE=2048
+HIVE_CFLAGS += '-DHIVE_STACK_ARENA_SIZE=(16*1024)'
+HIVE_CFLAGS += -DHIVE_MAX_SUPERVISORS=2
+HIVE_CFLAGS += -DHIVE_MAX_SUPERVISOR_CHILDREN=4
 
-ARM_LDFLAGS := -Tlm3s6965.ld \
-               -mcpu=cortex-m3 -mthumb \
-               -Wl,--gc-sections \
-               -nostartfiles -specs=nosys.specs
+# CFLAGS to pass to src/Makefile.stm32
+HIVE_CFLAGS_EXPORT := $(MCU)
+HIVE_CFLAGS_EXPORT += -I$(abspath ../include)
+HIVE_CFLAGS_EXPORT += -I$(abspath ../lib) -I$(abspath ../lib/printf)
+HIVE_CFLAGS_EXPORT += $(HIVE_CFLAGS)
 
-# Source files (from shared definitions)
-include $(SRC_DIR)/hive_sources.mk
+# ============================================================================
+# Local Build Configuration
+# ============================================================================
 
-QEMU_SRCS := $(addprefix $(SRC_DIR)/,$(HIVE_CORE_SRCS)) \
-             $(addprefix $(SRC_DIR)/,$(HIVE_HAL_STM32_SRCS))
-QEMU_ASM := $(addprefix $(SRC_DIR)/,$(HIVE_HAL_STM32_ASM))
-QEMU_TEST_SRCS := startup.S semihosting.c test_main.c
+# ARM compiler flags for local sources (tests, examples)
+ARM_CFLAGS := -std=c11 -Wall -Wextra -Wpedantic -O2 -g
+ARM_CFLAGS += $(MCU)
+ARM_CFLAGS += -ffunction-sections -fdata-sections -fno-common
+ARM_CFLAGS += -ffreestanding -nostdlib
+ARM_CFLAGS += -MMD -MP
 
-# Lightweight printf library
-PRINTF_SRC := ../lib/printf/printf.c
+# Include paths and defines for local sources
+ARM_CPPFLAGS := -I../include -I../lib -I../lib/printf -DPRINTF_INCLUDE_CONFIG_H -I.
+ARM_CPPFLAGS += -I../src/hal/stm32
+ARM_CPPFLAGS += -DHIVE_PLATFORM_STM32 -DHIVE_ENABLE_NET=0 -DHIVE_ENABLE_FILE=0
+ARM_CPPFLAGS += $(HIVE_CFLAGS)
 
-QEMU_OBJS := $(QEMU_SRCS:$(SRC_DIR)/%.c=$(BUILD_DIR)/%.o) \
-             $(QEMU_ASM:$(SRC_DIR)/%.S=$(BUILD_DIR)/%.o) \
-             $(BUILD_DIR)/printf.o \
-             $(BUILD_DIR)/startup.o \
-             $(BUILD_DIR)/semihosting.o \
-             $(BUILD_DIR)/test_main.o
+ARM_LDFLAGS := -Tlm3s6965.ld
+ARM_LDFLAGS += $(MCU)
+ARM_LDFLAGS += -Wl,--gc-sections
+ARM_LDFLAGS += -nostartfiles -specs=nosys.specs
+
+# Hive library (built by delegating to src/Makefile.stm32)
+HIVE_LIB := $(BUILD_DIR)/libhive.a
+
+# Local QEMU sources
+QEMU_LOCAL_SRCS := startup.S semihosting.c test_main.c
+QEMU_LOCAL_OBJS := $(BUILD_DIR)/startup.o $(BUILD_DIR)/semihosting.o $(BUILD_DIR)/test_main.o
 
 # Basic test binary
 QEMU_ELF := $(BUILD_DIR)/test.elf
 QEMU_BIN := $(BUILD_DIR)/test.bin
-
-# Runtime objects for test linking (exclude test_main.o which has its own main)
-QEMU_RUNTIME_OBJS := $(filter-out $(BUILD_DIR)/test_main.o,$(QEMU_OBJS))
 
 # Compatible tests (exclude net_test.c, file_test.c, logging_test.c which require disabled features)
 QEMU_COMPAT_TESTS := actor_test ipc_test timer_test link_test \
@@ -93,23 +96,19 @@ QEMU_COMPAT_EXAMPLES := timer pingpong priority link_demo supervisor bus request
 .PHONY: all
 all: $(QEMU_ELF)
 
-# Create build directories (including HAL subdirectory)
-$(BUILD_DIR) $(BUILD_DIR)/hal/stm32:
+# Create build directory
+$(BUILD_DIR):
 	mkdir -p $@
 
-# Compile runtime sources for ARM
-$(BUILD_DIR)/%.o: $(SRC_DIR)/%.c | $(BUILD_DIR) $(BUILD_DIR)/hal/stm32
-	$(ARM_CC) $(ARM_CFLAGS) $(ARM_CPPFLAGS) -c $< -o $@
+# Build hive library (delegate to src/Makefile.stm32)
+$(HIVE_LIB):
+	@$(MAKE) -C $(SRC_DIR) -f Makefile.stm32 \
+		BUILD_DIR=$(abspath $(BUILD_DIR)) \
+		CC=$(ARM_CC) AR=$(ARM_AR) \
+		ENABLE_NET=0 ENABLE_FILE=0 \
+		CFLAGS="$(HIVE_CFLAGS_EXPORT)"
 
-# Compile ARM assembly from src/
-$(BUILD_DIR)/%.o: $(SRC_DIR)/%.S | $(BUILD_DIR) $(BUILD_DIR)/hal/stm32
-	$(ARM_CC) $(ARM_CFLAGS) $(ARM_CPPFLAGS) -c $< -o $@
-
-# Compile lightweight printf library
-$(BUILD_DIR)/printf.o: $(PRINTF_SRC) | $(BUILD_DIR)
-	$(ARM_CC) $(ARM_CFLAGS) $(ARM_CPPFLAGS) -c $< -o $@
-
-# Compile QEMU test sources
+# Compile QEMU local sources
 $(BUILD_DIR)/startup.o: startup.S | $(BUILD_DIR)
 	$(ARM_CC) $(ARM_CFLAGS) $(ARM_CPPFLAGS) -c $< -o $@
 
@@ -123,8 +122,8 @@ $(BUILD_DIR)/test_runner.o: test_runner.c | $(BUILD_DIR)
 	$(ARM_CC) $(ARM_CFLAGS) $(ARM_CPPFLAGS) -c $< -o $@
 
 # Link basic test binary
-$(QEMU_ELF): $(QEMU_OBJS)
-	$(ARM_CC) $(ARM_LDFLAGS) $^ -o $@
+$(QEMU_ELF): $(QEMU_LOCAL_OBJS) $(HIVE_LIB)
+	$(ARM_CC) $(ARM_LDFLAGS) $(QEMU_LOCAL_OBJS) $(HIVE_LIB) -o $@
 	$(ARM_SIZE) $@
 
 # Create binary image
@@ -143,8 +142,8 @@ $(BUILD_DIR)/qemu_%.o: $(TESTS_DIR)/%.c | $(BUILD_DIR)
 		-c $< -o $@
 
 # Pattern rule: link test ELF
-$(BUILD_DIR)/test_%.elf: $(BUILD_DIR)/qemu_%.o $(BUILD_DIR)/test_runner.o $(QEMU_RUNTIME_OBJS)
-	$(ARM_CC) $(ARM_LDFLAGS) $^ -o $@
+$(BUILD_DIR)/test_%.elf: $(BUILD_DIR)/qemu_%.o $(BUILD_DIR)/test_runner.o $(BUILD_DIR)/startup.o $(BUILD_DIR)/semihosting.o $(HIVE_LIB)
+	$(ARM_CC) $(ARM_LDFLAGS) $(BUILD_DIR)/qemu_$*.o $(BUILD_DIR)/test_runner.o $(BUILD_DIR)/startup.o $(BUILD_DIR)/semihosting.o $(HIVE_LIB) -o $@
 	$(ARM_SIZE) $@
 
 # Preserve test ELF files
@@ -188,8 +187,8 @@ $(BUILD_DIR)/qemu_example_%.o: $(EXAMPLES_DIR)/%.c | $(BUILD_DIR)
 		-c $< -o $@
 
 # Pattern rule: link example ELF
-$(BUILD_DIR)/example_%.elf: $(BUILD_DIR)/qemu_example_%.o $(BUILD_DIR)/test_runner.o $(QEMU_RUNTIME_OBJS)
-	$(ARM_CC) $(ARM_LDFLAGS) $^ -o $@
+$(BUILD_DIR)/example_%.elf: $(BUILD_DIR)/qemu_example_%.o $(BUILD_DIR)/test_runner.o $(BUILD_DIR)/startup.o $(BUILD_DIR)/semihosting.o $(HIVE_LIB)
+	$(ARM_CC) $(ARM_LDFLAGS) $(BUILD_DIR)/qemu_example_$*.o $(BUILD_DIR)/test_runner.o $(BUILD_DIR)/startup.o $(BUILD_DIR)/semihosting.o $(HIVE_LIB) -o $@
 	$(ARM_SIZE) $@
 
 # Preserve example ELF files
