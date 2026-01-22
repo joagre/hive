@@ -261,7 +261,8 @@ _Noreturn void hive_exit_crash(void) {
     actor *current = hive_actor_current();
     if (current) {
         HIVE_LOG_ERROR("Actor %u (%s) returned without calling hive_exit()",
-                       current->id, current->name ? current->name : "unnamed");
+                       (unsigned)current->id,
+                       current->name ? current->name : "unnamed");
 
         // Mark as crashed - linked/monitoring actors will be notified
         current->exit_reason = HIVE_EXIT_CRASH;

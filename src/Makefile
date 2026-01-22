@@ -22,13 +22,13 @@ DEPFLAGS = -MMD -MP
 
 # Platform-specific settings
 ifeq ($(PLATFORM),linux)
-  CPPFLAGS += -DHIVE_PLATFORM_LINUX
-  PLATFORM_SRCS := hive_scheduler_linux.c hive_timer_linux.c hal/linux/hive_hal_linux.c
-  PLATFORM_ASM := hive_context_x86_64.S
+  CPPFLAGS += -DHIVE_PLATFORM_LINUX -Ihal/linux
+  PLATFORM_SRCS := hive_scheduler_linux.c hive_timer_linux.c hal/linux/hive_hal_linux.c hal/linux/hive_hal_context_linux.c
+  PLATFORM_ASM := hal/linux/hive_context_x86_64.S
 else ifeq ($(PLATFORM),stm32)
-  CPPFLAGS += -DHIVE_PLATFORM_STM32
-  PLATFORM_SRCS := hive_scheduler_stm32.c hive_timer_stm32.c hal/stm32/hive_hal_stm32.c
-  PLATFORM_ASM := hive_context_arm_cm.S
+  CPPFLAGS += -DHIVE_PLATFORM_STM32 -Ihal/stm32
+  PLATFORM_SRCS := hive_scheduler_stm32.c hive_timer_stm32.c hal/stm32/hive_hal_stm32.c hal/stm32/hive_hal_context_stm32.c
+  PLATFORM_ASM := hal/stm32/hive_context_arm_cm.S
 else
   $(error Unknown PLATFORM: $(PLATFORM). Use 'linux' or 'stm32')
 endif
@@ -47,7 +47,7 @@ else
 endif
 
 # Core source files (platform-independent)
-CORE_SRCS := hive_actor.c hive_bus.c hive_context.c hive_ipc.c \
+CORE_SRCS := hive_actor.c hive_bus.c hive_ipc.c \
              hive_link.c hive_log.c hive_pool.c hive_runtime.c \
              hive_select.c hive_supervisor.c
 
@@ -94,6 +94,7 @@ $(BUILD_DIR)/%.o: %.c | $(BUILD_DIR)
 
 # Compile assembly files
 $(BUILD_DIR)/%.o: %.S | $(BUILD_DIR)
+	@mkdir -p $(dir $@)
 	$(CC) $(CPPFLAGS) -c $< -o $@
 
 # Compile printf library (from lib/printf/)

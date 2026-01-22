@@ -13,8 +13,18 @@ ENABLE_FILE ?= 1
 BUILD_DIR := ../build
 LIB := $(BUILD_DIR)/libhive.a
 
+# Platform (default to linux)
+PLATFORM ?= linux
+
+# HAL include path based on platform
+ifeq ($(PLATFORM),stm32)
+  HAL_INCLUDE := -I../src/hal/stm32
+else
+  HAL_INCLUDE := -I../src/hal/linux
+endif
+
 # Include path - always relative to this directory
-CPPFLAGS := -I../include -D_POSIX_C_SOURCE=200809L -DHIVE_PLATFORM_LINUX
+CPPFLAGS := -I../include $(HAL_INCLUDE) -D_POSIX_C_SOURCE=200809L -DHIVE_PLATFORM_LINUX
 DEPFLAGS := -MMD -MP
 
 # Feature flags
