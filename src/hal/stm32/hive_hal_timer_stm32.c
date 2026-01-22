@@ -4,6 +4,7 @@
 // Provides timer_id-based API compatible with Linux implementation.
 // Default tick resolution: 1ms (HIVE_TIMER_TICK_US)
 
+#include "hal/hive_hal_timer.h"
 #include "hive_timer.h"
 #include "hive_internal.h"
 #include "hive_static_config.h"
@@ -46,7 +47,7 @@ static struct {
     timer_id next_id;
     volatile uint32_t tick_count; // Current tick count (updated by ISR)
     volatile bool tick_pending;   // Set by ISR, cleared by scheduler
-} s_timer = {0};
+} s_hal_timer = {0};
 
 // Convert microseconds to ticks (rounding up)
 static uint32_t us_to_ticks(uint32_t us) {
@@ -56,26 +57,26 @@ static uint32_t us_to_ticks(uint32_t us) {
 // Called by hardware timer ISR (SysTick or TIMx)
 // This function must be called from the timer interrupt handler
 void hive_timer_tick_isr(void) {
-    s_timer.tick_count++;
-    s_timer.tick_pending = true;
+    s_hal_timer.tick_count++;
+    s_hal_timer.tick_pending = true;
 }
 
 // Get current tick count
 uint32_t hive_timer_get_ticks(void) {
-    return s_timer.tick_count;
+    return s_hal_timer.tick_count;
 }
 
 // Process expired timers (called by scheduler in main loop)
 void hive_timer_process_pending(void) {
-    if (!s_timer.tick_pending) {
+    if (!s_hal_timer.tick_pending) {
         return;
     }
-    s_timer.tick_pending = false;
+    s_hal_timer.tick_pending = false;
 
-    uint32_t now = s_timer.tick_count;
+    uint32_t now = s_hal_timer.tick_count;
 
     // Process all expired timers
-    timer_entry **pp = &s_timer.timers;
+    timer_entry **pp = &s_hal_timer.timers;
     while (*pp) {
         timer_entry *entry = *pp;
 
@@ -111,56 +112,48 @@ void hive_timer_handle_event(io_source *source) {
     // This function exists for API compatibility but shouldn't be called
 }
 
-// Initialize timer subsystem
-hive_status hive_timer_init(void) {
-    HIVE_INIT_GUARD(s_timer.initialized);
+hive_status hive_hal_timer_init(void) {
+    if (s_hal_timer.initialized) {
+        return HIVE_SUCCESS;
+    }
 
     // Initialize timer entry pool
     hive_pool_init(&s_timer_pool_mgr, s_timer_pool, s_timer_used,
                    sizeof(timer_entry), HIVE_TIMER_ENTRY_POOL_SIZE);
 
     // Initialize timer state
-    s_timer.timers = NULL;
-    s_timer.next_id = 1;
-    s_timer.tick_count = 0;
-    s_timer.tick_pending = false;
+    s_hal_timer.timers = NULL;
+    s_hal_timer.next_id = 1;
+    s_hal_timer.tick_count = 0;
+    s_hal_timer.tick_pending = false;
 
     // Hardware timer initialization should be done by the application
     // (e.g., configure SysTick to call hive_timer_tick_isr every
     // HIVE_TIMER_TICK_US)
 
-    s_timer.initialized = true;
+    s_hal_timer.initialized = true;
     return HIVE_SUCCESS;
 }
 
-// Cleanup timer subsystem
-void hive_timer_cleanup(void) {
-    HIVE_CLEANUP_GUARD(s_timer.initialized);
+void hive_hal_timer_cleanup(void) {
+    if (!s_hal_timer.initialized) {
+        return;
+    }
 
     // Clean up all active timers
-    timer_entry *entry = s_timer.timers;
+    timer_entry *entry = s_hal_timer.timers;
     while (entry) {
         timer_entry *next = entry->next;
         hive_pool_free(&s_timer_pool_mgr, entry);
         entry = next;
     }
-    s_timer.timers = NULL;
+    s_hal_timer.timers = NULL;
 
-    s_timer.initialized = false;
+    s_hal_timer.initialized = false;
 }
 
-// Create a timer (one-shot or periodic)
-static hive_status create_timer(uint32_t interval_us, bool periodic,
-                                timer_id *out) {
-    if (!out) {
-        return HIVE_ERROR(HIVE_ERR_INVALID, "NULL out pointer");
-    }
-
-    HIVE_REQUIRE_INIT(s_timer.initialized, "Timer");
-
-    HIVE_REQUIRE_ACTOR_CONTEXT();
-    actor *current = hive_actor_current();
-
+hive_status hive_hal_timer_create(uint32_t interval_us, bool periodic,
+                                  actor_id owner, timer_id *out) {
     // Allocate timer entry from pool
     timer_entry *entry = hive_pool_alloc(&s_timer_pool_mgr);
     if (!entry) {
@@ -173,34 +166,24 @@ static hive_status create_timer(uint32_t interval_us, bool periodic,
         ticks = 1; // Minimum 1 tick
 
     // Initialize timer entry
-    entry->id = s_timer.next_id++;
-    entry->owner = current->id;
-    entry->expiry_ticks = s_timer.tick_count + ticks;
+    entry->id = s_hal_timer.next_id++;
+    entry->owner = owner;
+    entry->expiry_ticks = s_hal_timer.tick_count + ticks;
     entry->interval_ticks = periodic ? ticks : 0;
     entry->periodic = periodic;
 
     // Insert into list (simple append - could optimize with sorted insert)
-    entry->next = s_timer.timers;
-    s_timer.timers = entry;
+    entry->next = s_hal_timer.timers;
+    s_hal_timer.timers = entry;
 
     *out = entry->id;
     return HIVE_SUCCESS;
 }
 
-hive_status hive_timer_after(uint32_t delay_us, timer_id *out) {
-    return create_timer(delay_us, false, out);
-}
-
-hive_status hive_timer_every(uint32_t interval_us, timer_id *out) {
-    return create_timer(interval_us, true, out);
-}
-
-hive_status hive_timer_cancel(timer_id id) {
-    HIVE_REQUIRE_INIT(s_timer.initialized, "Timer");
-
+hive_status hive_hal_timer_cancel(timer_id id) {
     // Find and remove timer from list
     timer_entry *found = NULL;
-    SLIST_FIND_REMOVE(s_timer.timers, entry->id == id, found);
+    SLIST_FIND_REMOVE(s_hal_timer.timers, entry->id == id, found);
 
     if (found) {
         hive_pool_free(&s_timer_pool_mgr, found);
@@ -210,25 +193,14 @@ hive_status hive_timer_cancel(timer_id id) {
     return HIVE_ERROR(HIVE_ERR_INVALID, "Timer not found");
 }
 
-hive_status hive_sleep(uint32_t delay_us) {
-    // Create one-shot timer
-    timer_id timer;
-    hive_status s = hive_timer_after(delay_us, &timer);
-    if (HIVE_FAILED(s)) {
-        return s;
-    }
-
-    // Wait specifically for THIS timer message
-    // Other messages remain in mailbox (selective receive)
-    hive_message msg;
-    return hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg,
-                               -1);
+uint64_t hive_hal_timer_get_time(void) {
+    return (uint64_t)s_hal_timer.tick_count * HIVE_TIMER_TICK_US;
 }
 
 // Advance simulation time (microseconds) and process expired timers
 // On STM32, this directly advances the tick counter (similar to ISR)
-void hive_timer_advance_time(uint64_t delta_us) {
-    if (!s_timer.initialized) {
+void hive_hal_timer_advance_time(uint64_t delta_us) {
+    if (!s_hal_timer.initialized) {
         return;
     }
 
@@ -236,17 +208,9 @@ void hive_timer_advance_time(uint64_t delta_us) {
     uint32_t ticks = us_to_ticks((uint32_t)delta_us);
 
     // Advance tick count
-    s_timer.tick_count += ticks;
-    s_timer.tick_pending = true;
+    s_hal_timer.tick_count += ticks;
+    s_hal_timer.tick_pending = true;
 
     // Process expired timers immediately
     hive_timer_process_pending();
-}
-
-// Get current time in microseconds
-// Resolution is limited by HIVE_TIMER_TICK_US (default 1ms).
-// For sub-millisecond precision, reduce HIVE_TIMER_TICK_US or use
-// platform-specific high-resolution timers (DWT cycle counter).
-uint64_t hive_get_time(void) {
-    return (uint64_t)s_timer.tick_count * HIVE_TIMER_TICK_US;
 }

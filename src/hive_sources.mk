@@ -14,7 +14,8 @@ HIVE_CORE_SRCS := \
 	hive_runtime.c \
 	hive_scheduler.c \
 	hive_select.c \
-	hive_supervisor.c
+	hive_supervisor.c \
+	hive_timer.c
 
 # Optional feature sources
 HIVE_NET_SRCS := hive_net.c
