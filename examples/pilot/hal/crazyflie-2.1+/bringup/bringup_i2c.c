@@ -1,7 +1,7 @@
 // Crazyflie 2.1+ Bring-Up - I2C3 Bus Scan and Communication
 
 #include "bringup_i2c.h"
-#include "bringup_uart.h"
+#include "bringup_swo.h"
 #include "stm32f4xx.h"
 
 // I2C3 configuration

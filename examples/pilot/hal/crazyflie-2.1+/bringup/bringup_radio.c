@@ -1,7 +1,7 @@
 // Crazyflie 2.1+ Bring-Up - Radio (Syslink) Test
 
 #include "bringup_radio.h"
-#include "bringup_uart.h"
+#include "bringup_swo.h"
 #include "stm32f4xx.h"
 #include <string.h>
 
@@ -147,12 +147,12 @@ bool radio_has_battery_data(void) {
 }
 
 bool radio_run_test(int timeout_ms) {
-    uart_puts("[RADIO] Initializing syslink (USART6)... ");
+    swo_puts("[RADIO] Initializing syslink (USART6)... ");
 
     radio_init();
-    uart_puts("OK\n");
+    swo_puts("OK\n");
 
-    uart_puts("[RADIO] Waiting for battery packet...\n");
+    swo_puts("[RADIO] Waiting for battery packet...\n");
 
     // Poll for battery packet
     int elapsed = 0;
@@ -162,8 +162,8 @@ bool radio_run_test(int timeout_ms) {
         radio_poll();
 
         if (s_has_battery_data) {
-            uart_printf("[RADIO] Battery voltage: %fV... OK\n",
-                        s_battery_voltage);
+            swo_printf("[RADIO] Battery voltage: %fV... OK\n",
+                       s_battery_voltage);
             return true;
         }
 
@@ -174,6 +174,6 @@ bool radio_run_test(int timeout_ms) {
         elapsed += poll_interval;
     }
 
-    uart_puts("[RADIO] Timeout waiting for battery packet... FAIL\n");
+    swo_puts("[RADIO] Timeout waiting for battery packet... FAIL\n");
     return false;
 }

@@ -9,7 +9,7 @@ before running the full pilot firmware.
 
 1. **Crazyflie 2.1+** - The target platform
 2. **Bitcraze Debug Adapter Kit** - Connects to the 0.05" debug header
-3. **ST-Link V3** - For flashing and debug UART via VCP
+3. **ST-Link V3** - For flashing and SWO debug output
 
 ### Connections
 
@@ -17,12 +17,12 @@ before running the full pilot firmware.
 Crazyflie 2.1+          Debug Adapter          ST-Link V3
 +--------------+        +------------+        +----------+
 | Debug Header |------->| 10-pin     |------->| 20-pin   |
-| (0.05" pitch)|        | to 20-pin  |        | SWD+UART |
+| (0.05" pitch)|        | to 20-pin  |        | SWD+SWO  |
 +--------------+        +------------+        +----------+
                                                    |
                                                    v
                                               USB to PC
-                                              (VCP: /dev/ttyACM0)
+                                              (view with st-trace)
 ```
 
 ### Debug Header Pinout (Crazyflie)
@@ -34,20 +34,23 @@ Crazyflie 2.1+          Debug Adapter          ST-Link V3
 | 3 | GND | Ground |
 | 4 | SWCLK | SWD clock |
 | 5 | GND | Ground |
-| 6 | SWO | Trace output (not used) |
+| 6 | SWO | Trace output (debug output) |
 | 7 | GND | Ground |
-| 8 | PA9 | USART1_TX (debug output) |
+| 8 | PA9 | USART1_TX (unused) |
 | 9 | GND | Ground |
-| 10 | PA10 | USART1_RX (debug input) |
+| 10 | PA10 | USART1_RX (unused) |
 
-### ST-Link V3 VCP Setup
+### SWO Debug Output
 
-The ST-Link V3 provides a Virtual COM Port (VCP) that bridges the UART
-signals from the debug connector to USB.
+Debug output uses SWO (Serial Wire Output) via the ITM (Instrumentation
+Trace Macrocell). This is a one-way output channel - no input is possible.
 
 1. Connect ST-Link V3 to PC via USB
-2. VCP appears as `/dev/ttyACM0` (Linux) or `COMx` (Windows)
-3. Open terminal: `screen /dev/ttyACM0 115200` or use minicom/PuTTY
+2. Flash the firmware
+3. View output: `st-trace -c 168`
+
+The `-c 168` parameter specifies the CPU clock frequency in MHz (168 MHz for
+the STM32F405). The SWO baud rate is automatically derived from this.
 
 ## Building and Flashing
 
@@ -69,7 +72,7 @@ st-flash reset
 ## Bring-Up Sequence
 
 The firmware runs through each hardware component systematically,
-reporting results via UART. Each phase can pass (OK), fail (FAIL),
+reporting results via SWO. Each phase can pass (OK), fail (FAIL),
 or be skipped (SKIP).
 
 ### Phase 1: Boot & Clock
@@ -206,12 +209,12 @@ All tests passed!
 
 ## Troubleshooting
 
-### No output on VCP
+### No output on SWO
 
-1. Check baud rate is 115200
-2. Verify TX/RX connections (PA9=TX, PA10=RX)
-3. Ensure ST-Link V3 VCP is enabled (ST-Link Utility)
-4. Try swapping TX/RX if crossed
+1. Ensure `st-trace -c 168` is running
+2. Verify SWO pin connected (pin 6 on debug header, pin 13 on 20-pin)
+3. Check CPU frequency matches `-c` parameter (168 for STM32F405)
+4. Try resetting the target: `st-flash reset`
 
 ### I2C devices not found
 
@@ -246,7 +249,7 @@ All tests passed!
 | File | Description |
 |------|-------------|
 | `bringup_main.c` | Main test sequence and coordination |
-| `bringup_uart.c/h` | USART1 debug output (115200 baud) |
+| `bringup_swo.c/h` | SWO debug output via ITM |
 | `bringup_i2c.c/h` | I2C3 bus scan and communication |
 | `bringup_sensors.c/h` | Sensor chip ID and data readout |
 | `bringup_motors.c/h` | Motor PWM test (TIM2) |

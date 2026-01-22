@@ -20,7 +20,7 @@ Run the hardware bringup firmware to verify all components.
 ```bash
 cd examples/pilot/hal/crazyflie-2.1+/bringup
 make && make flash
-screen /dev/ttyACM0 115200
+st-trace -c 168
 ```
 
 ### Required Tests (must pass)

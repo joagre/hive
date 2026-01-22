@@ -2,7 +2,7 @@
 
 #include "bringup_sensors.h"
 #include "bringup_i2c.h"
-#include "bringup_uart.h"
+#include "bringup_swo.h"
 #include "stm32f4xx.h"
 #include <math.h>
 
@@ -386,28 +386,28 @@ void sensor_run_all_tests(sensor_test_results_t *results) {
 
     // Chip ID tests
     results->accel_id_ok = sensor_test_accel_id(&chip_id);
-    uart_printf("[SENSOR] BMI088 Accel chip ID = 0x%02X... %s\n", chip_id,
-                results->accel_id_ok ? "OK" : "FAIL");
+    swo_printf("[SENSOR] BMI088 Accel chip ID = 0x%02X... %s\n", chip_id,
+               results->accel_id_ok ? "OK" : "FAIL");
 
     results->gyro_id_ok = sensor_test_gyro_id(&chip_id);
-    uart_printf("[SENSOR] BMI088 Gyro chip ID = 0x%02X... %s\n", chip_id,
-                results->gyro_id_ok ? "OK" : "FAIL");
+    swo_printf("[SENSOR] BMI088 Gyro chip ID = 0x%02X... %s\n", chip_id,
+               results->gyro_id_ok ? "OK" : "FAIL");
 
     results->baro_id_ok = sensor_test_baro_id(&chip_id);
-    uart_printf("[SENSOR] BMP388 chip ID = 0x%02X... %s\n", chip_id,
-                results->baro_id_ok ? "OK" : "FAIL");
+    swo_printf("[SENSOR] BMP388 chip ID = 0x%02X... %s\n", chip_id,
+               results->baro_id_ok ? "OK" : "FAIL");
 
     results->flow_deck_present = s_flow_deck_present;
     if (s_flow_deck_present) {
         results->tof_id_ok = sensor_test_tof_id(&model_id);
-        uart_printf("[SENSOR] VL53L1x model ID = 0x%04X... %s (Flow deck)\n",
-                    model_id, results->tof_id_ok ? "OK" : "FAIL");
+        swo_printf("[SENSOR] VL53L1x model ID = 0x%04X... %s (Flow deck)\n",
+                   model_id, results->tof_id_ok ? "OK" : "FAIL");
 
         results->flow_id_ok = sensor_test_flow_id(&chip_id);
-        uart_printf("[SENSOR] PMW3901 product ID = 0x%02X... %s (Flow deck)\n",
-                    chip_id, results->flow_id_ok ? "OK" : "FAIL");
+        swo_printf("[SENSOR] PMW3901 product ID = 0x%02X... %s (Flow deck)\n",
+                   chip_id, results->flow_id_ok ? "OK" : "FAIL");
     } else {
-        uart_printf("[SENSOR] Flow deck not detected\n");
+        swo_printf("[SENSOR] Flow deck not detected\n");
         results->tof_id_ok = false;
         results->flow_id_ok = false;
     }
@@ -419,22 +419,22 @@ void sensor_run_all_tests(sensor_test_results_t *results) {
 
     results->accel_data_ok =
         sensor_read_accel(&accel) && sensor_check_accel(&accel);
-    uart_printf("[DATA] Accelerometer: X=%fg Y=%fg Z=%fg... %s\n", accel.x,
-                accel.y, accel.z, results->accel_data_ok ? "OK" : "FAIL");
+    swo_printf("[DATA] Accelerometer: X=%fg Y=%fg Z=%fg... %s\n", accel.x,
+               accel.y, accel.z, results->accel_data_ok ? "OK" : "FAIL");
 
     results->gyro_data_ok = sensor_read_gyro(&gyro) && sensor_check_gyro(&gyro);
-    uart_printf("[DATA] Gyroscope: X=%f Y=%f Z=%f deg/s... %s\n", gyro.x,
-                gyro.y, gyro.z, results->gyro_data_ok ? "OK" : "FAIL");
+    swo_printf("[DATA] Gyroscope: X=%f Y=%f Z=%f deg/s... %s\n", gyro.x, gyro.y,
+               gyro.z, results->gyro_data_ok ? "OK" : "FAIL");
 
     results->baro_data_ok = sensor_read_baro(&baro) && sensor_check_baro(&baro);
-    uart_printf("[DATA] Barometer: %f Pa, %f C... %s\n", baro.pressure,
-                baro.temperature, results->baro_data_ok ? "OK" : "FAIL");
+    swo_printf("[DATA] Barometer: %f Pa, %f C... %s\n", baro.pressure,
+               baro.temperature, results->baro_data_ok ? "OK" : "FAIL");
 
     if (s_flow_deck_present) {
         uint16_t range;
         results->tof_data_ok = sensor_read_tof(&range);
-        uart_printf("[DATA] ToF range: %u mm... %s (Flow deck)\n", range,
-                    results->tof_data_ok ? "OK" : "FAIL");
+        swo_printf("[DATA] ToF range: %u mm... %s (Flow deck)\n", range,
+                   results->tof_data_ok ? "OK" : "FAIL");
     } else {
         results->tof_data_ok = false;
     }

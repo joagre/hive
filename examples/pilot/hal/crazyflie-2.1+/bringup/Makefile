@@ -13,7 +13,7 @@ CMSIS_DIR = ../vendor/CMSIS
 
 # Source files
 SRCS = bringup_main.c \
-       bringup_uart.c \
+       bringup_swo.c \
        bringup_i2c.c \
        bringup_sensors.c \
        bringup_motors.c \
@@ -106,5 +106,5 @@ help:
 	@echo "Usage:"
 	@echo "  1. make"
 	@echo "  2. make flash"
-	@echo "  3. Connect to VCP: screen /dev/ttyACM0 115200"
+	@echo "  3. View SWO output: st-trace -c 168"
 	@echo "  4. Press reset or: make reset"

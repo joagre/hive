@@ -1,7 +1,7 @@
 // Crazyflie 2.1+ Bring-Up - Motor Tests
 
 #include "bringup_motors.h"
-#include "bringup_uart.h"
+#include "bringup_swo.h"
 #include "stm32f4xx.h"
 
 // PWM frequency: 328 Hz (good for brushed motors)
@@ -130,18 +130,18 @@ bool motors_is_armed(void) {
 }
 
 bool motors_run_test(void) {
-    uart_puts("\n");
-    uart_puts("[MOTOR] !!! WARNING: REMOVE PROPELLERS !!!\n");
-    uart_puts("[MOTOR] Press ENTER to continue or 's' to skip...\n");
+    swo_puts("\n");
+    swo_puts("[MOTOR] !!! WARNING: REMOVE PROPELLERS !!!\n");
+    swo_puts("[MOTOR] Press ENTER to continue or 's' to skip...\n");
 
     // Wait for user input
-    int c = uart_getc_timeout(30000); // 30 second timeout
+    int c = swo_getc_timeout(30000); // 30 second timeout
     if (c < 0 || c == 's' || c == 'S') {
-        uart_puts("[MOTOR] Motor test skipped\n");
+        swo_puts("[MOTOR] Motor test skipped\n");
         return false;
     }
 
-    uart_puts("[MOTOR] Starting motor test...\n");
+    swo_puts("[MOTOR] Starting motor test...\n");
 
     motors_arm();
 
@@ -149,28 +149,28 @@ bool motors_run_test(void) {
     for (int i = 0; i < MOTOR_COUNT; i++) {
         const motor_info_t *info = motor_get_info((motor_id_t)i);
 
-        uart_printf("[MOTOR] Spinning %s (%s, %s) at 10%%...", info->name,
-                    info->position, info->rotation);
+        swo_printf("[MOTOR] Spinning %s (%s, %s) at 10%%...", info->name,
+                   info->position, info->rotation);
 
         motor_set((motor_id_t)i, 0.10f);
         delay_ms(1000);
         motor_set((motor_id_t)i, 0.0f);
         delay_ms(500);
 
-        uart_puts(" OK\n");
+        swo_puts(" OK\n");
     }
 
     // Test all motors together at low power
-    uart_puts("[MOTOR] Spinning all motors at 8%...");
+    swo_puts("[MOTOR] Spinning all motors at 8%...");
     for (int i = 0; i < MOTOR_COUNT; i++) {
         motor_set((motor_id_t)i, 0.08f);
     }
     delay_ms(1500);
     motors_stop();
-    uart_puts(" OK\n");
+    swo_puts(" OK\n");
 
     motors_disarm();
 
-    uart_puts("[MOTOR] All motors tested... OK\n");
+    swo_puts("[MOTOR] All motors tested... OK\n");
     return true;
 }

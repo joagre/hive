@@ -1,15 +1,15 @@
 // Crazyflie 2.1+ Bring-Up Test
 //
-// Systematically tests each hardware component and reports via UART.
-// Connect ST-Link V3 VCP to USART1 (PA9/PA10) via debug adapter.
+// Systematically tests each hardware component and reports via SWO.
+// Connect ST-Link V3 to debug adapter (20-pin). SWO on pin 13.
 //
-// Run: screen /dev/ttyACM0 115200
+// View output: st-trace -c 168
 
 #include "bringup_i2c.h"
 #include "bringup_motors.h"
 #include "bringup_radio.h"
 #include "bringup_sensors.h"
-#include "bringup_uart.h"
+#include "bringup_swo.h"
 #include "stm32f4xx.h"
 
 // CMSIS required global - actual value set by system_clock_init()
@@ -101,32 +101,32 @@ static void led_blink(int count, int period_ms) {
 
 // Phase 1: Boot & Clock
 static bool test_boot(void) {
-    uart_puts("\n=== Phase 1: Boot & Clock ===\n");
+    swo_puts("\n=== Phase 1: Boot & Clock ===\n");
 
     // LED blink test
-    uart_puts("[BOOT] LED blink test... ");
+    swo_puts("[BOOT] LED blink test... ");
     led_blink(3, 200);
-    uart_puts("OK\n");
+    swo_puts("OK\n");
 
     // Clock test
-    uart_printf("[BOOT] SystemCoreClock = %u Hz... ", SystemCoreClock);
+    swo_printf("[BOOT] SystemCoreClock = %u Hz... ", SystemCoreClock);
     if (SystemCoreClock == 168000000) {
-        uart_puts("OK\n");
+        swo_puts("OK\n");
         return true;
     } else {
-        uart_puts("FAIL\n");
+        swo_puts("FAIL\n");
         return false;
     }
 }
 
 // Phase 2: I2C Bus Scan
 static bool test_i2c_scan(void) {
-    uart_puts("\n=== Phase 2: I2C Bus Scan ===\n");
+    swo_puts("\n=== Phase 2: I2C Bus Scan ===\n");
 
-    uart_puts("[I2C] Initializing I2C3...\n");
+    swo_puts("[I2C] Initializing I2C3...\n");
     i2c_init();
 
-    uart_puts("[I2C] Scanning I2C3 bus...\n");
+    swo_puts("[I2C] Scanning I2C3 bus...\n");
 
     uint8_t found[16];
     int count = i2c_scan(found, 16);
@@ -138,7 +138,7 @@ static bool test_i2c_scan(void) {
 
     for (int i = 0; i < count; i++) {
         const char *name = i2c_device_name(found[i]);
-        uart_printf("[I2C] Found device at 0x%02X (%s)\n", found[i], name);
+        swo_printf("[I2C] Found device at 0x%02X (%s)\n", found[i], name);
 
         if (found[i] == I2C_ADDR_BMI088_ACCEL)
             accel_found = true;
@@ -150,14 +150,14 @@ static bool test_i2c_scan(void) {
             tof_found = true;
     }
 
-    uart_printf("[I2C] Scan complete: %d devices found\n", count);
+    swo_printf("[I2C] Scan complete: %d devices found\n", count);
 
     // Check required devices
     bool ok = accel_found && gyro_found && baro_found;
-    uart_printf("[I2C] Required sensors (IMU, Baro): %s\n", ok ? "OK" : "FAIL");
+    swo_printf("[I2C] Required sensors (IMU, Baro): %s\n", ok ? "OK" : "FAIL");
 
     if (tof_found) {
-        uart_puts("[I2C] Flow deck detected\n");
+        swo_puts("[I2C] Flow deck detected\n");
         s_flow_deck = true;
     }
 
@@ -166,8 +166,8 @@ static bool test_i2c_scan(void) {
 
 // Phase 3 & 4: Sensor Tests
 static bool test_sensors(void) {
-    uart_puts("\n=== Phase 3: Sensor Chip IDs ===\n");
-    uart_puts("\n=== Phase 4: Sensor Data ===\n");
+    swo_puts("\n=== Phase 3: Sensor Chip IDs ===\n");
+    swo_puts("\n=== Phase 4: Sensor Data ===\n");
 
     spi_init(); // For PMW3901
     sensors_init();
@@ -187,7 +187,7 @@ static bool test_sensors(void) {
 
 // Phase 5: Motor Test
 static bool test_motors(void) {
-    uart_puts("\n=== Phase 5: Motor Test ===\n");
+    swo_puts("\n=== Phase 5: Motor Test ===\n");
 
     motors_init();
     return motors_run_test();
@@ -195,32 +195,32 @@ static bool test_motors(void) {
 
 // Phase 6: Radio Test
 static bool test_radio(void) {
-    uart_puts("\n=== Phase 6: Radio Test ===\n");
+    swo_puts("\n=== Phase 6: Radio Test ===\n");
 
     return radio_run_test(5000); // 5 second timeout
 }
 
 // Print summary
 static void print_summary(void) {
-    uart_puts("\n");
-    uart_puts("=== Bring-Up Test Summary ===\n");
-    uart_printf("Boot & Clock:     %s\n", s_boot_ok ? "OK" : "FAIL");
-    uart_printf("I2C Bus Scan:     %s\n", s_i2c_ok ? "OK" : "FAIL");
-    uart_printf("Sensors:          %s\n", s_sensors_ok ? "OK" : "FAIL");
-    uart_printf("Motors:           %s\n", s_motors_ok ? "OK" : "SKIP/FAIL");
-    uart_printf("Radio:            %s\n", s_radio_ok ? "OK" : "FAIL");
-    uart_puts("\n");
-    uart_printf("Flow deck:        %s\n",
-                s_flow_deck ? "DETECTED" : "NOT DETECTED");
-    uart_puts("\n");
+    swo_puts("\n");
+    swo_puts("=== Bring-Up Test Summary ===\n");
+    swo_printf("Boot & Clock:     %s\n", s_boot_ok ? "OK" : "FAIL");
+    swo_printf("I2C Bus Scan:     %s\n", s_i2c_ok ? "OK" : "FAIL");
+    swo_printf("Sensors:          %s\n", s_sensors_ok ? "OK" : "FAIL");
+    swo_printf("Motors:           %s\n", s_motors_ok ? "OK" : "SKIP/FAIL");
+    swo_printf("Radio:            %s\n", s_radio_ok ? "OK" : "FAIL");
+    swo_puts("\n");
+    swo_printf("Flow deck:        %s\n",
+               s_flow_deck ? "DETECTED" : "NOT DETECTED");
+    swo_puts("\n");
 
     bool all_required = s_boot_ok && s_i2c_ok && s_sensors_ok;
     if (all_required) {
-        uart_puts("All required tests passed!\n");
+        swo_puts("All required tests passed!\n");
         // Steady LED on
         led_on();
     } else {
-        uart_puts("Some tests FAILED - check output above\n");
+        swo_puts("Some tests FAILED - check output above\n");
         // Fast blink to indicate failure
         while (1) {
             led_toggle();
@@ -233,32 +233,32 @@ int main(void) {
     // Initialize system
     system_clock_init();
     led_init();
-    uart_init();
+    swo_init();
 
     // Welcome message
-    uart_puts("\n\n");
-    uart_puts("========================================\n");
-    uart_puts("  Crazyflie 2.1+ Bring-Up Test\n");
-    uart_puts("========================================\n");
-    uart_puts("\n");
-    uart_puts("Press ENTER to start tests...\n");
+    swo_puts("\n\n");
+    swo_puts("========================================\n");
+    swo_puts("  Crazyflie 2.1+ Bring-Up Test\n");
+    swo_puts("========================================\n");
+    swo_puts("\n");
+    swo_puts("Press ENTER to start tests...\n");
 
     // Wait for keypress or timeout
-    int c = uart_getc_timeout(5000);
+    int c = swo_getc_timeout(5000);
     if (c < 0) {
-        uart_puts("(timeout - starting automatically)\n");
+        swo_puts("(timeout - starting automatically)\n");
     }
 
     // Run tests
     s_boot_ok = test_boot();
     if (!s_boot_ok) {
-        uart_puts("\n!!! Boot test failed - cannot continue !!!\n");
+        swo_puts("\n!!! Boot test failed - cannot continue !!!\n");
         goto done;
     }
 
     s_i2c_ok = test_i2c_scan();
     if (!s_i2c_ok) {
-        uart_puts("\n!!! I2C test failed - cannot test sensors !!!\n");
+        swo_puts("\n!!! I2C test failed - cannot test sensors !!!\n");
         // Continue anyway to test motors/radio
     } else {
         s_sensors_ok = test_sensors();
