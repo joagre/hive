@@ -4,15 +4,21 @@
 // Wraps platform functions and adds common HAL interface.
 
 #include "../hal.h"
-#include "debug_uart.h"
+#include "debug_swo.h"
 #include "platform_crazyflie.h"
 #include <stdarg.h>
+
+// Crazyflie 2.1+ runs at 168 MHz
+#define CPU_FREQ_HZ 168000000
+#define SWO_BAUD 2000000
 
 // ----------------------------------------------------------------------------
 // Platform Lifecycle
 // ----------------------------------------------------------------------------
 
 int hal_init(void) {
+    // Initialize SWO debug output first so we can log during init
+    debug_swo_init(CPU_FREQ_HZ, SWO_BAUD);
     return platform_init();
 }
 
@@ -128,12 +134,12 @@ void hal_led_toggle(void) {
 // ----------------------------------------------------------------------------
 
 void hal_debug_init(void) {
-    debug_uart_init();
+    // SWO already initialized in hal_init(), nothing to do here
 }
 
 void hal_printf(const char *fmt, ...) {
     va_list args;
     va_start(args, fmt);
-    debug_uart_vprintf(fmt, args);
+    debug_swo_vprintf(fmt, args);
     va_end(args);
 }
