@@ -11,13 +11,14 @@ The Hardware Abstraction Layer (HAL) isolates platform-specific code so that por
 | Category | Files | Functions | Required |
 |----------|-------|-----------|----------|
 | Core HAL | `hive_hal_<platform>.c` | 7 functions | Yes |
+| Timer HAL | `hive_hal_timer_<platform>.c` | 6 functions | Yes |
 | Context | `hive_hal_context_<platform>.c` | 1 function | Yes |
 | Context | `hive_context_<arch>.S` | 1 function | Yes |
 | Context | `hive_hal_context_defs.h` | 1 struct | Yes |
 | File I/O | (in hal or separate) | 8 functions | Optional |
 | Network | (in hal or separate) | 10 functions | Optional |
 
-**Minimum port**: ~9 functions + 1 assembly function + 1 struct definition
+**Minimum port**: ~15 functions + 1 assembly function + 1 struct definition
 
 ## Quick Start
 
@@ -29,6 +30,7 @@ The Hardware Abstraction Layer (HAL) isolates platform-specific code so that por
 2. Copy templates:
    ```
    cp src/hal/template/hive_hal_template.c src/hal/<platform>/hive_hal_<platform>.c
+   cp src/hal/template/hive_hal_timer_template.c src/hal/<platform>/hive_hal_timer_<platform>.c
    cp src/hal/template/hive_hal_context_defs.h src/hal/<platform>/
    cp src/hal/template/hive_hal_context_template.c src/hal/<platform>/hive_hal_context_<platform>.c
    cp src/hal/template/hive_context_template.S src/hal/<platform>/hive_context_<arch>.S
@@ -72,6 +74,31 @@ void hive_hal_event_unregister(int fd);
 - `event_register/unregister`: Add/remove file descriptors from watch list
 
 For platforms without file descriptors (bare metal), register/unregister can be no-ops if timers use a software wheel.
+
+### Timer Functions (6 functions)
+
+```c
+hive_status hive_hal_timer_init(void);
+void hive_hal_timer_cleanup(void);
+hive_status hive_hal_timer_create(uint32_t interval_us, bool periodic,
+                                  actor_id owner, timer_id *out);
+hive_status hive_hal_timer_cancel(timer_id id);
+uint64_t hive_hal_timer_get_time(void);
+void hive_hal_timer_advance_time(uint64_t delta_us);
+```
+
+**Implementation notes:**
+- `timer_create`: Create a one-shot or periodic timer that sends `HIVE_MSG_TIMER` to owner
+- `timer_cancel`: Cancel an active timer by ID
+- `timer_get_time`: Return current time in microseconds (for simulation mode)
+- `timer_advance_time`: Advance simulation time and fire due timers (for testing/simulation)
+
+**Platform approaches:**
+- **Linux**: Use `timerfd` + epoll for real-time mode; software timers for simulation mode
+- **STM32**: Software timer wheel driven by SysTick interrupt (`hive_timer_tick_isr()`)
+- **Simulation**: Store expiry times, fire timers when `advance_time` is called
+
+See `include/hal/hive_hal_timer.h` for the full API specification.
 
 ### Context Functions (1 C function + 1 assembly function)
 
@@ -155,6 +182,7 @@ Use these error codes in your HAL implementation:
 
 See `src/hal/linux/`:
 - `hive_hal_linux.c` - Time, events (epoll), file, network
+- `hive_hal_timer_linux.c` - Timer HAL (timerfd + simulation mode)
 - `hive_hal_context_linux.c` - x86-64 context init
 - `hive_context_x86_64.S` - x86-64 context switch
 - `hive_hal_context_defs.h` - x86-64 context struct
@@ -163,6 +191,7 @@ See `src/hal/linux/`:
 
 See `src/hal/stm32/`:
 - `hive_hal_stm32.c` - Time (SysTick), events (WFI), network stubs
+- `hive_hal_timer_stm32.c` - Timer HAL (software timer wheel)
 - `hive_hal_file_stm32.c` - Flash-based virtual file system
 - `hive_hal_context_stm32.c` - ARM context init
 - `hive_context_arm_cm.S` - ARM context switch
