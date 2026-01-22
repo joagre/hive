@@ -66,7 +66,8 @@
 #define ALT_KF_Q_BIAS 0.0001f // Accel bias random walk (m^2/s^4)
 
 // Measurement noise (R) - how much we trust the rangefinder/baro
-#define ALT_KF_R_ALTITUDE 0.0001f // Rangefinder/baro noise (m^2) - trust sensor
+// Set to match actual sensor noise variance: (0.03m)^2 = 0.0009
+#define ALT_KF_R_ALTITUDE 0.001f // Rangefinder noise (m^2) - realistic noise
 
 // Initial uncertainty (P0 diagonal)
 #define ALT_KF_P0_ALTITUDE 1.0f // Initial altitude uncertainty (m^2)
@@ -80,7 +81,8 @@
 #define VVEL_FILTER_ALPHA 0.8f
 
 // Low-pass filter coefficient for horizontal velocity
-#define HVEL_FILTER_ALPHA 0.8f
+// Higher alpha needed with noisy optical flow/GPS position data
+#define HVEL_FILTER_ALPHA 0.95f
 
 // ----------------------------------------------------------------------------
 // Safety thresholds (altitude_actor emergency detection)
@@ -108,10 +110,11 @@
 // ----------------------------------------------------------------------------
 
 #ifdef SIMULATED_TIME
-// Webots-tuned values (good sim performance)
-#define POS_KP 0.12f
-#define POS_KD 0.18f
-#define MAX_TILT_ANGLE 0.35f // ~20 degrees
+// Webots with sensor noise - reduced gains for stability
+// D term especially sensitive to noisy velocity estimates
+#define POS_KP 0.08f
+#define POS_KD 0.06f         // Low D - noisy velocity
+#define MAX_TILT_ANGLE 0.20f // ~11 degrees - limit for noise tolerance
 #else
 // Conservative first-flight values for real hardware
 // Optical flow is noisy; start sluggish and tune up gradually

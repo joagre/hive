@@ -36,31 +36,38 @@
 // Default: full noise for all profiles (realistic simulation)
 // Override with -DSENSOR_NOISE=0 or -DSENSOR_NOISE=1 if needed
 #ifndef SENSOR_NOISE
-#define SENSOR_NOISE 2 // Full noise - realistic simulation
+#define SENSOR_NOISE 1 // Low noise - intrinsic sensor noise only
 #endif
 
 #if SENSOR_NOISE == 0
 #define ACCEL_NOISE_STDDEV 0.0f
 #define GYRO_NOISE_STDDEV 0.0f
+#define ALTITUDE_NOISE_STDDEV 0.0f
 #elif SENSOR_NOISE == 1
-#define ACCEL_NOISE_STDDEV 0.01f  // Low - m/s^2 (~0.1% of gravity)
-#define GYRO_NOISE_STDDEV 0.0005f // Low - rad/s (~0.03 deg/s)
+// Low noise - intrinsic sensor noise only (no vibration)
+#define ACCEL_NOISE_STDDEV 0.02f    // m/s^2 - BMI088 intrinsic
+#define GYRO_NOISE_STDDEV 0.001f    // rad/s - BMI088 intrinsic
+#define ALTITUDE_NOISE_STDDEV 0.01f // meters - clean rangefinder
 #else
-// Realistic MEMS IMU noise (MPU6050/BMI088 class)
-// Accel: ~150 ug/sqrt(Hz) at 125Hz BW -> 0.016 m/s^2
-// Gyro:  ~0.007 deg/s/sqrt(Hz) at 125Hz BW -> 0.0014 rad/s
-#define ACCEL_NOISE_STDDEV 0.02f // Realistic - m/s^2 (~0.2% of gravity)
-#define GYRO_NOISE_STDDEV 0.001f // Realistic - rad/s (~0.06 deg/s)
+// Moderate noise - between clean sim and full realistic
+// Testing what level the current tuning can handle
+#define ACCEL_NOISE_STDDEV 0.05f    // m/s^2 - moderate vibration
+#define GYRO_NOISE_STDDEV 0.003f    // rad/s - moderate (~0.17 deg/s)
+#define ALTITUDE_NOISE_STDDEV 0.01f // meters - clean rangefinder
 #endif
-#define GYRO_BIAS_DRIFT 0.0f // rad/s per step (0 = disabled)
-#define GPS_NOISE_STDDEV \
-    0.0f // meters (disabled - causes velocity noise issues)
+#define GYRO_BIAS_DRIFT 0.00001f // rad/s per step - slow drift
+// GPS position noise (simulates integrated flow deck drift on real hardware)
+#define GPS_XY_NOISE_STDDEV 0.005f // meters - position noise
 
 // Xorshift32 PRNG state (seeded at init for variety)
 static uint32_t g_rng_state = 1; // Will be seeded in hal_init()
 
 // Accumulated gyro bias (simulates sensor drift)
 static float g_gyro_bias[3] = {0.0f, 0.0f, 0.0f};
+
+// Previous GPS for velocity computation
+static float g_prev_gps[3] = {0.0f, 0.0f, 0.0f};
+static bool g_prev_gps_valid = false;
 
 // Xorshift32 PRNG - fast, deterministic, good distribution
 static uint32_t xorshift32(void) {
@@ -216,11 +223,33 @@ void hal_read_sensors(sensor_data_t *sensors) {
     sensors->baro_temp_c = 0.0f;
     sensors->baro_valid = false;
 
-    // GPS with noise (includes altitude)
-    sensors->gps_x = (float)gps[0] + GPS_NOISE_STDDEV * randf_gaussian();
-    sensors->gps_y = (float)gps[1] + GPS_NOISE_STDDEV * randf_gaussian();
-    sensors->gps_z = (float)gps[2] + GPS_NOISE_STDDEV * randf_gaussian();
+    // GPS position with noise (simulates integrated flow deck on real hardware)
+    // On real Crazyflie, the HAL integrates flow deck to provide pseudo-GPS.
+    // Here we use actual GPS with noise to simulate that behavior.
+    float current_gps[3] = {(float)gps[0], (float)gps[1], (float)gps[2]};
+    sensors->gps_x = current_gps[0] + GPS_XY_NOISE_STDDEV * randf_gaussian();
+    sensors->gps_y = current_gps[1] + GPS_XY_NOISE_STDDEV * randf_gaussian();
+    sensors->gps_z = current_gps[2] + ALTITUDE_NOISE_STDDEV * randf_gaussian();
     sensors->gps_valid = true;
+
+    // Compute velocity from GPS (true velocity, no noise needed since GPS is ground truth)
+    // This matches what the Crazyflie flow deck provides directly
+    float dt = TIME_STEP_MS / 1000.0f;
+    if (g_prev_gps_valid && dt > 0.0f) {
+        sensors->velocity_x = (current_gps[0] - g_prev_gps[0]) / dt;
+        sensors->velocity_y = (current_gps[1] - g_prev_gps[1]) / dt;
+        sensors->velocity_valid = true;
+    } else {
+        sensors->velocity_x = 0.0f;
+        sensors->velocity_y = 0.0f;
+        sensors->velocity_valid = false;
+    }
+
+    // Store for next iteration
+    g_prev_gps[0] = current_gps[0];
+    g_prev_gps[1] = current_gps[1];
+    g_prev_gps[2] = current_gps[2];
+    g_prev_gps_valid = true;
 }
 
 // ----------------------------------------------------------------------------

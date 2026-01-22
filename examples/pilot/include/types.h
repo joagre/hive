@@ -12,8 +12,9 @@
 // ----------------------------------------------------------------------------
 
 // Raw sensor readings from HAL.
-// HAL populates this from hardware sensors (IMU, GPS, barometer).
-// Fusion is done in estimator_actor using the complementary filter.
+// HAL populates this from hardware sensors (IMU, barometer, position source).
+// Position can come from GPS (simulation) or integrated flow deck (Crazyflie).
+// Fusion is done in estimator_actor using Kalman filters.
 typedef struct sensor_data {
     // Accelerometer (m/s^2, body frame)
     float accel[3]; // [x, y, z]
@@ -31,9 +32,18 @@ typedef struct sensor_data {
     float baro_temp_c;   // temperature in Celsius
     bool baro_valid;     // false if not available
 
-    // GPS - optional
-    float gps_x, gps_y, gps_z; // meters, world frame
-    bool gps_valid;            // false if not available
+    // Position (meters, world frame) - from GPS or integrated optical flow
+    // On Crazyflie: HAL integrates flow deck internally to provide position
+    // On Webots: direct GPS position from simulation
+    float gps_x, gps_y, gps_z;
+    bool gps_valid; // false if position not available
+
+    // Velocity (m/s, world frame) - optional, for direct velocity sensors
+    // When valid, estimator can use this directly instead of differentiating position.
+    // On Crazyflie: direct from optical flow (higher quality than differentiated position)
+    // On Webots: computed from GPS
+    float velocity_x, velocity_y;
+    bool velocity_valid; // false if direct velocity not available
 } sensor_data_t;
 
 #define SENSOR_DATA_ZERO                                                     \
@@ -41,7 +51,8 @@ typedef struct sensor_data {
         .accel = {0.0f, 0.0f, 0.0f}, .gyro = {0.0f, 0.0f, 0.0f},             \
         .mag = {0.0f, 0.0f, 0.0f}, .mag_valid = false, .pressure_hpa = 0.0f, \
         .baro_altitude = 0.0f, .baro_temp_c = 0.0f, .baro_valid = false,     \
-        .gps_x = 0.0f, .gps_y = 0.0f, .gps_z = 0.0f, .gps_valid = false      \
+        .gps_x = 0.0f, .gps_y = 0.0f, .gps_z = 0.0f, .gps_valid = false,     \
+        .velocity_x = 0.0f, .velocity_y = 0.0f, .velocity_valid = false      \
     }
 
 // State estimate from estimator actor.

@@ -179,13 +179,21 @@ void estimator_actor(void *args, const hive_spawn_info *siblings,
 #endif
 
         // -----------------------------------------------------------------
-        // Horizontal velocity (differentiation + LPF for now)
+        // Horizontal velocity
         // -----------------------------------------------------------------
-        if (first_sample) {
+        if (sensors.velocity_valid) {
+            // Use direct velocity from HAL (e.g., optical flow)
+            // This is higher quality than differentiated position
+            x_velocity = sensors.velocity_x;
+            y_velocity = sensors.velocity_y;
+            first_sample = false;
+        } else if (first_sample) {
+            // No velocity yet, initialize to zero
             x_velocity = 0.0f;
             y_velocity = 0.0f;
             first_sample = false;
         } else if (dt > 0.0f) {
+            // Fallback: differentiate position + LPF
             float raw_vx = (est.x - prev_x) / dt;
             float raw_vy = (est.y - prev_y) / dt;
             x_velocity = LPF(x_velocity, raw_vx, HVEL_FILTER_ALPHA);
