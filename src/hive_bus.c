@@ -7,8 +7,8 @@
 #include "hive_runtime.h"
 #include "hive_log.h"
 #include "hive_select.h"
+#include "hal/hive_hal_time.h"
 #include <string.h>
-#include <sys/time.h>
 
 // Compile-time check: readers_mask is uint32_t, so max 32 subscribers
 _Static_assert(
@@ -69,15 +69,7 @@ static struct {
 
 // Get current time in milliseconds
 static uint64_t get_time_ms(void) {
-#ifdef HIVE_PLATFORM_STM32
-    // On STM32, use hive_timer which provides millisecond ticks
-    extern uint32_t hive_timer_get_ticks(void);
-    return (uint64_t)hive_timer_get_ticks();
-#else
-    struct timeval tv;
-    gettimeofday(&tv, NULL);
-    return (uint64_t)tv.tv_sec * 1000 + tv.tv_usec / 1000;
-#endif
+    return hive_hal_get_time_us() / 1000;
 }
 
 // Find bus by ID

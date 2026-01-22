@@ -23,11 +23,11 @@ DEPFLAGS = -MMD -MP
 # Platform-specific settings
 ifeq ($(PLATFORM),linux)
   CPPFLAGS += -DHIVE_PLATFORM_LINUX
-  PLATFORM_SRCS := hive_scheduler_linux.c hive_timer_linux.c
+  PLATFORM_SRCS := hive_scheduler_linux.c hive_timer_linux.c hal/linux/hive_hal_linux.c
   PLATFORM_ASM := hive_context_x86_64.S
 else ifeq ($(PLATFORM),stm32)
   CPPFLAGS += -DHIVE_PLATFORM_STM32
-  PLATFORM_SRCS := hive_scheduler_stm32.c hive_timer_stm32.c
+  PLATFORM_SRCS := hive_scheduler_stm32.c hive_timer_stm32.c hal/stm32/hive_hal_stm32.c
   PLATFORM_ASM := hive_context_arm_cm.S
 else
   $(error Unknown PLATFORM: $(PLATFORM). Use 'linux' or 'stm32')
@@ -89,6 +89,7 @@ $(BUILD_DIR):
 
 # Compile source files with dependency generation
 $(BUILD_DIR)/%.o: %.c | $(BUILD_DIR)
+	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) $(CPPFLAGS) $(DEPFLAGS) -c $< -o $@
 
 # Compile assembly files
