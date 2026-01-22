@@ -40,8 +40,9 @@ CFLAGS += -I$(HIVE_ROOT)/lib -I$(HIVE_ROOT)/lib/printf -DPRINTF_INCLUDE_CONFIG_H
 FLIGHT_PROFILE ?= FLIGHT_PROFILE_FIRST_TEST
 CFLAGS += -DFLIGHT_PROFILE=$(FLIGHT_PROFILE)
 
-# Log level
-CFLAGS += -DHIVE_LOG_LEVEL=HIVE_LOG_LEVEL_INFO
+# Log level (default: INFO)
+LOG_LEVEL ?= INFO
+CFLAGS += -DHIVE_LOG_LEVEL=HIVE_LOG_LEVEL_$(LOG_LEVEL)
 
 # Hive memory configuration
 include hive_config.mk
@@ -83,7 +84,7 @@ HIVE_CFLAGS_EXPORT += -I$(abspath $(HAL_DIR))
 HIVE_CFLAGS_EXPORT += $(HIVE_CFLAGS)
 HIVE_CFLAGS_EXPORT += -DHIVE_DEFAULT_STACK_SIZE=6144
 HIVE_CFLAGS_EXPORT += '-DHIVE_STACK_ARENA_SIZE=(72*1024)'
-HIVE_CFLAGS_EXPORT += -DHIVE_LOG_LEVEL=HIVE_LOG_LEVEL_INFO
+HIVE_CFLAGS_EXPORT += -DHIVE_LOG_LEVEL=HIVE_LOG_LEVEL_$(LOG_LEVEL)
 HIVE_CFLAGS_EXPORT += -DHIVE_VFILE_LOG_BASE=0x08080000
 HIVE_CFLAGS_EXPORT += -DHIVE_VFILE_LOG_SIZE=131072
 HIVE_CFLAGS_EXPORT += -DHIVE_VFILE_LOG_SECTOR=8
@@ -150,6 +151,9 @@ help:
 	@echo "      FLIGHT_PROFILE_HOVER_TEST   - 0.5m hover with position hold"
 	@echo "      FLIGHT_PROFILE_FULL_3D      - Full 3D flight with waypoints"
 	@echo ""
+	@echo "  LOG_LEVEL=<level>         Log verbosity (default: INFO)"
+	@echo "      TRACE, DEBUG, INFO, WARN, ERROR, NONE"
+	@echo ""
 	@echo "Hardware Info:"
 	@echo "  MCU:        STM32F405RG (Cortex-M4F, 168MHz)"
 	@echo "  Flash:      1MB (firmware + 128KB log partition)"
@@ -159,6 +163,7 @@ help:
 	@echo "Examples:"
 	@echo "  make -f Makefile.crazyflie-2.1+"
 	@echo "  make -f Makefile.crazyflie-2.1+ FLIGHT_PROFILE=FLIGHT_PROFILE_HOVER_TEST"
+	@echo "  make -f Makefile.crazyflie-2.1+ LOG_LEVEL=DEBUG"
 	@echo "  make -f Makefile.crazyflie-2.1+ flash"
 
 -include $(PILOT_DEPS)
