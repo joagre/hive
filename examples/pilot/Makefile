@@ -57,6 +57,14 @@ endif
 LOG_LEVEL ?= INFO
 CFLAGS += -DHIVE_LOG_LEVEL=HIVE_LOG_LEVEL_$(LOG_LEVEL)
 
+# Log output destinations (default: both enabled)
+ifdef LOG_TO_STDOUT
+CFLAGS += -DHIVE_LOG_TO_STDOUT=$(LOG_TO_STDOUT)
+endif
+ifdef LOG_TO_FILE
+CFLAGS += -DHIVE_LOG_TO_FILE=$(LOG_TO_FILE)
+endif
+
 # Stack profiling
 ifdef STACK_PROFILE
 CFLAGS += -DHIVE_STACK_WATERMARK=1
@@ -90,6 +98,12 @@ HIVE_CFLAGS_EXPORT := $(HIVE_CFLAGS)
 HIVE_CFLAGS_EXPORT += -DHIVE_DEFAULT_STACK_SIZE=4096
 HIVE_CFLAGS_EXPORT += '-DHIVE_STACK_ARENA_SIZE=(52*1024)'
 HIVE_CFLAGS_EXPORT += -DHIVE_LOG_LEVEL=HIVE_LOG_LEVEL_$(LOG_LEVEL)
+ifdef LOG_TO_STDOUT
+HIVE_CFLAGS_EXPORT += -DHIVE_LOG_TO_STDOUT=$(LOG_TO_STDOUT)
+endif
+ifdef LOG_TO_FILE
+HIVE_CFLAGS_EXPORT += -DHIVE_LOG_TO_FILE=$(LOG_TO_FILE)
+endif
 
 # Targets
 .PHONY: all build install clean check-webots
@@ -155,11 +169,15 @@ help:
 	@echo "  LOG_LEVEL=<level>         Log verbosity (default: INFO)"
 	@echo "      TRACE, DEBUG, INFO, WARN, ERROR, NONE"
 	@echo ""
+	@echo "  LOG_TO_STDOUT=<0|1>       Log to console (default: 1)"
+	@echo "  LOG_TO_FILE=<0|1>         Log to file (default: 1)"
+	@echo ""
 	@echo "  STACK_PROFILE=1           Enable stack watermark profiling"
 	@echo ""
 	@echo "Examples:"
 	@echo "  make FLIGHT_PROFILE=FLIGHT_PROFILE_FIRST_TEST"
 	@echo "  make SENSOR_NOISE=0 LOG_LEVEL=DEBUG"
+	@echo "  make LOG_TO_STDOUT=0                        # Quiet console"
 	@echo "  make MOTOR_LAG=50 STACK_PROFILE=1"
 
 -include $(PILOT_DEPS)
