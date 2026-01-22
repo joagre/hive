@@ -127,11 +127,11 @@ PILOT_SRCS = pilot.c pid.c $(ACTOR_SRCS) $(HAL_SRCS) $(FUSION_SRCS) $(UTIL_SRCS)
 # Hive runtime (Linux x86-64 platform)
 HIVE_CORE_SRCS = hive_actor.c hive_bus.c hive_ipc.c \
                  hive_link.c hive_log.c hive_pool.c hive_runtime.c hive_select.c \
-                 hive_supervisor.c hive_scheduler.c hive_timer_linux.c \
+                 hive_supervisor.c hive_scheduler.c \
                  hive_net.c hive_file.c
 
 # HAL source files (Linux platform)
-HIVE_HAL_SRCS = hal/linux/hive_hal_linux.c hal/linux/hive_hal_context_linux.c
+HIVE_HAL_SRCS = hal/linux/hive_hal_timer_linux.c hal/linux/hive_hal_linux.c hal/linux/hive_hal_context_linux.c
 
 HIVE_ASM = hal/linux/hive_context_x86_64.S
 

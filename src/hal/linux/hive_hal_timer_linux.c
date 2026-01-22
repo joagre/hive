@@ -1,3 +1,9 @@
+// Hardware Abstraction Layer - Linux Timer Implementation
+//
+// Timer subsystem using timerfd + epoll for efficient timer management.
+// Each logical timer gets its own timerfd, registered with epoll for event-driven wakeup.
+// Also supports simulation mode where timers are software-managed (for Webots).
+
 #include "hive_timer.h"
 #include "hive_internal.h"
 #include "hive_static_config.h"

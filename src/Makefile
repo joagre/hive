@@ -23,11 +23,11 @@ DEPFLAGS = -MMD -MP
 # Platform-specific settings
 ifeq ($(PLATFORM),linux)
   CPPFLAGS += -DHIVE_PLATFORM_LINUX -Ihal/linux
-  PLATFORM_SRCS := hive_timer_linux.c hal/linux/hive_hal_linux.c hal/linux/hive_hal_context_linux.c
+  PLATFORM_SRCS := hal/linux/hive_hal_timer_linux.c hal/linux/hive_hal_linux.c hal/linux/hive_hal_context_linux.c
   PLATFORM_ASM := hal/linux/hive_context_x86_64.S
 else ifeq ($(PLATFORM),stm32)
   CPPFLAGS += -DHIVE_PLATFORM_STM32 -Ihal/stm32
-  PLATFORM_SRCS := hive_timer_stm32.c hal/stm32/hive_hal_stm32.c hal/stm32/hive_hal_context_stm32.c
+  PLATFORM_SRCS := hal/stm32/hive_hal_timer_stm32.c hal/stm32/hive_hal_stm32.c hal/stm32/hive_hal_context_stm32.c
   PLATFORM_ASM := hal/stm32/hive_context_arm_cm.S
   # STM32 file HAL is separate from main HAL (complex flash implementation)
   ifeq ($(ENABLE_FILE),1)

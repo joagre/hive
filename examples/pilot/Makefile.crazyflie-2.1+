@@ -83,11 +83,11 @@ HIVE_CORE_SRCS = \
 	hive_select.c \
 	hive_supervisor.c \
 	hive_scheduler.c \
-	hive_timer_stm32.c \
 	hive_file.c
 
 # HAL source files (STM32 platform)
 HIVE_HAL_SRCS = \
+	hal/stm32/hive_hal_timer_stm32.c \
 	hal/stm32/hive_hal_stm32.c \
 	hal/stm32/hive_hal_context_stm32.c \
 	hal/stm32/hive_hal_file_stm32.c

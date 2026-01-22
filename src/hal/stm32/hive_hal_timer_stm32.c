@@ -1,3 +1,9 @@
+// Hardware Abstraction Layer - STM32 Timer Implementation
+//
+// Software timer wheel driven by hardware tick interrupt (SysTick or TIMx).
+// Provides timer_id-based API compatible with Linux implementation.
+// Default tick resolution: 1ms (HIVE_TIMER_TICK_US)
+
 #include "hive_timer.h"
 #include "hive_internal.h"
 #include "hive_static_config.h"
