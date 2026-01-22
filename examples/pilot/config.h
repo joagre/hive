@@ -51,7 +51,30 @@
 // Estimator parameters
 // ----------------------------------------------------------------------------
 
+// Enable Kalman filter for altitude estimation (1 = KF, 0 = simple LPF)
+// KF provides better velocity estimates and handles sensor noise optimally
+#ifndef USE_ALTITUDE_KF
+#define USE_ALTITUDE_KF 1
+#endif
+
+// Altitude Kalman filter parameters
+// Tune these based on sensor characteristics and flight test analysis
+// Process noise (Q matrix diagonal) - how much we trust the model
+#define ALT_KF_Q_ALTITUDE 0.0001f // Position process noise (m^2)
+#define ALT_KF_Q_VELOCITY \
+    1.0f // Velocity process noise (m^2/s^2) - HIGH to track fast
+#define ALT_KF_Q_BIAS 0.0001f // Accel bias random walk (m^2/s^4)
+
+// Measurement noise (R) - how much we trust the rangefinder/baro
+#define ALT_KF_R_ALTITUDE 0.0001f // Rangefinder/baro noise (m^2) - trust sensor
+
+// Initial uncertainty (P0 diagonal)
+#define ALT_KF_P0_ALTITUDE 1.0f // Initial altitude uncertainty (m^2)
+#define ALT_KF_P0_VELOCITY 1.0f // Initial velocity uncertainty (m^2/s^2)
+#define ALT_KF_P0_BIAS 0.1f     // Initial bias uncertainty (m^2/s^4)
+
 // Low-pass filter coefficient for vertical velocity (0.0 to 1.0)
+// Used when USE_ALTITUDE_KF=0, or for horizontal velocity
 // Higher = more smoothing, slower response
 // Lower = less smoothing, more noise
 #define VVEL_FILTER_ALPHA 0.8f

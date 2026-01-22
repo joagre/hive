@@ -91,7 +91,7 @@ ACTOR_SRCS = sensor_actor.c estimator_actor.c altitude_actor.c waypoint_actor.c 
              position_actor.c attitude_actor.c rate_actor.c motor_actor.c \
              flight_manager_actor.c telemetry_logger_actor.c
 HAL_SRCS = hal/webots-crazyflie/hal_webots.c
-FUSION_SRCS = fusion/complementary_filter.c
+FUSION_SRCS = fusion/complementary_filter.c fusion/altitude_kf.c
 UTIL_SRCS = stack_profile.c
 PILOT_SRCS = pilot.c pid.c $(ACTOR_SRCS) $(HAL_SRCS) $(FUSION_SRCS) $(UTIL_SRCS)
 

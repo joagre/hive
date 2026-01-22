@@ -68,7 +68,8 @@ PILOT_SRCS = \
 	flight_manager_actor.c \
 	comms_actor.c \
 	stack_profile.c \
-	fusion/complementary_filter.c
+	fusion/complementary_filter.c \
+	fusion/altitude_kf.c
 
 # Hive runtime (STM32 platform - no net, with flash file support)
 HIVE_CORE_SRCS = \
