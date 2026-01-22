@@ -41,11 +41,14 @@ X-configuration matching Bitcraze firmware:
 ```
 
 **Motor mixing (in hal_webots.c):**
+
+Note: Pitch is negated before mixing to match Crazyflie coordinate frame.
+After this adjustment, the effective mixing is:
 ```
-M1 = thrust - roll + pitch + yaw  (rear-left, CCW)
-M2 = thrust - roll - pitch - yaw  (front-left, CW)
-M3 = thrust + roll - pitch + yaw  (front-right, CCW)
-M4 = thrust + roll + pitch - yaw  (rear-right, CW)
+M1 = thrust - roll - pitch + yaw  (rear-left, CCW)
+M2 = thrust - roll + pitch - yaw  (front-left, CW)
+M3 = thrust + roll + pitch + yaw  (front-right, CCW)
+M4 = thrust + roll - pitch - yaw  (rear-right, CW)
 ```
 
 **Motor velocity signs:** M1,M3 use negative velocity; M2,M4 use positive.

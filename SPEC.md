@@ -725,6 +725,42 @@ hive_status hive_kill(actor_id target);
 
 For graceful shutdown, implement an application-level protocol: send a shutdown request message, wait for acknowledgment, then kill if needed.
 
+### Stack Watermarking
+
+When `HIVE_STACK_WATERMARK=1`, the runtime fills actor stacks with a pattern at allocation time. This allows measuring actual stack usage by scanning for untouched bytes.
+
+```c
+// Get stack usage for an actor (bytes used)
+// Returns actual usage if watermarking enabled, or stack_size if disabled
+size_t hive_actor_stack_usage(actor_id id);
+
+// Callback for stack usage iteration
+typedef void (*stack_usage_callback)(actor_id id, const char *name,
+                                     size_t stack_size, size_t used);
+
+// Iterate all live actors and report stack usage via callback
+void hive_actor_stack_usage_all(stack_usage_callback cb);
+```
+
+**Usage example:**
+
+```c
+void print_stack(actor_id id, const char *name, size_t stack_size, size_t used) {
+    printf("Actor %u (%s): %zu/%zu bytes (%.1f%%)\n",
+           id, name ? name : "unnamed", used, stack_size,
+           100.0 * used / stack_size);
+}
+
+// In some monitoring actor:
+hive_actor_stack_usage_all(print_stack);
+```
+
+**Notes:**
+- Adds overhead at spawn time (stack fill) and query time (pattern scan)
+- Disabled by default (`HIVE_STACK_WATERMARK=0`)
+- Enable via compile flag: `make CFLAGS+='-DHIVE_STACK_WATERMARK=1'`
+- Pattern is configurable via `HIVE_STACK_WATERMARK_PATTERN` (default: `0xDEADBEEF`)
+
 ### Linking and Monitoring
 
 Actors can link to other actors to receive notification when they die:
@@ -2617,6 +2653,10 @@ All resource limits are defined at compile-time and require recompilation to cha
 #define HIVE_MONITOR_ENTRY_POOL_SIZE 128      // Monitor entry pool
 #define HIVE_TIMER_ENTRY_POOL_SIZE 64         // Timer entry pool
 #define HIVE_DEFAULT_STACK_SIZE 65536         // Default actor stack size
+
+// Stack watermarking (for measuring actual stack usage)
+#define HIVE_STACK_WATERMARK 0                // 0=disabled, 1=enabled
+#define HIVE_STACK_WATERMARK_PATTERN 0xDEADBEEF  // Pattern for watermark
 
 // Supervisor limits
 #define HIVE_MAX_SUPERVISOR_CHILDREN 16       // Max children per supervisor

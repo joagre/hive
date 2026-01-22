@@ -62,6 +62,29 @@ Tests priority-based scheduling behavior.
 
 ---
 
+#### `sibling_test.c`
+Tests sibling info array passed to actors at spawn time.
+
+**Tests (4 tests):**
+- Standalone spawn gets sibling_count = 1 (self only)
+- Supervised children see all siblings
+- hive_find_sibling helper finds sibling by name
+- hive_find_sibling returns NULL for unknown name
+
+---
+
+#### `spawn_init_test.c`
+Tests spawn init function and auto-register features.
+
+**Tests (5 tests):**
+- Init function transforms arguments before actor starts
+- Init returns NULL (valid case, actor gets NULL)
+- Auto-register with name (actor_config.auto_register)
+- Auto-register fails if name already taken
+- No init, direct args passthrough
+
+---
+
 ### IPC Tests
 
 ---
@@ -140,6 +163,23 @@ Realistic scenario demonstrating congestion handling.
 
 ---
 
+#### `select_test.c`
+Tests unified event waiting (hive_select) API.
+
+**Tests (10 tests):**
+- Single IPC source (wildcard) - equivalent to hive_ipc_recv()
+- Single IPC source (filtered) - equivalent to hive_ipc_recv_match()
+- Single bus source - equivalent to hive_bus_read_wait()
+- Multi-source IPC + IPC (first matches)
+- Multi-source IPC + IPC (second matches)
+- Multi-source bus + bus
+- Multi-source IPC + bus (mixed)
+- Priority ordering - strict array order when both ready
+- Timeout behavior (returns HIVE_ERR_TIMEOUT)
+- Empty sources array (rejected)
+
+---
+
 ### Linking and Monitoring Tests
 
 ---
@@ -175,6 +215,43 @@ Tests unidirectional actor monitoring (rt_monitor).
 - Demonitor invalid ref
 - Double demonitor
 - Monitor pool exhaustion
+
+---
+
+### Supervisor Tests
+
+---
+
+#### `supervisor_test.c`
+Tests supervision (automatic child restart).
+
+**Tests (9 tests):**
+- Basic lifecycle (start/stop supervisor)
+- one_for_one - crash one child, only that child restarts
+- one_for_all - crash one child, all children restart
+- rest_for_one - crash child N, children N+ restart
+- Restart intensity exceeded (supervisor shuts down)
+- Restart types (permanent/transient/temporary)
+- Empty children list
+- Invalid configurations rejected
+- Utility functions (hive_supervisor_children, etc.)
+
+---
+
+### Name Registry Tests
+
+---
+
+#### `registry_test.c`
+Tests actor name registry (hive_register, hive_whereis, hive_unregister).
+
+**Tests (6 tests):**
+- Basic register and whereis
+- Duplicate name registration fails
+- Auto-cleanup on actor exit
+- Unregister removes name
+- Whereis non-existent name fails
+- NULL arguments rejected
 
 ---
 
@@ -243,6 +320,18 @@ Tests non-blocking network I/O operations.
 - Non-blocking send (timeout=0)
 - Connect timeout to non-routable address
 - Actor death during blocked recv
+
+---
+
+#### `logging_test.c`
+Tests structured logging API.
+
+**Tests (5 tests):**
+- hive_log_file_open creates log file
+- HIVE_LOG_* macros write to file
+- hive_log_file_sync flushes to disk
+- hive_log_file_close finalizes file
+- Log file contains valid binary entries (magic bytes)
 
 ---
 

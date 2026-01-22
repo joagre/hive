@@ -11,9 +11,9 @@
 // sources (IPC messages or bus entries). It is the single primitive that
 // underlies all blocking receive operations.
 //
-// Priority: When multiple sources are ready simultaneously, bus sources
-// are checked first (in array order), then IPC sources (in array order).
-// This ensures time-sensitive sensor data is not starved by IPC queues.
+// Priority: Sources are checked in strict array order. When multiple sources
+// are ready simultaneously, the first one in the array wins. There is no
+// type-based priority - bus and IPC sources are treated equally.
 //
 // Usage:
 //   hive_select_source sources[] = {
