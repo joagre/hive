@@ -2,8 +2,7 @@
 #
 # Usage:
 #   make -f Makefile.crazyflie-2.1+          # Build firmware
-#   make -f Makefile.crazyflie-2.1+ flash    # Flash to device
-#   make -f Makefile.crazyflie-2.1+ clean    # Clean all
+#   make -f Makefile.crazyflie-2.1+ help     # Show all build options
 
 # Paths
 HIVE_ROOT := ../..
@@ -133,5 +132,33 @@ flash: $(BUILD_DIR)/$(TARGET).bin
 clean:
 	rm -rf $(BUILD_DIR)
 	@$(MAKE) -C $(HAL_DIR) clean
+
+.PHONY: help
+help:
+	@echo "Pilot Crazyflie 2.1+ Firmware - Build System"
+	@echo ""
+	@echo "Targets:"
+	@echo "  make -f Makefile.crazyflie-2.1+          Build firmware"
+	@echo "  make -f Makefile.crazyflie-2.1+ flash    Flash via ST-Link"
+	@echo "  make -f Makefile.crazyflie-2.1+ size     Show memory usage"
+	@echo "  make -f Makefile.crazyflie-2.1+ clean    Remove build artifacts"
+	@echo "  make -f Makefile.crazyflie-2.1+ help     Show this help"
+	@echo ""
+	@echo "Build Options:"
+	@echo "  FLIGHT_PROFILE=<profile>  Flight profile (default: FLIGHT_PROFILE_FIRST_TEST)"
+	@echo "      FLIGHT_PROFILE_FIRST_TEST   - Gentle 0.3m hover, no lateral (safe)"
+	@echo "      FLIGHT_PROFILE_HOVER_TEST   - 0.5m hover with position hold"
+	@echo "      FLIGHT_PROFILE_FULL_3D      - Full 3D flight with waypoints"
+	@echo ""
+	@echo "Hardware Info:"
+	@echo "  MCU:        STM32F405RG (Cortex-M4F, 168MHz)"
+	@echo "  Flash:      1MB (firmware + 128KB log partition)"
+	@echo "  RAM:        128KB CCM + 64KB SRAM"
+	@echo "  Sensors:    BMI088 IMU, BMP388 baro, Flow deck (PMW3901 + VL53L1x)"
+	@echo ""
+	@echo "Examples:"
+	@echo "  make -f Makefile.crazyflie-2.1+"
+	@echo "  make -f Makefile.crazyflie-2.1+ FLIGHT_PROFILE=FLIGHT_PROFILE_HOVER_TEST"
+	@echo "  make -f Makefile.crazyflie-2.1+ flash"
 
 -include $(PILOT_DEPS)

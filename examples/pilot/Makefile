@@ -2,8 +2,7 @@
 #
 # Usage:
 #   make              - Build and install to Webots
-#   make build        - Build only
-#   make clean        - Remove build artifacts
+#   make help         - Show all build options
 #
 # Requirements:
 #   - WEBOTS_HOME environment variable set
@@ -123,5 +122,44 @@ clean:
 
 check-webots:
 	@test -d "$(WEBOTS_HOME)" || { echo "Error: WEBOTS_HOME not set"; exit 1; }
+
+.PHONY: help
+help:
+	@echo "Pilot Webots Controller - Build System"
+	@echo ""
+	@echo "Targets:"
+	@echo "  make              Build and install to controllers/pilot/"
+	@echo "  make build        Build only (no install)"
+	@echo "  make clean        Remove build artifacts"
+	@echo "  make help         Show this help"
+	@echo ""
+	@echo "Build Options:"
+	@echo "  FLIGHT_PROFILE=<profile>  Flight profile (default: FULL_3D in code)"
+	@echo "      FLIGHT_PROFILE_FIRST_TEST   - Gentle 0.3m hover, no lateral"
+	@echo "      FLIGHT_PROFILE_HOVER_TEST   - 0.5m hover with position hold"
+	@echo "      FLIGHT_PROFILE_FULL_3D      - Full 3D flight with waypoints"
+	@echo ""
+	@echo "  SENSOR_NOISE=<0-3>        Sensor noise level (default: 3)"
+	@echo "      0 = Clean (no noise)"
+	@echo "      1 = Low noise"
+	@echo "      2 = Moderate noise"
+	@echo "      3 = Flow deck realistic"
+	@echo ""
+	@echo "  MOTOR_LAG=<ms>            Motor time constant (default: 20)"
+	@echo "      Simulates motor response delay in milliseconds"
+	@echo ""
+	@echo "  FLOW_MIN_HEIGHT=<m>       Flow deck minimum height (default: 0.1)"
+	@echo "  FLOW_MAX_HEIGHT=<m>       Flow deck maximum height (default: 4.0)"
+	@echo "      Height range where optical flow is valid"
+	@echo ""
+	@echo "  LOG_LEVEL=<level>         Log verbosity (default: INFO)"
+	@echo "      TRACE, DEBUG, INFO, WARN, ERROR, NONE"
+	@echo ""
+	@echo "  STACK_PROFILE=1           Enable stack watermark profiling"
+	@echo ""
+	@echo "Examples:"
+	@echo "  make FLIGHT_PROFILE=FLIGHT_PROFILE_FIRST_TEST"
+	@echo "  make SENSOR_NOISE=0 LOG_LEVEL=DEBUG"
+	@echo "  make MOTOR_LAG=50 STACK_PROFILE=1"
 
 -include $(PILOT_DEPS)
