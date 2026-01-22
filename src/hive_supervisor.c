@@ -16,9 +16,9 @@
 
 // Child runtime state
 typedef struct {
-    actor_id id;          // Current actor ID (0 if not running)
-    uint32_t monitor_ref; // Monitor reference
-    bool running;         // Is child currently running
+    actor_id id;         // Current actor ID (0 if not running)
+    uint32_t monitor_id; // Monitor ID
+    bool running;        // Is child currently running
 } child_state;
 
 // Restart timestamp for intensity tracking
@@ -192,7 +192,7 @@ static hive_status spawn_child(supervisor_state *sup, size_t index) {
     set_child_siblings(sup, index);
 
     // Monitor the child
-    status = hive_monitor(state->id, &state->monitor_ref);
+    status = hive_monitor(state->id, &state->monitor_id);
     if (HIVE_FAILED(status)) {
         // Can't supervise a child we can't monitor - kill it and fail
         HIVE_LOG_ERROR("[SUP] Failed to monitor child \"%s\": %s", spec->name,
@@ -254,13 +254,13 @@ static hive_status spawn_all_children_two_phase(supervisor_state *sup) {
 
         // Monitor the child
         hive_status status = hive_monitor(sup->child_states[i].id,
-                                          &sup->child_states[i].monitor_ref);
+                                          &sup->child_states[i].monitor_id);
         if (HIVE_FAILED(status)) {
             HIVE_LOG_ERROR("[SUP] Failed to monitor child \"%s\": %s",
                            sup->children[i].name, HIVE_ERR_STR(status));
             // Rollback: cancel monitors and kill all children
             for (size_t j = 0; j < i; j++) {
-                hive_monitor_cancel(sup->child_states[j].monitor_ref);
+                hive_monitor_cancel(sup->child_states[j].monitor_id);
             }
             for (size_t j = 0; j < sup->num_children; j++) {
                 hive_kill(sup->child_states[j].id);
@@ -282,7 +282,7 @@ static void stop_child(supervisor_state *sup, size_t index) {
 
     if (state->running && state->id != ACTOR_ID_INVALID) {
         // Cancel monitor first (ignore errors - child may already be dead)
-        hive_monitor_cancel(state->monitor_ref);
+        hive_monitor_cancel(state->monitor_id);
 
         // Kill the child actor
         hive_kill(state->id);

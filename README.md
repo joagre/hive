@@ -453,8 +453,8 @@ if (HIVE_FAILED(status)) {
 }
 
 // Monitor supervisor for shutdown (optional)
-uint32_t mon_ref;
-status = hive_monitor(supervisor, &mon_ref);
+uint32_t monitor_id;
+status = hive_monitor(supervisor, &monitor_id);
 if (HIVE_FAILED(status)) {
     // Handle error...
 }

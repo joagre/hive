@@ -137,8 +137,8 @@ static void orchestrator_actor(void *args, const hive_spawn_info *siblings,
     printf("Supervisor started (Actor ID: %u)\n\n", supervisor);
 
     // Monitor supervisor to know when it exits
-    uint32_t mon_ref;
-    hive_monitor(supervisor, &mon_ref);
+    uint32_t monitor_id;
+    hive_monitor(supervisor, &monitor_id);
 
     // Let the workers run for a while
     printf("=== Running for 3 seconds... ===\n\n");

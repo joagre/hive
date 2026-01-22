@@ -417,8 +417,8 @@ hive_status hive_ipc_request(actor_id to, const void *request, size_t req_len,
     }
 
     // Set up temporary monitor to detect if target dies during request
-    uint32_t mon_ref;
-    hive_status status = hive_monitor(to, &mon_ref);
+    uint32_t monitor_id;
+    hive_status status = hive_monitor(to, &monitor_id);
     if (HIVE_FAILED(status)) {
         // Target doesn't exist or is already dead
         return HIVE_ERROR(HIVE_ERR_CLOSED, "Target actor not found");
@@ -431,7 +431,7 @@ hive_status hive_ipc_request(actor_id to, const void *request, size_t req_len,
     status = hive_ipc_notify_internal(to, current->id, HIVE_MSG_REQUEST,
                                       call_tag, request, req_len);
     if (HIVE_FAILED(status)) {
-        hive_monitor_cancel(mon_ref);
+        hive_monitor_cancel(monitor_id);
         return status;
     }
 
@@ -444,7 +444,7 @@ hive_status hive_ipc_request(actor_id to, const void *request, size_t req_len,
     hive_message msg;
     size_t matched;
     status = hive_ipc_recv_matches(filters, 2, &msg, timeout_ms, &matched);
-    hive_monitor_cancel(mon_ref);
+    hive_monitor_cancel(monitor_id);
 
     if (HIVE_FAILED(status)) {
         return status;

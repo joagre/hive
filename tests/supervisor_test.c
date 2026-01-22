@@ -162,8 +162,8 @@ static void test1_basic_lifecycle(void *args, const hive_spawn_info *siblings,
     }
 
     // Monitor supervisor
-    uint32_t mon_ref;
-    hive_monitor(supervisor, &mon_ref);
+    uint32_t monitor_id;
+    hive_monitor(supervisor, &monitor_id);
 
     // Wait for children to start
     wait_ms(100);
@@ -465,8 +465,8 @@ static void test5_restart_intensity(void *args, const hive_spawn_info *siblings,
     }
 
     // Monitor supervisor
-    uint32_t mon_ref;
-    hive_monitor(supervisor, &mon_ref);
+    uint32_t monitor_id;
+    hive_monitor(supervisor, &monitor_id);
 
     // Wait for supervisor to give up and shut down
     hive_message msg;
@@ -613,8 +613,8 @@ static void test7_empty_children(void *args, const hive_spawn_info *siblings,
     TEST_PASS("supervisor starts with empty children");
 
     // Monitor supervisor
-    uint32_t mon_ref;
-    hive_monitor(supervisor, &mon_ref);
+    uint32_t monitor_id;
+    hive_monitor(supervisor, &monitor_id);
 
     // Stop it
     hive_supervisor_stop(supervisor);

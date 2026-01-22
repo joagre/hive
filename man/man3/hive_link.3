@@ -31,12 +31,12 @@ removes a previously established link. Both directions are removed.
 creates a unidirectional monitor. The calling actor receives an EXIT message
 when
 .I target
-dies, but not vice versa. The monitor reference is stored in
+dies, but not vice versa. The monitor ID is stored in
 .IR out .
 Multiple monitors can be created for the same target.
 .PP
 .BR hive_monitor_cancel ()
-cancels a monitor using the reference returned by
+cancels a monitor using the ID returned by
 .BR hive_monitor ().
 .SS Exit Messages
 When a linked or monitored actor dies, an EXIT message is delivered to the
@@ -48,7 +48,7 @@ The payload is:
 typedef struct {
     actor_id         actor;   /* ID of the actor that died */
     hive_exit_reason reason;  /* Why the actor exited */
-    uint32_t         monitor_id; /* 0 = link, non-zero = monitor ref */
+    uint32_t         monitor_id; /* 0 = link, non-zero = monitor ID */
 } hive_exit_msg;
 .fi
 .PP
@@ -60,7 +60,7 @@ field distinguishes exit notifications from links vs monitors:
 \- notification came from a bidirectional link
 .IP \(bu 2
 .B monitor_id != 0
-\- notification came from a monitor; value matches the reference
+\- notification came from a monitor; value matches the ID
 returned by
 .BR hive_monitor ()
 .PP
@@ -75,7 +75,7 @@ if (hive_is_exit_msg(&msg)) {
     if (info.monitor_id == 0) {
         printf("Linked actor %u died\\n", info.actor);
     } else {
-        printf("Monitored actor %u died (ref=%u)\\n",
+        printf("Monitored actor %u died (id=%u)\\n",
                info.actor, info.monitor_id);
     }
 }
@@ -134,7 +134,7 @@ returns a constant string describing the exit reason.
 .TP
 .B HIVE_ERR_INVALID
 Cannot link/monitor self, target actor is dead or invalid, not linked to
-target (for remove), or monitor reference not found (for cancel).
+target (for remove), or monitor ID not found (for cancel).
 .TP
 .B HIVE_ERR_NOMEM
 Link or monitor pool exhausted (HIVE_LINK_ENTRY_POOL_SIZE or
@@ -164,7 +164,7 @@ An actor can link to multiple other actors
 .IP \(bu 2
 An actor can be linked to by multiple other actors
 .IP \(bu 2
-Multiple monitors can exist for the same target (each has unique reference)
+Multiple monitors can exist for the same target (each has unique ID)
 .IP \(bu 2
 Linking to an already-linked actor returns an error
 .SS Automatic Cleanup

@@ -2319,8 +2319,8 @@ void orchestrator(void *args, const hive_spawn_info *siblings, size_t sibling_co
     hive_supervisor_start(&cfg, NULL, &supervisor);
 
     // Monitor supervisor to know when it exits
-    uint32_t mon_ref;
-    hive_monitor(supervisor, &mon_ref);
+    uint32_t monitor_id;
+    hive_monitor(supervisor, &monitor_id);
 
     // Wait for supervisor exit (intensity exceeded or explicit stop)
     hive_message msg;

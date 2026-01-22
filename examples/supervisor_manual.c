@@ -40,7 +40,7 @@ static void supervisor_actor(void *args, const hive_spawn_info *siblings,
 
 // Spawn 3 workers
 #define NUM_WORKERS 3
-    uint32_t monitor_refs[NUM_WORKERS];
+    uint32_t monitor_ids[NUM_WORKERS];
     int worker_ids[NUM_WORKERS] = {1, 2, 3};
 
     printf("Supervisor: Spawning %d workers...\n", NUM_WORKERS);
@@ -57,13 +57,13 @@ static void supervisor_actor(void *args, const hive_spawn_info *siblings,
         }
 
         // Monitor the worker
-        hive_status status = hive_monitor(worker, &monitor_refs[i]);
+        hive_status status = hive_monitor(worker, &monitor_ids[i]);
         if (HIVE_FAILED(status)) {
             printf("Supervisor: Failed to monitor worker %d: %s\n", i + 1,
                    HIVE_ERR_STR(status));
         } else {
-            printf("Supervisor: Monitoring worker %d (Actor ID: %u, ref: %u)\n",
-                   i + 1, worker, monitor_refs[i]);
+            printf("Supervisor: Monitoring worker %d (Actor ID: %u, id: %u)\n",
+                   i + 1, worker, monitor_ids[i]);
         }
     }
 
