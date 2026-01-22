@@ -7,7 +7,7 @@
 #ifndef PLATFORM_CRAZYFLIE_H
 #define PLATFORM_CRAZYFLIE_H
 
-#include "../../types.h"
+#include "types.h"
 #include <stdint.h>
 #include <stdbool.h>
 

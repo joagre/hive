@@ -3,7 +3,7 @@
 // Portable sensor fusion that fuses accelerometer and gyroscope data.
 
 #include "complementary_filter.h"
-#include "../types.h"
+#include "types.h"
 #include <math.h>
 
 // ----------------------------------------------------------------------------

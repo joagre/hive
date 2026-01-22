@@ -16,8 +16,8 @@
 #ifndef HAL_H
 #define HAL_H
 
-#include "../types.h"
-#include "../config.h"
+#include "types.h"
+#include "config.h"
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>

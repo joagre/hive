@@ -32,7 +32,7 @@ BUILD_DIR = build
 CC = gcc
 CFLAGS = -std=c11 -Wall -Wextra -O2 -g
 CFLAGS += -D_POSIX_C_SOURCE=200809L
-CFLAGS += -I$(WEBOTS_INCLUDE) -I$(HIVE_INCLUDE) -I. -Ihal/webots-crazyflie
+CFLAGS += -I$(WEBOTS_INCLUDE) -I$(HIVE_INCLUDE) -I. -Iinclude -Ihal/webots-crazyflie
 CFLAGS += -I$(HIVE_ROOT)/lib -I$(HIVE_ROOT)/lib/printf -DPRINTF_INCLUDE_CONFIG_H
 CFLAGS += -MMD -MP
 
