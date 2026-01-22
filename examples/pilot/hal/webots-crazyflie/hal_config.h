@@ -43,12 +43,14 @@
 // ----------------------------------------------------------------------------
 
 // Rate PID gains (rate error -> torque)
-#define HAL_RATE_PID_KP 0.015f // Slightly reduced for noise rejection
-#define HAL_RATE_PID_KI 0.0f
-#define HAL_RATE_PID_KD 0.002f       // Increased damping
-#define HAL_RATE_PID_IMAX 0.5f       // Integral limit
-#define HAL_RATE_PID_OMAX_ROLL 0.08f // Reduced for smoother control
-#define HAL_RATE_PID_OMAX_PITCH 0.08f
-#define HAL_RATE_PID_OMAX_YAW 0.12f
+// Tuned for 20ms motor response lag - higher gains compensate for motor delay
+#define HAL_RATE_PID_KP 0.028f // Increased to compensate for motor lag
+#define HAL_RATE_PID_KI 0.002f // Small integral for steady-state tracking
+#define HAL_RATE_PID_KD 0.003f // Predictive damping
+#define HAL_RATE_PID_IMAX 0.3f // Integral limit
+#define HAL_RATE_PID_OMAX_ROLL \
+    0.12f // Increased - motor lag limits actual response
+#define HAL_RATE_PID_OMAX_PITCH 0.12f
+#define HAL_RATE_PID_OMAX_YAW 0.15f
 
 #endif // HAL_CONFIG_H
