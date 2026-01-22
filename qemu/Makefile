@@ -25,7 +25,9 @@ ARM_CFLAGS := -std=c11 -Wall -Wextra -Wpedantic -O2 -g \
 
 # QEMU test uses smaller config values suitable for 64KB RAM
 # Include lightweight printf library for low stack usage
+# Include STM32 HAL for platform-specific headers
 ARM_CPPFLAGS := -I../include -I../lib -I../lib/printf -DPRINTF_INCLUDE_CONFIG_H -I. \
+                -I../src/hal/stm32 \
                 -DHIVE_PLATFORM_STM32 -DHIVE_ENABLE_NET=0 -DHIVE_ENABLE_FILE=0 \
                 -DHIVE_MAX_ACTORS=8 \
                 -DHIVE_MAX_BUSES=4 \
@@ -48,13 +50,16 @@ ARM_LDFLAGS := -Tlm3s6965.ld \
                -nostartfiles -specs=nosys.specs
 
 # Runtime source files
-QEMU_CORE_SRCS := hive_actor.c hive_bus.c hive_context.c hive_ipc.c \
+QEMU_CORE_SRCS := hive_actor.c hive_bus.c hive_ipc.c \
                   hive_link.c hive_log.c hive_pool.c hive_runtime.c \
-                  hive_select.c hive_supervisor.c hive_scheduler_stm32.c \
+                  hive_select.c hive_supervisor.c hive_scheduler.c \
                   hive_timer_stm32.c
 
-QEMU_SRCS := $(addprefix $(SRC_DIR)/,$(QEMU_CORE_SRCS))
-QEMU_ASM := $(SRC_DIR)/hive_context_arm_cm.S
+# HAL source files (STM32)
+QEMU_HAL_SRCS := hal/stm32/hive_hal_stm32.c hal/stm32/hive_hal_context_stm32.c
+
+QEMU_SRCS := $(addprefix $(SRC_DIR)/,$(QEMU_CORE_SRCS)) $(addprefix $(SRC_DIR)/,$(QEMU_HAL_SRCS))
+QEMU_ASM := $(SRC_DIR)/hal/stm32/hive_context_arm_cm.S
 QEMU_TEST_SRCS := startup.S semihosting.c test_main.c
 
 # Lightweight printf library
@@ -93,16 +98,16 @@ QEMU_COMPAT_EXAMPLES := timer pingpong priority link_demo supervisor bus request
 .PHONY: all
 all: $(QEMU_ELF)
 
-# Create build directory
-$(BUILD_DIR):
-	mkdir -p $(BUILD_DIR)
+# Create build directories (including HAL subdirectory)
+$(BUILD_DIR) $(BUILD_DIR)/hal/stm32:
+	mkdir -p $@
 
 # Compile runtime sources for ARM
-$(BUILD_DIR)/%.o: $(SRC_DIR)/%.c | $(BUILD_DIR)
+$(BUILD_DIR)/%.o: $(SRC_DIR)/%.c | $(BUILD_DIR) $(BUILD_DIR)/hal/stm32
 	$(ARM_CC) $(ARM_CFLAGS) $(ARM_CPPFLAGS) -c $< -o $@
 
 # Compile ARM assembly from src/
-$(BUILD_DIR)/%.o: $(SRC_DIR)/%.S | $(BUILD_DIR)
+$(BUILD_DIR)/%.o: $(SRC_DIR)/%.S | $(BUILD_DIR) $(BUILD_DIR)/hal/stm32
 	$(ARM_CC) $(ARM_CFLAGS) $(ARM_CPPFLAGS) -c $< -o $@
 
 # Compile lightweight printf library

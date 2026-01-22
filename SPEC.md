@@ -2945,27 +2945,66 @@ if (no_runnable_actors) {
 
 ## Platform Abstraction
 
-The runtime abstracts platform-specific functionality:
+The runtime uses a Hardware Abstraction Layer (HAL) to isolate platform-specific code. Porters implement HAL functions without needing to understand scheduler or timer internals.
+
+### HAL Architecture
 
 | Component | Linux (dev) | STM32 bare metal (prod) |
 |-----------|-------------|-------------------------|
 | Context switch | x86-64 asm | ARM Cortex-M asm |
 | Event notification | epoll | WFI + interrupt flags |
 | Timer | timerfd + epoll | Software timer wheel (SysTick/TIM) |
-| Network | Non-blocking BSD sockets + epoll | lwIP NO_SYS mode (not yet implemented) |
-| File | Synchronous POSIX | Synchronous FATFS or littlefs |
+| Network | Non-blocking BSD sockets + epoll | Stubs (future lwIP support) |
+| File | Synchronous POSIX | Flash-backed virtual files |
+
+### HAL Headers
+
+```
+include/hal/
+  hive_hal_time.h      - Time + critical sections (3 functions)
+  hive_hal_event.h     - Event loop primitives (5 functions)
+  hive_hal_context.h   - Context switching (1 function + struct)
+  hive_hal_file.h      - File I/O (8 functions, optional)
+  hive_hal_net.h       - Network I/O (10 functions, optional)
+```
+
+### HAL Functions
+
+| Category | Functions | Required |
+|----------|-----------|----------|
+| Time | `get_time_us`, `critical_enter`, `critical_exit` | Yes |
+| Event | `init`, `cleanup`, `poll`, `wait`, `register`, `unregister` | Yes |
+| Context | `init` (C), `switch` (asm) | Yes |
+| File | `init`, `cleanup`, `open`, `close`, `read`, `pread`, `write`, `pwrite`, `sync` | Optional |
+| Network | `init`, `cleanup`, `socket`, `bind`, `listen`, `accept`, `connect`, `connect_check`, `close`, `recv`, `send` | Optional |
+
+**Minimum port**: ~9 C functions + 1 assembly function + 1 struct definition
 
 ### Platform-Specific Source Files
 
-Platform-specific implementations use naming convention `*_linux.c` / `*_stm32.c`:
+Platform implementations live in `src/hal/<platform>/`:
 
 | Component | Linux | STM32 |
 |-----------|-------|-------|
-| Scheduler | `hive_scheduler_linux.c` | `hive_scheduler_stm32.c` |
-| Timer | `hive_timer_linux.c` | `hive_timer_stm32.c` |
-| Context switch | `hive_context_x86_64.S` | `hive_context_arm_cm.S` |
+| Main HAL | `hal/linux/hive_hal_linux.c` | `hal/stm32/hive_hal_stm32.c` |
+| Context init | `hal/linux/hive_hal_context_linux.c` | `hal/stm32/hive_hal_context_stm32.c` |
+| Context switch | `hal/linux/hive_context_x86_64.S` | `hal/stm32/hive_context_arm_cm.S` |
+| Context struct | `hal/linux/hive_hal_context_defs.h` | `hal/stm32/hive_hal_context_defs.h` |
+| File HAL | (in main HAL) | `hal/stm32/hive_hal_file_stm32.c` |
 
-Shared code in `hive_context.c` handles platform-specific context initialization.
+Platform-independent wrappers call HAL functions:
+- `hive_scheduler.c` - Unified scheduler (calls HAL event functions)
+- `hive_file.c` - File I/O wrapper (calls HAL file functions)
+- `hive_net.c` - Network I/O wrapper (calls HAL network functions)
+
+### Porting Guide
+
+Templates for new ports are in `src/hal/template/`:
+- `hive_hal_template.c` - Documented HAL implementation template
+- `hive_hal_context_defs.h` - Context struct template
+- `hive_hal_context_template.c` - Context init template
+- `hive_context_template.S` - Assembly template
+- `README.md` - Complete porting guide
 
 ### Building for Different Platforms
 

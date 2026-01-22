@@ -684,6 +684,28 @@ All runtime APIs must be called from actor context (the scheduler thread). The r
 
 **External thread communication:** External threads cannot call runtime APIs directly. Use platform-specific IPC (sockets/pipes) with dedicated reader actors to bridge external threads into the actor system. See `SPEC.md` "Thread Safety" section for complete details.
 
+### Hardware Abstraction Layer (HAL)
+
+The runtime uses a HAL to isolate platform-specific code. Porters implement HAL functions without needing to understand scheduler or timer internals.
+
+```
+include/hal/
+  hive_hal_time.h      - Time + critical sections (3 functions)
+  hive_hal_event.h     - Event loop primitives (5 functions)
+  hive_hal_context.h   - Context switching (1 function + struct)
+  hive_hal_file.h      - File I/O (8 functions, optional)
+  hive_hal_net.h       - Network I/O (10 functions, optional)
+
+src/hal/
+  linux/               - Linux implementation (epoll, POSIX)
+  stm32/               - STM32 implementation (WFI, flash)
+  template/            - Documented templates for new ports
+```
+
+**Minimum port**: ~9 C functions + 1 assembly function + 1 struct definition
+
+See `src/hal/template/README.md` for the complete porting guide.
+
 ## Testing
 
 ```bash
