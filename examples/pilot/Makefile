@@ -33,6 +33,8 @@ CC = gcc
 CFLAGS = -std=c11 -Wall -Wextra -O2 -g
 CFLAGS += -D_POSIX_C_SOURCE=200809L
 CFLAGS += -I$(WEBOTS_INCLUDE) -I$(HIVE_INCLUDE) -I. -Iinclude -Ihal/webots-crazyflie
+# Include Linux HAL for hive_hal_context_defs.h
+CFLAGS += -I$(HIVE_SRC_DIR)/hal/linux
 CFLAGS += -I$(HIVE_ROOT)/lib -I$(HIVE_ROOT)/lib/printf -DPRINTF_INCLUDE_CONFIG_H
 CFLAGS += -MMD -MP
 
@@ -94,11 +96,15 @@ UTIL_SRCS = stack_profile.c
 PILOT_SRCS = pilot.c pid.c $(ACTOR_SRCS) $(HAL_SRCS) $(FUSION_SRCS) $(UTIL_SRCS)
 
 # Hive runtime (Linux x86-64 platform)
-HIVE_CORE_SRCS = hive_actor.c hive_bus.c hive_context.c hive_ipc.c \
+HIVE_CORE_SRCS = hive_actor.c hive_bus.c hive_ipc.c \
                  hive_link.c hive_log.c hive_pool.c hive_runtime.c hive_select.c \
-                 hive_supervisor.c hive_scheduler_linux.c hive_timer_linux.c \
-                 hive_net.c hive_file_linux.c
-HIVE_ASM = hive_context_x86_64.S
+                 hive_supervisor.c hive_scheduler.c hive_timer_linux.c \
+                 hive_net.c hive_file.c
+
+# HAL source files (Linux platform)
+HIVE_HAL_SRCS = hal/linux/hive_hal_linux.c hal/linux/hive_hal_context_linux.c
+
+HIVE_ASM = hal/linux/hive_context_x86_64.S
 
 # ------------------------------------------------------------------------------
 # Object Files
@@ -108,6 +114,7 @@ PILOT_OBJS = $(PILOT_SRCS:.c=.o)
 PILOT_DEPS = $(PILOT_SRCS:.c=.d)
 
 HIVE_OBJS = $(HIVE_CORE_SRCS:%.c=$(BUILD_DIR)/hive/%.o)
+HIVE_HAL_OBJS = $(HIVE_HAL_SRCS:%.c=$(BUILD_DIR)/hive/%.o)
 HIVE_ASM_OBJS = $(HIVE_ASM:%.S=$(BUILD_DIR)/hive/%.o)
 HIVE_DEPS = $(HIVE_OBJS:.o=.d)
 
@@ -136,12 +143,25 @@ build: check-webots $(TARGET)
 $(BUILD_DIR)/hive:
 	mkdir -p $@
 
+$(BUILD_DIR)/hive/hal/linux:
+	mkdir -p $@
+
 $(BUILD_DIR)/hive/%.o: $(HIVE_SRC_DIR)/%.c | $(BUILD_DIR)/hive
 	@echo "CC (hive) $<"
 	@$(CC) $(CFLAGS) -c $< -o $@
 
+# HAL source files (need hal/linux subdirectory)
+$(BUILD_DIR)/hive/hal/linux/%.o: $(HIVE_SRC_DIR)/hal/linux/%.c | $(BUILD_DIR)/hive/hal/linux
+	@echo "CC (hal) $<"
+	@$(CC) $(CFLAGS) -c $< -o $@
+
 $(BUILD_DIR)/hive/%.o: $(HIVE_SRC_DIR)/%.S | $(BUILD_DIR)/hive
 	@echo "AS (hive) $<"
+	@$(CC) -g -c $< -o $@
+
+# HAL assembly (in hal/linux subdirectory)
+$(BUILD_DIR)/hive/hal/linux/%.o: $(HIVE_SRC_DIR)/hal/linux/%.S | $(BUILD_DIR)/hive/hal/linux
+	@echo "AS (hal) $<"
 	@$(CC) -g -c $< -o $@
 
 # Compile lightweight printf library
@@ -149,7 +169,7 @@ $(PRINTF_OBJ): $(HIVE_ROOT)/lib/printf/printf.c | $(BUILD_DIR)/hive
 	@echo "CC (printf) $<"
 	@$(CC) $(CFLAGS) -c $< -o $@
 
-$(LOCAL_HIVE_LIB): $(HIVE_OBJS) $(HIVE_ASM_OBJS) $(PRINTF_OBJ)
+$(LOCAL_HIVE_LIB): $(HIVE_OBJS) $(HIVE_HAL_OBJS) $(HIVE_ASM_OBJS) $(PRINTF_OBJ)
 	@echo "AR $@"
 	@ar rcs $@ $^
 
