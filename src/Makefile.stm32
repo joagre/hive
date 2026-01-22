@@ -1,11 +1,6 @@
 # src/Makefile.stm32 - Build libhive.a for STM32 (ARM Cortex-M)
 #
-# Usage:
-#   make -f Makefile.stm32 BUILD_DIR=/path CFLAGS+="-DFOO"
-#
-# Required from caller:
-#   BUILD_DIR  - Where to put output files
-#   CFLAGS     - MCU flags, memory config, include paths
+# Usage: make -f Makefile.stm32 [options]    (run 'make -f Makefile.stm32 help' for details)
 #
 # Called from board-specific Makefiles (e.g., examples/pilot/Makefile.crazyflie-2.1+)
 
@@ -13,8 +8,12 @@
 CC ?= arm-none-eabi-gcc
 AR ?= arm-none-eabi-ar
 
-# Build directory (must be provided by caller)
-BUILD_DIR ?= $(error BUILD_DIR must be specified)
+# Build directory (must be provided by caller for build targets)
+ifeq ($(MAKECMDGOALS),help)
+  BUILD_DIR ?= /tmp/dummy
+else
+  BUILD_DIR ?= $(error BUILD_DIR must be specified)
+endif
 
 # Base flags (caller adds MCU flags, includes, defines via CFLAGS)
 BASE_CFLAGS := -std=c11 -Wall -Wextra -Wpedantic
@@ -93,5 +92,44 @@ $(LIB): $(OBJS) $(PRINTF_OBJ)
 
 clean:
 	rm -f $(OBJS) $(PRINTF_OBJ) $(DEPS) $(LIB)
+
+.PHONY: help
+help:
+	@echo "Hive Runtime Library - STM32 Build"
+	@echo ""
+	@echo "This Makefile is called from board-specific Makefiles."
+	@echo "It requires the caller to provide BUILD_DIR and CFLAGS."
+	@echo ""
+	@echo "Targets:"
+	@echo "  make -f Makefile.stm32 ...    Build libhive.a"
+	@echo "  make -f Makefile.stm32 clean  Remove build artifacts"
+	@echo "  make -f Makefile.stm32 help   Show this help"
+	@echo ""
+	@echo "Required from Caller:"
+	@echo "  BUILD_DIR=<path>      Output directory (required)"
+	@echo "  CFLAGS=<flags>        Must include:"
+	@echo "                        - MCU flags (-mcpu, -mthumb, -mfpu, etc.)"
+	@echo "                        - Include paths (-I for hive headers)"
+	@echo "                        - Memory config (-DHIVE_MAX_ACTORS=N, etc.)"
+	@echo ""
+	@echo "Optional:"
+	@echo "  ENABLE_NET=<0|1>      Network support (default: 0)"
+	@echo "  ENABLE_FILE=<0|1>     File I/O support (default: 1)"
+	@echo "  CC=<compiler>         Cross-compiler (default: arm-none-eabi-gcc)"
+	@echo "  AR=<archiver>         Archiver (default: arm-none-eabi-ar)"
+	@echo ""
+	@echo "Memory Configuration (pass via CFLAGS):"
+	@echo "  -DHIVE_MAX_ACTORS=N              Max actors"
+	@echo "  -DHIVE_MAX_BUSES=N               Max buses"
+	@echo "  -DHIVE_MAILBOX_ENTRY_POOL_SIZE=N Mailbox pool"
+	@echo "  -DHIVE_MESSAGE_DATA_POOL_SIZE=N  Message pool"
+	@echo "  -DHIVE_DEFAULT_STACK_SIZE=N      Default stack size"
+	@echo "  -DHIVE_STACK_ARENA_SIZE=N        Stack arena size"
+	@echo ""
+	@echo "Example (from board Makefile):"
+	@echo "  \$$(MAKE) -C \$$(SRC_DIR) -f Makefile.stm32 \\"
+	@echo "      BUILD_DIR=\$$(abspath \$$(BUILD_DIR)) \\"
+	@echo "      CC=\$$(CC) AR=\$$(AR) \\"
+	@echo "      CFLAGS=\"\$$(HIVE_CFLAGS_EXPORT)\""
 
 -include $(DEPS)

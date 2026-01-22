@@ -1,9 +1,6 @@
 # src/Makefile - Build libhive.a for Linux (x86-64)
 #
-# Usage:
-#   make                      # Build to ../build/
-#   make BUILD_DIR=/some/path # Build to custom directory
-#   make CFLAGS+="-DFOO"      # Add extra flags
+# Usage: make [options]       (run 'make help' for details)
 #
 # Called from top-level Makefile or from examples that need libhive.a.
 
@@ -89,5 +86,36 @@ $(LIB): $(OBJS) $(PRINTF_OBJ)
 
 clean:
 	rm -f $(OBJS) $(PRINTF_OBJ) $(DEPS) $(LIB)
+
+.PHONY: help
+help:
+	@echo "Hive Runtime Library - Linux Build"
+	@echo ""
+	@echo "Targets:"
+	@echo "  make              Build libhive.a to ../build/"
+	@echo "  make clean        Remove build artifacts"
+	@echo "  make help         Show this help"
+	@echo ""
+	@echo "Build Options:"
+	@echo "  BUILD_DIR=<path>      Output directory (default: ../build)"
+	@echo "  ENABLE_NET=<0|1>      Network support (default: 1)"
+	@echo "  ENABLE_FILE=<0|1>     File I/O support (default: 1)"
+	@echo "  CFLAGS+=<flags>       Add extra compiler flags"
+	@echo "  CC=<compiler>         C compiler (default: gcc)"
+	@echo "  AR=<archiver>         Archiver (default: ar)"
+	@echo ""
+	@echo "Memory Configuration (via CFLAGS):"
+	@echo "  -DHIVE_MAX_ACTORS=N              Max actors (default: 64)"
+	@echo "  -DHIVE_MAX_BUSES=N               Max buses (default: 32)"
+	@echo "  -DHIVE_MAILBOX_ENTRY_POOL_SIZE=N Mailbox pool (default: 256)"
+	@echo "  -DHIVE_MESSAGE_DATA_POOL_SIZE=N  Message pool (default: 256)"
+	@echo "  -DHIVE_DEFAULT_STACK_SIZE=N      Default stack (default: 65536)"
+	@echo "  -DHIVE_STACK_ARENA_SIZE=N        Stack arena (default: 1MB)"
+	@echo ""
+	@echo "Examples:"
+	@echo "  make"
+	@echo "  make BUILD_DIR=/tmp/build"
+	@echo "  make ENABLE_NET=0 ENABLE_FILE=0"
+	@echo "  make CFLAGS+='-DHIVE_MAX_ACTORS=16'"
 
 -include $(DEPS)
