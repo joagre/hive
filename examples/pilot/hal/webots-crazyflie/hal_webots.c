@@ -89,6 +89,23 @@
     20.0f // milliseconds - typical for Crazyflie motors
 #endif
 
+// ----------------------------------------------------------------------------
+// Flow Deck Height Limits
+// ----------------------------------------------------------------------------
+// VL53L1x ToF sensor has limited range. Outside this range, flow velocity
+// and position estimates become invalid. Matches real hardware behavior.
+//
+// Short distance mode: 0.05m - 1.3m (typical indoor flight)
+// Long distance mode:  0.05m - 4.0m (less accurate)
+
+#ifndef FLOW_MIN_HEIGHT
+#define FLOW_MIN_HEIGHT 0.05f // meters - ToF minimum range
+#endif
+
+#ifndef FLOW_MAX_HEIGHT
+#define FLOW_MAX_HEIGHT 1.3f // meters - VL53L1x short distance mode
+#endif
+
 // Xorshift32 PRNG state (seeded at init for variety)
 static uint32_t g_rng_state = 1; // Will be seeded in hal_init()
 
@@ -260,19 +277,42 @@ void hal_read_sensors(sensor_data_t *sensors) {
     // On real Crazyflie, the HAL integrates flow deck to provide pseudo-GPS.
     // Here we use actual GPS with noise to simulate that behavior.
     float current_gps[3] = {(float)gps[0], (float)gps[1], (float)gps[2]};
-    sensors->gps_x = current_gps[0] + GPS_XY_NOISE_STDDEV * randf_gaussian();
-    sensors->gps_y = current_gps[1] + GPS_XY_NOISE_STDDEV * randf_gaussian();
-    sensors->gps_z = current_gps[2] + ALTITUDE_NOISE_STDDEV * randf_gaussian();
-    sensors->gps_valid = true;
+    float current_height = current_gps[2];
 
-    // Compute velocity from GPS (true velocity, no noise needed since GPS is ground truth)
-    // This matches what the Crazyflie flow deck provides directly
-    float dt = TIME_STEP_MS / 1000.0f;
-    if (g_prev_gps_valid && dt > 0.0f) {
-        sensors->velocity_x = (current_gps[0] - g_prev_gps[0]) / dt;
-        sensors->velocity_y = (current_gps[1] - g_prev_gps[1]) / dt;
-        sensors->velocity_valid = true;
+    // Check if height is within flow deck operational range
+    // Outside this range, ToF sensor can't measure and flow velocity is invalid
+    bool height_valid = (current_height >= FLOW_MIN_HEIGHT) &&
+                        (current_height <= FLOW_MAX_HEIGHT);
+
+    if (height_valid) {
+        // Normal operation - provide position and velocity
+        sensors->gps_x =
+            current_gps[0] + GPS_XY_NOISE_STDDEV * randf_gaussian();
+        sensors->gps_y =
+            current_gps[1] + GPS_XY_NOISE_STDDEV * randf_gaussian();
+        sensors->gps_z =
+            current_height + ALTITUDE_NOISE_STDDEV * randf_gaussian();
+        sensors->gps_valid = true;
+
+        // Compute velocity from GPS (matches flow deck behavior)
+        float dt = TIME_STEP_MS / 1000.0f;
+        if (g_prev_gps_valid && dt > 0.0f) {
+            sensors->velocity_x = (current_gps[0] - g_prev_gps[0]) / dt;
+            sensors->velocity_y = (current_gps[1] - g_prev_gps[1]) / dt;
+            sensors->velocity_valid = true;
+        } else {
+            sensors->velocity_x = 0.0f;
+            sensors->velocity_y = 0.0f;
+            sensors->velocity_valid = false;
+        }
     } else {
+        // Outside flow deck range - no valid position/velocity
+        // Real hardware would lose position lock here
+        sensors->gps_x = 0.0f;
+        sensors->gps_y = 0.0f;
+        sensors->gps_z =
+            current_height; // Altitude still available from ToF (clamped)
+        sensors->gps_valid = false;
         sensors->velocity_x = 0.0f;
         sensors->velocity_y = 0.0f;
         sensors->velocity_valid = false;
@@ -282,7 +322,7 @@ void hal_read_sensors(sensor_data_t *sensors) {
     g_prev_gps[0] = current_gps[0];
     g_prev_gps[1] = current_gps[1];
     g_prev_gps[2] = current_gps[2];
-    g_prev_gps_valid = true;
+    g_prev_gps_valid = height_valid;
 }
 
 // ----------------------------------------------------------------------------

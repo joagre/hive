@@ -71,6 +71,17 @@ ifdef MOTOR_LAG
 CFLAGS += -DMOTOR_TIME_CONSTANT_MS=$(MOTOR_LAG)
 endif
 
+# Flow deck height limits in meters
+# VL53L1x ToF sensor range limits - outside this range, position/velocity invalid
+# Default: 0.05m - 1.3m (short distance mode)
+# Example: make FLOW_MAX_HEIGHT=4.0 (long distance mode)
+ifdef FLOW_MIN_HEIGHT
+CFLAGS += -DFLOW_MIN_HEIGHT=$(FLOW_MIN_HEIGHT)
+endif
+ifdef FLOW_MAX_HEIGHT
+CFLAGS += -DFLOW_MAX_HEIGHT=$(FLOW_MAX_HEIGHT)
+endif
+
 # Platform identification (enables platform-specific defaults in hive_static_config.h)
 CFLAGS += -DHIVE_PLATFORM_LINUX
 

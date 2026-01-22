@@ -80,6 +80,10 @@ void estimator_actor(void *args, const hive_spawn_info *siblings,
     float y_velocity = 0.0f;
     bool first_sample = true;
 
+    // Last known valid position (held when GPS becomes invalid)
+    float last_valid_x = 0.0f;
+    float last_valid_y = 0.0f;
+
     // For measuring dt
     uint64_t prev_time = hive_get_time();
 
@@ -122,9 +126,15 @@ void estimator_actor(void *args, const hive_spawn_info *siblings,
             est.x = sensors.gps_x;
             est.y = sensors.gps_y;
             measured_altitude = sensors.gps_z;
+            // Update last known valid position
+            last_valid_x = est.x;
+            last_valid_y = est.y;
         } else {
-            est.x = 0.0f;
-            est.y = 0.0f;
+            // Hold last known position when GPS becomes invalid
+            // (e.g., flow deck out of range). This prevents position
+            // controller from generating aggressive corrections.
+            est.x = last_valid_x;
+            est.y = last_valid_y;
             // Altitude from barometer (HAL computes from calibrated reference)
             if (sensors.baro_valid) {
                 measured_altitude = sensors.baro_altitude;
