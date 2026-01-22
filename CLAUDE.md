@@ -407,12 +407,13 @@ src/hal/
   template/            - Documented templates for new ports
 ```
 
-**Minimum port**: ~9 C functions + 1 assembly function + 1 struct definition
+**Minimum port**: ~15 C functions + 1 assembly function + 1 struct definition
 
 **Platform-specific files:**
 | Category | Linux | STM32 |
 |----------|-------|-------|
 | Main HAL | `hal/linux/hive_hal_linux.c` | `hal/stm32/hive_hal_stm32.c` |
+| Timer HAL | `hal/linux/hive_hal_timer_linux.c` | `hal/stm32/hive_hal_timer_stm32.c` |
 | Context init | `hal/linux/hive_hal_context_linux.c` | `hal/stm32/hive_hal_context_stm32.c` |
 | Context switch | `hal/linux/hive_context_x86_64.S` | `hal/stm32/hive_context_arm_cm.S` |
 | Context struct | `hal/linux/hive_hal_context_defs.h` | `hal/stm32/hive_hal_context_defs.h` |
@@ -420,6 +421,7 @@ src/hal/
 
 **Platform-independent files:**
 - `hive_scheduler.c` - Unified scheduler (calls HAL event functions)
+- `hive_timer.c` - Thin wrapper around HAL timer functions
 - `hive_file.c` - Thin wrapper around HAL file functions
 - `hive_net.c` - Thin wrapper around HAL network functions
 
@@ -428,6 +430,7 @@ src/hal/
 |----------|-----------|-------|
 | Time | `get_time_us`, `critical_enter`, `critical_exit` | Required |
 | Event | `init`, `cleanup`, `poll`, `wait`, `register`, `unregister` | Required |
+| Timer | `init`, `cleanup`, `create`, `cancel`, `get_time`, `advance_time` | Required |
 | Context | `init` (C), `switch` (asm) | Required |
 | File | `init`, `cleanup`, `open`, `close`, `read`, `pread`, `write`, `pwrite`, `sync` | Optional |
 | Network | `init`, `cleanup`, `socket`, `bind`, `listen`, `accept`, `connect`, `connect_check`, `close`, `recv`, `send` | Optional |
