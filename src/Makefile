@@ -1,125 +1,93 @@
-# src/Makefile - Build the Hive runtime library
+# src/Makefile - Build libhive.a for Linux (x86-64)
 #
-# Can be run standalone or from top-level Makefile.
-# Uses variables from top-level if available, otherwise sets defaults.
+# Usage:
+#   make                      # Build to ../build/
+#   make BUILD_DIR=/some/path # Build to custom directory
+#   make CFLAGS+="-DFOO"      # Add extra flags
+#
+# Called from top-level Makefile or from examples that need libhive.a.
 
-# Defaults (when run standalone)
+# Toolchain
 CC ?= gcc
-CFLAGS ?= -std=c11 -Wall -Wextra -Wpedantic -Werror -O2 -g
-PLATFORM ?= linux
+AR ?= ar
+
+# Build directory (caller can override)
+BUILD_DIR ?= ../build
+
+# Base flags
+BASE_CFLAGS := -std=c11 -Wall -Wextra -Wpedantic -Werror -O2 -g
+BASE_CFLAGS += -D_POSIX_C_SOURCE=200809L
+BASE_CFLAGS += -DHIVE_PLATFORM_LINUX
+BASE_CFLAGS += -DPRINTF_INCLUDE_CONFIG_H
+BASE_CFLAGS += -I../include -I../lib -I../lib/printf -Ihal/linux
+BASE_CFLAGS += -MMD -MP
+
+# Combine with caller's CFLAGS (allows += from caller)
+ALL_CFLAGS := $(BASE_CFLAGS) $(CFLAGS)
+
+# Feature flags (default: all enabled for Linux)
 ENABLE_NET ?= 1
 ENABLE_FILE ?= 1
 
-# Build directory - always use ../build when in src/
-BUILD_DIR := ../build
-
-# Include path - always relative to this directory
-# lib/printf: lightweight printf for embedded (low stack usage)
-# -I../lib enables <printf/printf.h> include style
-CPPFLAGS := -I../include -I../lib -I../lib/printf -D_POSIX_C_SOURCE=200809L
-CPPFLAGS += -DPRINTF_INCLUDE_CONFIG_H
-DEPFLAGS = -MMD -MP
-
-# Platform-specific settings
-ifeq ($(PLATFORM),linux)
-  CPPFLAGS += -DHIVE_PLATFORM_LINUX -Ihal/linux
-  PLATFORM_SRCS := hal/linux/hive_hal_timer_linux.c hal/linux/hive_hal_linux.c hal/linux/hive_hal_context_linux.c
-  PLATFORM_ASM := hal/linux/hive_context_x86_64.S
-else ifeq ($(PLATFORM),stm32)
-  CPPFLAGS += -DHIVE_PLATFORM_STM32 -Ihal/stm32
-  PLATFORM_SRCS := hal/stm32/hive_hal_timer_stm32.c hal/stm32/hive_hal_stm32.c hal/stm32/hive_hal_context_stm32.c
-  PLATFORM_ASM := hal/stm32/hive_context_arm_cm.S
-  # STM32 file HAL is separate from main HAL (complex flash implementation)
-  ifeq ($(ENABLE_FILE),1)
-    PLATFORM_SRCS += hal/stm32/hive_hal_file_stm32.c
-  endif
-else
-  $(error Unknown PLATFORM: $(PLATFORM). Use 'linux' or 'stm32')
-endif
-
-# Feature flags
 ifeq ($(ENABLE_NET),1)
-  CPPFLAGS += -DHIVE_ENABLE_NET=1
+  ALL_CFLAGS += -DHIVE_ENABLE_NET=1
 else
-  CPPFLAGS += -DHIVE_ENABLE_NET=0
+  ALL_CFLAGS += -DHIVE_ENABLE_NET=0
 endif
 
 ifeq ($(ENABLE_FILE),1)
-  CPPFLAGS += -DHIVE_ENABLE_FILE=1
+  ALL_CFLAGS += -DHIVE_ENABLE_FILE=1
 else
-  CPPFLAGS += -DHIVE_ENABLE_FILE=0
+  ALL_CFLAGS += -DHIVE_ENABLE_FILE=0
 endif
 
-# Core source files (platform-independent)
-CORE_SRCS := hive_actor.c hive_bus.c hive_ipc.c \
-             hive_link.c hive_log.c hive_pool.c hive_runtime.c \
-             hive_scheduler.c hive_select.c hive_supervisor.c
+# Source files (from shared definitions)
+include hive_sources.mk
 
-# Lightweight printf library (low stack usage for embedded)
-LIB_SRCS := ../lib/printf/printf.c
-
-# Feature-specific source files
-FEATURE_SRCS :=
+SRCS := $(HIVE_CORE_SRCS) $(HIVE_HAL_LINUX_SRCS)
 ifeq ($(ENABLE_NET),1)
-  FEATURE_SRCS += hive_net.c
+  SRCS += $(HIVE_NET_SRCS)
 endif
 ifeq ($(ENABLE_FILE),1)
-  FEATURE_SRCS += hive_file.c
+  SRCS += $(HIVE_FILE_SRCS)
 endif
 
-# Combine all source files
-SRCS := $(CORE_SRCS) $(PLATFORM_SRCS) $(FEATURE_SRCS)
-ASM_SRCS := $(PLATFORM_ASM)
+ASM_SRCS := $(HIVE_HAL_LINUX_ASM)
 
-# Objects: hive sources + library sources
+# Object files
 OBJS := $(SRCS:%.c=$(BUILD_DIR)/%.o) $(ASM_SRCS:%.S=$(BUILD_DIR)/%.o)
-LIB_OBJS := $(BUILD_DIR)/printf.o
-DEPS := $(SRCS:%.c=$(BUILD_DIR)/%.d)
+PRINTF_OBJ := $(BUILD_DIR)/printf.o
+DEPS := $(OBJS:.o=.d)
 
-# Library
+# Output library
 LIB := $(BUILD_DIR)/libhive.a
 
 # Default target
-.PHONY: all
+.PHONY: all clean
+
 all: $(LIB)
 
-# Ensure build directory exists
-$(BUILD_DIR):
-	mkdir -p $(BUILD_DIR)
-
-# Compile source files with dependency generation
-$(BUILD_DIR)/%.o: %.c | $(BUILD_DIR)
+# Compile C sources
+$(BUILD_DIR)/%.o: %.c
 	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) $(CPPFLAGS) $(DEPFLAGS) -c $< -o $@
+	$(CC) $(ALL_CFLAGS) -c $< -o $@
 
-# Compile assembly files
-$(BUILD_DIR)/%.o: %.S | $(BUILD_DIR)
+# Compile assembly
+$(BUILD_DIR)/%.o: %.S
 	@mkdir -p $(dir $@)
-	$(CC) $(CPPFLAGS) -c $< -o $@
+	$(CC) $(ALL_CFLAGS) -c $< -o $@
 
-# Compile printf library (from lib/printf/)
-$(BUILD_DIR)/printf.o: ../lib/printf/printf.c | $(BUILD_DIR)
-	$(CC) $(CFLAGS) $(CPPFLAGS) $(DEPFLAGS) -c $< -o $@
+# Compile printf library
+$(PRINTF_OBJ): ../lib/printf/printf.c
+	@mkdir -p $(dir $@)
+	$(CC) $(ALL_CFLAGS) -c $< -o $@
 
 # Create static library
-$(LIB): $(OBJS) $(LIB_OBJS)
-	ar rcs $@ $^
+$(LIB): $(OBJS) $(PRINTF_OBJ)
+	@mkdir -p $(dir $@)
+	$(AR) rcs $@ $^
 
-# Clean library objects only
-.PHONY: clean
 clean:
-	rm -f $(OBJS) $(LIB_OBJS) $(DEPS) $(LIB)
+	rm -f $(OBJS) $(PRINTF_OBJ) $(DEPS) $(LIB)
 
-.PHONY: help
-help:
-	@echo "src/Makefile targets:"
-	@echo "  all   - Build libhive.a (default)"
-	@echo "  clean - Remove library and object files"
-	@echo ""
-	@echo "Configuration (inherited from top-level or set manually):"
-	@echo "  PLATFORM=linux|stm32  - Target platform"
-	@echo "  ENABLE_NET=0|1        - Enable network I/O"
-	@echo "  ENABLE_FILE=0|1       - Enable file I/O"
-
-# Include automatically generated dependencies
 -include $(DEPS)

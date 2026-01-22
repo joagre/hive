@@ -1,0 +1,97 @@
+# src/Makefile.stm32 - Build libhive.a for STM32 (ARM Cortex-M)
+#
+# Usage:
+#   make -f Makefile.stm32 BUILD_DIR=/path CFLAGS+="-DFOO"
+#
+# Required from caller:
+#   BUILD_DIR  - Where to put output files
+#   CFLAGS     - MCU flags, memory config, include paths
+#
+# Called from board-specific Makefiles (e.g., examples/pilot/Makefile.crazyflie-2.1+)
+
+# Toolchain (caller can override)
+CC ?= arm-none-eabi-gcc
+AR ?= arm-none-eabi-ar
+
+# Build directory (must be provided by caller)
+BUILD_DIR ?= $(error BUILD_DIR must be specified)
+
+# Base flags (caller adds MCU flags, includes, defines via CFLAGS)
+BASE_CFLAGS := -std=c11 -Wall -Wextra -Wpedantic
+BASE_CFLAGS += -O2 -g3 -gdwarf-2
+BASE_CFLAGS += -ffunction-sections -fdata-sections
+BASE_CFLAGS += -DHIVE_PLATFORM_STM32
+BASE_CFLAGS += -DPRINTF_INCLUDE_CONFIG_H
+BASE_CFLAGS += -I../include -I../lib -I../lib/printf -Ihal/stm32
+BASE_CFLAGS += -MMD -MP
+
+# Combine with caller's CFLAGS
+ALL_CFLAGS := $(BASE_CFLAGS) $(CFLAGS)
+
+# Feature flags (STM32: no net, file enabled by default)
+ENABLE_NET ?= 0
+ENABLE_FILE ?= 1
+
+ifeq ($(ENABLE_NET),1)
+  ALL_CFLAGS += -DHIVE_ENABLE_NET=1
+else
+  ALL_CFLAGS += -DHIVE_ENABLE_NET=0
+endif
+
+ifeq ($(ENABLE_FILE),1)
+  ALL_CFLAGS += -DHIVE_ENABLE_FILE=1
+else
+  ALL_CFLAGS += -DHIVE_ENABLE_FILE=0
+endif
+
+# Source files (from shared definitions)
+include hive_sources.mk
+
+SRCS := $(HIVE_CORE_SRCS) $(HIVE_HAL_STM32_SRCS)
+ifeq ($(ENABLE_FILE),1)
+  SRCS += $(HIVE_FILE_SRCS) $(HIVE_HAL_STM32_FILE_SRCS)
+endif
+
+ASM_SRCS := $(HIVE_HAL_STM32_ASM)
+
+# Object files
+OBJS := $(SRCS:%.c=$(BUILD_DIR)/%.o) $(ASM_SRCS:%.S=$(BUILD_DIR)/%.o)
+PRINTF_OBJ := $(BUILD_DIR)/printf.o
+DEPS := $(OBJS:.o=.d)
+
+# Output library
+LIB := $(BUILD_DIR)/libhive.a
+
+# Default target
+.PHONY: all clean
+
+all: $(LIB)
+
+# Compile C sources
+$(BUILD_DIR)/%.o: %.c
+	@mkdir -p $(dir $@)
+	@echo "CC $<"
+	@$(CC) $(ALL_CFLAGS) -c $< -o $@
+
+# Compile assembly
+$(BUILD_DIR)/%.o: %.S
+	@mkdir -p $(dir $@)
+	@echo "AS $<"
+	@$(CC) $(ALL_CFLAGS) -c $< -o $@
+
+# Compile printf library
+$(PRINTF_OBJ): ../lib/printf/printf.c
+	@mkdir -p $(dir $@)
+	@echo "CC $<"
+	@$(CC) $(ALL_CFLAGS) -c $< -o $@
+
+# Create static library
+$(LIB): $(OBJS) $(PRINTF_OBJ)
+	@mkdir -p $(dir $@)
+	@echo "AR $@"
+	@$(AR) rcs $@ $^
+
+clean:
+	rm -f $(OBJS) $(PRINTF_OBJ) $(DEPS) $(LIB)
+
+-include $(DEPS)
