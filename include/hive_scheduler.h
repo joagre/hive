@@ -26,7 +26,4 @@ void hive_scheduler_yield(void);
 // Check if shutdown was requested
 bool hive_scheduler_should_stop(void);
 
-// Get epoll file descriptor for event loop (for subsystems to register I/O)
-int hive_scheduler_get_epoll_fd(void);
-
 #endif // HIVE_SCHEDULER_H

@@ -74,7 +74,6 @@ PILOT_SRCS = \
 HIVE_CORE_SRCS = \
 	hive_actor.c \
 	hive_bus.c \
-	hive_context.c \
 	hive_ipc.c \
 	hive_link.c \
 	hive_log.c \
@@ -82,11 +81,17 @@ HIVE_CORE_SRCS = \
 	hive_runtime.c \
 	hive_select.c \
 	hive_supervisor.c \
-	hive_scheduler_stm32.c \
+	hive_scheduler.c \
 	hive_timer_stm32.c \
-	hive_file_stm32.c
+	hive_file.c
 
-HIVE_ASM = hive_context_arm_cm.S
+# HAL source files (STM32 platform)
+HIVE_HAL_SRCS = \
+	hal/stm32/hive_hal_stm32.c \
+	hal/stm32/hive_hal_context_stm32.c \
+	hal/stm32/hive_hal_file_stm32.c
+
+HIVE_ASM = hal/stm32/hive_context_arm_cm.S
 
 # HAL library (built by HAL Makefile)
 HAL_LIB = $(HAL_DIR)/build/libhal.a
@@ -147,8 +152,10 @@ CFLAGS += '-DHIVE_FILE_RING_SIZE=(8*1024)'
 
 # Include paths (including lightweight printf library)
 PRINTF_INCLUDES = -I$(HIVE_ROOT)/lib -I$(HIVE_ROOT)/lib/printf -DPRINTF_INCLUDE_CONFIG_H
-PILOT_INCLUDES = -I. -Iinclude -I$(HAL_DIR) -I$(HIVE_INC_DIR) $(PRINTF_INCLUDES)
-HIVE_INCLUDES = -I$(HAL_DIR) -I$(HIVE_INC_DIR) $(PRINTF_INCLUDES)
+# HIVE_HAL_INC: path to hive's STM32 HAL (for hive_hal_context_defs.h)
+HIVE_HAL_INC = -I$(HIVE_SRC_DIR)/hal/stm32
+PILOT_INCLUDES = -I. -Iinclude -I$(HAL_DIR) -I$(HIVE_INC_DIR) $(HIVE_HAL_INC) $(PRINTF_INCLUDES)
+HIVE_INCLUDES = -I$(HAL_DIR) -I$(HIVE_INC_DIR) $(HIVE_HAL_INC) $(PRINTF_INCLUDES)
 
 # Assembler flags
 ASFLAGS = $(MCU) -g3
@@ -176,6 +183,7 @@ PILOT_OBJS = $(PILOT_SRCS:%.c=$(BUILD_DIR)/pilot/%.o)
 
 # Hive objects (built into libhive.a)
 HIVE_OBJS = $(HIVE_CORE_SRCS:%.c=$(BUILD_DIR)/hive/%.o)
+HIVE_HAL_OBJS = $(HIVE_HAL_SRCS:%.c=$(BUILD_DIR)/hive/%.o)
 HIVE_ASM_OBJS = $(HIVE_ASM:%.S=$(BUILD_DIR)/hive/%.o)
 
 # Lightweight printf library object
@@ -185,7 +193,7 @@ PRINTF_OBJ = $(BUILD_DIR)/hive/printf.o
 HIVE_LIB = $(BUILD_DIR)/libhive.a
 
 # Dependencies
-DEPS = $(PILOT_OBJS:.o=.d) $(HIVE_OBJS:.o=.d)
+DEPS = $(PILOT_OBJS:.o=.d) $(HIVE_OBJS:.o=.d) $(HIVE_HAL_OBJS:.o=.d)
 
 # ------------------------------------------------------------------------------
 # Build Rules
@@ -196,7 +204,7 @@ DEPS = $(PILOT_OBJS:.o=.d) $(HIVE_OBJS:.o=.d)
 all: $(BUILD_DIR)/$(TARGET).elf $(BUILD_DIR)/$(TARGET).hex $(BUILD_DIR)/$(TARGET).bin size
 
 # Create build directories
-$(BUILD_DIR)/pilot $(BUILD_DIR)/pilot/fusion $(BUILD_DIR)/hive:
+$(BUILD_DIR)/pilot $(BUILD_DIR)/pilot/fusion $(BUILD_DIR)/hive $(BUILD_DIR)/hive/hal/stm32:
 	mkdir -p $@
 
 # --- Hive library ---
@@ -206,9 +214,14 @@ $(BUILD_DIR)/hive/%.o: $(HIVE_SRC_DIR)/%.c | $(BUILD_DIR)/hive
 	@echo "CC (hive) $<"
 	@$(CC) $(CFLAGS) $(HIVE_INCLUDES) -c $< -o $@
 
+# Compile hive HAL C sources (in hal/stm32/ subdirectory)
+$(BUILD_DIR)/hive/hal/stm32/%.o: $(HIVE_SRC_DIR)/hal/stm32/%.c | $(BUILD_DIR)/hive/hal/stm32
+	@echo "CC (hive-hal) $<"
+	@$(CC) $(CFLAGS) $(HIVE_INCLUDES) -c $< -o $@
+
 # Compile hive assembly
-$(BUILD_DIR)/hive/%.o: $(HIVE_SRC_DIR)/%.S | $(BUILD_DIR)/hive
-	@echo "AS (hive) $<"
+$(BUILD_DIR)/hive/hal/stm32/%.o: $(HIVE_SRC_DIR)/hal/stm32/%.S | $(BUILD_DIR)/hive/hal/stm32
+	@echo "AS (hive-hal) $<"
 	@$(CC) $(ASFLAGS) $(HIVE_INCLUDES) -c $< -o $@
 
 # Compile lightweight printf library
@@ -217,7 +230,7 @@ $(PRINTF_OBJ): $(HIVE_ROOT)/lib/printf/printf.c | $(BUILD_DIR)/hive
 	@$(CC) $(CFLAGS) $(PRINTF_INCLUDES) -c $< -o $@
 
 # Create libhive.a
-$(HIVE_LIB): $(HIVE_OBJS) $(HIVE_ASM_OBJS) $(PRINTF_OBJ)
+$(HIVE_LIB): $(HIVE_OBJS) $(HIVE_HAL_OBJS) $(HIVE_ASM_OBJS) $(PRINTF_OBJ)
 	@echo "AR $@"
 	@$(AR) rcs $@ $^
 

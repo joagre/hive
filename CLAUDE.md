@@ -376,19 +376,60 @@ The runtime is **completely single-threaded**. All runtime APIs must be called f
 
 See SPEC.md "Thread Safety" section for full details.
 
-### Platform Abstraction
+### Hardware Abstraction Layer (HAL)
+
+The runtime uses a HAL to isolate platform-specific code. Porters implement HAL functions without needing to understand scheduler or timer internals.
+
+**HAL Structure:**
+```
+include/hal/
+  hive_hal_time.h      - Time + critical sections (3 functions)
+  hive_hal_event.h     - Event loop primitives (5 functions)
+  hive_hal_context.h   - Context switching (1 function + struct)
+  hive_hal_file.h      - File I/O (8 functions, optional)
+  hive_hal_net.h       - Network I/O (10 functions, optional)
+
+src/hal/
+  linux/               - Linux implementation (epoll, POSIX)
+  stm32/               - STM32 implementation (WFI, flash)
+  template/            - Documented templates for new ports
+```
+
+**Minimum port**: ~9 C functions + 1 assembly function + 1 struct definition
+
+**Platform-specific files:**
+| Category | Linux | STM32 |
+|----------|-------|-------|
+| Main HAL | `hal/linux/hive_hal_linux.c` | `hal/stm32/hive_hal_stm32.c` |
+| Context init | `hal/linux/hive_hal_context_linux.c` | `hal/stm32/hive_hal_context_stm32.c` |
+| Context switch | `hal/linux/hive_context_x86_64.S` | `hal/stm32/hive_context_arm_cm.S` |
+| Context struct | `hal/linux/hive_hal_context_defs.h` | `hal/stm32/hive_hal_context_defs.h` |
+| File HAL | (in main HAL) | `hal/stm32/hive_hal_file_stm32.c` |
+
+**Platform-independent files:**
+- `hive_scheduler.c` - Unified scheduler (calls HAL event functions)
+- `hive_file.c` - Thin wrapper around HAL file functions
+- `hive_net.c` - Thin wrapper around HAL network functions
+
+**HAL Functions Summary:**
+| Category | Functions | Notes |
+|----------|-----------|-------|
+| Time | `get_time_us`, `critical_enter`, `critical_exit` | Required |
+| Event | `init`, `cleanup`, `poll`, `wait`, `register`, `unregister` | Required |
+| Context | `init` (C), `switch` (asm) | Required |
+| File | `init`, `cleanup`, `open`, `close`, `read`, `pread`, `write`, `pwrite`, `sync` | Optional |
+| Network | `init`, `cleanup`, `socket`, `bind`, `listen`, `accept`, `connect`, `connect_check`, `close`, `recv`, `send` | Optional |
+
+See `src/hal/template/README.md` for porting guide.
+
+### Platform Differences
+
 Different implementations for Linux (dev) vs STM32 bare metal (prod):
 - Context switch: x86-64 asm vs ARM Cortex-M asm
 - Event notification: epoll vs WFI + interrupt flags
 - Timer: timerfd + epoll vs software timer wheel (SysTick/TIM)
-- Network: Non-blocking BSD sockets + epoll (Linux only; STM32 not yet implemented)
-- File: Synchronous POSIX (`hive_file_linux.c`) vs flash-backed ring buffer (`hive_file_stm32.c`)
-
-Platform-specific source files:
-- Scheduler: `hive_scheduler_linux.c` / `hive_scheduler_stm32.c`
-- Timer: `hive_timer_linux.c` / `hive_timer_stm32.c`
-- Context: `hive_context_x86_64.S` / `hive_context_arm_cm.S`
-- File: `hive_file_linux.c` / `hive_file_stm32.c`
+- Network: Non-blocking BSD sockets + epoll (Linux); stubs on STM32 (future lwIP)
+- File: Synchronous POSIX vs flash-backed ring buffer
 
 **STM32 File I/O Differences:**
 

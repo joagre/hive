@@ -1,22 +1,14 @@
-// STM32 Flash File I/O Implementation
+// Hardware Abstraction Layer - STM32 File I/O Implementation
 //
-// Provides the same API and semantics as hive_file_linux.c for STM32 flash
-// storage. Uses a ring buffer for efficiency - most writes complete
-// immediately. When the buffer fills up, write() blocks to flush data to flash
-// before continuing. This ensures no data loss while maintaining good
-// performance for typical usage.
-//
-// Key characteristics:
-// - Virtual file paths mapped to flash sectors (/log, /config)
-// - Ring buffer for efficient writes (most are O(1))
-// - Blocks to flush when buffer is full (ensures no data loss)
-// - Staged writes with flash programming from RAM
-// - Erase on TRUNC flag (required before writing)
+// Flash-backed virtual file system for STM32.
+// Maps virtual paths (/log, /config) to flash sectors.
+// Uses ring buffer for efficient writes.
 //
 // Board-specific flash configuration via -D flags:
 // - HIVE_VFILE_LOG_BASE, HIVE_VFILE_LOG_SIZE, HIVE_VFILE_LOG_SECTOR
 // - HIVE_VFILE_CONFIG_BASE, HIVE_VFILE_CONFIG_SIZE, HIVE_VFILE_CONFIG_SECTOR
 
+#include "hal/hive_hal_file.h"
 #include "hive_file.h"
 #include "hive_internal.h"
 #include "hive_static_config.h"
@@ -324,50 +316,8 @@ static bool flush_ring_to_flash(vfile_t *vf) {
 }
 
 // ----------------------------------------------------------------------------
-// File I/O Subsystem State
+// Helper Functions
 // ----------------------------------------------------------------------------
-
-static struct {
-    bool initialized;
-} s_file = {0};
-
-// ----------------------------------------------------------------------------
-// API Implementation
-// ----------------------------------------------------------------------------
-
-hive_status hive_file_init(void) {
-    HIVE_INIT_GUARD(s_file.initialized);
-
-    // Reset ring buffer
-    s_ring_head = 0;
-    s_ring_tail = 0;
-    s_ring_fd = -1;
-
-    // Reset staging
-    staging_reset();
-
-    // Reset virtual file state
-    for (size_t i = 0; i < VFILE_COUNT; i++) {
-        s_vfiles[i].write_pos = 0;
-        s_vfiles[i].opened = false;
-        s_vfiles[i].erased_ok = false;
-        s_vfiles[i].write_mode = false;
-    }
-
-    s_file.initialized = true;
-    return HIVE_SUCCESS;
-}
-
-void hive_file_cleanup(void) {
-    HIVE_CLEANUP_GUARD(s_file.initialized);
-
-    // Close any open files
-    for (size_t i = 0; i < VFILE_COUNT; i++) {
-        s_vfiles[i].opened = false;
-    }
-
-    s_file.initialized = false;
-}
 
 // Find virtual file by path
 static vfile_t *find_vfile(const char *path) {
@@ -387,14 +337,40 @@ static vfile_t *get_vfile(int fd) {
     return &s_vfiles[fd];
 }
 
-hive_status hive_file_open(const char *path, int flags, int mode, int *fd_out) {
-    (void)mode; // Not used for flash files
+// ----------------------------------------------------------------------------
+// HAL File API Implementation
+// ----------------------------------------------------------------------------
 
-    if (!path || !fd_out) {
-        return HIVE_ERROR(HIVE_ERR_INVALID, "NULL path or fd_out pointer");
+hive_status hive_hal_file_init(void) {
+    // Reset ring buffer
+    s_ring_head = 0;
+    s_ring_tail = 0;
+    s_ring_fd = -1;
+
+    // Reset staging
+    staging_reset();
+
+    // Reset virtual file state
+    for (size_t i = 0; i < VFILE_COUNT; i++) {
+        s_vfiles[i].write_pos = 0;
+        s_vfiles[i].opened = false;
+        s_vfiles[i].erased_ok = false;
+        s_vfiles[i].write_mode = false;
     }
 
-    HIVE_REQUIRE_INIT(s_file.initialized, "File I/O");
+    return HIVE_SUCCESS;
+}
+
+void hive_hal_file_cleanup(void) {
+    // Close any open files
+    for (size_t i = 0; i < VFILE_COUNT; i++) {
+        s_vfiles[i].opened = false;
+    }
+}
+
+hive_status hive_hal_file_open(const char *path, int flags, int mode,
+                               int *fd_out) {
+    (void)mode; // Not used for flash files
 
     vfile_t *vf = find_vfile(path);
     if (!vf) {
@@ -452,9 +428,7 @@ hive_status hive_file_open(const char *path, int flags, int mode, int *fd_out) {
     return HIVE_SUCCESS;
 }
 
-hive_status hive_file_close(int fd) {
-    HIVE_REQUIRE_INIT(s_file.initialized, "File I/O");
-
+hive_status hive_hal_file_close(int fd) {
     vfile_t *vf = get_vfile(fd);
     if (!vf || !vf->opened) {
         return HIVE_ERROR(HIVE_ERR_INVALID, "invalid fd");
@@ -462,7 +436,7 @@ hive_status hive_file_close(int fd) {
 
     // Final sync if write mode
     if (vf->write_mode && s_ring_fd == fd) {
-        hive_file_sync(fd);
+        hive_hal_file_sync(fd);
         s_ring_fd = -1;
     }
 
@@ -472,20 +446,11 @@ hive_status hive_file_close(int fd) {
     return HIVE_SUCCESS;
 }
 
-hive_status hive_file_read(int fd, void *buf, size_t len, size_t *bytes_read) {
-    (void)len; // Read position tracking not implemented
-
-    if (!buf || !bytes_read) {
-        return HIVE_ERROR(HIVE_ERR_INVALID,
-                          "NULL buffer or bytes_read pointer");
-    }
-
-    HIVE_REQUIRE_INIT(s_file.initialized, "File I/O");
-
-    vfile_t *vf = get_vfile(fd);
-    if (!vf || !vf->opened) {
-        return HIVE_ERROR(HIVE_ERR_INVALID, "invalid fd");
-    }
+hive_status hive_hal_file_read(int fd, void *buf, size_t len,
+                               size_t *bytes_read) {
+    (void)fd;
+    (void)buf;
+    (void)len;
 
     // For now, read is not implemented (would need read position tracking)
     // This is primarily a write-optimized implementation for logging
@@ -493,15 +458,8 @@ hive_status hive_file_read(int fd, void *buf, size_t len, size_t *bytes_read) {
     return HIVE_ERROR(HIVE_ERR_INVALID, "read not implemented for flash files");
 }
 
-hive_status hive_file_pread(int fd, void *buf, size_t len, size_t offset,
-                            size_t *bytes_read) {
-    if (!buf || !bytes_read) {
-        return HIVE_ERROR(HIVE_ERR_INVALID,
-                          "NULL buffer or bytes_read pointer");
-    }
-
-    HIVE_REQUIRE_INIT(s_file.initialized, "File I/O");
-
+hive_status hive_hal_file_pread(int fd, void *buf, size_t len, size_t offset,
+                                size_t *bytes_read) {
     vfile_t *vf = get_vfile(fd);
     if (!vf || !vf->opened) {
         return HIVE_ERROR(HIVE_ERR_INVALID, "invalid fd");
@@ -525,15 +483,8 @@ hive_status hive_file_pread(int fd, void *buf, size_t len, size_t offset,
     return HIVE_SUCCESS;
 }
 
-hive_status hive_file_write(int fd, const void *buf, size_t len,
-                            size_t *bytes_written) {
-    if (!buf || !bytes_written) {
-        return HIVE_ERROR(HIVE_ERR_INVALID,
-                          "NULL buffer or bytes_written pointer");
-    }
-
-    HIVE_REQUIRE_INIT(s_file.initialized, "File I/O");
-
+hive_status hive_hal_file_write(int fd, const void *buf, size_t len,
+                                size_t *bytes_written) {
     vfile_t *vf = get_vfile(fd);
     if (!vf || !vf->opened) {
         return HIVE_ERROR(HIVE_ERR_INVALID, "invalid fd");
@@ -575,8 +526,8 @@ hive_status hive_file_write(int fd, const void *buf, size_t len,
     return HIVE_SUCCESS;
 }
 
-hive_status hive_file_pwrite(int fd, const void *buf, size_t len, size_t offset,
-                             size_t *bytes_written) {
+hive_status hive_hal_file_pwrite(int fd, const void *buf, size_t len,
+                                 size_t offset, size_t *bytes_written) {
     // pwrite not supported for ring-buffered flash writes
     (void)fd;
     (void)buf;
@@ -586,9 +537,7 @@ hive_status hive_file_pwrite(int fd, const void *buf, size_t len, size_t offset,
     return HIVE_ERROR(HIVE_ERR_INVALID, "pwrite not supported for flash files");
 }
 
-hive_status hive_file_sync(int fd) {
-    HIVE_REQUIRE_INIT(s_file.initialized, "File I/O");
-
+hive_status hive_hal_file_sync(int fd) {
     vfile_t *vf = get_vfile(fd);
     if (!vf || !vf->opened) {
         return HIVE_ERROR(HIVE_ERR_INVALID, "invalid fd");

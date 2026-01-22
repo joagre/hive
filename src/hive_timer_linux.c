@@ -8,12 +8,12 @@
 #include "hive_ipc.h"
 #include "hive_log.h"
 #include "hive_io_source.h"
+#include "hal/hive_hal_event.h"
 #include <string.h>
 #include <unistd.h>
 #include <errno.h>
 #include <time.h>
 #include <sys/timerfd.h>
-#include <sys/epoll.h>
 
 // Active timer entry
 typedef struct timer_entry {
@@ -41,11 +41,10 @@ static struct {
     uint64_t sim_time_us; // Current simulation time in microseconds
 } s_timer = {0};
 
-// Helper: Close timer fd and remove from epoll (only in real-time mode)
+// Helper: Close timer fd and remove from event system (only in real-time mode)
 static void timer_close_fd(timer_entry *entry) {
     if (entry->fd >= 0) {
-        int epoll_fd = hive_scheduler_get_epoll_fd();
-        epoll_ctl(epoll_fd, EPOLL_CTL_DEL, entry->fd, NULL);
+        hive_hal_event_unregister(entry->fd);
         close(entry->fd);
         entry->fd = -1;
     }
@@ -196,20 +195,17 @@ static hive_status create_timer(uint32_t interval_us, bool periodic,
         entry->interval_us = interval_us;
         entry->expiry_us = 0; // Not used in real-time mode
 
-        // Setup io_source for epoll
+        // Setup io_source for event system
         entry->source.type = IO_SOURCE_TIMER;
         entry->source.data.timer = entry;
 
-        // Add to scheduler's epoll
-        int epoll_fd = hive_scheduler_get_epoll_fd();
-        struct epoll_event ev;
-        ev.events = EPOLLIN;
-        ev.data.ptr = &entry->source;
-
-        if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, tfd, &ev) < 0) {
+        // Register with HAL event system (timers use read events)
+        hive_status reg_status =
+            hive_hal_event_register(tfd, HIVE_EVENT_READ, &entry->source);
+        if (HIVE_FAILED(reg_status)) {
             close(tfd);
             hive_pool_free(&s_timer_pool_mgr, entry);
-            return HIVE_ERROR(HIVE_ERR_IO, "epoll_ctl failed");
+            return reg_status;
         }
     }
 
