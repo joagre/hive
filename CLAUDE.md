@@ -177,6 +177,14 @@ Convenience macros:
 - Actors can link (bidirectional) or monitor (unidirectional) other actors for death notifications
 - When an actor dies: mailbox cleared, links/monitors notified, bus subscriptions removed, timers cancelled, resources freed
 
+### Stack Watermarking
+When `HIVE_STACK_WATERMARK=1`, the runtime fills actor stacks with a pattern at allocation time, allowing measurement of actual stack usage:
+```c
+size_t hive_actor_stack_usage(actor_id id);  // Get bytes used by actor
+void hive_actor_stack_usage_all(stack_usage_callback cb);  // Iterate all actors
+```
+Enable via: `make CFLAGS+='-DHIVE_STACK_WATERMARK=1'`
+
 ### Exit Message Handling
 Exit messages are received when linked/monitored actors die:
 ```c
@@ -324,6 +332,10 @@ The runtime uses **compile-time configuration** for bounded, predictable memory 
 - `HIVE_MAX_SUPERVISORS`: Maximum concurrent supervisors (8)
 - `HIVE_MAX_SUPERVISOR_CHILDREN`: Maximum children per supervisor (16)
 - `HIVE_MAX_REGISTERED_NAMES`: Maximum registered actor names (32)
+
+**Stack Watermarking** (also in `hive_static_config.h`):
+- `HIVE_STACK_WATERMARK`: Enable stack usage measurement (default: 0 = disabled)
+- `HIVE_STACK_WATERMARK_PATTERN`: Fill pattern for watermarking (default: 0xDEADBEEF)
 
 **Logging Configuration** (also in `hive_static_config.h`):
 - `HIVE_LOG_LEVEL`: Minimum log level to compile (default: INFO on Linux, NONE on STM32)
