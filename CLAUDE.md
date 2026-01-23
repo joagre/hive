@@ -17,6 +17,8 @@ This is an actor-based runtime for embedded systems, targeting STM32 (ARM Cortex
 - **SPEC.md** - Complete design specification
 - **README.md** - Quick start and API overview
 - **man/man3/** - Unix man pages for all API functions
+- **examples/** - Working examples (pingpong, bus, supervisor, etc.)
+- **examples/pilot/** - Complete quadcopter autopilot (11 actors, Kalman filter, cascaded PID)
 
 Man pages available:
 - `hive_init(3)` - Runtime initialization, run loop, shutdown
