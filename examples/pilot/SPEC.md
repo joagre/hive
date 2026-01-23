@@ -28,6 +28,16 @@ A quadcopter autopilot example using the actor runtime. Supports Webots simulati
 | CSV telemetry | Yes | No |
 | Radio telemetry | No | Yes |
 
+### Timing Terminology
+
+| Term | Definition |
+|------|------------|
+| **Control period** | 4ms (250 Hz) — the interval between control loop iterations |
+| **Tick** | One control period |
+| **Simulation step** | `HAL_TIME_STEP_US` — equals control period in Webots |
+
+> **Disclaimer:** This is a demonstration autopilot, not production-ready flight software. See "Production Gaps" section for what a real flight controller would need.
+
 ## Status
 
 **Implemented:**
@@ -176,6 +186,8 @@ same instant.
 
 ### Error Handling Pattern
 
+> **Actor return semantics:** In Hive, returning from an actor entry function is treated as abnormal termination (CRASH) unless the actor explicitly calls `hive_exit()`. This enables supervision and restart.
+
 Actors use explicit error checking instead of `assert()`. This enables the supervisor
 to detect and recover from failed actors.
 
@@ -183,8 +195,9 @@ to detect and recover from failed actors.
 The supervisor sees this as a CRASH and can attempt restart per the restart strategy.
 
 ```c
+// Estimator subscribes to sensor bus (consumer role)
 if (HIVE_FAILED(hive_bus_subscribe(state->sensor_bus))) {
-    HIVE_LOG_ERROR("[SENSOR] bus subscribe failed");
+    HIVE_LOG_ERROR("[ESTIMATOR] bus subscribe failed");
     return;
 }
 ```
@@ -194,6 +207,7 @@ Log error and return. These failures indicate a fundamental runtime problem that
 actor cannot recover from.
 
 ```c
+// Sensor waits for periodic timer (producer role)
 status = hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
 if (HIVE_FAILED(status)) {
     HIVE_LOG_ERROR("[SENSOR] recv_match failed: %s", HIVE_ERR_STR(status));
@@ -205,6 +219,7 @@ if (HIVE_FAILED(status)) {
 Log warning and continue. The actor keeps running and processes the next iteration.
 
 ```c
+// Sensor publishes to sensor bus (producer role)
 if (HIVE_FAILED(hive_bus_publish(state->sensor_bus, &sensors, sizeof(sensors)))) {
     HIVE_LOG_WARN("[SENSOR] bus publish failed");
 }
@@ -232,18 +247,18 @@ The Crazyflie build uses `HIVE_LOG_LEVEL=INFO`:
 Logs are written to flash and downloaded over radio after flight. This provides a
 complete flight record for debugging without the overhead of TRACE/DEBUG messages.
 
-## Non-Goals (Future Work)
+## Deferred Features
 
-- Full state estimation (Kalman filter)
-- Failsafe handling
-- Parameter tuning UI
-- Multiple vehicle types
+Features intentionally omitted from this demonstration:
 
-## Limitations (Production Requirements)
+- Full state estimation (Kalman filter) — complementary filter is sufficient for demo
+- Failsafe handling (return-to-home, auto-land) — requires GPS and mission planning
+- Parameter tuning UI — gains are hardcoded per platform
+- Multiple vehicle types — single X-configuration quadcopter
 
-**This example is a demonstration, not production-ready flight software.**
+## Production Gaps
 
-A production flight controller would need error handling and failsafes that this example omits:
+What a production flight controller would need beyond this demonstration:
 
 ### Missing Error Handling
 
@@ -799,6 +814,8 @@ Rate Actor ──► Torque Bus ──► Motor Actor ──► HAL ──► Ha
 
 **Features:** Subscribe to torque bus, call HAL for motor output. Mixer is in HAL.
 
+> **Motor authority:** The motor actor is the sole writer to motor outputs. STOP notifications from flight manager override all torque commands and force outputs to zero. This single point of control prevents conflicting motor commands.
+
 ### Step 2: Separate Altitude Actor ✓
 
 Split altitude control from rate control.
@@ -997,8 +1014,11 @@ Thrust Bus ─┘
 
 **Implementation:**
 - Subscribes to sensor, state, and thrust buses (not position target bus)
-- Position targets omitted due to 31-byte ESB packet size limit
 - Sends binary packets at 100Hz over syslink protocol
+
+**Constraint:** ESB payload limit is 31 bytes per packet.
+
+**Design choice:** Prioritize attitude, rates, and thrust in telemetry packets. Position targets are omitted due to packet size limit—use Webots CSV telemetry for position control tuning. A future revision could add a third packet type for targets if needed.
 - Two operating modes:
   - Flight mode: Sends telemetry packets at 100Hz
   - Download mode: Transfers flash log file to ground station on request
