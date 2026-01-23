@@ -1,6 +1,6 @@
 # Hive - Actor Runtime for Embedded Systems
 
-> **Lightweight actors for embedded systems. Deterministic memory, no GC.**
+> **Erlang-style actors for embedded systems. Deterministic memory, cooperative scheduling, no GC.**
 
 A complete actor-based runtime designed for **embedded and safety-critical systems**. Features cooperative multitasking with priority-based scheduling and message passing using the actor model.
 

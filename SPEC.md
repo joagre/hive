@@ -96,7 +96,7 @@ Hive is **not**:
 - A distributed actor framework (single process only)
 - A statechart or FSM framework
 
-**Tagline:** *"Erlang-style actors with deterministic memory and cooperative scheduling for embedded systems."*
+**Tagline:** *"Erlang-style actors for embedded systems. Deterministic memory, cooperative scheduling, no GC."*
 
 ## Failure Modes Summary
 
