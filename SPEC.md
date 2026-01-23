@@ -3110,10 +3110,59 @@ For production systems:
 - **Actor monitoring:** Use links/monitors to detect failures, restart actors as needed
 - **Memory isolation:** Hardware MPU (ARM Cortex-M) can provide hardware-guaranteed protection
 
-### Future Extensions
+### Future Extensions (Stack)
 
 Hardware-based protection may be added in future versions:
 - **Linux:** `mprotect()` guard pages (immediate SIGSEGV on overflow)
 - **ARM Cortex-M:** MPU guard regions (immediate HardFault on overflow)
 
 These would provide immediate, hardware-guaranteed detection with zero runtime overhead.
+
+---
+
+## Future Extensions
+
+This section documents potential improvements that have been considered but are not currently implemented. These are valid enhancements that preserve Hive's philosophy (single-threaded, cooperative, bounded memory) while addressing known limitations.
+
+### Guaranteed EXIT/Monitor Delivery
+
+**Current behavior:** EXIT and monitor notifications use the same message pool as normal IPC. Under pool exhaustion, supervisors may miss actor death notifications.
+
+**Potential improvement:** Reserve a dedicated EXIT slot per actor (adds ~8 bytes per actor) to guarantee delivery regardless of pool state.
+
+**Rationale for deferral:** Pool exhaustion is a systemic error that should trigger shutdown. In well-sized systems, this is not a practical concern. The complexity of maintaining a separate delivery mechanism is not justified for embedded systems with correctly sized pools.
+
+### Bounded I/O Dispatch
+
+**Current behavior:** `epoll_wait()` is only called when the run queue is empty. If an actor never yields, I/O events can be starved indefinitely.
+
+**Potential improvement:** Poll I/O every N actor dispatches (compile-time configurable). This bounds worst-case I/O latency to N × max-actor-run-time.
+
+**Rationale for deferral:** Well-behaved actors yield regularly via `recv`, `select`, or explicit `yield`. Flight-critical code follows this pattern. Adding periodic polling adds complexity and may interfere with deterministic scheduling in time-critical applications.
+
+### Priority Fairness Mode
+
+**Current behavior:** Strict priority scheduling. Higher-priority actors always preempt lower-priority actors. A misbehaving CRITICAL actor can starve all others.
+
+**Potential improvement:** Opt-in fairness mode (compile-time flag) that enforces:
+- Per-priority quota (must schedule lower priority after N runs)
+- Priority aging for waiting actors
+- Per-actor time budget with forced yield
+
+**Rationale for deferral:** Strict priority is intentional for deterministic real-time behavior. Applications requiring fairness can implement it at the actor level. Adding scheduler-level fairness significantly complicates timing analysis.
+
+### Selective Receive Save Queue
+
+**Current behavior:** Each selective receive scans the mailbox from the head. Repeated receives with the same filter rescan previously-checked messages.
+
+**Potential improvement:** Track scan position per filter pattern (Erlang's "save queue" optimization). Only scan new messages on repeated receives.
+
+**Rationale for deferral:** For embedded systems with small mailboxes (< 20 messages), the O(n) scan is acceptable. The optimization adds state tracking complexity. If this becomes a bottleneck, a `scan_start` pointer could be added to the mailbox struct.
+
+### Bus Retention on Subscribe
+
+**Current behavior:** Late subscribers see no data until the next publish. After supervisor restart, downstream actors wait for the next publish cycle.
+
+**Potential improvement:** Optional "retain latest" flag for buses with `max_entries=1`. New subscribers immediately receive the most recent value.
+
+**Rationale for deferral:** For high-frequency buses (e.g., sensor data at 250Hz), the wait is negligible (< 4ms). The current behavior is predictable and avoids complexity around stale data semantics.

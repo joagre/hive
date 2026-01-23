@@ -44,6 +44,11 @@
 #define TIME_STEP_MS 4 // Control loop period (milliseconds)
 // Note: Actors measure actual dt using hive_get_time(), not a fixed timestep
 
+// Motor deadman timeout - if no torque command received within this time,
+// motors are zeroed. Should be several control cycles to tolerate jitter.
+// 50ms = ~12 control cycles at 250Hz, provides margin while still being safe.
+#define MOTOR_DEADMAN_TIMEOUT_MS 50
+
 #define DEBUG_PRINT_INTERVAL \
     250 // Print every N iterations (250 = 1 second at 250Hz)
 

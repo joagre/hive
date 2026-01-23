@@ -4,6 +4,10 @@
 // The HAL handles mixing (converting torque to individual motor commands).
 // Uses hive_select() to wait on torque bus OR STOP notification simultaneously,
 // ensuring immediate response to STOP commands (critical for safety).
+//
+// DEADMAN WATCHDOG: If no torque command is received within
+// MOTOR_DEADMAN_TIMEOUT_MS, motors are automatically zeroed. This prevents
+// runaway motors if upstream control actors crash.
 
 #include "motor_actor.h"
 #include "pilot_buses.h"
@@ -65,8 +69,18 @@ void motor_actor(void *args, const hive_spawn_info *siblings,
         torque_cmd_t torque;
 
         // Wait for torque command OR STOP notification (unified event waiting)
+        // Timeout implements deadman watchdog - zero motors if no command
         hive_select_result result;
-        status = hive_select(sources, 2, &result, -1);
+        status = hive_select(sources, 2, &result, MOTOR_DEADMAN_TIMEOUT_MS);
+
+        if (status.code == HIVE_ERR_TIMEOUT) {
+            // DEADMAN TIMEOUT - no torque command received, zero motors
+            HIVE_LOG_WARN("[MOTOR] Deadman timeout - zeroing motors");
+            torque = (torque_cmd_t)TORQUE_CMD_ZERO;
+            hal_write_torque(&torque);
+            continue;
+        }
+
         if (HIVE_FAILED(status)) {
             HIVE_LOG_ERROR("[MOTOR] select failed: %s", HIVE_ERR_STR(status));
             return;

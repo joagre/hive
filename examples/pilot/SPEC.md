@@ -231,14 +231,12 @@ The following instrumentation should be added for production flight software:
 - `bus_publish_fail_count` - incremented when `hive_bus_publish()` returns error
 - Counters exposed via telemetry or debug interface
 
-**Motor Deadman Watchdog:**
-- Production motor actor requires a torque watchdog
-- If no valid torque command received within 3 ticks (12ms), zero all motors
+**Motor Deadman Watchdog:** ✓ Implemented
+- Motor actor uses `hive_select()` with `MOTOR_DEADMAN_TIMEOUT_MS` timeout (50ms)
+- If no torque command received within timeout, all motors are zeroed
 - Protects against controller actor crash leaving motors at last commanded value
-- This example omits the watchdog to keep motor actor minimal
-
-These requirements are documented here but not implemented in the example to
-maintain code clarity. A production system would add these as first priorities.
+- Timeout of 50ms (~12 control cycles at 250Hz) provides margin while remaining safe
+- Logs warning on timeout: `[MOTOR] Deadman timeout - zeroing motors`
 
 ---
 
@@ -1055,3 +1053,4 @@ ARM Cortex-M may differ slightly due to calling conventions.
 4. **Telemetry** - ✓ Radio telemetry implemented (Crazyflie only)
 5. **RC input** - Manual control override
 6. **Setpoint actor** - Altitude command generation, mode switching
+7. **Bus retention on subscribe** - Late subscribers immediately receive most recent value (useful after supervisor restart). Current behavior: wait for next publish cycle, acceptable for high-frequency buses (< 4ms delay at 250Hz)
