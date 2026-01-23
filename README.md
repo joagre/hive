@@ -146,7 +146,7 @@ All resource limits are defined at compile time. Edit and recompile to change:
 
 All structures are statically allocated. Actor stacks use a static arena allocator by default (configurable size), with optional malloc via `actor_config.malloc_stack = true`. Stack sizes are configurable per actor, allowing different actors to use different stack sizes. Arena memory is automatically reclaimed and reused when actors exit. No malloc in hot paths. Memory footprint calculable at link time when using arena allocator (default); optional malloc'd stacks add runtime-dependent heap usage.
 
-**Embedded footprint:** The defaults above are generous for Linux development. The `examples/pilot/` quadcopter application demonstrates a minimal embedded configuration: 10 actors, 40KB stack arena, 16-entry mailbox pool. The complete pilot firmware (9 actors, flight control, sensor fusion) compiles to ~60KB flash and ~58KB RAM—suitable for microcontrollers like STM32F4.
+**Embedded footprint:** The defaults above are generous for Linux development. See the [Pilot Example](#pilot-example-quadcopter-flight-controller) for a minimal embedded configuration (~60KB flash, ~58KB RAM on STM32F4).
 
 ## Running Examples
 
@@ -193,7 +193,7 @@ All structures are statically allocated. Actor stacks use a static arena allocat
 
 ### Pilot Example (Quadcopter Flight Controller)
 
-The `examples/pilot/` directory contains a complete quadcopter autopilot targeting real hardware (Crazyflie 2.1+). Not a toy demo—11 actors, cascaded PID control, sensor fusion, and fail-safe supervision in 52KB of stack.
+The `examples/pilot/` directory contains a complete quadcopter autopilot targeting real hardware (Crazyflie 2.1+). Not a toy demo—11 actors, cascaded PID control, sensor fusion, and fail-safe supervision. Compiles to ~60KB flash and ~58KB RAM with a 52KB stack arena.
 
 See [examples/pilot/README.md](examples/pilot/README.md) for build instructions and architecture details.
 
