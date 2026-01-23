@@ -190,6 +190,9 @@ Hardware Abstraction Layer (HAL) provides platform independence:
 - `hal_write_torque()` - writes motors with mixing (called by motor_actor)
 - `hal_radio_*()` - radio telemetry (Crazyflie only, called by comms_actor)
 - `hal_step()` - advance simulation (Webots only)
+- `hal_debug_init()`, `hal_printf()` - debug output
+- `hal_delay_ms()`, `hal_get_time_ms()` - timing utilities
+- `hal_led_*()` - debug LED control
 
 Actor code is identical across platforms. See `hal/<platform>/README.md` for
 hardware-specific details.
