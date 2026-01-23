@@ -18,6 +18,7 @@ The runtime uses **statically bounded memory** for predictable behavior with no 
 - An RTOS (no preemption, no priority inversion protection)
 - A hard real-time guarantee engine (no deadline enforcement)
 - A distributed actor framework (single process only)
+- A statechart or FSM framework
 
 ## Quick Links
 

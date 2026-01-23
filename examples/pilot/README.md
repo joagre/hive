@@ -33,7 +33,9 @@ Without Flow deck, hovers and changes altitude only. 60-second startup delay bef
 Radio telemetry enabled via Crazyradio 2.0 for real-time ground station logging.
 
 **Safety features (all platforms):** Emergency cutoff on excessive tilt (>45°), excessive
-altitude (>2m), or touchdown. Flight duration limited by flight manager (10s/40s/60s per profile).
+altitude (>2m), or touchdown. Motor deadman watchdog zeros motors if no command received
+within 50ms (protects against controller crash). Flight duration limited by flight manager
+(10s/40s/60s per profile).
 
 ## Prerequisites
 
