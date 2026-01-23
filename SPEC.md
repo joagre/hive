@@ -3110,14 +3110,10 @@ For production systems:
 - **Actor monitoring:** Use links/monitors to detect failures, restart actors as needed
 - **Memory isolation:** Hardware MPU (ARM Cortex-M) can provide hardware-guaranteed protection
 
-### Future Considerations
+### Future Extensions
 
 Hardware-based protection may be added in future versions:
 - **Linux:** `mprotect()` guard pages (immediate SIGSEGV on overflow)
 - **ARM Cortex-M:** MPU guard regions (immediate HardFault on overflow)
 
 These would provide immediate, hardware-guaranteed detection with zero runtime overhead.
-
-## Future Considerations
-
-Not in scope for first version, but noted for future:
