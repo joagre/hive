@@ -8,6 +8,8 @@ Supports two platforms:
 
 **Philosophy:** The pilot is a stress test for the runtime. If it reveals weaknesses (latency, scheduling, memory), the runtime is fixed—not the pilot. The pilot code should be clean and idiomatic, not full of workarounds.
 
+**Full specification:** [SPEC.md](SPEC.md) — design rationale, supervision semantics, error handling patterns, and architecture details.
+
 ## What it does
 
 Demonstrates waypoint navigation with a quadcopter using 10-11 actors (8 flight-critical workers + flight manager + supervisor + 1 optional telemetry actor):
