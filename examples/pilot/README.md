@@ -167,6 +167,7 @@ graph TB
     StateBus --> Altitude
     StateBus --> Position --> AttitudeSP([Attitude SP Bus]) --> Attitude[Attitude]
     StateBus --> Attitude --> RateSP([Rate SP Bus]) --> Rate
+    StateBus --> Rate
     Rate --> TorqueBus([Torque Bus]) --> Motor[Motor]
 
     SensorBus -.-> Comms[Comms]
