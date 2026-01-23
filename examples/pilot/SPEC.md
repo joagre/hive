@@ -387,6 +387,7 @@ graph TB
     StateBus --> Altitude
     StateBus --> Position --> AttitudeSPBus --> Attitude
     StateBus --> Attitude --> RateSPBus --> Rate --> TorqueBus --> Motor
+    StateBus --> Rate
 
     Motor --> WriteTorque
 
@@ -394,6 +395,12 @@ graph TB
     StateBus -.-> Comms
     ThrustBus -.-> Comms
     Comms -.-> RadioTx
+
+    SensorBus -.-> TLog[TLOG ACTOR<br/>CSV logging]
+    StateBus -.-> TLog
+    ThrustBus -.-> TLog
+    PositionTargetBus -.-> TLog
+    TLog -.-> CSV([CSV File])
 ```
 
 ### Actor Priority and Blocking Table
