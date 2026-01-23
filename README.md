@@ -657,46 +657,16 @@ case 2: /* Shutdown: result.ipc */ break;
 
 ## Implementation Details
 
-### Event Loop Architecture
+### Event Loop and Thread Safety
 
-The runtime is **completely single-threaded** with an event loop architecture. All actors run cooperatively in a single scheduler thread. There are no I/O worker threads - all I/O operations are integrated into the scheduler's event loop.
+The runtime is **completely single-threaded**. All actors run cooperatively in a single scheduler thread with zero synchronization primitives (no mutexes, atomics, or locks).
 
-**Linux (epoll)**:
-- Timers: `timerfd` registered in `epoll`
-- Network: Non-blocking sockets registered in `epoll`
-- File: Direct synchronous I/O (regular files don't work with epoll)
-- Event loop: `epoll_wait()` with bounded timeout (10ms) for defensive wakeup
+- **Linux:** `epoll` for timers and network; synchronous file I/O
+- **STM32:** Hardware timers, WFI for idle, flash-backed virtual files
 
-**STM32 (bare metal)**:
-- Timers: Hardware timers (SysTick or TIM peripherals)
-- Network: Not yet implemented (planned: lwIP in NO_SYS mode)
-- File: Flash-backed virtual files (e.g., `/log`) with ring buffer
-  - Board config via -D flags: `HIVE_VFILE_LOG_BASE`, `HIVE_VFILE_LOG_SIZE`, `HIVE_VFILE_LOG_SECTOR`
-  - `write()` pushes to ring buffer (O(1), never blocks)
-  - `sync()` drains ring buffer to flash (blocking)
-  - `HIVE_O_TRUNC` erases flash sector (blocks 1-4 seconds)
-- Event loop: WFI (Wait For Interrupt) when no actors runnable
+All runtime APIs must be called from actor context. External threads must use platform IPC (sockets/pipes) with dedicated reader actors.
 
-This single-threaded model provides:
-- Maximum simplicity (no lock ordering, no deadlock)
-- Conditional determinism (no lock contention, no priority inversion; see SPEC.md for epoll ordering caveats)
-- Maximum performance (zero lock overhead, no cache line bouncing)
-- Safety-critical compliance (deterministic memory, predictable scheduling)
-
-### Thread Safety
-
-All runtime APIs must be called from actor context (the scheduler thread). The runtime uses **zero synchronization primitives** in the core event loop:
-
-- No mutexes (single thread, no contention)
-- No C11 atomics (single writer/reader per data structure)
-- No condition variables (event loop uses epoll/select for waiting)
-- No locks (mailboxes, actor state, bus state accessed only by scheduler thread)
-
-**Note:** STM32 uses `volatile bool` flags with interrupt disable for ISR-to-scheduler communication. This is a synchronization protocol but not C11 atomics.
-
-**Reentrancy constraint:** Runtime APIs are **not reentrant**. Actors **must not** call runtime APIs from signal handlers or interrupt service routines (ISRs). Violating this results in undefined behavior.
-
-**External thread communication:** External threads cannot call runtime APIs directly. Use platform-specific IPC (sockets/pipes) with dedicated reader actors to bridge external threads into the actor system. See `SPEC.md` "Thread Safety" section for complete details.
+See [SPEC.md](SPEC.md#thread-safety) for complete thread safety contract and external thread communication patterns.
 
 ### Hardware Abstraction Layer (HAL)
 
