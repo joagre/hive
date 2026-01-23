@@ -191,6 +191,26 @@ All structures are statically allocated. Actor stacks use a static arena allocat
 ./build/registry
 ```
 
+### Pilot Example (Quadcopter Flight Controller)
+
+The `examples/pilot/` directory contains a complete quadcopter autopilot—not a toy demo, but a flight controller targeting real hardware (Crazyflie 2.1+). It demonstrates Hive in a safety-critical embedded context:
+
+- **11 actors**: sensor fusion, state estimation, cascaded PID control (altitude → position → attitude → rate), motor output, telemetry logging
+- **7 pub-sub buses**: decoupled data flow from sensors through control loops to motors
+- **ONE_FOR_ALL supervision**: any actor crash triggers full system restart (fail-safe)
+- **52KB total stack**: all actors fit in 4KB each with ~50% headroom
+- **Dual-target**: runs in Webots simulator and on STM32F405 bare metal
+
+```bash
+# Webots simulation (requires WEBOTS_HOME)
+cd examples/pilot && make && webots worlds/crazyflie.wbt
+
+# Crazyflie hardware (requires arm-none-eabi-gcc, stlink)
+cd examples/pilot && make -f Makefile.crazyflie-2.1+ flash
+```
+
+See [examples/pilot/README.md](examples/pilot/README.md) for architecture details and [examples/pilot/SPEC.md](examples/pilot/SPEC.md) for the full specification.
+
 ## Quick Start
 
 ### Basic Actor Example
