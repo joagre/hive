@@ -33,6 +33,20 @@ A quadcopter autopilot example using the actor runtime. Supports Webots simulati
 
 The pilot serves dual purposes: a real-world stress test that exposes runtime weaknesses, and a showcase of clean actor-based embedded design.
 
+## Why Actors Instead of Tasks?
+
+Traditional RTOS designs use tasks with shared memory and locks. Actors use message passing with no shared state. Why choose actors for a flight controller?
+
+**Isolation:** Each actor has private state. A bug in the altitude controller cannot corrupt the rate controller's PID state. With shared memory, a wild pointer in one task can silently corrupt another.
+
+**Explicit dependencies:** Data flows through buses and IPC. You can trace exactly which actor produces data and which consumes it. With shared memory, dependencies hide in global variables and lock ordering.
+
+**Supervision:** When an actor crashes, the supervisor restarts it with clean state. With tasks, a crash typically means system reset. Actors let you recover from software faults without losing the aircraft.
+
+**Testing:** Actors with message-passing interfaces are easy to test in isolation. Inject messages, observe outputs. Shared-memory tasks require complex test harnesses to set up global state.
+
+**The cost:** Message copying instead of pointer sharing. For a 250Hz control loop with small messages (< 100 bytes), this overhead is negligible compared to the safety benefits.
+
 ## Design Decisions
 
 ### Why buses instead of IPC?

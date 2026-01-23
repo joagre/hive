@@ -6,6 +6,8 @@ Supports two platforms:
 - **Webots simulation** (default) - Crazyflie quadcopter in Webots simulator
 - **Crazyflie 2.1+** - Bitcraze nano quadcopter (~63 KB flash, ~120 KB RAM)
 
+**Philosophy:** The pilot is a stress test for the runtime. If it reveals weaknesses (latency, scheduling, memory), the runtime is fixed—not the pilot. The pilot code should be clean and idiomatic, not full of workarounds.
+
 ## What it does
 
 Demonstrates waypoint navigation with a quadcopter using 10-12 actors (9-11 workers + 1 supervisor):

@@ -15,6 +15,8 @@ A minimalistic actor-based runtime designed for **embedded and safety-critical s
 5. **O(1) hot paths**: IPC, timers, bus, monitoring, and I/O dispatch use pools with O(1) allocation; spawn/exit may use bounded arena search
 6. **No preemption**: Actors run until they block (IPC, I/O, timers) or yield
 
+**Hive favors boundedness and inspectability over fairness and throughput.**
+
 ### Heap Usage Policy
 
 **Definition - Hot path**: Any operation callable while the scheduler is running, including all API calls from actor context, event dispatch, and wakeup processing.
