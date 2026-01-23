@@ -567,6 +567,8 @@ This runtime makes deliberate design choices that favor **predictability, perfor
 
 **Consequence:** Deep mailboxes slow down selective receive. If 100 messages are queued and you're waiting for a specific tag, each wake scans all 100.
 
+**No save queue optimization:** Unlike Erlang, repeated selective receives with the same filter rescan from the mailbox head each time. There is no "save queue" to track previously scanned messages. If non-matching messages accumulate and are never consumed, this creates O(n) scans on each receive. For embedded systems with small mailboxes, this is acceptable. If this ever becomes a bottleneck, a `scan_start` pointer could be added.
+
 **Keep mailboxes shallow.** The request/reply pattern naturally does this (block waiting for reply).
 
 **Mitigation:** Process messages promptly. Don't let mailbox grow deep. Use `hive_ipc_request()` which blocks until reply.
