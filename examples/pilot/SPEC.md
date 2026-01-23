@@ -422,8 +422,8 @@ This table documents the scheduling design for audit and latency analysis.
 | rate | CRITICAL | Bus read (rate_sp_bus) | Yields waiting for setpoints |
 | motor | CRITICAL | select() with 50ms timeout | Yields waiting for torque or timeout |
 | flight_manager | CRITICAL | Timer + IPC recv | Yields on coordination events |
-| comms | LOW | Bus read (multiple) | Non-critical, may be starved |
-| telemetry_logger | LOW | Bus read + timer | Non-critical, may be starved |
+| comms | LOW | Bus read (3 buses) | Non-critical, may be starved |
+| telemetry_logger | LOW | Timer + bus read (4 buses) | Non-critical, may be starved |
 
 **Scheduling characteristics:**
 - All flight-critical actors run at CRITICAL priority
