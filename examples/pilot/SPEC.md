@@ -478,54 +478,6 @@ Code is split into focused modules:
 | `flight_profiles.h` | Waypoint definitions per flight profile |
 | `tools/*.py` | PID tuning and telemetry analysis tools |
 
-### Data Flow
-
-```mermaid
-graph TB
-    subgraph HW["Hardware"]
-        Sensors[Sensors]
-        Motors[Motors]
-        Radio[Radio]
-    end
-
-    ReadSensors[hal_read_sensors]
-    WriteTorque[hal_write_torque]
-    RadioTx[hal_radio_send]
-
-    Sensors --> ReadSensors --> Sensor[Sensor Actor]
-    Sensor --> SensorBus([Sensor Bus])
-    SensorBus --> Estimator[Estimator Actor]
-    Estimator --> StateBus([State Bus])
-
-    StateBus --> Waypoint[Waypoint Actor<br/>navigation]
-    StateBus --> Altitude[Altitude Actor<br/>altitude PID]
-    StateBus --> Position[Position Actor<br/>position PD]
-    StateBus --> Attitude[Attitude Actor<br/>attitude PIDs]
-    StateBus --> Rate[Rate Actor<br/>rate PIDs]
-
-    Waypoint --> PositionTargetBus([Position Target Bus])
-    PositionTargetBus --> Altitude
-    PositionTargetBus --> Position
-    Altitude --> ThrustBus([Thrust Bus])
-    ThrustBus --> Rate
-    Position --> AttitudeSP([Attitude Setpoint Bus])
-    AttitudeSP --> Attitude
-    Attitude --> RateSP([Rate Setpoint Bus])
-    RateSP --> Rate
-
-    Rate --> TorqueBus([Torque Bus])
-    TorqueBus --> Motor[Motor Actor<br/>output]
-
-    Motor --> WriteTorque --> Motors
-
-    SensorBus -.-> Comms[Comms Actor<br/>telemetry]
-    StateBus -.-> Comms
-    ThrustBus -.-> Comms
-    Comms -.-> RadioTx --> Radio
-```
-
----
-
 ## Control Algorithms
 
 ### PID Controller
