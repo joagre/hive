@@ -421,6 +421,33 @@ This table documents the scheduling design for audit and latency analysis.
 - LOW priority actors (comms, telemetry) may experience latency under load but do not affect flight safety
 - Motor actor's 50ms deadman timeout ensures it yields regularly even if upstream fails
 
+### Actor Responsibilities
+
+| Actor | Input | Output | Priority | Restart | Responsibility |
+|-------|-------|--------|----------|---------|----------------|
+| **Supervisor** | Child exit notifications | (internal) | CRITICAL | - | Monitors workers, ONE_FOR_ALL restart |
+| **Sensor** | Hardware | Sensor Bus | CRITICAL | PERMANENT | Read raw sensors, publish |
+| **Estimator** | Sensor Bus | State Bus | CRITICAL | PERMANENT | Complementary filter fusion, state estimate |
+| **Waypoint** | State Bus + START notification | Position Target Bus | CRITICAL | PERMANENT | Waypoint navigation (3D on Webots, altitude-only on STM32) |
+| **Altitude** | State + Position Target Bus + LANDING | Thrust Bus + LANDED | CRITICAL | PERMANENT | Altitude PID (250Hz), landing detection |
+| **Position** | Position Target + State Bus | Attitude Setpoint Bus | CRITICAL | PERMANENT | Position PD (250Hz) |
+| **Attitude** | Attitude Setpoint + State | Rate Setpoint Bus | CRITICAL | PERMANENT | Attitude PIDs (250Hz) |
+| **Rate** | State + Thrust + Rate SP | Torque Bus | CRITICAL | PERMANENT | Rate PIDs (250Hz) |
+| **Motor** | Torque Bus + STOP notification | Hardware | CRITICAL | PERMANENT | Output to hardware via HAL |
+| **Flight Manager** | LANDED notification | START/LANDING/STOP notifications | CRITICAL | TRANSIENT | Startup delay, landing coordination (normal exit = mission complete) |
+| **Comms** | Sensor + State + Thrust Bus | Radio (HAL) | LOW | TEMPORARY | Radio telemetry (Crazyflie only, not flight-critical) |
+| **Telemetry Logger** | Sensor + State + Thrust + Position Target Bus | CSV file | LOW | TEMPORARY | CSV logging for PID tuning (Webots only, not flight-critical) |
+
+**Why CRITICAL for flight actors?** Flight-critical actors share the same priority so execution
+order follows spawn order (round-robin within priority level). This ensures the data pipeline
+executes correctly: sensor → estimator → waypoint → altitude → position → attitude → rate →
+motor → flight_manager. Differentiated priorities would break this—higher priority actors run
+first regardless of spawn order, causing motor to output before controllers have computed new
+values. Telemetry runs at LOW priority since it's not flight-critical and shouldn't delay
+control loops.
+
+> **Runtime assumption:** This design relies on deterministic round-robin scheduling within a priority level, as guaranteed by the Hive runtime. Changing actor priorities requires re-validating pipeline execution order.
+
 ---
 
 ## Implementation Details
@@ -743,10 +770,14 @@ examples/pilot/
 
 ## Architecture Evolution Roadmap
 
-The example will evolve incrementally toward a clean multi-actor design.
-Each step maintains a working system while improving separation of concerns.
+This section documents how the architecture evolved from a monolithic design to the current
+multi-actor implementation. Steps 1-10 are complete; Step 11 is future work.
 
-### Target Architecture
+### Future Architecture (Aspirational)
+
+This simplified diagram shows the end-goal architecture including future features (Step 11).
+The "Setpoint Actor" would replace the current Waypoint + Flight Manager pattern with a
+unified setpoint source supporting RC input and mode switching.
 
 ```mermaid
 graph LR
@@ -775,33 +806,6 @@ graph LR
     StateBus --> Altitude --> Attitude --> Rate --> Motor
     StateBus -.-> Comms
 ```
-
-### Actor Responsibilities (Current)
-
-| Actor | Input | Output | Priority | Restart | Responsibility |
-|-------|-------|--------|----------|---------|----------------|
-| **Supervisor** | Child exit notifications | (internal) | CRITICAL | - | Monitors workers, ONE_FOR_ALL restart |
-| **Sensor** | Hardware | Sensor Bus | CRITICAL | PERMANENT | Read raw sensors, publish |
-| **Estimator** | Sensor Bus | State Bus | CRITICAL | PERMANENT | Complementary filter fusion, state estimate |
-| **Waypoint** | State Bus + START notification | Position Target Bus | CRITICAL | PERMANENT | Waypoint navigation (3D on Webots, altitude-only on STM32) |
-| **Altitude** | State + Position Target Bus + LANDING | Thrust Bus + LANDED | CRITICAL | PERMANENT | Altitude PID (250Hz), landing detection |
-| **Position** | Position Target + State Bus | Attitude Setpoint Bus | CRITICAL | PERMANENT | Position PD (250Hz) |
-| **Attitude** | Attitude Setpoint + State | Rate Setpoint Bus | CRITICAL | PERMANENT | Attitude PIDs (250Hz) |
-| **Rate** | State + Thrust + Rate SP | Torque Bus | CRITICAL | PERMANENT | Rate PIDs (250Hz) |
-| **Motor** | Torque Bus + STOP notification | Hardware | CRITICAL | PERMANENT | Output to hardware via HAL |
-| **Flight Manager** | LANDED notification | START/LANDING/STOP notifications | CRITICAL | TRANSIENT | Startup delay, landing coordination (normal exit = mission complete) |
-| **Comms** | Sensor + State + Thrust Bus | Radio (HAL) | LOW | TEMPORARY | Radio telemetry (Crazyflie only, not flight-critical) |
-| **Telemetry Logger** | Sensor + State + Thrust + Position Target Bus | CSV file | LOW | TEMPORARY | CSV logging for PID tuning (Webots only, not flight-critical) |
-
-**Why CRITICAL for flight actors?** Flight-critical actors share the same priority so execution
-order follows spawn order (round-robin within priority level). This ensures the data pipeline
-executes correctly: sensor → estimator → waypoint → altitude → position → attitude → rate →
-motor → flight_manager. Differentiated priorities would break this—higher priority actors run
-first regardless of spawn order, causing motor to output before controllers have computed new
-values. Telemetry runs at LOW priority since it's not flight-critical and shouldn't delay
-control loops.
-
-> **Runtime assumption:** This design relies on deterministic round-robin scheduling within a priority level, as guaranteed by the Hive runtime. Changing actor priorities requires re-validating pipeline execution order.
 
 ### Step 1: Motor Actor ✓
 
