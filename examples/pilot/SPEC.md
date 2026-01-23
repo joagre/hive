@@ -420,7 +420,7 @@ This table documents the scheduling design for audit and latency analysis.
 | position | CRITICAL | Bus read (2 buses) | Yields waiting for state + position target |
 | attitude | CRITICAL | Bus read (2 buses) | Yields waiting for state + attitude setpoint |
 | rate | CRITICAL | Bus read (3 buses) | Yields waiting for state + thrust + rate setpoint |
-| motor | CRITICAL | select() with 50ms timeout | Yields waiting for torque or timeout |
+| motor | CRITICAL | hive_select (1 bus + IPC, 50ms timeout) | Yields waiting for torque, STOP, or timeout |
 | flight_manager | CRITICAL | Timer + IPC recv | Yields on coordination events |
 | comms | LOW | Bus read (3 buses) | Non-critical, may be starved |
 | telemetry_logger | LOW | Timer + bus read (4 buses) | Non-critical, may be starved |
