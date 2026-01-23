@@ -43,6 +43,8 @@ Install: `make install-man` (or `sudo make install-man`)
 - Fast context switching via manual assembly (no setjmp/longjmp or ucontext)
 - Cooperative multitasking only (no preemption within actor runtime)
 
+**Hive favors boundedness and inspectability over fairness and throughput.**
+
 ### Heap Usage Policy
 
 **Definition - Hot path**: Any operation callable while the scheduler is running, including all API calls from actor context, event dispatch, and wakeup processing.

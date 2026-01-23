@@ -20,6 +20,8 @@ The runtime uses **statically bounded memory** for predictable behavior with no 
 - A distributed actor framework (single process only)
 - A statechart or FSM framework
 
+**Hive favors boundedness and inspectability over fairness and throughput.**
+
 ## Quick Links
 
 - **[Full Specification](SPEC.md)** - Complete design and implementation details
