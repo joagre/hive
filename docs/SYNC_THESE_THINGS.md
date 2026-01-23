@@ -126,3 +126,5 @@ grep -rn "hal_" examples/pilot/README.md | grep -v "\.c:"
 - Diagrams verified (StateBus-->Rate, TLog actor)
 - Actor counts verified (10-11)
 - Memory footprint verified (~60KB flash, ~58KB RAM, 52KB stack arena)
+- Added examples and pilot reference to CLAUDE.md
+- Full sync verification passed (all checks green)
