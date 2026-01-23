@@ -415,13 +415,13 @@ This table documents the scheduling design for audit and latency analysis.
 |-------|----------|---------------------|----------------|
 | sensor | CRITICAL | Timer (4ms periodic) | Yields every tick after sensor read |
 | estimator | CRITICAL | Bus read (1 bus) | Yields waiting for sensor data |
-| waypoint | CRITICAL | Bus read (1 bus) | Yields waiting for state updates |
-| altitude | CRITICAL | Bus read (2 buses) | Yields waiting for state + position target |
+| waypoint | CRITICAL | hive_select (1 bus + timer) | Yields waiting for state or hover timer |
+| altitude | CRITICAL | hive_select (1 bus + IPC) | Yields waiting for state or LANDING |
 | position | CRITICAL | Bus read (2 buses) | Yields waiting for state + position target |
 | attitude | CRITICAL | Bus read (2 buses) | Yields waiting for state + attitude setpoint |
 | rate | CRITICAL | Bus read (3 buses) | Yields waiting for state + thrust + rate setpoint |
 | motor | CRITICAL | hive_select (1 bus + IPC, 50ms timeout) | Yields waiting for torque, STOP, or timeout |
-| flight_manager | CRITICAL | Timer + IPC recv | Yields on coordination events |
+| flight_manager | CRITICAL | hive_select (2 timers) | Yields waiting for sync or flight timer |
 | comms | LOW | Bus read (3 buses) | Non-critical, may be starved |
 | telemetry_logger | LOW | Timer + bus read (4 buses) | Non-critical, may be starved |
 
