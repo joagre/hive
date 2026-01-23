@@ -183,9 +183,13 @@ graph TB
 ```
 
 Hardware Abstraction Layer (HAL) provides platform independence:
+- `hal_init()`, `hal_cleanup()` - platform lifecycle
+- `hal_self_test()`, `hal_calibrate()` - startup checks
+- `hal_arm()`, `hal_disarm()` - motor enable/disable
 - `hal_read_sensors()` - reads sensors (called by sensor_actor)
 - `hal_write_torque()` - writes motors with mixing (called by motor_actor)
 - `hal_radio_*()` - radio telemetry (Crazyflie only, called by comms_actor)
+- `hal_step()` - advance simulation (Webots only)
 
 Actor code is identical across platforms. See `hal/<platform>/README.md` for
 hardware-specific details.
