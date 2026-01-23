@@ -3,11 +3,36 @@
 A quadcopter autopilot example using the actor runtime. Supports Webots simulation
 (default) and STM32 hardware (Crazyflie 2.1+).
 
+> In this document, "pilot" refers to the autopilot software, not a human pilot.
+
+### Actor Counts
+
+| Category | Count | Notes |
+|----------|-------|-------|
+| Flight-critical workers | 8 | sensor, estimator, waypoint, altitude, position, attitude, rate, motor |
+| Flight manager | 1 | Coordinates startup/shutdown, TRANSIENT restart |
+| Supervisor | 1 | Monitors all children |
+| Optional (Crazyflie) | +1 | comms_actor for radio telemetry |
+| Optional (Webots) | +1 | telemetry_logger_actor for CSV output |
+| **Total** | 10-11 | Platform-dependent |
+
+### Platform Differences
+
+| Feature | Webots | Crazyflie 2.1+ |
+|---------|--------|----------------|
+| `comms_actor` | No | Yes |
+| `telemetry_logger_actor` | Yes | No |
+| Position source | Simulated GPS | Optical flow (Flow deck v2) |
+| Altitude source | Simulated rangefinder | ToF sensor (Flow deck v2) |
+| Flash logging | No | Yes |
+| CSV telemetry | Yes | No |
+| Radio telemetry | No | Yes |
+
 ## Status
 
 **Implemented:**
 - Altitude-hold hover with attitude stabilization
-- Horizontal position hold (GPS-based XY control)
+- Horizontal position hold (simulated GPS in Webots; optical flow on Crazyflie)
 - Heading hold (yaw control with angle wrap-around)
 - Waypoint navigation (square demo route with altitude and heading changes)
 - Step 1: Motor actor (safety, watchdog)
@@ -55,6 +80,8 @@ Traditional RTOS designs use tasks with shared memory and locks. Actors use mess
 - **IPC notify** queues every message - slow consumers would process stale data
 - For control loops, you always want the *latest* sensor reading, not a backlog
 
+> **Bus semantics:** All buses use `max_entries=1` (latest-value only). Subscriptions do not receive retained values; subscribers only observe publishes that occur after subscription.
+
 ### Why max_entries=1?
 
 All buses use `max_entries=1` (single entry, latest value only):
@@ -74,7 +101,7 @@ All buses use `max_entries=1` (single entry, latest value only):
 
 ### Startup Ordering and Supervision
 
-All 9 workers are spawned by the supervisor in dependency order:
+All flight-critical workers are spawned by the supervisor in dependency order (see Actor Counts table above):
 
 1. **Sensor → Estimator** - Estimator subscribes to sensor bus
 2. **Controllers** - Subscribe to state bus (created by estimator)
@@ -139,13 +166,11 @@ same instant.
 - Controllers cascade: altitude → position → attitude → rate
 - Motor receives torque commands, outputs to hardware
 
-**Worst-case latency:** One tick (4ms) from sensor read to motor output. This occurs
-when sensor publishes just after motor finishes reading, requiring a full tick before
-motor sees the new data.
+**Typical latency:** Under nominal conditions, pipeline latency is within one tick (~4ms) from sensor read to motor output. Worst-case latency is bounded by the control period plus any additional delay from missed publishes, timeouts, or supervisor restarts.
 
 **Why this is acceptable:**
 - This pipelined approach is standard practice in flight controllers (PX4, ArduPilot)
-- At 250 Hz, one tick of latency is 4ms—well within control loop requirements
+- At 250 Hz, typical latency of 4ms is well within control loop requirements
 - Synchronous snapshotting would add complexity with minimal benefit
 - Controllers use rate damping terms that compensate for small latencies
 
@@ -290,8 +315,7 @@ The following instrumentation should be added for production flight software:
 
 ## Architecture Overview
 
-Ten to twelve actors: nine flight-critical workers connected via buses, plus one
-supervisor, and optional telemetry actors (comms on Crazyflie, telemetry_logger on Webots):
+10-11 actors depending on platform (see Actor Counts table above): flight-critical workers connected via buses, supervisor, flight manager, and one optional telemetry actor:
 
 **Supervision:** All actors are supervised with ONE_FOR_ALL strategy. Flight-critical
 actors use PERMANENT restart (crash triggers restart of all). Comms uses
@@ -690,7 +714,7 @@ examples/pilot/
 ### Console Output
 
 ```
-10 actors spawned (9 children + 1 supervisor)
+10-11 actors spawned (see Actor Counts table)
 [ALT] tgt=1.00 alt=0.01 vvel=0.00 thrust=0.750
 [ALT] tgt=1.00 alt=0.05 vvel=0.12 thrust=0.720
 ...
@@ -761,6 +785,8 @@ motor → flight_manager. Differentiated priorities would break this—higher pr
 first regardless of spawn order, causing motor to output before controllers have computed new
 values. Telemetry runs at LOW priority since it's not flight-critical and shouldn't delay
 control loops.
+
+> **Runtime assumption:** This design relies on deterministic round-robin scheduling within a priority level, as guaranteed by the Hive runtime. Changing actor priorities requires re-validating pipeline execution order.
 
 ### Step 1: Motor Actor ✓
 
