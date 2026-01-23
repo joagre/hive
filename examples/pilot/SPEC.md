@@ -414,12 +414,12 @@ This table documents the scheduling design for audit and latency analysis.
 | Actor | Priority | Primary Block Point | Yield Behavior |
 |-------|----------|---------------------|----------------|
 | sensor | CRITICAL | Timer (4ms periodic) | Yields every tick after sensor read |
-| estimator | CRITICAL | Bus read (sensor_bus) | Yields waiting for sensor data |
-| waypoint | CRITICAL | Bus read (state_bus) | Yields waiting for state updates |
-| altitude | CRITICAL | Bus read (state_bus) | Yields waiting for state updates |
-| position | CRITICAL | Bus read (state_bus) | Yields waiting for state updates |
-| attitude | CRITICAL | Bus read (attitude_sp_bus) | Yields waiting for setpoints |
-| rate | CRITICAL | Bus read (rate_sp_bus) | Yields waiting for setpoints |
+| estimator | CRITICAL | Bus read (1 bus) | Yields waiting for sensor data |
+| waypoint | CRITICAL | Bus read (1 bus) | Yields waiting for state updates |
+| altitude | CRITICAL | Bus read (2 buses) | Yields waiting for state + position target |
+| position | CRITICAL | Bus read (2 buses) | Yields waiting for state + position target |
+| attitude | CRITICAL | Bus read (2 buses) | Yields waiting for state + attitude setpoint |
+| rate | CRITICAL | Bus read (3 buses) | Yields waiting for state + thrust + rate setpoint |
 | motor | CRITICAL | select() with 50ms timeout | Yields waiting for torque or timeout |
 | flight_manager | CRITICAL | Timer + IPC recv | Yields on coordination events |
 | comms | LOW | Bus read (3 buses) | Non-critical, may be starved |
