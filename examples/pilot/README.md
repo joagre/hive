@@ -10,10 +10,10 @@ Supports two platforms:
 
 ## What it does
 
-Demonstrates waypoint navigation with a quadcopter using 10-12 actors (9-11 workers + 1 supervisor):
+Demonstrates waypoint navigation with a quadcopter using 10-11 actors (8 flight-critical workers + flight manager + supervisor + 1 optional telemetry actor):
 
 1. **Sensor actor** reads raw sensors via HAL, publishes to sensor bus
-2. **Estimator actor** runs complementary filter, computes velocities, publishes to state bus
+2. **Estimator actor** runs altitude Kalman filter + attitude complementary filter, publishes to state bus
 3. **Altitude actor** reads target altitude from position target bus, runs altitude PID, handles landing
 4. **Waypoint actor** waits for START signal, manages waypoint list, publishes to position target bus
 5. **Position actor** reads target XY/yaw from position target bus, runs position PD
@@ -161,8 +161,8 @@ sizes differ per platform based on available RAM.
 
 ## Architecture
 
-Ten to twelve actors: nine flight-critical workers connected via buses, one supervisor
-monitoring all workers, plus optional telemetry actors (comms on Crazyflie, telemetry_logger on Webots):
+10-11 actors: eight flight-critical workers + flight manager + supervisor, plus one optional
+telemetry actor (comms on Crazyflie, telemetry_logger on Webots):
 
 ```mermaid
 graph TB
@@ -388,8 +388,9 @@ explicit error checking. This enables the supervisor to detect and restart faile
 and can attempt restart.
 
 ```c
+// Estimator subscribes to sensor bus (consumer role)
 if (HIVE_FAILED(hive_bus_subscribe(state->sensor_bus))) {
-    HIVE_LOG_ERROR("[SENSOR] bus subscribe failed");
+    HIVE_LOG_ERROR("[ESTIMATOR] bus subscribe failed");
     return;
 }
 ```
@@ -398,6 +399,7 @@ if (HIVE_FAILED(hive_bus_subscribe(state->sensor_bus))) {
 Log error and return. These failures indicate a fundamental runtime problem.
 
 ```c
+// Sensor waits for periodic timer (producer role)
 status = hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
 if (HIVE_FAILED(status)) {
     HIVE_LOG_ERROR("[SENSOR] recv_match failed: %s", HIVE_ERR_STR(status));
@@ -409,6 +411,7 @@ if (HIVE_FAILED(status)) {
 Log warning and continue. The actor keeps running and processes the next iteration.
 
 ```c
+// Sensor publishes to sensor bus (producer role)
 if (HIVE_FAILED(hive_bus_publish(state->sensor_bus, &sensors, sizeof(sensors)))) {
     HIVE_LOG_WARN("[SENSOR] bus publish failed");
 }
