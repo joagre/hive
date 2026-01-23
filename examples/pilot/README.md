@@ -192,14 +192,11 @@ hardware-specific details.
 
 ## Supervision and Spawn Order
 
-All actors are supervised with **ONE_FOR_ALL** strategy. Flight-critical actors
-use PERMANENT restart (crash triggers restart of all). Comms uses TEMPORARY
-restart (crash/exit doesn't trigger restarts, just stops comms).
+All actors supervised with **ONE_FOR_ALL** strategy - if any flight-critical actor
+crashes, all restart together. See [SPEC.md](SPEC.md#supervision-semantics) for why
+this is correct for a control pipeline.
 
-Workers run at CRITICAL priority (comms at LOW). Spawn order determines
-execution order within the same priority level (round-robin). Workers are spawned
-in data-flow order, with flight_manager last so all siblings are available via
-`hive_find_sibling()`:
+Spawn order determines execution order (round-robin within priority level):
 
 | Order | Actor     | Priority | Restart   | Rationale |
 |-------|-----------|----------|-----------|-----------|
@@ -215,9 +212,7 @@ in data-flow order, with flight_manager last so all siblings are available via
 | 10    | comms     | LOW      | TEMPORARY | Crazyflie only, not flight-critical |
 | 11    | tlog      | LOW      | TEMPORARY | Webots only, CSV logging for PID tuning |
 
-Workers use **sibling info** for IPC coordination:
-- Supervisor passes sibling info (actor IDs and names) at spawn time
-- `flight_manager` uses `hive_find_sibling()` to look up waypoint, altitude, motor
+Workers use `hive_find_sibling()` to look up sibling actor IDs for IPC coordination.
 
 ## Control System
 
@@ -381,56 +376,15 @@ doesn't affect flight-critical control loops and won't trigger restarts if it fa
 
 ## Error Handling
 
-Actors use a consistent error handling pattern that avoids `assert()` in favor of
-explicit error checking. This enables the supervisor to detect and restart failed actors.
+Actors use explicit error checking instead of `assert()`, enabling the supervisor to
+detect and restart failed actors:
 
-**Cold path (initialization):** Log error and return. The supervisor sees this as a CRASH
-and can attempt restart.
+- **Cold path (init):** Log error and return → supervisor sees CRASH, attempts restart
+- **Hot path blocking:** Log error and return → fundamental runtime problem
+- **Hot path non-blocking:** Log warning and continue → next iteration proceeds
 
-```c
-// Estimator subscribes to sensor bus (consumer role)
-if (HIVE_FAILED(hive_bus_subscribe(state->sensor_bus))) {
-    HIVE_LOG_ERROR("[ESTIMATOR] bus subscribe failed");
-    return;
-}
-```
+See [SPEC.md](SPEC.md#error-handling-pattern) for detailed examples and rationale.
 
-**Hot path - blocking calls** (`hive_select`, `hive_bus_read_wait`, `hive_ipc_recv_match`):
-Log error and return. These failures indicate a fundamental runtime problem.
-
-```c
-// Sensor waits for periodic timer (producer role)
-status = hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
-if (HIVE_FAILED(status)) {
-    HIVE_LOG_ERROR("[SENSOR] recv_match failed: %s", HIVE_ERR_STR(status));
-    return;
-}
-```
-
-**Hot path - non-blocking calls** (`hive_bus_publish`, `hive_ipc_notify`, `hive_timer_after`):
-Log warning and continue. The actor keeps running and processes the next iteration.
-
-```c
-// Sensor publishes to sensor bus (producer role)
-if (HIVE_FAILED(hive_bus_publish(state->sensor_bus, &sensors, sizeof(sensors)))) {
-    HIVE_LOG_WARN("[SENSOR] bus publish failed");
-}
-```
-
-**Why no `assert()`:**
-- `assert()` terminates the entire process - supervisor cannot recover
-- On STM32, `assert()` behavior is platform-dependent (hang, reset, undefined)
-- Log + return gives consistent behavior across platforms
-- `_Static_assert` is still used for compile-time checks (packet sizes, etc.)
-
-**Logging configuration (Crazyflie):**
-
-| Level | Status | Rationale |
-|-------|--------|-----------|
-| TRACE, DEBUG | Compiled out | Chatty, development only |
-| INFO | Captured to flash | Important events (waypoint reached, flight started) |
-| WARN, ERROR | Captured to flash | Problems that need attention |
-
-Logs are written to flash and can be downloaded over radio after flight (see Log Download section).
-This provides a complete flight record without the overhead of TRACE/DEBUG messages.
+**Logging (Crazyflie):** INFO/WARN/ERROR captured to flash, TRACE/DEBUG compiled out.
+Logs downloadable over radio after flight (see Log Download section).
 
