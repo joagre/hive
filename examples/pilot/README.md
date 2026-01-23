@@ -173,6 +173,12 @@ graph TB
     StateBus -.-> Comms
     ThrustBus -.-> Comms
     Comms -.-> Radio([Radio])
+
+    SensorBus -.-> TLog[TLog]
+    StateBus -.-> TLog
+    ThrustBus -.-> TLog
+    PositionTargetBus -.-> TLog
+    TLog -.-> CSV([CSV])
 ```
 
 Hardware Abstraction Layer (HAL) provides platform independence:
