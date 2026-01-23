@@ -279,20 +279,21 @@ After flight completes, a stack usage report is printed to stderr:
 
 | Actor | Size | Used | Usage |
 |-------|------|------|-------|
-| supervisor | 4096 | 2504 | 61.1% |
-| sensor | 4096 | 2008 | 49.0% |
-| estimator | 4096 | 808 | 19.7% |
-| waypoint | 4096 | 3232 | 78.9% |
-| altitude | 4096 | 2664 | 65.0% |
-| position | 4096 | 680 | 16.6% |
+| supervisor | 4096 | 1128 | 27.5% |
+| sensor | 4096 | 2056 | 50.2% |
+| estimator | 4096 | 1480 | 36.1% |
+| waypoint | 4096 | 1288 | 31.4% |
+| altitude | 4096 | 1304 | 31.8% |
+| position | 4096 | 664 | 16.2% |
 | attitude | 4096 | 760 | 18.6% |
 | rate | 4096 | 792 | 19.3% |
-| motor | 4096 | 488 | 11.9% |
-| flight_mgr | 4096 | 3112 | 76.0% |
+| motor | 4096 | 504 | 12.3% |
+| tlog | 4096 | 1912 | 46.7% |
+| flight_mgr | 4096 | 1192 | 29.1% |
 
 Measured on x86-64 Linux (Webots simulation). ARM Cortex-M may differ slightly
 due to calling conventions. All actors fit comfortably in 4KB with the highest
-usage at 78.9% (waypoint), leaving ~860 bytes headroom.
+usage at 50.2% (sensor), leaving ~2KB headroom.
 
 Note: Comms actor (Crazyflie only) not included in Webots measurements.
 

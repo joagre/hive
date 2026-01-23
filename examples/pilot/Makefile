@@ -107,6 +107,9 @@ endif
 ifdef LOG_TO_FILE
 HIVE_CFLAGS_EXPORT += -DHIVE_LOG_TO_FILE=$(LOG_TO_FILE)
 endif
+ifdef STACK_PROFILE
+HIVE_CFLAGS_EXPORT += -DHIVE_STACK_WATERMARK=1
+endif
 
 # Targets
 .PHONY: all build install clean check-webots
