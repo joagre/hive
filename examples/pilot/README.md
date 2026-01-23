@@ -1,8 +1,8 @@
 # Pilot Example
 
-Quadcopter waypoint navigation using hive actor runtime.
+A complete quadcopter autopilot—not a toy demo, but a flight controller targeting real hardware. Demonstrates Hive in a safety-critical embedded context with 11 actors, cascaded PID control, sensor fusion, pub-sub data flow, and fail-safe supervision.
 
-Supports two platforms:
+**Platforms:**
 - **Webots simulation** (default) - Crazyflie quadcopter in Webots simulator
 - **Crazyflie 2.1+** - Bitcraze nano quadcopter (~63 KB flash, ~120 KB RAM)
 
