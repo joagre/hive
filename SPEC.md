@@ -474,6 +474,8 @@ This pure single-threaded model provides:
 
 **Key insight:** Modern OSes provide non-blocking I/O mechanisms (epoll, kqueue, IOCP). On bare metal, hardware interrupts and WFI provide equivalent functionality. The event loop pattern is standard in async runtimes (Node.js, Tokio, libuv, asyncio).
 
+See [Event Loop Architecture (Implementation)](#event-loop-architecture) for detailed implementation with code examples.
+
 ## Memory Model
 
 ### Actor Stacks
@@ -484,56 +486,15 @@ Stack growth/reallocation is not supported. Stack overflow results in undefined 
 
 ### Memory Allocation
 
-The runtime uses static allocation for predictable behavior and suitability for MCU deployment:
+The runtime uses static allocation for predictable behavior and suitability for MCU deployment. All memory regions are statically reserved at compile time; allocation within those regions occurs at runtime via bounded algorithms.
 
-See "Heap Usage Policy" section for the complete memory allocation contract. Summary: all memory regions are statically reserved at compile time; allocation within those regions occurs at runtime via bounded algorithms. No heap allocation after `hive_init()` except optional malloc for actor stacks.
+**Key characteristics:**
+- No heap allocation after `hive_init()` except optional malloc for actor stacks
+- O(1) pool allocation for hot paths (IPC, timers, bus)
+- O(n) bounded arena allocation for cold paths (spawn/exit)
+- Pool exhaustion returns `HIVE_ERR_NOMEM`
 
-**Allocation Strategy:**
-
-- **Actor table:** Static array of `HIVE_MAX_ACTORS` (64), configured at compile time
-- **Actor stacks:** Hybrid allocation (configurable per actor)
-  - Default: Static arena allocator with `HIVE_STACK_ARENA_SIZE` (1 MB)
-    - First-fit allocation with block splitting for variable stack sizes
-    - Automatic memory reclamation and reuse when actors exit (coalescing)
-    - Supports different stack sizes for different actors
-  - Optional: malloc via `actor_config.malloc_stack = true`
-- **IPC pools:** Static pools with O(1) allocation (hot path)
-  - Mailbox entry pool: `HIVE_MAILBOX_ENTRY_POOL_SIZE` (256)
-  - Message data pool: `HIVE_MESSAGE_DATA_POOL_SIZE` (256), fixed-size entries of `HIVE_MAX_MESSAGE_SIZE` bytes
-- **Link/Monitor pools:** Static pools for actor relationships
-  - Link entry pool: `HIVE_LINK_ENTRY_POOL_SIZE` (128)
-  - Monitor entry pool: `HIVE_MONITOR_ENTRY_POOL_SIZE` (128)
-- **Timer pool:** Static pool of `HIVE_TIMER_ENTRY_POOL_SIZE` (64)
-- **Bus storage:** Static arrays per bus
-  - Bus entries: Pre-allocated array of `HIVE_MAX_BUS_ENTRIES` (64) per bus
-  - Bus subscribers: Pre-allocated array of `HIVE_MAX_BUS_SUBSCRIBERS` (32) per bus
-  - Entry data: Uses shared message pool
-- **I/O sources:** Pool of `io_source` structures for tracking pending I/O operations in the event loop
-
-**Memory Footprint (estimated, 64-bit Linux build, default configuration):**
-
-*Note: Exact sizes are toolchain-dependent. Run `size build/libhive.a` for precise numbers. Estimates below are for GCC on x86-64 Linux.*
-
-- Static data (BSS): ~1.2 MB total (includes 1 MB stack arena)
-  - Stack arena: 1 MB (configurable via `HIVE_STACK_ARENA_SIZE`)
-  - Actor table: ~10–15 KB
-  - Mailbox pool: ~10–15 KB
-  - Message pool: 64 KB (256 × 256 bytes, configurable)
-  - Link/monitor pools: ~5 KB
-  - Timer pool: ~5 KB
-  - Bus tables: ~90 KB
-  - I/O source pool: ~5 KB
-- Without stack arena: ~190 KB
-
-**Total:** ~1.2 MB static (verify with `size` command; no heap allocation with default arena)
-
-**Benefits:**
-
-- Bounded memory: Footprint calculable at link time
-- No heap fragmentation in hot paths (optional malloc'd stacks may fragment process heap)
-- Predictable allocation: Pool exhaustion returns clear errors (`HIVE_ERR_NOMEM`)
-- Suitable for safety-critical certification
-- Bounded latency: O(1) pool allocation for hot paths, O(n) bounded arena allocation for cold paths (spawn/exit)
+See [Heap Usage Policy](#heap-usage-policy) for the complete contract and [Memory Allocation Architecture](#memory-allocation-architecture) for compile-time configuration, pool sizes, and memory sizing guide.
 
 ## Architectural Limits
 
