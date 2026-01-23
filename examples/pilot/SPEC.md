@@ -79,6 +79,40 @@ The spawn order in `pilot.c` ensures:
 1. All subscribers are ready before their data sources begin publishing
 2. `flight_manager` spawns last so all siblings are available via `hive_find_sibling()`
 
+### Supervision Semantics
+
+**Restart strategy:** ONE_FOR_ALL - if any flight-critical actor crashes, all actors restart.
+
+**Why ONE_FOR_ALL?** The control pipeline has tight inter-actor dependencies:
+- Estimator depends on sensor data format
+- Controllers depend on state estimate
+- Motor depends on torque commands
+
+If one actor crashes and restarts with fresh state while others continue with stale state,
+the pipeline produces incorrect output. Restarting all actors ensures consistent state.
+
+**State reset on restart:**
+When ONE_FOR_ALL triggers, all actors restart from scratch:
+- PID integrators reset to zero (no windup from previous flight)
+- Kalman filter covariances reset to initial values
+- Waypoint navigation resets to first waypoint
+- Bus subscriptions cleared (must re-subscribe)
+- IPC connections lost (must re-resolve siblings)
+
+This is correct behavior for a flight controller - inconsistent state is more dangerous than
+a brief control gap during restart.
+
+**Comms actor isolation:**
+The comms actor uses TEMPORARY restart type:
+- Does NOT trigger ONE_FOR_ALL restart of flight-critical actors if it crashes
+- Simply stops sending telemetry (acceptable for non-critical actor)
+- Flight continues normally without comms
+
+This isolation prevents a telemetry bug from crashing the entire flight.
+
+**Telemetry logger isolation:**
+Same as comms - TEMPORARY restart, outside the critical path.
+
 ### Pipeline Model
 
 The control system is a pipeline, not a synchronous snapshot. Each actor processes

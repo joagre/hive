@@ -89,16 +89,16 @@ Already documented in CLAUDE.md and SPEC.md:
 
 ### 2.1 Motor Deadman Watchdog
 
-**Status: FIX**
+**Status: DONE** ✓
 
-Valid safety concern. Motors should zero if no command received within timeout.
+Implemented in `motor_actor.c` using `hive_select()` with timeout.
 
 Implementation:
-- Motor actor uses `hive_ipc_recv` with timeout
+- Motor actor uses `hive_select()` with `MOTOR_DEADMAN_TIMEOUT_MS` (50ms)
 - On timeout: zero all motors, log warning
-- Timeout period: configurable, e.g., 50ms (12-13 ticks at 4ms)
+- Documented in pilot SPEC.md
 
-**Action:** Implement in motor actor. Update pilot SPEC.md.
+**Commits:** `0b3326f`
 
 ---
 
@@ -121,37 +121,38 @@ Future option: "retain latest" flag for buses with `max_entries=1`.
 
 ### 2.3 Supervision Semantics Clarification
 
-**Status: FIX**
+**Status: DONE** ✓
 
-Need to document:
+Documented in pilot SPEC.md "Supervision Semantics" section:
 - ONE_FOR_ALL restart resets all state (integrators, filters)
-- Comms actor is outside flight-critical supervision tree
+- Why ONE_FOR_ALL is correct for flight controller
+- Comms actor isolation via TEMPORARY restart type
 
-**Action:** Add section to pilot SPEC.md.
+**Commits:** (this batch)
 
 ---
 
 ### 2.4 Error Handling Rules
 
-**Status: FIX**
+**Status: DONE** ✓
 
-Need to document explicitly:
+Documented in SPEC.md "Actor Exit Semantics" section:
 - Returning from actor function = `hive_exit(CRASH)`
 - `HIVE_ERR_TIMEOUT` is not a crash (normal control flow)
 - `HIVE_ERR_NOMEM` is systemic error (should be surfaced)
 
-**Action:** Add to runtime SPEC.md and pilot SPEC.md.
+**Commits:** `11a267a`
 
 ---
 
 ### 2.5 Priority and Blocking Table
 
-**Status: FIX**
+**Status: DONE** ✓
 
-Good documentation addition. Shows scheduling design is intentional.
-
-**Action:** Add table to pilot SPEC.md showing:
+Added "Actor Priority and Blocking Table" to pilot SPEC.md showing:
 - Actor name, priority, primary blocking point, yield behavior
+
+**Commits:** `11a267a`
 
 ---
 
@@ -159,53 +160,66 @@ Good documentation addition. Shows scheduling design is intentional.
 
 ### 3.1 Guarantees vs Non-Guarantees Page
 
-**Status: FIX**
+**Status: DONE** ✓
 
-Excellent suggestion. Add clear, testable list.
+Added "Guarantees and Non-Guarantees" section to SPEC.md with:
+- Table of guaranteed properties
+- Table of NOT guaranteed properties
+- "Honest Positioning" subsection (Hive is / is not)
 
-**Action:** Add section to SPEC.md.
+**Commits:** `11a267a`
 
 ---
 
 ### 3.2 Failure Modes and Backpressure Patterns
 
-**Status: FIX**
+**Status: DONE** ✓
 
-Document:
-- Pool exhaustion behavior (returns HIVE_ERR_NOMEM, does not block)
-- Recommended patterns (retry with backoff, drop oldest, escalate)
+Added "Failure Modes Summary" section to SPEC.md with:
+- Pool exhaustion behavior table (IPC vs bus differences)
+- Recommended patterns table (check and retry, backpressure, drop, escalate)
+- Error code classification table
 
-**Action:** Add section to SPEC.md.
+**Commits:** (this batch)
 
 ---
 
 ### 3.3 Memory Sizing Guide
 
-**Status: FIX**
+**Status: DONE** ✓
 
-Provide formulae and example configs.
+Added "Memory Sizing Guide" section to SPEC.md with:
+- Fixed overhead calculations
+- Pool memory calculations
+- Sizing formulae table
+- Flight controller example config
+- Server application example config
 
-**Action:** Add section to SPEC.md.
+**Commits:** (this batch)
 
 ---
 
 ### 3.4 Simulation Invariant
 
-**Status: FIX**
+**Status: DONE** ✓
 
-Document that `hive_run_until_blocked()` requires actors to eventually block.
+Added "Simulation Invariant" section to SPEC.md with:
+- Contract that actors MUST block
+- Correct and incorrect code patterns
+- Why this matters (simulation vs production difference)
+- Diagnosis guidance
 
-**Action:** Add to SPEC.md simulation section.
+**Commits:** (this batch)
 
 ---
 
 ## 4. Positioning Summary
 
-**Status: FIX**
+**Status: DONE** ✓
 
-The "Hive is / Hive is not" framing is good. The tagline is accurate.
+Added "Hive is / Hive is not" positioning to README.md introduction.
 
-**Action:** Add to README.md introduction.
+**Commits:** `11a267a`
 
 ---
 
@@ -214,33 +228,40 @@ The "Hive is / Hive is not" framing is good. The tagline is accurate.
 | Section | Status | Action Required |
 |---------|--------|-----------------|
 | 1.1 Selective Receive | DONE | Minor clarification |
-| 1.2 EXIT Delivery | FUTURE | Document + future extension |
-| 1.3 I/O Starvation | FUTURE | Document + future extension |
-| 1.4 Priority Starvation | FUTURE | Already documented, add future option |
+| 1.2 EXIT Delivery | FUTURE | ✓ Added to Future Extensions |
+| 1.3 I/O Starvation | FUTURE | ✓ Added to Future Extensions |
+| 1.4 Priority Starvation | FUTURE | ✓ Added to Future Extensions |
 | 1.5 File I/O | DONE | Verify docs |
-| 2.1 Motor Deadman | FIX | **Implement in code** |
-| 2.2 Bus Retention | FUTURE | Document + future extension |
-| 2.3 Supervision Semantics | FIX | Document in pilot SPEC |
-| 2.4 Error Handling | FIX | Document in both SPECs |
-| 2.5 Priority Table | FIX | Document in pilot SPEC |
-| 3.1 Guarantees Page | FIX | Add to SPEC |
-| 3.2 Failure Modes | FIX | Add to SPEC |
-| 3.3 Memory Sizing | FIX | Add to SPEC |
-| 3.4 Simulation Invariant | FIX | Add to SPEC |
-| 4. Positioning | FIX | Add to README |
+| 2.1 Motor Deadman | **DONE** | ✓ Implemented |
+| 2.2 Bus Retention | FUTURE | ✓ Added to Future Extensions |
+| 2.3 Supervision Semantics | **DONE** | ✓ Documented |
+| 2.4 Error Handling | **DONE** | ✓ Documented |
+| 2.5 Priority Table | **DONE** | ✓ Documented |
+| 3.1 Guarantees Page | **DONE** | ✓ Documented |
+| 3.2 Failure Modes | **DONE** | ✓ Documented |
+| 3.3 Memory Sizing | **DONE** | ✓ Documented |
+| 3.4 Simulation Invariant | **DONE** | ✓ Documented |
+| 4. Positioning | **DONE** | ✓ Documented |
 
-**Code changes:** 1 (motor deadman)
-**Documentation changes:** 13
-**Future extensions:** 4
+**All items complete!**
+- Code changes: 1 (motor deadman)
+- Documentation: 10 items
+- Future extensions: 4 items
 
 ---
 
 ## Execution Order
 
-1. **Motor deadman watchdog** (code) - Most important for credibility
-2. **Guarantees vs Non-Guarantees** (doc) - Sets honest expectations
-3. **Error handling rules** (doc) - Clarifies crash semantics
-4. **Pilot priority/blocking table** (doc) - Shows scheduling intent
-5. **Remaining documentation** - In order of section numbers
-6. **Future Extensions section** - Collect all FUTURE items
+1. ~~**Motor deadman watchdog** (code)~~ ✓ Done
+2. ~~**Guarantees vs Non-Guarantees** (doc)~~ ✓ Done
+3. ~~**Error handling rules** (doc)~~ ✓ Done
+4. ~~**Pilot priority/blocking table** (doc)~~ ✓ Done
+5. ~~**Future Extensions section**~~ ✓ Done
+6. ~~**Positioning summary** (README)~~ ✓ Done
+7. ~~**Supervision Semantics** (2.3)~~ ✓ Done
+8. ~~**Failure Modes** (3.2)~~ ✓ Done
+9. ~~**Memory Sizing Guide** (3.3)~~ ✓ Done
+10. ~~**Simulation Invariant** (3.4)~~ ✓ Done
+
+**All reviewer feedback addressed!**
 

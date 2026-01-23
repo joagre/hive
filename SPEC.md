@@ -96,6 +96,44 @@ Hive is **not**:
 
 **Tagline:** *"Erlang-style actors with deterministic memory and cooperative scheduling for embedded systems."*
 
+## Failure Modes Summary
+
+Quick reference for resource exhaustion and failure handling. See IPC and Bus sections for details.
+
+### Pool Exhaustion Behavior
+
+| Pool | Exhaustion Result | Blocking? | Auto-drop? |
+|------|-------------------|-----------|------------|
+| IPC message pool | `HIVE_ERR_NOMEM` returned | No | No |
+| IPC mailbox entry pool | `HIVE_ERR_NOMEM` returned | No | No |
+| Bus message pool | `HIVE_ERR_NOMEM` returned | No | No |
+| Bus ring buffer full | Oldest entry evicted | No | Yes (oldest) |
+| Bus subscriber table | `HIVE_ERR_NOMEM` returned | No | No |
+| Timer pool | `HIVE_ERR_NOMEM` returned | No | No |
+
+**Key insight:** IPC never auto-drops (caller must handle). Bus ring buffer auto-drops oldest entry.
+
+### Recommended Patterns
+
+| Pattern | When to Use | Example |
+|---------|-------------|---------|
+| **Check and retry** | Transient exhaustion | `if (NOMEM) sleep_ms(10); retry();` |
+| **Backpressure** | Producer-consumer | Use `hive_ipc_request()` (blocks sender) |
+| **Drop and continue** | Non-critical data | `if (NOMEM) log_warn(); return;` |
+| **Escalate** | Critical failure | `if (NOMEM) hive_exit(CRASH);` |
+
+### Error Code Classification
+
+| Error Code | Meaning | Typical Response |
+|------------|---------|------------------|
+| `HIVE_ERR_TIMEOUT` | Normal control flow | Continue, check condition |
+| `HIVE_ERR_WOULDBLOCK` | No data available | Continue, check later |
+| `HIVE_ERR_NOMEM` | Pool exhausted | Retry, backoff, or escalate |
+| `HIVE_ERR_CLOSED` | Target died | Re-resolve via `hive_whereis()` |
+| `HIVE_ERR_INVALID` | Bad arguments | Fix caller (programming error) |
+
+**See:** "IPC API → Pool Exhaustion Behavior" and "Bus API → Pool Exhaustion and Buffer Full Behavior" for detailed documentation.
+
 ## Architecture
 
 ```
@@ -2752,6 +2790,74 @@ All runtime structures are **statically allocated** based on these limits. Actor
 - O(1) pool allocation for hot paths (scheduling, IPC); O(n) bounded arena allocation for cold paths (spawn/exit)
 - Suitable for embedded/MCU deployment
 
+### Memory Sizing Guide
+
+Use these formulae to calculate memory requirements for your application.
+
+**Fixed overhead:**
+```
+Runtime base          ~12 KB   (scheduler, pools metadata, context data)
+Actor table           HIVE_MAX_ACTORS × 72 bytes
+Bus table             HIVE_MAX_BUSES × 64 bytes
+Supervisor table      HIVE_MAX_SUPERVISORS × (80 + HIVE_MAX_SUPERVISOR_CHILDREN × 32) bytes
+Name registry         HIVE_MAX_REGISTERED_NAMES × 40 bytes
+```
+
+**Pool memory:**
+```
+Mailbox entries       HIVE_MAILBOX_ENTRY_POOL_SIZE × 24 bytes
+Message data          HIVE_MESSAGE_DATA_POOL_SIZE × (HIVE_MAX_MESSAGE_SIZE + 8) bytes
+Link entries          HIVE_LINK_ENTRY_POOL_SIZE × 16 bytes
+Monitor entries       HIVE_MONITOR_ENTRY_POOL_SIZE × 20 bytes
+Timer entries         HIVE_TIMER_ENTRY_POOL_SIZE × 24 bytes
+```
+
+**Stack memory:**
+```
+Stack arena           HIVE_STACK_ARENA_SIZE (default 1 MB)
+  - or -
+Per-actor stacks      Sum of all actor stack_size values (if malloc_stack=true)
+```
+
+**Sizing formulae:**
+
+| Parameter | Formula | Notes |
+|-----------|---------|-------|
+| `HIVE_MAX_ACTORS` | Peak concurrent actors | Include supervisor(s) |
+| `HIVE_MAX_BUSES` | Number of buses created | Usually 1 per data stream |
+| `HIVE_MAILBOX_ENTRY_POOL_SIZE` | 1.5 × peak pending messages | Shared across all actors |
+| `HIVE_MESSAGE_DATA_POOL_SIZE` | 1.5 × peak pending (IPC + bus entries) | Includes bus data |
+| `HIVE_TIMER_ENTRY_POOL_SIZE` | Active timers × 2 | Include margin for overlapping timers |
+| `HIVE_STACK_ARENA_SIZE` | Sum of actor stacks + 20% | Fragmentation overhead |
+
+**Example: Flight controller (pilot example)**
+```c
+// 10-11 actors, 7 buses, modest IPC traffic
+#define HIVE_MAX_ACTORS 16
+#define HIVE_MAX_BUSES 8
+#define HIVE_MAILBOX_ENTRY_POOL_SIZE 64    // Low IPC usage
+#define HIVE_MESSAGE_DATA_POOL_SIZE 64     // 7 buses × 1 entry each + margin
+#define HIVE_TIMER_ENTRY_POOL_SIZE 16      // Few timers
+#define HIVE_MAX_SUPERVISORS 1             // Single supervisor
+#define HIVE_MAX_SUPERVISOR_CHILDREN 12    // All flight actors
+#define HIVE_STACK_ARENA_SIZE (64*1024)    // 64 KB (STM32 constrained)
+// Total RAM: ~90 KB (fits in STM32F405's 192 KB)
+```
+
+**Example: Server application (many actors, heavy IPC)**
+```c
+// 50+ actors, high message throughput
+#define HIVE_MAX_ACTORS 64
+#define HIVE_MAX_BUSES 16
+#define HIVE_MAILBOX_ENTRY_POOL_SIZE 512   // Heavy IPC traffic
+#define HIVE_MESSAGE_DATA_POOL_SIZE 512    // Many pending messages
+#define HIVE_TIMER_ENTRY_POOL_SIZE 128     // Many timers
+#define HIVE_MAX_SUPERVISORS 8             // Supervision hierarchy
+#define HIVE_MAX_SUPERVISOR_CHILDREN 16    // Workers per supervisor
+#define HIVE_STACK_ARENA_SIZE (2*1024*1024) // 2 MB (Linux desktop)
+// Total RAM: ~2.5 MB
+```
+
 ### Runtime API
 
 ```c
@@ -2946,6 +3052,51 @@ while (wb_robot_step(TIME_STEP_MS) != -1) {
 - Deterministic, reproducible behavior
 - Timer granularity matches simulation time step
 - No wall-clock dependencies in actors
+
+### Simulation Invariant
+
+**`hive_run_until_blocked()` REQUIRES actors to eventually block.** If any actor runs without blocking, the function loops forever.
+
+**The contract:**
+- Every actor MUST either block (recv, select, bus_read_wait) or exit within finite computation
+- Actors MUST NOT spin-poll without yielding
+- This is a correctness requirement, not a suggestion
+
+**Correct pattern:**
+```c
+void sensor_actor(void *arg) {
+    timer_id timer;
+    hive_timer_every(TIME_STEP_MS * 1000, &timer);
+    while (1) {
+        hive_message msg;
+        hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);  // BLOCKS
+        read_sensors();
+        publish_to_bus();
+    }
+}
+```
+
+**INCORRECT pattern (will hang simulation):**
+```c
+void bad_actor(void *arg) {
+    while (1) {
+        // NO BLOCKING CALL - hive_run_until_blocked() loops forever
+        do_work();
+    }
+}
+```
+
+**Why this matters:**
+- Simulation requires lockstep coordination: advance time, run until blocked, repeat
+- Actors that don't block break this contract
+- In production (`hive_run()`), non-blocking actors would starve others, but the system keeps running
+- In simulation (`hive_run_until_blocked()`), the system hangs
+
+**Diagnosis:**
+If simulation appears to hang, check that all actors have a blocking call in their main loop. Common fixes:
+- Add timer-driven loop (most actors should use this)
+- Add bus_read_wait for bus consumers
+- Add recv/recv_match for IPC consumers
 
 ## Event Loop Architecture
 
