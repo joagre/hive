@@ -8,6 +8,17 @@ A complete actor-based runtime designed for **embedded and safety-critical syste
 
 The runtime uses **statically bounded memory** for predictable behavior with no heap fragmentation in hot paths (heap allocation optional only for actor stacks). It features **priority-based scheduling** (4 levels: CRITICAL, HIGH, NORMAL, LOW) with fast context switching. Provides message passing (IPC with selective receive and request/reply), linking, monitoring, timers, pub-sub messaging (bus), network I/O, and file I/O.
 
+**Hive is:**
+- A single-threaded, cooperative actor runtime
+- With Erlang-inspired semantics (mailboxes, selective receive, links, monitors, supervisors)
+- Designed for MCUs and safety-conscious embedded systems
+- Emphasizing bounded memory, explicit failure handling, and predictable scheduling
+
+**Hive is not:**
+- An RTOS (no preemption, no priority inversion protection)
+- A hard real-time guarantee engine (no deadline enforcement)
+- A distributed actor framework (single process only)
+
 ## Quick Links
 
 - **[Full Specification](SPEC.md)** - Complete design and implementation details

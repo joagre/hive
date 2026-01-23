@@ -309,6 +309,31 @@ graph TB
     Comms -.-> RadioTx
 ```
 
+### Actor Priority and Blocking Table
+
+This table documents the scheduling design for audit and latency analysis.
+
+| Actor | Priority | Primary Block Point | Yield Behavior |
+|-------|----------|---------------------|----------------|
+| sensor | CRITICAL | Timer (4ms periodic) | Yields every tick after sensor read |
+| estimator | CRITICAL | Bus read (sensor_bus) | Yields waiting for sensor data |
+| waypoint | CRITICAL | Bus read (state_bus) | Yields waiting for state updates |
+| altitude | CRITICAL | Bus read (state_bus) | Yields waiting for state updates |
+| position | CRITICAL | Bus read (state_bus) | Yields waiting for state updates |
+| attitude | CRITICAL | Bus read (attitude_sp_bus) | Yields waiting for setpoints |
+| rate | CRITICAL | Bus read (rate_sp_bus) | Yields waiting for setpoints |
+| motor | CRITICAL | select() with 50ms timeout | Yields waiting for torque or timeout |
+| flight_manager | CRITICAL | Timer + IPC recv | Yields on coordination events |
+| comms | LOW | Bus read (multiple) | Non-critical, may be starved |
+| telemetry_logger | LOW | Bus read + timer | Non-critical, may be starved |
+
+**Scheduling characteristics:**
+- All flight-critical actors run at CRITICAL priority
+- Each actor blocks on its upstream bus, creating natural pipeline synchronization
+- No actor performs unbounded computation between yields
+- LOW priority actors (comms, telemetry) may experience latency under load but do not affect flight safety
+- Motor actor's 50ms deadman timeout ensures it yields regularly even if upstream fails
+
 ---
 
 ## Implementation Details

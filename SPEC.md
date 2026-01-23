@@ -52,6 +52,50 @@ A minimalistic actor-based runtime designed for **embedded and safety-critical s
 
 On both platforms, the actor runtime is **single-threaded** with an event loop architecture. All actors run cooperatively in a single scheduler thread. I/O operations use platform-specific non-blocking mechanisms integrated directly into the scheduler's event loop.
 
+## Guarantees and Non-Guarantees
+
+A clear list of what Hive guarantees and what it does not. Use this to evaluate fit for your application.
+
+### Guaranteed
+
+| Property | Description |
+|----------|-------------|
+| **Bounded memory** | Total memory usage calculable at link time from compile-time configuration |
+| **No hot-path heap** | No malloc/free after `hive_init()` except optional actor stack allocation |
+| **Single-threaded** | All actors run in one thread; no data races within runtime |
+| **Explicit yields** | Actors run until they explicitly block (recv, select, I/O) or yield |
+| **Message ordering** | Messages from A to B delivered in send order (per sender FIFO) |
+| **Link/monitor notification** | Actor death always notifies linked/monitoring actors (pool permitting) |
+| **Timer delivery** | Timers fire after specified delay, delivered as messages to creating actor |
+| **Bus latest-value** | Subscribers always read most recent published value (not queued history) |
+
+### Not Guaranteed
+
+| Property | Description |
+|----------|-------------|
+| **Starvation freedom** | Higher-priority actors can starve lower priority indefinitely |
+| **I/O dispatch latency** | If run queue never empties, I/O events may be delayed indefinitely |
+| **EXIT delivery under exhaustion** | EXIT uses same pool as IPC; pool exhaustion may drop EXIT messages |
+| **Reproducible multi-event order** | When multiple I/O events fire simultaneously, dispatch order is unspecified |
+| **Hard real-time deadlines** | No deadline enforcement; worst-case latency depends on actor behavior |
+| **Preemption** | Long-running actors are not preempted; must yield cooperatively |
+
+### Honest Positioning
+
+Hive is:
+- A **single-threaded, cooperative actor runtime**
+- With **Erlang-inspired semantics** (mailboxes, selective receive, links, monitors, supervisors)
+- Designed for **MCUs and safety-conscious systems**
+- Emphasizing **bounded memory, explicit failure, and predictable scheduling**
+
+Hive is **not**:
+- An RTOS (no preemption, no priority inversion protection)
+- A hard real-time guarantee engine (no deadline enforcement)
+- A distributed actor framework (single process only)
+- A statechart or FSM framework
+
+**Tagline:** *"Erlang-style actors with deterministic memory and cooperative scheduling for embedded systems."*
+
 ## Architecture
 
 ```
@@ -513,6 +557,41 @@ if (len > HIVE_MAX_MESSAGE_SIZE) {
     return HIVE_ERROR(HIVE_ERR_INVALID, "Message too large");
 }
 ```
+
+### Actor Exit Semantics
+
+**Returning from actor function = CRASH**
+
+If an actor's entry function returns without calling `hive_exit()`, the runtime treats this as a crash (`HIVE_EXIT_CRASH`). Linked/monitoring actors receive EXIT notifications with crash reason.
+
+```c
+void my_actor(void *args, const hive_spawn_info *siblings, size_t count) {
+    // BAD: returning without hive_exit() = CRASH
+    return;
+
+    // GOOD: explicit normal exit
+    hive_exit(HIVE_EXIT_NORMAL);
+}
+```
+
+**Error codes are not crash conditions**
+
+| Error Code | Meaning | Typical Response |
+|------------|---------|------------------|
+| `HIVE_ERR_TIMEOUT` | Operation timed out | Normal control flow (retry, fallback, continue) |
+| `HIVE_ERR_WOULDBLOCK` | Non-blocking operation has no data | Normal control flow (try again later) |
+| `HIVE_ERR_NOMEM` | Pool exhausted | **Systemic error** - log, backoff, or escalate |
+| `HIVE_ERR_CLOSED` | Target actor died | Handle gracefully (re-resolve via whereis) |
+| `HIVE_ERR_INVALID` | Invalid arguments | Bug in caller - fix the code |
+| `HIVE_ERR_IO` | I/O operation failed | Depends on context (retry, report, abort) |
+
+**`HIVE_ERR_TIMEOUT` is not a crash.** Many legitimate patterns use timeouts for control flow (deadman watchdogs, periodic polling, request timeouts). Do not treat timeout as an error requiring actor termination.
+
+**`HIVE_ERR_NOMEM` indicates systemic overload.** Unlike timeout, NOMEM means the system is misconfigured or overloaded. Appropriate responses:
+- Log the error for diagnosis
+- Apply backpressure (slow down, drop work)
+- Escalate to supervisor (if transient issue)
+- Shut down gracefully (if persistent)
 
 ## Design Trade-offs and Sharp Edges
 
