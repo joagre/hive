@@ -17,6 +17,8 @@ A minimalistic actor-based runtime designed for **embedded and safety-critical s
 
 **Hive favors boundedness and inspectability over fairness and throughput.**
 
+**Note on "bounded":** Throughout this document, "bounded" refers to **bounded algorithmic complexity and allocation behavior**, not bounded end-to-end response time across actors. Cooperative scheduling means worst-case latency depends on actor behavior.
+
 ### Heap Usage Policy
 
 **Definition - Hot path**: Any operation callable while the scheduler is running, including all API calls from actor context, event dispatch, and wakeup processing.
@@ -67,7 +69,7 @@ A clear list of what Hive guarantees and what it does not. Use this to evaluate 
 | **Single-threaded** | All actors run in one thread; no data races within runtime |
 | **Explicit yields** | Actors run until they explicitly block (recv, select, I/O) or yield |
 | **Message ordering** | Messages from A to B delivered in send order (per sender FIFO) |
-| **Link/monitor notification** | Actor death always notifies linked/monitoring actors (pool permitting) |
+| **Link/monitor notification** | Actor death notifies linked/monitoring actors unless message pool exhaustion occurs |
 | **Timer delivery** | Timers fire after specified delay, delivered as messages to creating actor |
 | **Bus latest-value** | Subscribers always read most recent published value (not queued history) |
 
@@ -2537,6 +2539,9 @@ while (total < len) {
 
 File I/O operations.
 
+> **WARNING:** File I/O stalls the entire runtime—no actors run during file operations.
+> Restrict file I/O to initialization, shutdown, or `LOW` priority actors where stalls are acceptable.
+
 ```c
 hive_status hive_file_open(const char *path, int flags, int mode, int *fd_out);
 hive_status hive_file_close(int fd);
@@ -3323,7 +3328,7 @@ The runtime does **not** perform stack overflow detection. Stack overflow result
 - **Corruption of runtime state** (if overflow is severe)
 - **Silent data corruption** (worst case - no immediate crash)
 
-**Links/monitors are NOT notified.** The `HIVE_EXIT_CRASH_STACK` exit reason exists but is not currently triggered.
+**Links/monitors are NOT notified.** The `HIVE_EXIT_CRASH_STACK` exit reason is reserved for future use; the runtime does not currently detect stack overflow.
 
 ### Required Mitigation
 
