@@ -251,7 +251,7 @@ complete flight record for debugging without the overhead of TRACE/DEBUG message
 
 Features intentionally omitted from this demonstration:
 
-- Full state estimation (Kalman filter) — complementary filter is sufficient for demo
+- Full state estimation (unified EKF for position/velocity/attitude) — separate estimators used instead (altitude KF + complementary filter for attitude)
 - Failsafe handling (return-to-home, auto-land) — requires GPS and mission planning
 - Parameter tuning UI — gains are hardcoded per platform
 - Multiple vehicle types — single X-configuration quadcopter
