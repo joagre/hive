@@ -1,7 +1,9 @@
 # Pilot Example Specification
 
-A quadcopter autopilot example using the actor runtime. Supports Webots simulation
-(default) and STM32 hardware (Crazyflie 2.1+).
+A complete quadcopter autopilot using the actor runtime. Features cascaded PID control,
+sensor fusion (altitude Kalman filter + attitude complementary filter), pub-sub data flow,
+and fail-safe supervision. Supports Webots simulation (default) and STM32 hardware
+(Crazyflie 2.1+).
 
 > In this document, "pilot" refers to the autopilot software, not a human pilot.
 
@@ -434,7 +436,7 @@ This table documents the scheduling design for audit and latency analysis.
 |-------|-------|--------|----------|---------|----------------|
 | **Supervisor** | Child exit notifications | (internal) | CRITICAL | - | Monitors workers, ONE_FOR_ALL restart |
 | **Sensor** | Hardware | Sensor Bus | CRITICAL | PERMANENT | Read raw sensors, publish |
-| **Estimator** | Sensor Bus | State Bus | CRITICAL | PERMANENT | Complementary filter fusion, state estimate |
+| **Estimator** | Sensor Bus | State Bus | CRITICAL | PERMANENT | Altitude Kalman filter + attitude complementary filter |
 | **Waypoint** | State Bus + START notification | Position Target Bus | CRITICAL | PERMANENT | Waypoint navigation (3D on Webots, altitude-only on STM32) |
 | **Altitude** | State + Position Target Bus + LANDING | Thrust Bus + LANDED | CRITICAL | PERMANENT | Altitude PID (250Hz), landing detection |
 | **Position** | Position Target + State Bus | Attitude Setpoint Bus | CRITICAL | PERMANENT | Position PD (250Hz) |
@@ -834,14 +836,14 @@ Sensor Actor ──► Sensor Bus ──► Controllers
 **After:**
 ```
 Sensor Actor ──► Sensor Bus ──► Estimator Actor ──► State Bus ──► Controllers
-                             (complementary filter)
+                             (Kalman + complementary)
 ```
 
 **Implementation:**
-- Runs portable complementary filter (`fusion/complementary_filter.c`)
+- Altitude Kalman filter (`fusion/altitude_kf.c`) for altitude/velocity estimation
+- Complementary filter (`fusion/complementary_filter.c`) for attitude estimation
 - Fuses accelerometer and gyroscope for roll/pitch estimation
 - Fuses magnetometer for yaw (when available)
-- Computes velocities by differentiating position with low-pass filter
 - Webots: synthesizes accelerometer from gravity + inertial_unit angles
 
 **Benefits:**
@@ -1111,18 +1113,19 @@ Results from x86-64 Linux (Webots simulation) with 4KB stacks:
 
 | Actor | Used | Usage | Notes |
 |-------|------|-------|-------|
-| waypoint | 3232 | 78.9% | Highest - waypoint list + arrival detection |
-| flight_mgr | 3112 | 76.0% | Log file management + IPC |
-| altitude | 2664 | 65.0% | PID state + landing logic |
-| supervisor | 2504 | 61.1% | Child management overhead |
-| sensor | 2008 | 49.0% | HAL sensor structs |
-| estimator | 808 | 19.7% | Complementary filter state |
+| sensor | 2056 | 50.2% | Highest - HAL sensor structs |
+| tlog | 1912 | 46.7% | CSV formatting + file I/O |
+| estimator | 1480 | 36.1% | Kalman filter + complementary filter state |
+| altitude | 1304 | 31.8% | PID state + landing logic |
+| waypoint | 1288 | 31.4% | Waypoint list + arrival detection |
+| flight_mgr | 1192 | 29.1% | Log file management + IPC |
+| supervisor | 1128 | 27.5% | Child management overhead |
 | rate | 792 | 19.3% | Rate PIDs |
 | attitude | 760 | 18.6% | Attitude PIDs |
-| position | 680 | 16.6% | Position PD |
-| motor | 488 | 11.9% | Lowest - simple output |
+| position | 664 | 16.2% | Position PD |
+| motor | 504 | 12.3% | Lowest - simple output |
 
-All actors fit comfortably in 4KB with ~860 bytes headroom (78.9% peak).
+All actors fit comfortably in 4KB with ~50% headroom (50.2% peak).
 ARM Cortex-M may differ slightly due to calling conventions.
 
 ---
@@ -1130,7 +1133,7 @@ ARM Cortex-M may differ slightly due to calling conventions.
 ## Future Extensions
 
 1. **Mission planning** - Load waypoints from file, complex routes
-2. **Sensor fusion** - ✓ Complementary filter implemented (estimator actor)
+2. **Sensor fusion** - ✓ Altitude Kalman filter + attitude complementary filter (estimator actor)
 3. **Failsafe** - Motor failure detection, emergency landing
 4. **Telemetry** - ✓ Radio telemetry implemented (Crazyflie only)
 5. **RC input** - Manual control override
