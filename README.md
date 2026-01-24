@@ -10,8 +10,8 @@
 
 **Core Concepts**
 - [Cooperative Scheduling](#cooperative-scheduling)
-- [Memory Model](#memory-model)
 - [Performance](#performance)
+- [Memory Model](#memory-model)
 
 **Getting Started**
 - [Quick Start](#quick-start)
@@ -19,15 +19,13 @@
 
 **API Reference**
 - [API Overview](#api-overview)
+- [Implementation Details](#implementation-details)
 
 **Development**
 - [Building](#building)
 - [Testing](#testing)
-- [QEMU Testing](#qemu-testing)
 - [Code Style](#code-style)
-
-**Internals**
-- [Implementation Details](#implementation-details)
+- [QEMU Testing](#qemu-testing)
 
 **Resources**
 - [Quick Links](#quick-links)

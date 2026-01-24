@@ -16,9 +16,7 @@
 
 **Memory & Resources**
 - [Memory Model](#memory-model)
-- [Memory Allocation Architecture](#memory-allocation-architecture)
 - [Architectural Limits](#architectural-limits)
-- [Stack Overflow](#stack-overflow)
 
 **Error Handling**
 - [Error Handling](#error-handling)
@@ -26,20 +24,22 @@
 **API Reference**
 - [Core Types](#core-types)
 - [Actor API](#actor-api)
-- [Actor Death Handling](#actor-death-handling)
 - [IPC API](#ipc-api)
-- [Timer API](#timer-api)
 - [Bus API](#bus-api)
 - [Unified Event Waiting API](#unified-event-waiting-api)
+- [Timer API](#timer-api)
 - [Supervisor API](#supervisor-api)
 - [Network API](#network-api)
 - [File API](#file-api)
 - [Logging API](#logging-api)
 
 **Implementation Details**
+- [Memory Allocation Architecture](#memory-allocation-architecture)
+- [Actor Death Handling](#actor-death-handling)
 - [Scheduler Main Loop](#scheduler-main-loop)
 - [Event Loop Architecture](#event-loop-architecture)
 - [Platform Abstraction](#platform-abstraction)
+- [Stack Overflow](#stack-overflow)
 
 **Appendix**
 - [Future Extensions](#future-extensions)
