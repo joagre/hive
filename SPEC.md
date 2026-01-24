@@ -11,7 +11,7 @@ A minimalistic actor-based runtime designed for **embedded and safety-critical s
 1. **Minimalistic**: Only essential features, no bloat
 2. **Predictable**: Cooperative scheduling, no surprises
 3. **Modern C11**: Clean, safe, standards-compliant code
-4. **Statically bounded memory**: All runtime memory is bounded at link time; no heap allocations after init, except optional actor stacks under explicit configuration (`malloc_stack = true`)
+4. **Statically bounded memory**: All runtime memory is bounded at link time; no heap allocation (see Heap Usage Policy for one optional exception)
 5. **O(1) hot paths**: IPC, timers, bus, monitoring, and I/O dispatch use pools with O(1) allocation; spawn/exit may use bounded arena search
 6. **No preemption**: Actors run until they block (IPC, I/O, timers) or yield
 
@@ -40,7 +40,7 @@ A minimalistic actor-based runtime designed for **embedded and safety-critical s
 
 **Consequences**:
 - Hot path operations use **static pools** with **O(1) allocation** and return `HIVE_ERR_NOMEM` on pool exhaustion
-- No heap fragmentation in hot paths
+- No heap allocation, no fragmentation
 - Predictable allocation latency
 - Optional malloc'd stacks may fragment the process heap depending on allocator behavior
 
