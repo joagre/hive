@@ -35,6 +35,7 @@ The following safety features run on all platforms (Webots and STM32):
 | Altitude cutoff | altitude_actor.c | Motors off if altitude >2m |
 | Landed detection | altitude_actor.c | Motors off when target <5cm and altitude <15cm |
 | Thrust ramp | altitude_actor.c | Gradual thrust increase over 0.5 seconds on takeoff |
+| Motor deadman | motor_actor.c | Motors zeroed if no torque command within 50ms |
 | Flight duration | flight_manager_actor.c | Controlled landing after timeout (10-60s depending on flight profile) |
 
 The following safety features are STM32-only (disabled in Webots):
