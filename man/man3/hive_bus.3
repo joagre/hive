@@ -178,7 +178,7 @@ bitmask used to track which subscribers have read each entry (bit N = subscriber
 The configurable
 .B HIVE_MAX_BUS_SUBSCRIBERS
 defaults to 32 but cannot exceed this architectural limit.
-See SPEC.md "Architectural Limits" for all hardcoded constraints.
+See spec/design.md "Architectural Limits" for all hardcoded constraints.
 .SS New Subscriber Read Position
 When an actor subscribes, its read position starts at the current head. It will
 not see entries published before subscribing. To capture all entries, subscribe
