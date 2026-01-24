@@ -61,7 +61,7 @@ See [spec/](spec/) for design details.
 
 **Hive is not** an RTOS (no preemption), a hard real-time engine (no deadline enforcement), a distributed framework (single process only), or a statechart library.
 
-**Hive favors boundedness and inspectability over fairness and throughput.**
+**Hive favors boundedness and inspectability over fairness and throughput** (single-threaded, fixed pools, no time-slicing).
 
 **Platforms** - x86-64 Linux (fully implemented), STM32/ARM Cortex-M bare metal (core runtime implemented)
 
