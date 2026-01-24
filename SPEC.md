@@ -315,29 +315,28 @@ The runtime provides **bounded, predictable behavior**, not full reproducibility
 
 ### Scheduler-Stalling Calls
 
-File I/O operations (`hive_file_read()`, `hive_file_write()`, `hive_file_sync()`) are **synchronous** and stall the entire runtime:
+File I/O operations (`hive_file_read()`, `hive_file_write()`, `hive_file_sync()`) are **synchronous** and briefly pause the scheduler. This is fine for short, bursty operations—typical embedded file writes complete in under 1ms.
 
 **Behavior:**
 - Calling actor does NOT transition to `ACTOR_STATE_WAITING`
 - The scheduler event loop is paused during the syscall
-- All actors are stalled (no actor runs while file I/O executes)
-- Timer delivery is suspended during the stall (timerfd expirations accumulate in kernel)
-- Network events are not processed during the stall
-- After stall resumes: accumulated timer expirations are observed and delivered per tick-coalescing rules (one tick message regardless of expiration count)
+- Other actors wait briefly (no actor runs during file I/O)
+- Timer delivery is suspended (timerfd expirations accumulate in kernel)
+- After completion: accumulated timer expirations are delivered per tick-coalescing rules
 
-**Rationale:**
+**Why synchronous?**
 - Regular files do not work with `epoll` on Linux (always report ready)
 - True async file I/O would require `io_uring` (Linux 5.1+) or a thread pool
 - For embedded (STM32): FATFS/littlefs operations are typically fast (<1ms)
 - Simplicity: no additional complexity for a rarely-needed feature
 
-**Consequences:**
-- File I/O breaks real-time latency bounds
-- Long file operations delay all actors, timers, and network processing
-- Use file I/O sparingly and with small buffers
-- For latency-sensitive systems: perform file I/O only during initialization or shutdown
+**Best practices:**
+- Use `HIVE_PRIORITY_LOW` actors for file work
+- Keep operations short (small buffers, brief writes)
+- For logging: batch writes or use ring buffers
+- Initialization/shutdown: file I/O is fine at any priority (no real-time constraints yet)
 
-**Priority rule:** Actors using file I/O should run at `HIVE_PRIORITY_LOW` or `HIVE_PRIORITY_NORMAL`. Never use file I/O from `HIVE_PRIORITY_CRITICAL` or `HIVE_PRIORITY_HIGH` actors - this stalls time-critical control loops.
+**Avoid:** File I/O from `HIVE_PRIORITY_CRITICAL` actors in tight control loops.
 
 **Design alternatives not implemented:**
 - `io_uring`: Would add Linux 5.1+ dependency and significant complexity
@@ -2500,8 +2499,7 @@ while (total < len) {
 
 File I/O operations.
 
-> **WARNING:** File I/O stalls the entire runtime—no actors run during file operations.
-> Restrict file I/O to initialization, shutdown, or `LOW` priority actors where stalls are acceptable.
+> **Note:** File I/O is synchronous and briefly pauses the scheduler. This is fine for short operations—use `LOW` priority actors for file work. See "Scheduler-Stalling Calls" for details.
 
 ```c
 hive_status hive_file_open(const char *path, int flags, int mode, int *fd_out);
