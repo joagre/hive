@@ -360,7 +360,9 @@ if (HIVE_SUCCEEDED(status)) {
 
     // Echo loop
     while (HIVE_SUCCEEDED(hive_net_recv(client_fd, buf, sizeof(buf), &received, -1))) {
-        if (received == 0) break;  // Client closed connection
+        if (received == 0) {
+            break;  // Client closed connection
+        }
         hive_net_send(client_fd, buf, received, &sent, -1);
     }
     hive_net_close(client_fd);
@@ -663,9 +665,15 @@ if (HIVE_FAILED(status)) {
 }
 
 switch (result.index) {
-case 0: /* Bus data: result.bus.data, result.bus.len */ break;
-case 1: /* Timer: result.ipc */ break;
-case 2: /* Shutdown: result.ipc */ break;
+case 0:
+    // Bus data ready: result.bus.data, result.bus.len
+    break;
+case 1:
+    // Timer fired: result.ipc
+    break;
+case 2:
+    // Shutdown command: result.ipc
+    break;
 }
 ```
 
