@@ -1973,6 +1973,13 @@ Offset  Size  Field
 12      len   payload     Log message text (no null terminator)
 ```
 
+**Decoding:** Use `tools/decode_log.py` to convert binary logs to text:
+```bash
+python3 tools/decode_log.py flight.bin              # Decode to stdout
+python3 tools/decode_log.py flight.bin -o out.txt   # Decode to file
+python3 tools/decode_log.py flight.bin --stats      # Show statistics
+```
+
 ### Compile-Time Configuration (`hive_static_config.h`)
 
 ```c
