@@ -4,7 +4,7 @@
 
 ## Why Hive?
 
-**No shared state.** Each actor owns its data. No locks, no races, no corruption from wild pointers in other threads.
+**No shared state.** Each actor owns its data. No locks, no races. A bug in one actor can't corrupt another actor's state.
 
 **Supervision.** When an actor crashes, its supervisor restarts it with clean state. The system keeps running.
 
