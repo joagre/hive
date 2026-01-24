@@ -9,13 +9,13 @@
 
 // All buses used in the pilot control pipeline
 typedef struct {
-    bus_id sensor_bus;
-    bus_id state_bus;
-    bus_id thrust_bus;
-    bus_id position_target_bus;
-    bus_id attitude_setpoint_bus;
-    bus_id rate_setpoint_bus;
-    bus_id torque_bus;
-} pilot_buses;
+    bus_id_t sensor_bus;
+    bus_id_t state_bus;
+    bus_id_t thrust_bus;
+    bus_id_t position_target_bus;
+    bus_id_t attitude_setpoint_bus;
+    bus_id_t rate_setpoint_bus;
+    bus_id_t torque_bus;
+} pilot_buses_t;
 
 #endif // PILOT_BUSES_H

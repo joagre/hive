@@ -26,17 +26,17 @@
 
 // Actor state
 typedef struct {
-    bus_id state_bus;
-    bus_id sensor_bus;
-    bus_id thrust_bus;
-    bus_id position_target_bus;
+    bus_id_t state_bus;
+    bus_id_t sensor_bus;
+    bus_id_t thrust_bus;
+    bus_id_t position_target_bus;
     const char *log_path;
     int log_fd;
-} telemetry_logger_state;
+} telemetry_logger_state_t;
 
 void *telemetry_logger_init(void *init_args) {
-    const telemetry_logger_config *cfg = init_args;
-    static telemetry_logger_state state;
+    const telemetry_logger_config_t *cfg = init_args;
+    static telemetry_logger_state_t state;
     state.state_bus = cfg->buses->state_bus;
     state.sensor_bus = cfg->buses->sensor_bus;
     state.thrust_bus = cfg->buses->thrust_bus;
@@ -46,16 +46,16 @@ void *telemetry_logger_init(void *init_args) {
     return &state;
 }
 
-void telemetry_logger_actor(void *args, const hive_spawn_info *siblings,
+void telemetry_logger_actor(void *args, const hive_spawn_info_t *siblings,
                             size_t sibling_count) {
     (void)siblings;
     (void)sibling_count;
 
-    telemetry_logger_state *state = args;
+    telemetry_logger_state_t *state = args;
     char line_buf[LINE_BUF_SIZE];
 
     // Open CSV file
-    hive_status status = hive_file_open(
+    hive_status_t status = hive_file_open(
         state->log_path, HIVE_O_WRONLY | HIVE_O_CREAT | HIVE_O_TRUNC, 0644,
         &state->log_fd);
     if (HIVE_FAILED(status)) {
@@ -93,7 +93,7 @@ void telemetry_logger_actor(void *args, const hive_spawn_info *siblings,
     }
 
     // Start logging timer
-    timer_id timer;
+    timer_id_t timer;
     if (HIVE_FAILED(hive_timer_every(LOG_INTERVAL_US, &timer))) {
         HIVE_LOG_ERROR("[TLOG] Timer setup failed");
         hive_file_close(state->log_fd);
@@ -110,7 +110,7 @@ void telemetry_logger_actor(void *args, const hive_spawn_info *siblings,
     uint32_t log_count = 0;
 
     while (1) {
-        hive_message msg;
+        hive_message_t msg;
         status = hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer,
                                      &msg, -1);
         if (HIVE_FAILED(status)) {

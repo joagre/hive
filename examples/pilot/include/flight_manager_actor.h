@@ -21,7 +21,7 @@
 void *flight_manager_actor_init(void *init_args);
 
 // Flight manager actor entry point
-void flight_manager_actor(void *args, const hive_spawn_info *siblings,
+void flight_manager_actor(void *args, const hive_spawn_info_t *siblings,
                           size_t sibling_count);
 
 #endif // FLIGHT_MANAGER_ACTOR_H

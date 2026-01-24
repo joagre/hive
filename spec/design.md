@@ -28,7 +28,7 @@ A minimalistic actor-based runtime designed for **embedded and safety-critical s
 **Definition - Hot path** - Any operation callable while the scheduler is running, including all API calls from actor context, event dispatch, and wakeup processing.
 
 **Allowed heap use** (malloc/free)
-- Actor stack allocation during `hive_spawn()` **only if** `actor_config.malloc_stack = true`
+- Actor stack allocation during `hive_spawn()` **only if** `actor_config_t.malloc_stack = true`
 - Corresponding free on actor exit for malloc'd stacks
 
 **All other heap use is forbidden after `hive_init()` returns.**
@@ -571,7 +571,7 @@ See [Event Loop Architecture (Implementation)](internals.md#event-loop-architect
 
 ### Actor Stacks
 
-Each actor has a fixed-size stack allocated at spawn time. Stack size is configurable per actor via `actor_config.stack_size`, with a system-wide default (`HIVE_DEFAULT_STACK_SIZE`). Different actors can use different stack sizes to optimize memory usage.
+Each actor has a fixed-size stack allocated at spawn time. Stack size is configurable per actor via `actor_config_t.stack_size`, with a system-wide default (`HIVE_DEFAULT_STACK_SIZE`). Different actors can use different stack sizes to optimize memory usage.
 
 Stack growth/reallocation is not supported. Stack overflow results in undefined behavior - proper stack sizing is required (see [Stack Overflow](internals.md#stack-overflow) section).
 
@@ -614,7 +614,7 @@ The following limits are **hardcoded** and cannot be changed without modifying t
 
 ## Error Handling
 
-All runtime functions return `hive_status`:
+All runtime functions return `hive_status_t`:
 
 ```c
 typedef enum {
@@ -625,12 +625,12 @@ typedef enum {
     HIVE_ERR_CLOSED,
     HIVE_ERR_WOULDBLOCK,
     HIVE_ERR_IO,
-} hive_error_code;
+} hive_error_code_t;
 
 typedef struct {
-    hive_error_code code;
+    hive_error_code_t code;
     const char    *msg;   // string literal or NULL, never heap-allocated
-} hive_status;
+} hive_status_t;
 ```
 
 The `msg` field always points to a string literal or is NULL. It is never dynamically allocated, ensuring safe use across concurrent actors.
@@ -638,10 +638,10 @@ The `msg` field always points to a string literal or is NULL. It is never dynami
 Convenience macros:
 
 ```c
-#define HIVE_SUCCESS ((hive_status){HIVE_OK, NULL})
+#define HIVE_SUCCESS ((hive_status_t){HIVE_OK, NULL})
 #define HIVE_SUCCEEDED(s) ((s).code == HIVE_OK)
 #define HIVE_FAILED(s) ((s).code != HIVE_OK)
-#define HIVE_ERROR(code, msg) ((hive_status){(code), (msg)})
+#define HIVE_ERROR(code, msg) ((hive_status_t){(code), (msg)})
 #define HIVE_ERR_STR(s) ((s).msg ? (s).msg : "unknown error")
 ```
 
@@ -659,7 +659,7 @@ if (len > HIVE_MAX_MESSAGE_SIZE) {
 If an actor's entry function returns without calling `hive_exit()`, the runtime treats this as a crash (`HIVE_EXIT_CRASH`). Linked/monitoring actors receive EXIT notifications with crash reason.
 
 ```c
-void my_actor(void *args, const hive_spawn_info *siblings, size_t count) {
+void my_actor(void *args, const hive_spawn_info_t *siblings, size_t count) {
     // BAD: returning without hive_exit() = CRASH
     return;
 

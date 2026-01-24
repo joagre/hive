@@ -6,17 +6,17 @@
 #include <string.h>
 #include <stdint.h>
 
-// Stack arena allocator for actor stacks
-typedef struct arena_block {
-    size_t size;              // Size of this free block (excluding header)
-    struct arena_block *next; // Next free block in list
-} arena_block;
+// Stack arena allocator for actor_t stacks
+typedef struct arena_block_t {
+    size_t size;                // Size of this free block (excluding header)
+    struct arena_block_t *next; // Next free block in list
+} arena_block_t;
 
 typedef struct {
     uint8_t *base;
     size_t total_size;
-    arena_block *free_list;
-} stack_arena;
+    arena_block_t *free_list;
+} stack_arena_t;
 
 // Stack alignment for x86-64 ABI
 #define STACK_ALIGNMENT 16
@@ -25,16 +25,16 @@ typedef struct {
 // Static arena storage (16-byte aligned)
 static uint8_t s_stack_arena_memory[HIVE_STACK_ARENA_SIZE]
     __attribute__((aligned(16)));
-static stack_arena s_stack_arena = {0};
+static stack_arena_t s_stack_arena = {0};
 
-// Static actor storage
-static actor s_actors[HIVE_MAX_ACTORS];
+// Static actor_t storage
+static actor_t s_actors[HIVE_MAX_ACTORS];
 
-// Static actor table
-static actor_table s_actor_table = {0};
+// Static actor_t table
+static actor_table_t s_actor_table = {0};
 
-// Current running actor
-static actor *s_current_actor = NULL;
+// Current running actor_t
+static actor_t *s_current_actor = NULL;
 
 // Initialize stack arena
 static void arena_init(void) {
@@ -42,8 +42,8 @@ static void arena_init(void) {
     s_stack_arena.total_size = HIVE_STACK_ARENA_SIZE;
 
     // Initialize with one large free block
-    arena_block *block = (arena_block *)s_stack_arena.base;
-    block->size = HIVE_STACK_ARENA_SIZE - sizeof(arena_block);
+    arena_block_t *block = (arena_block_t *)s_stack_arena.base;
+    block->size = HIVE_STACK_ARENA_SIZE - sizeof(arena_block_t);
     block->next = NULL;
     s_stack_arena.free_list = block;
 }
@@ -54,8 +54,8 @@ static void *arena_alloc(size_t size) {
     size = (size + STACK_ALIGNMENT - 1) & ~(STACK_ALIGNMENT - 1);
 
     // Search free list for first-fit
-    arena_block **prev_ptr = &s_stack_arena.free_list;
-    arena_block *curr = s_stack_arena.free_list;
+    arena_block_t **prev_ptr = &s_stack_arena.free_list;
+    arena_block_t *curr = s_stack_arena.free_list;
 
     while (curr != NULL) {
         if (curr->size >= size) {
@@ -63,12 +63,12 @@ static void *arena_alloc(size_t size) {
             size_t remaining = curr->size - size;
 
             // Check if we should split the block
-            if (remaining >= sizeof(arena_block) + MIN_BLOCK_SIZE) {
+            if (remaining >= sizeof(arena_block_t) + MIN_BLOCK_SIZE) {
                 // Split: allocate from beginning, create new free block
-                arena_block *new_block =
-                    (arena_block *)((uint8_t *)curr + sizeof(arena_block) +
-                                    size);
-                new_block->size = remaining - sizeof(arena_block);
+                arena_block_t *new_block =
+                    (arena_block_t *)((uint8_t *)curr + sizeof(arena_block_t) +
+                                      size);
+                new_block->size = remaining - sizeof(arena_block_t);
                 new_block->next = curr->next;
                 *prev_ptr = new_block;
 
@@ -79,7 +79,7 @@ static void *arena_alloc(size_t size) {
             }
 
             // Return usable space (after header)
-            return (uint8_t *)curr + sizeof(arena_block);
+            return (uint8_t *)curr + sizeof(arena_block_t);
         }
 
         prev_ptr = &curr->next;
@@ -96,12 +96,13 @@ static void arena_free(void *ptr) {
     }
 
     // Get block header
-    arena_block *block = (arena_block *)((uint8_t *)ptr - sizeof(arena_block));
+    arena_block_t *block =
+        (arena_block_t *)((uint8_t *)ptr - sizeof(arena_block_t));
 
     // Insert into free list (maintain address-sorted order) and coalesce
-    arena_block **prev_ptr = &s_stack_arena.free_list;
-    arena_block *curr = s_stack_arena.free_list;
-    arena_block *prev_block = NULL;
+    arena_block_t **prev_ptr = &s_stack_arena.free_list;
+    arena_block_t *curr = s_stack_arena.free_list;
+    arena_block_t *prev_block = NULL;
 
     // Find insertion point
     while (curr != NULL && curr < block) {
@@ -117,10 +118,10 @@ static void arena_free(void *ptr) {
     // Coalesce with previous block if adjacent
     if (prev_block != NULL) {
         uint8_t *prev_end =
-            (uint8_t *)prev_block + sizeof(arena_block) + prev_block->size;
+            (uint8_t *)prev_block + sizeof(arena_block_t) + prev_block->size;
         if (prev_end == (uint8_t *)block) {
             // Merge with previous
-            prev_block->size += sizeof(arena_block) + block->size;
+            prev_block->size += sizeof(arena_block_t) + block->size;
             prev_block->next = block->next;
             block = prev_block;
         }
@@ -129,21 +130,21 @@ static void arena_free(void *ptr) {
     // Coalesce with next block if adjacent
     if (block->next != NULL) {
         uint8_t *block_end =
-            (uint8_t *)block + sizeof(arena_block) + block->size;
+            (uint8_t *)block + sizeof(arena_block_t) + block->size;
         if (block_end == (uint8_t *)block->next) {
             // Merge with next
-            arena_block *next = block->next;
-            block->size += sizeof(arena_block) + next->size;
+            arena_block_t *next = block->next;
+            block->size += sizeof(arena_block_t) + next->size;
             block->next = next->next;
         }
     }
 }
 
-hive_status hive_actor_init(void) {
+hive_status_t hive_actor_init(void) {
     // Initialize stack arena
     arena_init();
 
-    // Use static actor array (already zero-initialized by C)
+    // Use static actor_t array (already zero-initialized by C)
     s_actor_table.actors = s_actors;
     s_actor_table.max_actors = HIVE_MAX_ACTORS;
     s_actor_table.num_actors = 0;
@@ -154,9 +155,9 @@ hive_status hive_actor_init(void) {
 
 void hive_actor_cleanup(void) {
     if (s_actor_table.actors) {
-        // Free all actor stacks and mailboxes
+        // Free all actor_t stacks and mailboxes
         for (size_t i = 0; i < s_actor_table.max_actors; i++) {
-            actor *a = &s_actor_table.actors[i];
+            actor_t *a = &s_actor_table.actors[i];
             if (a->state != ACTOR_STATE_DEAD && a->stack) {
                 if (a->stack_is_malloced) {
                     free(a->stack);
@@ -172,13 +173,13 @@ void hive_actor_cleanup(void) {
     }
 }
 
-actor *hive_actor_get(actor_id id) {
+actor_t *hive_actor_get(actor_id_t id) {
     if (id == ACTOR_ID_INVALID) {
         return NULL;
     }
 
     for (size_t i = 0; i < s_actor_table.max_actors; i++) {
-        actor *a = &s_actor_table.actors[i];
+        actor_t *a = &s_actor_table.actors[i];
         if (a->id == id && a->state != ACTOR_STATE_DEAD) {
             return a;
         }
@@ -187,15 +188,15 @@ actor *hive_actor_get(actor_id id) {
     return NULL;
 }
 
-actor *hive_actor_alloc(actor_fn fn, void *args,
-                        const hive_spawn_info *siblings, size_t sibling_count,
-                        const actor_config *cfg) {
+actor_t *hive_actor_alloc(actor_fn_t fn, void *args,
+                          const hive_spawn_info_t *siblings,
+                          size_t sibling_count, const actor_config_t *cfg) {
     if (s_actor_table.num_actors >= s_actor_table.max_actors) {
         return NULL;
     }
 
     // Find free slot
-    actor *a = NULL;
+    actor_t *a = NULL;
     for (size_t i = 0; i < s_actor_table.max_actors; i++) {
         if (s_actor_table.actors[i].state == ACTOR_STATE_DEAD ||
             s_actor_table.actors[i].id == ACTOR_ID_INVALID) {
@@ -231,8 +232,8 @@ actor *hive_actor_alloc(actor_fn fn, void *args,
         return NULL;
     }
 
-    // Initialize actor
-    memset(a, 0, sizeof(actor));
+    // Initialize actor_t
+    memset(a, 0, sizeof(actor_t));
     a->id = s_actor_table.next_id++;
     a->state = ACTOR_STATE_READY;
     a->priority = cfg->priority;
@@ -262,9 +263,9 @@ actor *hive_actor_alloc(actor_fn fn, void *args,
     a->recv_filters = NULL;
     a->recv_filter_count = 0;
 
-    // Initialize context with actor function
-    // Startup info (args, siblings, count) is stored in actor struct
-    // Cast to match hive_context_init signature (const void* vs const hive_spawn_info*)
+    // Initialize context with actor_t function
+    // Startup info (args, siblings, count) is stored in actor_t struct
+    // Cast to match hive_context_init signature (const void* vs const hive_spawn_info_t*)
     hive_context_init(&a->ctx, stack, stack_size,
                       (void (*)(void *, const void *, size_t))fn);
 
@@ -274,11 +275,11 @@ actor *hive_actor_alloc(actor_fn fn, void *args,
 }
 
 // External cleanup functions
-extern void hive_bus_cleanup_actor(actor_id id);
-extern void hive_link_cleanup_actor(actor_id id);
-extern void hive_registry_cleanup_actor(actor_id id);
+extern void hive_bus_cleanup_actor(actor_id_t id);
+extern void hive_link_cleanup_actor(actor_id_t id);
+extern void hive_registry_cleanup_actor(actor_id_t id);
 
-void hive_actor_free(actor *a) {
+void hive_actor_free(actor_t *a) {
     if (!a) {
         return;
     }
@@ -308,29 +309,29 @@ void hive_actor_free(actor *a) {
         a->active_msg = NULL;
     }
 
-    // Free mailbox entries
+    // Free mailbox_t entries
     hive_ipc_mailbox_clear(&a->mailbox);
 
     a->state = ACTOR_STATE_DEAD;
     s_actor_table.num_actors--;
 }
 
-actor *hive_actor_current(void) {
+actor_t *hive_actor_current(void) {
     return s_current_actor;
 }
 
-void hive_actor_set_current(actor *a) {
+void hive_actor_set_current(actor_t *a) {
     s_current_actor = a;
 }
 
-// Get actor table (for scheduler)
-actor_table *hive_actor_get_table(void) {
+// Get actor_t table (for scheduler)
+actor_table_t *hive_actor_get_table(void) {
     return &s_actor_table;
 }
 
-// Find a sibling actor by name in the spawn info array
-actor_id hive_find_sibling(const hive_spawn_info *siblings, size_t count,
-                           const char *name) {
+// Find a sibling actor_t by name in the spawn info array
+actor_id_t hive_find_sibling(const hive_spawn_info_t *siblings, size_t count,
+                             const char *name) {
     if (!siblings || !name) {
         return ACTOR_ID_INVALID;
     }
@@ -345,8 +346,8 @@ actor_id hive_find_sibling(const hive_spawn_info *siblings, size_t count,
 }
 
 // Stack watermarking functions
-size_t hive_actor_stack_usage(actor_id id) {
-    actor *a = hive_actor_get(id);
+size_t hive_actor_stack_usage(actor_id_t id) {
+    actor_t *a = hive_actor_get(id);
     if (!a || !a->stack) {
         return 0;
     }
@@ -375,13 +376,13 @@ size_t hive_actor_stack_usage(actor_id id) {
 #endif
 }
 
-void hive_actor_stack_usage_all(stack_usage_callback cb) {
+void hive_actor_stack_usage_all(stack_usage_callback_t cb) {
     if (!cb) {
         return;
     }
 
     for (size_t i = 0; i < s_actor_table.max_actors; i++) {
-        actor *a = &s_actor_table.actors[i];
+        actor_t *a = &s_actor_table.actors[i];
         if (a->state != ACTOR_STATE_DEAD && a->id != ACTOR_ID_INVALID) {
             size_t used = hive_actor_stack_usage(a->id);
             cb(a->id, a->name, a->stack_size, used);

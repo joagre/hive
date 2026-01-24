@@ -38,7 +38,7 @@ static void record_execution(const char *name, int id) {
 }
 
 // Critical priority actor - runs first, safety-critical
-static void critical_actor(void *args, const hive_spawn_info *siblings,
+static void critical_actor(void *args, const hive_spawn_info_t *siblings,
                            size_t sibling_count) {
     (void)siblings;
     (void)sibling_count;
@@ -54,7 +54,7 @@ static void critical_actor(void *args, const hive_spawn_info *siblings,
 }
 
 // High priority actor - runs after critical, time-sensitive
-static void high_actor(void *args, const hive_spawn_info *siblings,
+static void high_actor(void *args, const hive_spawn_info_t *siblings,
                        size_t sibling_count) {
     (void)siblings;
     (void)sibling_count;
@@ -70,7 +70,7 @@ static void high_actor(void *args, const hive_spawn_info *siblings,
 }
 
 // Normal priority actor - standard processing
-static void normal_actor(void *args, const hive_spawn_info *siblings,
+static void normal_actor(void *args, const hive_spawn_info_t *siblings,
                          size_t sibling_count) {
     (void)siblings;
     (void)sibling_count;
@@ -86,7 +86,7 @@ static void normal_actor(void *args, const hive_spawn_info *siblings,
 }
 
 // Low priority actor - background tasks
-static void low_actor(void *args, const hive_spawn_info *siblings,
+static void low_actor(void *args, const hive_spawn_info_t *siblings,
                       size_t sibling_count) {
     (void)siblings;
     (void)sibling_count;
@@ -102,7 +102,7 @@ static void low_actor(void *args, const hive_spawn_info *siblings,
 }
 
 // High priority actor that runs for a while without yielding (for starvation demo)
-static void busy_high_actor(void *args, const hive_spawn_info *siblings,
+static void busy_high_actor(void *args, const hive_spawn_info_t *siblings,
                             size_t sibling_count) {
     (void)args;
     (void)siblings;
@@ -121,7 +121,7 @@ static void busy_high_actor(void *args, const hive_spawn_info *siblings,
 }
 
 // Low priority actor that should run after high finishes (for starvation demo)
-static void waiting_low_actor(void *args, const hive_spawn_info *siblings,
+static void waiting_low_actor(void *args, const hive_spawn_info_t *siblings,
                               size_t sibling_count) {
     (void)args;
     (void)siblings;
@@ -137,15 +137,15 @@ static void starving_demo(void) {
            "priorities.\n\n");
 
     // Spawn low priority first (but it won't run until high is done)
-    actor_config low_cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+    actor_config_t low_cfg = HIVE_ACTOR_CONFIG_DEFAULT;
     low_cfg.priority = HIVE_PRIORITY_LOW;
-    actor_id low_id;
+    actor_id_t low_id;
     hive_spawn(waiting_low_actor, NULL, NULL, &low_cfg, &low_id);
 
     // Spawn high priority - it will run first and block low
-    actor_config high_cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+    actor_config_t high_cfg = HIVE_ACTOR_CONFIG_DEFAULT;
     high_cfg.priority = HIVE_PRIORITY_HIGH;
-    actor_id high_id;
+    actor_id_t high_id;
     hive_spawn(busy_high_actor, NULL, NULL, &high_cfg, &high_id);
 
     printf("  Spawned: BUSY_HIGH and WAITING_LOW\n");
@@ -161,7 +161,7 @@ int main(void) {
     printf("  HIVE_PRIORITY_NORMAL   = %d\n", HIVE_PRIORITY_NORMAL);
     printf("  HIVE_PRIORITY_LOW      = %d (lowest)\n\n", HIVE_PRIORITY_LOW);
 
-    hive_status status = hive_init();
+    hive_status_t status = hive_init();
     if (HIVE_FAILED(status)) {
         fprintf(stderr, "Failed to init: %s\n", HIVE_ERR_STR(status));
         return 1;
@@ -174,27 +174,27 @@ int main(void) {
 
     // Spawn in reverse order to show priority matters, not spawn order
     {
-        actor_config cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+        actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
         cfg.priority = HIVE_PRIORITY_LOW;
-        actor_id id;
+        actor_id_t id;
         hive_spawn(low_actor, NULL, (void *)(uintptr_t)4, &cfg, &id);
     }
     {
-        actor_config cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+        actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
         cfg.priority = HIVE_PRIORITY_NORMAL;
-        actor_id id;
+        actor_id_t id;
         hive_spawn(normal_actor, NULL, (void *)(uintptr_t)3, &cfg, &id);
     }
     {
-        actor_config cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+        actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
         cfg.priority = HIVE_PRIORITY_HIGH;
-        actor_id id;
+        actor_id_t id;
         hive_spawn(high_actor, NULL, (void *)(uintptr_t)2, &cfg, &id);
     }
     {
-        actor_config cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+        actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
         cfg.priority = HIVE_PRIORITY_CRITICAL;
-        actor_id id;
+        actor_id_t id;
         hive_spawn(critical_actor, NULL, (void *)(uintptr_t)1, &cfg, &id);
     }
 
@@ -206,9 +206,9 @@ int main(void) {
     printf("Spawning 2 NORMAL actors - they alternate.\n\n");
 
     {
-        actor_config cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+        actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
         cfg.priority = HIVE_PRIORITY_NORMAL;
-        actor_id id5, id6;
+        actor_id_t id5, id6;
         hive_spawn(normal_actor, NULL, (void *)(uintptr_t)5, &cfg, &id5);
         hive_spawn(normal_actor, NULL, (void *)(uintptr_t)6, &cfg, &id6);
     }

@@ -1,7 +1,7 @@
 .\" Man page for types and compile-time configuration
 .TH HIVE_TYPES 3 "January 2026" "Hive 1.0" "Actor Runtime Manual"
 .SH NAME
-hive_types, hive_status, hive_message, actor_config \- runtime types and constants
+hive_types, hive_status_t, hive_message_t, actor_config_t \- runtime types and constants
 .SH SYNOPSIS
 .nf
 .B #include <hive_types.h>
@@ -12,13 +12,13 @@ This manual describes the fundamental types, constants, and compile-time
 configuration for the actor runtime.
 .SS Handles
 .TP
-.B actor_id
+.B actor_id_t
 Opaque 32-bit handle identifying an actor.
 .TP
 .B ACTOR_ID_INVALID
 Sentinel value (0) indicating an invalid or uninitialized actor ID.
 .TP
-.B bus_id
+.B bus_id_t
 Opaque 32-bit handle identifying a bus (defined in
 .IR <hive_bus.h> ).
 .TP
@@ -26,7 +26,7 @@ Opaque 32-bit handle identifying a bus (defined in
 Sentinel value (0) indicating an invalid bus ID (defined in
 .IR <hive_bus.h> ).
 .TP
-.B timer_id
+.B timer_id_t
 Opaque 32-bit handle identifying a timer (defined in
 .IR <hive_timer.h> ).
 .TP
@@ -37,13 +37,13 @@ Sentinel value (0) indicating an invalid timer ID (defined in
 .PP
 .nf
 typedef struct {
-    hive_error_code code;  /* Error code */
+    hive_error_code_t code;  /* Error code */
     const char    *msg;    /* String literal or NULL, never heap-allocated */
-} hive_status;
+} hive_status_t;
 .fi
 .PP
 All runtime functions return
-.I hive_status
+.I hive_status_t
 to indicate success or failure. The
 .I msg
 field provides a human-readable error description when non-NULL.
@@ -100,12 +100,12 @@ Data was truncated to fit buffer (bus read operations).
 .PP
 .nf
 typedef struct {
-    actor_id       sender;  /* Sender actor ID */
-    hive_msg_class class;   /* Message class */
+    actor_id_t       sender;  /* Sender actor ID */
+    hive_msg_class_t class;   /* Message class */
     uint32_t       tag;     /* Message tag */
     size_t         len;     /* Payload length in bytes */
     const void    *data;    /* Payload pointer */
-} hive_message;
+} hive_message_t;
 .fi
 .PP
 The
@@ -176,12 +176,12 @@ before lower priority actors.
 .PP
 .nf
 /* Actor entry function signature */
-typedef void (*actor_fn)(void *args,
-                         const hive_spawn_info *siblings,
+typedef void (*actor_fn_t)(void *args,
+                         const hive_spawn_info_t *siblings,
                          size_t sibling_count);
 
 /* Init function signature (called in spawner context) */
-typedef void *(*hive_actor_init_fn)(void *init_args);
+typedef void *(*hive_actor_init_fn_t)(void *init_args);
 .fi
 .PP
 The actor function receives:
@@ -199,9 +199,9 @@ The actor function receives:
 .nf
 typedef struct {
     const char *name;  /* Actor name (may be NULL) */
-    actor_id id;       /* Actor ID */
+    actor_id_t id;       /* Actor ID */
     bool registered;   /* Whether registered in name registry */
-} hive_spawn_info;
+} hive_spawn_info_t;
 .fi
 .PP
 For standalone actors, siblings[0] contains self info with sibling_count=1.
@@ -211,11 +211,11 @@ For supervised actors, siblings contains all sibling children.
 .nf
 typedef struct {
     size_t      stack_size;   /* bytes, 0 = default (64KB) */
-    hive_priority_level priority;
+    hive_priority_level_t priority;
     const char *name;         /* for debugging, may be NULL */
     bool        malloc_stack; /* false = arena (default), true = malloc */
     bool        auto_register;/* auto-register name in registry */
-} actor_config;
+} actor_config_t;
 
 #define HIVE_ACTOR_CONFIG_DEFAULT { \\
     .stack_size = 0, \\
@@ -254,9 +254,9 @@ Defined in
 .PP
 .nf
 typedef struct {
-    actor_id       actor;   /* ID of the actor that died */
-    hive_exit_reason reason;  /* Why the actor exited */
-} hive_exit_msg;
+    actor_id_t       actor;   /* ID of the actor that died */
+    hive_exit_reason_t reason;  /* Why the actor exited */
+} hive_exit_msg_t;
 .fi
 .PP
 Use helper functions from
@@ -271,10 +271,10 @@ Defined in
 .PP
 .nf
 typedef struct {
-    actor_id       sender;  /* HIVE_SENDER_ANY for any sender */
-    hive_msg_class class;   /* HIVE_MSG_ANY for any class */
+    actor_id_t       sender;  /* HIVE_SENDER_ANY for any sender */
+    hive_msg_class_t class;   /* HIVE_MSG_ANY for any class */
     uint32_t       tag;     /* HIVE_TAG_ANY for any tag */
-} hive_recv_filter;
+} hive_recv_filter_t;
 .fi
 .PP
 Used by
@@ -291,27 +291,27 @@ Defined in
 typedef enum {
     HIVE_SEL_IPC,  /* Wait for IPC message */
     HIVE_SEL_BUS,  /* Wait for bus data */
-} hive_select_type;
+} hive_select_type_t;
 
 typedef struct {
-    hive_select_type type;
+    hive_select_type_t type;
     union {
-        hive_recv_filter ipc;  /* For HIVE_SEL_IPC */
-        bus_id bus;            /* For HIVE_SEL_BUS */
+        hive_recv_filter_t ipc;  /* For HIVE_SEL_IPC */
+        bus_id_t bus;            /* For HIVE_SEL_BUS */
     };
-} hive_select_source;
+} hive_select_source_t;
 
 typedef struct {
     size_t index;           /* Which source triggered (0-based) */
-    hive_select_type type;  /* Type of triggered source */
+    hive_select_type_t type;  /* Type of triggered source */
     union {
-        hive_message ipc;   /* For HIVE_SEL_IPC */
+        hive_message_t ipc;   /* For HIVE_SEL_IPC */
         struct {
             void *data;     /* For HIVE_SEL_BUS */
             size_t len;
         } bus;
     };
-} hive_select_result;
+} hive_select_result_t;
 .fi
 .PP
 Used by
@@ -438,20 +438,20 @@ Certification for safety-critical systems
 The
 .I msg
 field in
-.I hive_status
+.I hive_status_t
 is always a string literal, never heap-allocated. It remains valid indefinitely.
 .SS Message Data Lifetime
 The
 .I data
 field in
-.I hive_message
+.I hive_message_t
 points to a shared buffer that is overwritten on the next successful
 .BR hive_ipc_recv ().
 Copy data immediately if needed later.
 .SH EXAMPLE
 .SS Error Handling Pattern
 .nf
-hive_status s = hive_spawn(my_fn, NULL, NULL, NULL, &id);
+hive_status_t s = hive_spawn(my_fn, NULL, NULL, NULL, &id);
 if (HIVE_FAILED(s)) {
     printf("Spawn failed: %s\\n", HIVE_ERR_STR(s));
     return -1;

@@ -6,13 +6,13 @@ hive_link, hive_link_remove, hive_monitor, hive_monitor_cancel, hive_is_exit_msg
 .nf
 .B #include <hive_link.h>
 .PP
-.BI "hive_status hive_link(actor_id " target ");"
-.BI "hive_status hive_link_remove(actor_id " target ");"
-.BI "hive_status hive_monitor(actor_id " target ", uint32_t *" out ");"
-.BI "hive_status hive_monitor_cancel(uint32_t " id ");"
-.BI "bool hive_is_exit_msg(const hive_message *" msg ");"
-.BI "hive_status hive_decode_exit(const hive_message *" msg ", hive_exit_msg *" out ");"
-.BI "const char *hive_exit_reason_str(hive_exit_reason " reason ");"
+.BI "hive_status_t hive_link(actor_id_t " target ");"
+.BI "hive_status_t hive_link_remove(actor_id_t " target ");"
+.BI "hive_status_t hive_monitor(actor_id_t " target ", uint32_t *" out ");"
+.BI "hive_status_t hive_monitor_cancel(uint32_t " id ");"
+.BI "bool hive_is_exit_msg(const hive_message_t *" msg ");"
+.BI "hive_status_t hive_decode_exit(const hive_message_t *" msg ", hive_exit_msg_t *" out ");"
+.BI "const char *hive_exit_reason_str(hive_exit_reason_t " reason ");"
 .fi
 .SH DESCRIPTION
 These functions enable actors to be notified when other actors die, supporting
@@ -46,10 +46,10 @@ The payload is:
 .PP
 .nf
 typedef struct {
-    actor_id         actor;   /* ID of the actor that died */
-    hive_exit_reason reason;  /* Why the actor exited */
+    actor_id_t         actor;   /* ID of the actor that died */
+    hive_exit_reason_t reason;  /* Why the actor exited */
     uint32_t         monitor_id; /* 0 = link, non-zero = monitor ID */
-} hive_exit_msg;
+} hive_exit_msg_t;
 .fi
 .PP
 The
@@ -70,7 +70,7 @@ to extract the exit information:
 .PP
 .nf
 if (hive_is_exit_msg(&msg)) {
-    hive_exit_msg info;
+    hive_exit_msg_t info;
     hive_decode_exit(&msg, &info);
     if (info.monitor_id == 0) {
         printf("Linked actor %u died\\n", info.actor);
@@ -122,7 +122,7 @@ returns a human-readable string for the exit reason:
 and
 .BR hive_decode_exit ()
 return an
-.I hive_status
+.I hive_status_t
 structure.
 .PP
 .BR hive_is_exit_msg ()
@@ -200,22 +200,23 @@ Deterministic behavior suitable for safety-critical systems
 #include <hive_ipc.h>
 #include <stdio.h>
 
-void worker(void *arg) {
+void worker(void *arg, const hive_spawn_info_t *siblings,
+            size_t sibling_count) {
     int id = *(int *)arg;
     printf("Worker %d started\\n", id);
     /* Simulate work then exit normally */
     hive_exit();
 }
 
-void manager(void *arg) {
-    (void)arg;
+void manager(void *arg, const hive_spawn_info_t *siblings,
+             size_t sibling_count) {
     int worker_ids[3] = {1, 2, 3};
     uint32_t monitors[3];
 
     /* Spawn and monitor workers */
     for (int i = 0; i < 3; i++) {
-        actor_id w;
-        hive_spawn(worker, &worker_ids[i], &w);
+        actor_id_t w;
+        hive_spawn(worker, NULL, &worker_ids[i], NULL, &w);
         hive_monitor(w, &monitors[i]);
         printf("Manager: monitoring worker %u\\n", w);
     }
@@ -223,11 +224,11 @@ void manager(void *arg) {
     /* Wait for workers to exit */
     int exited = 0;
     while (exited < 3) {
-        hive_message msg;
+        hive_message_t msg;
         hive_ipc_recv(&msg, -1);
 
         if (hive_is_exit_msg(&msg)) {
-            hive_exit_msg info;
+            hive_exit_msg_t info;
             hive_decode_exit(&msg, &info);
             printf("Manager: worker %u exited (%s)\\n",
                    info.actor, hive_exit_reason_str(info.reason));
@@ -246,8 +247,8 @@ void manager(void *arg) {
 
 int main(void) {
     hive_init();
-    actor_id mgr;
-    hive_spawn(manager, NULL, &mgr);
+    actor_id_t mgr;
+    hive_spawn(manager, NULL, NULL, NULL, &mgr);
     hive_run();
     hive_cleanup();
     return 0;

@@ -40,19 +40,19 @@ typedef int hive_log_level_t;
 // -----------------------------------------------------------------------------
 
 // Initialize logging subsystem (call once at startup)
-hive_status hive_log_init(void);
+hive_status_t hive_log_init(void);
 
 // Open log file for writing (call before flight, e.g., during ARM)
 // On STM32 with HIVE_O_TRUNC, this triggers flash erase (blocks 1-4 seconds)
-hive_status hive_log_file_open(const char *path);
+hive_status_t hive_log_file_open(const char *path);
 
 // Sync log file to storage (call periodically, e.g., every 100ms)
 // On STM32, this flushes the ring buffer to flash
-hive_status hive_log_file_sync(void);
+hive_status_t hive_log_file_sync(void);
 
 // Close log file (call after flight, e.g., during DISARM)
 // Performs final sync before closing
-hive_status hive_log_file_close(void);
+hive_status_t hive_log_file_close(void);
 
 // Cleanup logging subsystem (call at shutdown)
 void hive_log_cleanup(void);

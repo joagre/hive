@@ -6,12 +6,12 @@ hive_supervisor_start, hive_supervisor_stop, hive_restart_strategy_str, hive_chi
 .nf
 .B #include <hive_supervisor.h>
 .PP
-.BI "hive_status hive_supervisor_start(const hive_supervisor_config *" config ","
-.BI "                                  const actor_config *" sup_actor_cfg ","
-.BI "                                  actor_id *" out_supervisor ");"
-.BI "hive_status hive_supervisor_stop(actor_id " supervisor ");"
-.BI "const char *hive_restart_strategy_str(hive_restart_strategy " strategy ");"
-.BI "const char *hive_child_restart_str(hive_child_restart " restart ");"
+.BI "hive_status_t hive_supervisor_start(const hive_supervisor_config_t *" config ","
+.BI "                                  const actor_config_t *" sup_actor_cfg ","
+.BI "                                  actor_id_t *" out_supervisor ");"
+.BI "hive_status_t hive_supervisor_stop(actor_id_t " supervisor ");"
+.BI "const char *hive_restart_strategy_str(hive_restart_strategy_t " strategy ");"
+.BI "const char *hive_child_restart_str(hive_child_restart_t " restart ");"
 .fi
 .SH DESCRIPTION
 These functions implement a supervisor for managing child actors.
@@ -45,22 +45,22 @@ or sequential dependencies.
 .PP
 .nf
 typedef struct {
-    actor_fn start;              /* Actor entry point */
-    hive_actor_init_fn init;     /* Init function (NULL = skip) */
+    actor_fn_t start;              /* Actor entry point */
+    hive_actor_init_fn_t init;     /* Init function (NULL = skip) */
     void *init_args;             /* Arguments to init/actor */
     size_t init_args_size;       /* Size to copy (0 = pointer) */
     const char *name;            /* Child identifier for tracking */
     bool auto_register;          /* Auto-register in name registry */
-    hive_child_restart restart;  /* Restart policy */
-    actor_config actor_cfg;      /* Actor config */
-} hive_child_spec;
+    hive_child_restart_t restart;  /* Restart policy */
+    actor_config_t actor_cfg;      /* Actor config */
+} hive_child_spec_t;
 .fi
 .PP
 .TP
 .I start
 The actor entry function with signature:
 .nf
-void start(void *args, const hive_spawn_info *siblings, size_t sibling_count)
+void start(void *args, const hive_spawn_info_t *siblings, size_t sibling_count)
 .fi
 .TP
 .I init
@@ -95,14 +95,14 @@ This allows other actors to find the child using
 .PP
 .nf
 typedef struct {
-    hive_restart_strategy strategy;  /* How to handle failures */
+    hive_restart_strategy_t strategy;  /* How to handle failures */
     uint32_t max_restarts;           /* Max restarts in period */
     uint32_t restart_period_ms;      /* Time window (ms) */
-    const hive_child_spec *children; /* Child specifications */
+    const hive_child_spec_t *children; /* Child specifications */
     size_t num_children;             /* Number of children */
     void (*on_shutdown)(void *ctx);  /* Shutdown callback */
     void *shutdown_ctx;              /* Callback context */
-} hive_supervisor_config;
+} hive_supervisor_config_t;
 
 #define HIVE_SUPERVISOR_CONFIG_DEFAULT { \\
     .strategy = HIVE_STRATEGY_ONE_FOR_ONE, \\
@@ -133,10 +133,10 @@ array and
 at startup. The array contains spawn info for all sibling children:
 .nf
 typedef struct {
-    const char *name;  /* Child name (from child_spec) */
-    actor_id id;       /* Actor ID */
+    const char *name;  /* Child name (from child_spec_t) */
+    actor_id_t id;       /* Actor ID */
     bool registered;   /* Whether registered in name registry */
-} hive_spawn_info;
+} hive_spawn_info_t;
 .fi
 .PP
 Use
@@ -176,7 +176,7 @@ returns a string representation of a child restart type
 ("permanent", "transient", "temporary").
 .SH RETURN VALUE
 Functions returning
-.I hive_status
+.I hive_status_t
 indicate success when
 .I status.code
 is
@@ -235,7 +235,7 @@ Preserved bus cursor position (must re-subscribe)
 .IP \(bu 2
 Preserved timer IDs (old timers cancelled, must create new ones)
 .IP \(bu 2
-Preserved actor_id (new ID assigned on restart)
+Preserved actor_id_t (new ID assigned on restart)
 .IP \(bu 2
 Preserved monitor/link state (must re-establish)
 .IP \(bu 2
@@ -267,7 +267,7 @@ early in the actor function
 Either way, the child will be automatically unregistered when it exits.
 .SS Client Rule
 Actors communicating with supervised children MUST NOT cache
-.I actor_id
+.I actor_id_t
 across awaits, timeouts, or receive calls. They MUST re-resolve by name
 .RB ( hive_whereis (3))
 on each interaction or after any failure signal (timeout, EXIT message).
@@ -291,7 +291,7 @@ Timers cancelled
 .IP \(bu 2
 Links and monitors cleared
 .IP \(bu 2
-actor_id changes
+actor_id_t changes
 .IP \(bu 2
 Name registration removed (must re-register or use auto_register)
 .IP \(bu 2
@@ -322,13 +322,13 @@ Every give-up is observable (log + shutdown callback)
 #include <hive_supervisor.h>
 #include <stdio.h>
 
-void worker(void *args, const hive_spawn_info *siblings,
+void worker(void *args, const hive_spawn_info_t *siblings,
             size_t sibling_count) {
     int id = *(int *)args;
     printf("Worker %d started (actor %u)\\n", id, hive_self());
 
     /* Find sibling by name */
-    const hive_spawn_info *peer = hive_find_sibling(siblings,
+    const hive_spawn_info_t *peer = hive_find_sibling(siblings,
                                                     sibling_count,
                                                     "worker-1");
     if (peer) {
@@ -349,7 +349,7 @@ int main(void) {
 
     /* Define children */
     static int ids[3] = {0, 1, 2};
-    hive_child_spec children[3] = {
+    hive_child_spec_t children[3] = {
         {.start = worker,
          .init = NULL,
          .init_args = &ids[0],
@@ -377,7 +377,7 @@ int main(void) {
     };
 
     /* Configure supervisor */
-    hive_supervisor_config cfg = {
+    hive_supervisor_config_t cfg = {
         .strategy = HIVE_STRATEGY_ONE_FOR_ONE,
         .max_restarts = 5,
         .restart_period_ms = 10000,
@@ -387,7 +387,7 @@ int main(void) {
     };
 
     /* Start supervisor */
-    actor_id sup;
+    actor_id_t sup;
     hive_supervisor_start(&cfg, NULL, &sup);
 
     hive_run();

@@ -12,26 +12,26 @@
 //             exceeded
 
 // Listen on a port for incoming connections
-hive_status hive_net_listen(uint16_t port, int *fd_out);
+hive_status_t hive_net_listen(uint16_t port, int *fd_out);
 
 // Accept incoming connection
-hive_status hive_net_accept(int listen_fd, int *conn_fd_out,
-                            int32_t timeout_ms);
+hive_status_t hive_net_accept(int listen_fd, int *conn_fd_out,
+                              int32_t timeout_ms);
 
 // Connect to remote server (ip must be numeric IPv4 address, e.g.
 // "192.168.1.1")
-hive_status hive_net_connect(const char *ip, uint16_t port, int *fd_out,
-                             int32_t timeout_ms);
+hive_status_t hive_net_connect(const char *ip, uint16_t port, int *fd_out,
+                               int32_t timeout_ms);
 
 // Close network socket
-hive_status hive_net_close(int fd);
+hive_status_t hive_net_close(int fd);
 
 // Receive data from socket
-hive_status hive_net_recv(int fd, void *buf, size_t len, size_t *received,
-                          int32_t timeout_ms);
+hive_status_t hive_net_recv(int fd, void *buf, size_t len, size_t *received,
+                            int32_t timeout_ms);
 
 // Send data to socket
-hive_status hive_net_send(int fd, const void *buf, size_t len, size_t *sent,
-                          int32_t timeout_ms);
+hive_status_t hive_net_send(int fd, const void *buf, size_t len, size_t *sent,
+                            int32_t timeout_ms);
 
 #endif // HIVE_NET_H

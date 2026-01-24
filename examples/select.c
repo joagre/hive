@@ -29,10 +29,10 @@ typedef struct {
 #define CMD_STATUS 101
 
 // Global bus for sensor data
-static bus_id s_sensor_bus = BUS_ID_INVALID;
+static bus_id_t s_sensor_bus = BUS_ID_INVALID;
 
 // Sensor publisher actor - simulates sensor readings
-static void sensor_publisher(void *args, const hive_spawn_info *siblings,
+static void sensor_publisher(void *args, const hive_spawn_info_t *siblings,
                              size_t sibling_count) {
     (void)args;
     (void)siblings;
@@ -40,14 +40,14 @@ static void sensor_publisher(void *args, const hive_spawn_info *siblings,
     printf("[Sensor] Publisher started\n");
 
     // Create periodic timer for sensor updates (100ms)
-    timer_id tick;
+    timer_id_t tick;
     hive_timer_every(100000, &tick);
 
     sensor_data_t data = {20.0f, 50.0f, 0};
 
     for (int i = 0; i < 10; i++) {
         // Wait for timer
-        hive_message msg;
+        hive_message_t msg;
         hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, tick, &msg, -1);
 
         // Simulate changing sensor readings
@@ -67,11 +67,11 @@ static void sensor_publisher(void *args, const hive_spawn_info *siblings,
 }
 
 // Command sender actor - sends shutdown command after delay
-static void command_sender(void *args, const hive_spawn_info *siblings,
+static void command_sender(void *args, const hive_spawn_info_t *siblings,
                            size_t sibling_count) {
     (void)siblings;
     (void)sibling_count;
-    actor_id controller = *(actor_id *)args;
+    actor_id_t controller = *(actor_id_t *)args;
     printf("[Command] Sender started, will send shutdown after 500ms\n");
 
     // Wait before sending shutdown
@@ -95,7 +95,7 @@ static void command_sender(void *args, const hive_spawn_info *siblings,
 }
 
 // Controller actor - uses hive_select() to wait on multiple sources
-static void controller(void *args, const hive_spawn_info *siblings,
+static void controller(void *args, const hive_spawn_info_t *siblings,
                        size_t sibling_count) {
     (void)args;
     (void)siblings;
@@ -103,30 +103,30 @@ static void controller(void *args, const hive_spawn_info *siblings,
     printf("[Controller] Started\n");
 
     // Subscribe to sensor bus
-    hive_status status = hive_bus_subscribe(s_sensor_bus);
+    hive_status_t status = hive_bus_subscribe(s_sensor_bus);
     if (HIVE_FAILED(status)) {
         printf("[Controller] Failed to subscribe: %s\n", HIVE_ERR_STR(status));
         hive_exit();
     }
 
     // Create heartbeat timer (250ms)
-    timer_id heartbeat;
+    timer_id_t heartbeat;
     hive_timer_every(250000, &heartbeat);
 
     // Spawn sensor publisher
-    actor_id publisher;
+    actor_id_t publisher;
     hive_spawn(sensor_publisher, NULL, NULL, NULL, &publisher);
     hive_link(publisher);
 
     // Spawn command sender
-    actor_id self = hive_self();
-    actor_id cmd_sender;
+    actor_id_t self = hive_self();
+    actor_id_t cmd_sender;
     hive_spawn(command_sender, NULL, &self, NULL, &cmd_sender);
     hive_link(cmd_sender);
 
     // Set up select sources
     enum { SEL_SENSOR, SEL_HEARTBEAT, SEL_STATUS, SEL_SHUTDOWN };
-    hive_select_source sources[] = {
+    hive_select_source_t sources[] = {
         [SEL_SENSOR] = {HIVE_SEL_BUS, .bus = s_sensor_bus},
         [SEL_HEARTBEAT] = {HIVE_SEL_IPC,
                            .ipc = {HIVE_SENDER_ANY, HIVE_MSG_TIMER, heartbeat}},
@@ -143,7 +143,7 @@ static void controller(void *args, const hive_spawn_info *siblings,
     printf("[Controller] Entering main loop\n");
 
     while (running) {
-        hive_select_result result;
+        hive_select_result_t result;
         status = hive_select(sources, 4, &result, 1000);
 
         if (HIVE_FAILED(status)) {
@@ -182,11 +182,11 @@ static void controller(void *args, const hive_spawn_info *siblings,
         }
 
         // Check for exit messages (publisher finished)
-        hive_message msg;
+        hive_message_t msg;
         if (HIVE_SUCCEEDED(hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_EXIT,
                                                HIVE_TAG_ANY, &msg, 0))) {
             if (hive_is_exit_msg(&msg)) {
-                hive_exit_msg exit_info;
+                hive_exit_msg_t exit_info;
                 hive_decode_exit(&msg, &exit_info);
                 printf("[Controller] Actor %u exited (%s)\n", exit_info.actor,
                        hive_exit_reason_str(exit_info.reason));
@@ -213,7 +213,7 @@ int main(void) {
     printf("- Command messages\n\n");
 
     // Initialize runtime
-    hive_status status = hive_init();
+    hive_status_t status = hive_init();
     if (HIVE_FAILED(status)) {
         fprintf(stderr, "Failed to initialize runtime: %s\n",
                 HIVE_ERR_STR(status));
@@ -221,7 +221,7 @@ int main(void) {
     }
 
     // Create sensor bus (reduced limits for QEMU compatibility)
-    hive_bus_config bus_cfg = HIVE_BUS_CONFIG_DEFAULT;
+    hive_bus_config_t bus_cfg = HIVE_BUS_CONFIG_DEFAULT;
     bus_cfg.max_subscribers = 2;
     bus_cfg.max_entries = 4;
     bus_cfg.max_entry_size = 64;
@@ -234,10 +234,10 @@ int main(void) {
     }
 
     // Spawn controller
-    actor_config cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+    actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
     cfg.name = "controller";
 
-    actor_id id;
+    actor_id_t id;
     if (HIVE_FAILED(hive_spawn(controller, NULL, NULL, &cfg, &id))) {
         fprintf(stderr, "Failed to spawn controller\n");
         hive_bus_destroy(s_sensor_bus);

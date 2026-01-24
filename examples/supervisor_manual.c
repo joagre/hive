@@ -7,7 +7,7 @@
 #include <time.h>
 
 // Worker actor - does some work then exits
-static void worker_actor(void *args, const hive_spawn_info *siblings,
+static void worker_actor(void *args, const hive_spawn_info_t *siblings,
                          size_t sibling_count) {
     (void)siblings;
     (void)sibling_count;
@@ -19,10 +19,10 @@ static void worker_actor(void *args, const hive_spawn_info *siblings,
     srand(time(NULL) + worker_id);
     uint64_t work_time = 200000 + (rand() % 400000); // 200-600ms
 
-    timer_id work_timer;
+    timer_id_t work_timer;
     hive_timer_after(work_time, &work_timer);
 
-    hive_message msg;
+    hive_message_t msg;
     hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, work_timer, &msg, -1);
 
     printf("Worker %d: Completed work, exiting normally\n", worker_id);
@@ -30,7 +30,7 @@ static void worker_actor(void *args, const hive_spawn_info *siblings,
 }
 
 // Supervisor actor - monitors workers and reports when they exit
-static void supervisor_actor(void *args, const hive_spawn_info *siblings,
+static void supervisor_actor(void *args, const hive_spawn_info_t *siblings,
                              size_t sibling_count) {
     (void)args;
     (void)siblings;
@@ -46,10 +46,10 @@ static void supervisor_actor(void *args, const hive_spawn_info *siblings,
     printf("Supervisor: Spawning %d workers...\n", NUM_WORKERS);
 
     for (int i = 0; i < NUM_WORKERS; i++) {
-        actor_config worker_cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+        actor_config_t worker_cfg = HIVE_ACTOR_CONFIG_DEFAULT;
         worker_cfg.name = "worker";
 
-        actor_id worker;
+        actor_id_t worker;
         if (HIVE_FAILED(hive_spawn(worker_actor, NULL, &worker_ids[i],
                                    &worker_cfg, &worker))) {
             printf("Supervisor: Failed to spawn worker %d\n", i + 1);
@@ -57,7 +57,7 @@ static void supervisor_actor(void *args, const hive_spawn_info *siblings,
         }
 
         // Monitor the worker
-        hive_status status = hive_monitor(worker, &monitor_ids[i]);
+        hive_status_t status = hive_monitor(worker, &monitor_ids[i]);
         if (HIVE_FAILED(status)) {
             printf("Supervisor: Failed to monitor worker %d: %s\n", i + 1,
                    HIVE_ERR_STR(status));
@@ -72,8 +72,8 @@ static void supervisor_actor(void *args, const hive_spawn_info *siblings,
     printf("\nSupervisor: Waiting for workers to complete...\n");
 
     while (workers_completed < NUM_WORKERS) {
-        hive_message msg;
-        hive_status status = hive_ipc_recv(&msg, -1);
+        hive_message_t msg;
+        hive_status_t status = hive_ipc_recv(&msg, -1);
 
         if (HIVE_FAILED(status)) {
             printf("Supervisor: Failed to receive message\n");
@@ -81,7 +81,7 @@ static void supervisor_actor(void *args, const hive_spawn_info *siblings,
         }
 
         if (msg.class == HIVE_MSG_EXIT) {
-            hive_exit_msg *exit_info = (hive_exit_msg *)msg.data;
+            hive_exit_msg_t *exit_info = (hive_exit_msg_t *)msg.data;
 
             printf("Supervisor: Worker died (Actor ID: %u, reason: %s)\n",
                    exit_info->actor, hive_exit_reason_str(exit_info->reason));
@@ -101,7 +101,7 @@ int main(void) {
     printf("=== Actor Runtime Supervisor Demo ===\n\n");
 
     // Initialize runtime
-    hive_status status = hive_init();
+    hive_status_t status = hive_init();
     if (HIVE_FAILED(status)) {
         fprintf(stderr, "Failed to initialize runtime: %s\n",
                 HIVE_ERR_STR(status));
@@ -109,7 +109,7 @@ int main(void) {
     }
 
     // Spawn supervisor with larger stack (needs space for arrays and nested spawns)
-    actor_config sup_cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+    actor_config_t sup_cfg = HIVE_ACTOR_CONFIG_DEFAULT;
     sup_cfg.name = "supervisor";
 #ifdef QEMU_TEST_STACK_SIZE
     sup_cfg.stack_size = 2048; // Reduced for QEMU
@@ -117,7 +117,7 @@ int main(void) {
     sup_cfg.stack_size = 128 * 1024; // 128KB stack
 #endif
 
-    actor_id supervisor;
+    actor_id_t supervisor;
     if (HIVE_FAILED(
             hive_spawn(supervisor_actor, NULL, NULL, &sup_cfg, &supervisor))) {
         fprintf(stderr, "Failed to spawn supervisor\n");

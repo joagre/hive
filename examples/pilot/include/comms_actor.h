@@ -14,7 +14,7 @@
 void *comms_actor_init(void *init_args);
 
 // Comms actor entry point
-void comms_actor(void *args, const hive_spawn_info *siblings,
+void comms_actor(void *args, const hive_spawn_info_t *siblings,
                  size_t sibling_count);
 
 #endif // HAL_HAS_RADIO

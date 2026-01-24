@@ -19,12 +19,12 @@
 #include <stdint.h>
 
 // Timer ID type (also defined in hive_timer.h)
-typedef uint32_t timer_id;
+typedef uint32_t timer_id_t;
 
 // Initialize timer subsystem.
 // Linux: Initialize timer pool
 // STM32: Initialize timer pool and wheel
-hive_status hive_hal_timer_init(void);
+hive_status_t hive_hal_timer_init(void);
 
 // Cleanup timer subsystem.
 // Cancels all active timers and releases resources.
@@ -39,15 +39,15 @@ void hive_hal_timer_cleanup(void);
 //
 // Timer messages are sent to the owner actor with:
 // - class = HIVE_MSG_TIMER
-// - tag = timer_id
+// - tag = timer_id_t
 // - no payload
-hive_status hive_hal_timer_create(uint32_t interval_us, bool periodic,
-                                  actor_id owner, timer_id *out);
+hive_status_t hive_hal_timer_create(uint32_t interval_us, bool periodic,
+                                    actor_id_t owner, timer_id_t *out);
 
 // Cancel a timer.
 // id: Timer ID to cancel
 // Returns: HIVE_SUCCESS or error status
-hive_status hive_hal_timer_cancel(timer_id id);
+hive_status_t hive_hal_timer_cancel(timer_id_t id);
 
 // Get current time in microseconds.
 // Returns monotonic time suitable for measuring elapsed durations.

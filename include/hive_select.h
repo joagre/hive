@@ -16,12 +16,12 @@
 // type-based priority - bus and IPC sources are treated equally.
 //
 // Usage:
-//   hive_select_source sources[] = {
+//   hive_select_source_t sources[] = {
 //       {HIVE_SEL_BUS, .bus = state_bus},
 //       {HIVE_SEL_IPC, .ipc = {HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer_id}},
 //       {HIVE_SEL_IPC, .ipc = {HIVE_SENDER_ANY, HIVE_MSG_NOTIFY, CMD_TAG}},
 //   };
-//   hive_select_result result;
+//   hive_select_result_t result;
 //   hive_select(sources, 3, &result, -1);
 //
 //   switch (result.index) {
@@ -40,7 +40,8 @@
 //   result.ipc - valid until next hive_select() or hive_ipc_recv*() call
 //   result.bus.data - valid until next hive_select() or hive_bus_read*() call
 
-hive_status hive_select(const hive_select_source *sources, size_t num_sources,
-                        hive_select_result *result, int32_t timeout_ms);
+hive_status_t hive_select(const hive_select_source_t *sources,
+                          size_t num_sources, hive_select_result_t *result,
+                          int32_t timeout_ms);
 
 #endif // HIVE_SELECT_H

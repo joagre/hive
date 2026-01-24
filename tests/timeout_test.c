@@ -15,7 +15,7 @@ static uint64_t get_time_ms(void) {
     return (uint64_t)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
 }
 
-static void test_timeout_actor(void *args, const hive_spawn_info *siblings,
+static void test_timeout_actor(void *args, const hive_spawn_info_t *siblings,
                                size_t sibling_count) {
     (void)args;
     (void)siblings;
@@ -23,8 +23,8 @@ static void test_timeout_actor(void *args, const hive_spawn_info *siblings,
 
     printf("Test 1: Timeout when no message arrives\n");
     uint64_t start = get_time_ms();
-    hive_message msg;
-    hive_status status = hive_ipc_recv(&msg, 100); // 100ms timeout
+    hive_message_t msg;
+    hive_status_t status = hive_ipc_recv(&msg, 100); // 100ms timeout
     uint64_t elapsed = get_time_ms() - start;
 
     if (status.code == HIVE_ERR_TIMEOUT) {
@@ -34,7 +34,7 @@ static void test_timeout_actor(void *args, const hive_spawn_info *siblings,
     }
 
     printf("\nTest 2: Message arrives before timeout\n");
-    actor_id self = hive_self();
+    actor_id_t self = hive_self();
     int data = 42;
     hive_ipc_notify(self, HIVE_TAG_NONE, &data, sizeof(data));
 
@@ -75,7 +75,7 @@ static void test_timeout_actor(void *args, const hive_spawn_info *siblings,
 
 int main(void) {
     hive_init();
-    actor_id test;
+    actor_id_t test;
     hive_spawn(test_timeout_actor, NULL, NULL, NULL, &test);
     hive_run();
     hive_cleanup();

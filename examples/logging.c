@@ -31,7 +31,7 @@
 #define NUM_ITERATIONS 5
 
 // Logging demo actor
-static void logging_actor(void *args, const hive_spawn_info *siblings,
+static void logging_actor(void *args, const hive_spawn_info_t *siblings,
                           size_t sibling_count) {
     (void)args;
     (void)siblings;
@@ -42,7 +42,7 @@ static void logging_actor(void *args, const hive_spawn_info *siblings,
     // Open log file for binary output
     // On STM32, this would erase the flash sector (blocks briefly)
     HIVE_LOG_INFO("Opening log file: %s", LOG_FILE_PATH);
-    hive_status status = hive_log_file_open(LOG_FILE_PATH);
+    hive_status_t status = hive_log_file_open(LOG_FILE_PATH);
     if (HIVE_FAILED(status)) {
         HIVE_LOG_ERROR("Failed to open log file: %s", HIVE_ERR_STR(status));
         // Continue anyway - console logging still works
@@ -51,7 +51,7 @@ static void logging_actor(void *args, const hive_spawn_info *siblings,
     }
 
     // Create periodic timer for log sync
-    timer_id sync_timer;
+    timer_id_t sync_timer;
     status = hive_timer_every(SYNC_INTERVAL_US, &sync_timer);
     if (HIVE_FAILED(status)) {
         HIVE_LOG_ERROR("Failed to create sync timer: %s", HIVE_ERR_STR(status));
@@ -68,7 +68,7 @@ static void logging_actor(void *args, const hive_spawn_info *siblings,
     // Simulate some work with periodic logging and sync
     int iteration = 0;
     while (iteration < NUM_ITERATIONS) {
-        hive_message msg;
+        hive_message_t msg;
         status = hive_ipc_recv(&msg, -1);
         if (HIVE_FAILED(status)) {
             HIVE_LOG_ERROR("Failed to receive message: %s",
@@ -107,7 +107,7 @@ int main(void) {
     printf("=== Actor Runtime Logging Example ===\n\n");
 
     // Initialize runtime
-    hive_status status = hive_init();
+    hive_status_t status = hive_init();
     if (HIVE_FAILED(status)) {
         fprintf(stderr, "Failed to initialize runtime: %s\n",
                 HIVE_ERR_STR(status));
@@ -115,10 +115,10 @@ int main(void) {
     }
 
     // Spawn logging demo actor
-    actor_config actor_cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+    actor_config_t actor_cfg = HIVE_ACTOR_CONFIG_DEFAULT;
     actor_cfg.name = "logging_demo";
 
-    actor_id id;
+    actor_id_t id;
     if (HIVE_FAILED(hive_spawn(logging_actor, NULL, NULL, &actor_cfg, &id))) {
         fprintf(stderr, "Failed to spawn logging actor\n");
         hive_cleanup();

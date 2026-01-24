@@ -14,14 +14,14 @@
 
 typedef struct {
     int type;
-} coord_msg;
+} coord_msg_t;
 
 // Echo server actor
-static void server_actor(void *args, const hive_spawn_info *siblings,
+static void server_actor(void *args, const hive_spawn_info_t *siblings,
                          size_t sibling_count) {
     (void)siblings;
     (void)sibling_count;
-    actor_id client_id = (actor_id)(uintptr_t)args;
+    actor_id_t client_id = (actor_id_t)(uintptr_t)args;
 
     HIVE_LOG_DEBUG("Server actor starting (ID: %u, client_id: %u)", hive_self(),
                    client_id);
@@ -30,7 +30,7 @@ static void server_actor(void *args, const hive_spawn_info *siblings,
     // Listen on port
     HIVE_LOG_DEBUG("Server: About to call hive_net_listen");
     int listen_fd;
-    hive_status status = hive_net_listen(ECHO_PORT, &listen_fd);
+    hive_status_t status = hive_net_listen(ECHO_PORT, &listen_fd);
     HIVE_LOG_DEBUG("Server: hive_net_listen returned, status=%d", status.code);
     if (HIVE_FAILED(status)) {
         printf("Server: Failed to listen: %s\n", HIVE_ERR_STR(status));
@@ -40,7 +40,7 @@ static void server_actor(void *args, const hive_spawn_info *siblings,
     printf("Server: Listening on port %d (fd=%d)\n", ECHO_PORT, listen_fd);
 
     // Notify client that server is ready via IPC
-    coord_msg ready_msg = {.type = MSG_SERVER_READY};
+    coord_msg_t ready_msg = {.type = MSG_SERVER_READY};
     status = hive_ipc_notify(client_id, MSG_SERVER_READY, &ready_msg,
                              sizeof(ready_msg));
     if (HIVE_FAILED(status)) {
@@ -97,12 +97,12 @@ static void server_actor(void *args, const hive_spawn_info *siblings,
     hive_net_close(listen_fd);
 
     // Wait for client done notification via IPC
-    hive_message done_msg;
+    hive_message_t done_msg;
     status = hive_ipc_recv(&done_msg, 5000); // 5 second timeout
     if (HIVE_FAILED(status)) {
         printf("Server: Timeout waiting for client done message\n");
     } else {
-        coord_msg *coord = (coord_msg *)done_msg.data;
+        coord_msg_t *coord = (coord_msg_t *)done_msg.data;
         if (coord->type == MSG_CLIENT_DONE) {
             printf("Server: Received done notification from client via IPC\n");
         }
@@ -116,7 +116,7 @@ static void server_actor(void *args, const hive_spawn_info *siblings,
 static const char *messages[] = {"Hello, Server!", "How are you?", "Goodbye!"};
 
 // Echo client actor
-static void client_actor(void *args, const hive_spawn_info *siblings,
+static void client_actor(void *args, const hive_spawn_info_t *siblings,
                          size_t sibling_count) {
     (void)args;
     (void)siblings;
@@ -128,8 +128,8 @@ static void client_actor(void *args, const hive_spawn_info *siblings,
     // Wait for server to be ready via IPC
     HIVE_LOG_DEBUG("Client: About to wait for server ready notification");
     printf("Client: Waiting for server ready notification...\n");
-    hive_message msg;
-    hive_status status =
+    hive_message_t msg;
+    hive_status_t status =
         hive_ipc_recv(&msg, -1); // Block until message received
     if (HIVE_FAILED(status)) {
         printf("Client: Failed to receive ready message: %s\n",
@@ -137,8 +137,8 @@ static void client_actor(void *args, const hive_spawn_info *siblings,
         hive_exit();
     }
 
-    actor_id server_id = msg.sender;
-    coord_msg *coord = (coord_msg *)msg.data;
+    actor_id_t server_id = msg.sender;
+    coord_msg_t *coord = (coord_msg_t *)msg.data;
     if (coord->type == MSG_SERVER_READY) {
         printf("Client: Received server ready notification via IPC (from actor "
                "%u)\n",
@@ -188,7 +188,7 @@ static void client_actor(void *args, const hive_spawn_info *siblings,
     hive_net_close(conn_fd);
 
     // Notify server that client is done via IPC
-    coord_msg done_msg = {.type = MSG_CLIENT_DONE};
+    coord_msg_t done_msg = {.type = MSG_CLIENT_DONE};
     status = hive_ipc_notify(server_id, MSG_CLIENT_DONE, &done_msg,
                              sizeof(done_msg));
     if (HIVE_FAILED(status)) {
@@ -206,7 +206,7 @@ int main(void) {
     printf("=== Actor Runtime Echo Server/Client Example ===\n\n");
 
     // Initialize runtime
-    hive_status status = hive_init();
+    hive_status_t status = hive_init();
     if (HIVE_FAILED(status)) {
         fprintf(stderr, "Failed to initialize runtime: %s\n",
                 HIVE_ERR_STR(status));
@@ -214,11 +214,11 @@ int main(void) {
     }
 
     // Spawn client actor first (so we know its ID to pass to server)
-    actor_config client_cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+    actor_config_t client_cfg = HIVE_ACTOR_CONFIG_DEFAULT;
     client_cfg.name = "client";
     client_cfg.priority = HIVE_PRIORITY_NORMAL;
 
-    actor_id client_id;
+    actor_id_t client_id;
     if (HIVE_FAILED(
             hive_spawn(client_actor, NULL, NULL, &client_cfg, &client_id))) {
         fprintf(stderr, "Failed to spawn client actor\n");
@@ -227,11 +227,11 @@ int main(void) {
     }
 
     // Spawn server actor with client ID so it can send ready notification
-    actor_config server_cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+    actor_config_t server_cfg = HIVE_ACTOR_CONFIG_DEFAULT;
     server_cfg.name = "server";
     server_cfg.priority = HIVE_PRIORITY_NORMAL;
 
-    actor_id server_id;
+    actor_id_t server_id;
     if (HIVE_FAILED(hive_spawn(server_actor, NULL, (void *)(uintptr_t)client_id,
                                &server_cfg, &server_id))) {
         fprintf(stderr, "Failed to spawn server actor\n");

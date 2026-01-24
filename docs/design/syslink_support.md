@@ -189,11 +189,11 @@ Two new HAL functions for radio telemetry:
 // hive_radio.h
 
 // Initialize radio subsystem (call from hive_init on Crazyflie)
-hive_status hive_radio_init(void);
+hive_status_t hive_radio_init(void);
 
 // Send raw data over radio (max 31 bytes)
 // Returns HIVE_ERR_WOULDBLOCK if flow control disallows TX
-hive_status hive_radio_send(const void *data, size_t len);
+hive_status_t hive_radio_send(const void *data, size_t len);
 
 // Check if radio TX is allowed (flow control)
 bool hive_radio_tx_ready(void);
@@ -268,7 +268,7 @@ static void uart_write(const uint8_t *data, size_t len) {
 // Syslink TX
 // -----------------------------------------------------------------------------
 
-static hive_status syslink_send(uint8_t type, const void *data, size_t len) {
+static hive_status_t syslink_send(uint8_t type, const void *data, size_t len) {
     if (len > SYSLINK_MTU) {
         return HIVE_ERROR(HIVE_ERR_INVALID, "Packet too large");
     }
@@ -394,7 +394,7 @@ static void syslink_rx_byte(uint8_t byte) {
 // Public API
 // -----------------------------------------------------------------------------
 
-hive_status hive_radio_init(void) {
+hive_status_t hive_radio_init(void) {
     // Enable USART2 and GPIOA/GPIOC clocks
     // Configure PA2 (TX) and PA3 (RX) for USART2 alternate function
     // Configure PC4 (TXEN) as input
@@ -411,7 +411,7 @@ hive_status hive_radio_init(void) {
     return HIVE_SUCCESS;
 }
 
-hive_status hive_radio_send(const void *data, size_t len) {
+hive_status_t hive_radio_send(const void *data, size_t len) {
     if (len > 31) {
         return HIVE_ERROR(HIVE_ERR_INVALID, "Max 31 bytes");
     }
@@ -473,20 +473,18 @@ typedef struct __attribute__((packed)) {
 
 static uint32_t seq = 0;
 
-static void telemetry_actor(void *args, const hive_spawn_info *siblings,
+static void telemetry_actor(void *args, const hive_spawn_info_t *siblings,
                             size_t sibling_count) {
-    (void)args; (void)siblings; (void)sibling_count;
-
     // Subscribe to sensor and setpoint buses
     hive_bus_subscribe(sensor_bus);
     hive_bus_subscribe(setpoint_bus);
 
     // Create 10ms timer (100Hz telemetry)
-    timer_id telem_timer;
+    timer_id_t telem_timer;
     hive_timer_every(10000, &telem_timer);  // 10ms = 100Hz
 
     while (1) {
-        hive_message msg;
+        hive_message_t msg;
         hive_ipc_recv(&msg, -1);
 
         if (hive_msg_is_timer(&msg) && msg.tag == telem_timer) {
@@ -695,10 +693,10 @@ Or with stubs if HAL_HAS_RADIO is defined globally:
 // hal/webots-crazyflie/hal_webots.c (simulation stub)
 
 int hal_radio_init(void) { return 0; }
-int hal_radio_send(const void *data, size_t len) { (void)data; (void)len; return -1; }
+int hal_radio_send(const void *data, size_t len) { return -1; }
 bool hal_radio_tx_ready(void) { return false; }
 void hal_radio_poll(void) { }
-void hal_radio_set_rx_callback(hal_radio_rx_callback cb) { (void)cb; }
+void hal_radio_set_rx_callback(hal_radio_rx_callback cb) { }
 float hal_radio_get_battery(void) { return 0.0f; }
 ```
 

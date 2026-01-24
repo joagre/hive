@@ -129,10 +129,10 @@ int main(void) {
     hive_init();
 
     // Create buses (single entry = latest value only)
-    // All actors share these via pilot_buses struct passed through init_args
-    static pilot_buses buses;
-    hive_bus_config cfg = PILOT_BUS_CONFIG;
-    hive_status status;
+    // All actors share these via pilot_buses_t struct passed through init_args
+    static pilot_buses_t buses;
+    hive_bus_config_t cfg = PILOT_BUS_CONFIG;
+    hive_status_t status;
 
     status = hive_bus_create(&cfg, &buses.sensor_bus);
     if (HIVE_FAILED(status)) {
@@ -175,7 +175,7 @@ int main(void) {
 
     // Telemetry logger configuration
 #if ENABLE_TELEMETRY_LOG
-    static telemetry_logger_config tlog_config = {
+    static telemetry_logger_config_t tlog_config = {
         .buses = &buses,
         .log_path = TELEMETRY_LOG_PATH,
     };
@@ -183,12 +183,12 @@ int main(void) {
 
     // clang-format off
     // Define child specs for supervisor (9 flight actors + optional comms)
-    // Each actor's init function receives pilot_buses and extracts what it needs.
+    // Each actor's init function receives pilot_buses_t and extracts what it needs.
     // Control loop order: sensor -> estimator -> waypoint -> altitude ->
     //                     position -> attitude -> rate -> motor -> flight_manager
     // Comms runs at LOW priority and uses TEMPORARY restart.
     // clang-format on
-    hive_child_spec children[] = {
+    hive_child_spec_t children[] = {
         {.start = sensor_actor,
          .init = sensor_actor_init,
          .init_args = &buses,
@@ -289,7 +289,7 @@ int main(void) {
     // If any actor crashes, all are killed and restarted together.
     // This ensures consistent pipeline state after recovery.
     // Note: comms is TEMPORARY so its exit won't trigger restarts.
-    hive_supervisor_config sup_cfg = {
+    hive_supervisor_config_t sup_cfg = {
         .strategy = HIVE_STRATEGY_ONE_FOR_ALL,
         .max_restarts = 3,
         .restart_period_ms = 10000,
@@ -299,7 +299,7 @@ int main(void) {
         .shutdown_ctx = NULL,
     };
 
-    actor_id supervisor;
+    actor_id_t supervisor;
     status = hive_supervisor_start(&sup_cfg, NULL, &supervisor);
     if (HIVE_FAILED(status)) {
         HIVE_LOG_ERROR("Failed to start supervisor: %s", HIVE_ERR_STR(status));

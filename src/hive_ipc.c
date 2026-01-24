@@ -11,15 +11,15 @@
 #include "hive_select.h"
 #include <string.h>
 
-// Static pools for IPC (mailbox entries and message data)
-static mailbox_entry s_mailbox_pool[HIVE_MAILBOX_ENTRY_POOL_SIZE];
+// Static pools for IPC (mailbox_t entries and message data)
+static mailbox_entry_t s_mailbox_pool[HIVE_MAILBOX_ENTRY_POOL_SIZE];
 static bool s_mailbox_used[HIVE_MAILBOX_ENTRY_POOL_SIZE];
-hive_pool g_mailbox_pool_mgr; // Non-static so hive_link.c can access
+hive_pool_t g_mailbox_pool_mgr; // Non-static so hive_link.c can access
 
 // Message data pool - fixed size entries (type defined in hive_internal.h)
-static message_data_entry s_message_pool[HIVE_MESSAGE_DATA_POOL_SIZE];
+static message_data_entry_t s_message_pool[HIVE_MESSAGE_DATA_POOL_SIZE];
 static bool s_message_used[HIVE_MESSAGE_DATA_POOL_SIZE];
-hive_pool g_message_pool_mgr; // Non-static so hive_link.c can access
+hive_pool_t g_message_pool_mgr; // Non-static so hive_link.c can access
 
 // Tag generator for request/reply correlation
 static uint32_t s_next_tag = 1;
@@ -28,14 +28,14 @@ static uint32_t s_next_tag = 1;
 // Header Encoding/Decoding
 // -----------------------------------------------------------------------------
 
-static inline uint32_t encode_header(hive_msg_class class, uint32_t tag) {
+static inline uint32_t encode_header(hive_msg_class_t class, uint32_t tag) {
     return ((uint32_t) class << 28) | (tag & 0x0FFFFFFF);
 }
 
-static inline void decode_header(uint32_t header, hive_msg_class *class,
+static inline void decode_header(uint32_t header, hive_msg_class_t *class,
                                  uint32_t *tag) {
     if (class)
-        *class = (hive_msg_class)(header >> 28);
+        *class = (hive_msg_class_t)(header >> 28);
     if (tag)
         *tag = header & 0x0FFFFFFF;
 }
@@ -52,12 +52,12 @@ static uint32_t generate_tag(void) {
 // Initialization
 // -----------------------------------------------------------------------------
 
-hive_status hive_ipc_init(void) {
+hive_status_t hive_ipc_init(void) {
     hive_pool_init(&g_mailbox_pool_mgr, s_mailbox_pool, s_mailbox_used,
-                   sizeof(mailbox_entry), HIVE_MAILBOX_ENTRY_POOL_SIZE);
+                   sizeof(mailbox_entry_t), HIVE_MAILBOX_ENTRY_POOL_SIZE);
 
     hive_pool_init(&g_message_pool_mgr, s_message_pool, s_message_used,
-                   sizeof(message_data_entry), HIVE_MESSAGE_DATA_POOL_SIZE);
+                   sizeof(message_data_entry_t), HIVE_MESSAGE_DATA_POOL_SIZE);
 
     return HIVE_SUCCESS;
 }
@@ -70,15 +70,15 @@ hive_status hive_ipc_init(void) {
 // This is the single point for freeing message pool entries (DRY principle)
 void hive_msg_pool_free(void *data) {
     if (data) {
-        message_data_entry *msg_data =
-            (message_data_entry *)((char *)data -
-                                   offsetof(message_data_entry, data));
+        message_data_entry_t *msg_data =
+            (message_data_entry_t *)((char *)data -
+                                     offsetof(message_data_entry_t, data));
         hive_pool_free(&g_message_pool_mgr, msg_data);
     }
 }
 
-// Free a mailbox entry and its associated data buffer
-void hive_ipc_free_entry(mailbox_entry *entry) {
+// Free a mailbox_t entry and its associated data buffer
+void hive_ipc_free_entry(mailbox_entry_t *entry) {
     if (!entry) {
         return;
     }
@@ -86,9 +86,9 @@ void hive_ipc_free_entry(mailbox_entry *entry) {
     hive_pool_free(&g_mailbox_pool_mgr, entry);
 }
 
-// Check if a mailbox entry matches a single filter
-static bool entry_matches_filter(mailbox_entry *entry,
-                                 const hive_recv_filter *filter) {
+// Check if a mailbox_t entry matches a single filter
+static bool entry_matches_filter(mailbox_entry_t *entry,
+                                 const hive_recv_filter_t *filter) {
     // Check sender filter
     if (filter->sender != HIVE_SENDER_ANY && entry->sender != filter->sender) {
         return false;
@@ -100,7 +100,7 @@ static bool entry_matches_filter(mailbox_entry *entry,
     }
 
     uint32_t header = *(uint32_t *)entry->data;
-    hive_msg_class msg_class;
+    hive_msg_class_t msg_class;
     uint32_t msg_tag;
     decode_header(header, &msg_class, &msg_tag);
 
@@ -117,8 +117,8 @@ static bool entry_matches_filter(mailbox_entry *entry,
     return true;
 }
 
-// Add mailbox entry to actor's mailbox (doubly-linked list) and wake if blocked
-void hive_mailbox_add_entry(actor *recipient, mailbox_entry *entry) {
+// Add mailbox_t entry to actor_t's mailbox_t (doubly-linked list) and wake if blocked
+void hive_mailbox_add_entry(actor_t *recipient, mailbox_entry_t *entry) {
     entry->next = NULL;
     entry->prev = recipient->mailbox.tail;
 
@@ -130,7 +130,7 @@ void hive_mailbox_add_entry(actor *recipient, mailbox_entry *entry) {
     recipient->mailbox.tail = entry;
     recipient->mailbox.count++;
 
-    // Wake actor if blocked
+    // Wake actor_t if blocked
     if (recipient->state == ACTOR_STATE_WAITING) {
         bool should_wake = false;
 
@@ -147,7 +147,7 @@ void hive_mailbox_add_entry(actor *recipient, mailbox_entry *entry) {
             // Also wake on TIMER messages (could be timeout timer)
             if (!should_wake && entry->len >= HIVE_MSG_HEADER_SIZE) {
                 uint32_t header = *(uint32_t *)entry->data;
-                hive_msg_class msg_class = (hive_msg_class)(header >> 28);
+                hive_msg_class_t msg_class = (hive_msg_class_t)(header >> 28);
                 if (msg_class == HIVE_MSG_TIMER) {
                     should_wake = true;
                 }
@@ -167,7 +167,7 @@ void hive_mailbox_add_entry(actor *recipient, mailbox_entry *entry) {
             // Also wake on TIMER messages (could be timeout timer)
             if (!should_wake && entry->len >= HIVE_MSG_HEADER_SIZE) {
                 uint32_t header = *(uint32_t *)entry->data;
-                hive_msg_class msg_class = (hive_msg_class)(header >> 28);
+                hive_msg_class_t msg_class = (hive_msg_class_t)(header >> 28);
                 if (msg_class == HIVE_MSG_TIMER) {
                     should_wake = true;
                 }
@@ -180,8 +180,8 @@ void hive_mailbox_add_entry(actor *recipient, mailbox_entry *entry) {
     }
 }
 
-// Unlink entry from mailbox (supports unlinking from middle)
-static void mailbox_unlink(mailbox *mbox, mailbox_entry *entry) {
+// Unlink entry from mailbox_t (supports unlinking from middle)
+static void mailbox_unlink(mailbox_t *mbox, mailbox_entry_t *entry) {
     if (entry->prev) {
         entry->prev->next = entry->next;
     } else {
@@ -199,13 +199,12 @@ static void mailbox_unlink(mailbox *mbox, mailbox_entry *entry) {
     mbox->count--;
 }
 
-// Scan mailbox for message matching any of the filters
+// Scan mailbox_t for message matching any of the filters
 // Returns the matching entry and sets *matched_index to which filter matched
-static mailbox_entry *mailbox_find_match_any(mailbox *mbox,
-                                             const hive_recv_filter *filters,
-                                             size_t num_filters,
-                                             size_t *matched_index) {
-    for (mailbox_entry *entry = mbox->head; entry; entry = entry->next) {
+static mailbox_entry_t *
+mailbox_find_match_any(mailbox_t *mbox, const hive_recv_filter_t *filters,
+                       size_t num_filters, size_t *matched_index) {
+    for (mailbox_entry_t *entry = mbox->head; entry; entry = entry->next) {
         for (size_t i = 0; i < num_filters; i++) {
             if (entry_matches_filter(entry, &filters[i])) {
                 if (matched_index) {
@@ -218,19 +217,20 @@ static mailbox_entry *mailbox_find_match_any(mailbox *mbox,
     return NULL;
 }
 
-// Dequeue the head entry from an actor's mailbox
-mailbox_entry *hive_ipc_dequeue_head(actor *a) {
+// Dequeue the head entry from an actor_t's mailbox_t
+mailbox_entry_t *hive_ipc_dequeue_head(actor_t *a) {
     if (!a || !a->mailbox.head) {
         return NULL;
     }
-    mailbox_entry *entry = a->mailbox.head;
+    mailbox_entry_t *entry = a->mailbox.head;
     mailbox_unlink(&a->mailbox, entry);
     return entry;
 }
 
 // Check for timeout message and handle it
-hive_status hive_mailbox_handle_timeout(actor *current, timer_id timeout_timer,
-                                        const char *operation) {
+hive_status_t hive_mailbox_handle_timeout(actor_t *current,
+                                          timer_id_t timeout_timer,
+                                          const char *operation) {
     if (timeout_timer == TIMER_ID_INVALID) {
         return HIVE_SUCCESS; // No timeout was set
     }
@@ -239,14 +239,14 @@ hive_status hive_mailbox_handle_timeout(actor *current, timer_id timeout_timer,
     if (current->mailbox.head &&
         current->mailbox.head->len >= HIVE_MSG_HEADER_SIZE) {
         uint32_t header = *(uint32_t *)current->mailbox.head->data;
-        hive_msg_class msg_class;
+        hive_msg_class_t msg_class;
         uint32_t msg_tag;
         decode_header(header, &msg_class, &msg_tag);
 
         if (msg_class == HIVE_MSG_TIMER && msg_tag == timeout_timer) {
             // This IS our timeout timer - dequeue, free, and return timeout
             // error
-            mailbox_entry *entry = hive_ipc_dequeue_head(current);
+            mailbox_entry_t *entry = hive_ipc_dequeue_head(current);
             hive_ipc_free_entry(entry);
             return HIVE_ERROR(HIVE_ERR_TIMEOUT, operation);
         }
@@ -264,12 +264,12 @@ hive_status hive_mailbox_handle_timeout(actor *current, timer_id timeout_timer,
 
 // Internal notify with explicit sender, class and tag (used by timer, link,
 // etc.)
-hive_status hive_ipc_notify_internal(actor_id to, actor_id sender,
-                                     hive_msg_class class, uint32_t tag,
-                                     const void *data, size_t len) {
-    actor *receiver = hive_actor_get(to);
+hive_status_t hive_ipc_notify_internal(actor_id_t to, actor_id_t sender,
+                                       hive_msg_class_t class, uint32_t tag,
+                                       const void *data, size_t len) {
+    actor_t *receiver = hive_actor_get(to);
     if (!receiver) {
-        return HIVE_ERROR(HIVE_ERR_INVALID, "Invalid receiver actor ID");
+        return HIVE_ERROR(HIVE_ERR_INVALID, "Invalid receiver actor_t ID");
     }
 
     // Validate message size (payload + header)
@@ -279,14 +279,14 @@ hive_status hive_ipc_notify_internal(actor_id to, actor_id sender,
                           "Message exceeds HIVE_MAX_MESSAGE_SIZE");
     }
 
-    // Allocate mailbox entry from pool
-    mailbox_entry *entry = hive_pool_alloc(&g_mailbox_pool_mgr);
+    // Allocate mailbox_t entry from pool
+    mailbox_entry_t *entry = hive_pool_alloc(&g_mailbox_pool_mgr);
     if (!entry) {
         return HIVE_ERROR(HIVE_ERR_NOMEM, "Mailbox entry pool exhausted");
     }
 
     // Allocate message data from pool
-    message_data_entry *msg_data = hive_pool_alloc(&g_message_pool_mgr);
+    message_data_entry_t *msg_data = hive_pool_alloc(&g_message_pool_mgr);
     if (!msg_data) {
         hive_pool_free(&g_mailbox_pool_mgr, entry);
         return HIVE_ERROR(HIVE_ERR_NOMEM, "Message data pool exhausted");
@@ -305,7 +305,7 @@ hive_status hive_ipc_notify_internal(actor_id to, actor_id sender,
     entry->next = NULL;
     entry->prev = NULL;
 
-    // Add to receiver's mailbox and wake if blocked
+    // Add to receiver's mailbox_t and wake if blocked
     hive_mailbox_add_entry(receiver, entry);
 
     HIVE_LOG_TRACE("IPC: Message sent from %u to %u (class=%d, tag=%u)", sender,
@@ -313,10 +313,10 @@ hive_status hive_ipc_notify_internal(actor_id to, actor_id sender,
     return HIVE_SUCCESS;
 }
 
-hive_status hive_ipc_notify(actor_id to, uint32_t tag, const void *data,
-                            size_t len) {
+hive_status_t hive_ipc_notify(actor_id_t to, uint32_t tag, const void *data,
+                              size_t len) {
     HIVE_REQUIRE_ACTOR_CONTEXT();
-    actor *sender = hive_actor_current();
+    actor_t *sender = hive_actor_current();
 
     // Validate data pointer - NULL with len > 0 would cause memcpy crash
     if (data == NULL && len > 0) {
@@ -327,10 +327,10 @@ hive_status hive_ipc_notify(actor_id to, uint32_t tag, const void *data,
                                     len);
 }
 
-hive_status hive_ipc_notify_ex(actor_id to, hive_msg_class class, uint32_t tag,
-                               const void *data, size_t len) {
+hive_status_t hive_ipc_notify_ex(actor_id_t to, hive_msg_class_t class,
+                                 uint32_t tag, const void *data, size_t len) {
     HIVE_REQUIRE_ACTOR_CONTEXT();
-    actor *sender = hive_actor_current();
+    actor_t *sender = hive_actor_current();
 
     // Validate data pointer - NULL with len > 0 would cause memcpy crash
     if (data == NULL && len > 0) {
@@ -343,36 +343,36 @@ hive_status hive_ipc_notify_ex(actor_id to, hive_msg_class class, uint32_t tag,
 // Maximum number of filters supported by hive_ipc_recv_matches
 #define HIVE_MAX_RECV_FILTERS 16
 
-hive_status hive_ipc_recv(hive_message *msg, int32_t timeout_ms) {
+hive_status_t hive_ipc_recv(hive_message_t *msg, int32_t timeout_ms) {
     // Wrapper around hive_select with wildcard IPC filter
-    hive_select_source source = {
+    hive_select_source_t source = {
         .type = HIVE_SEL_IPC,
         .ipc = {HIVE_SENDER_ANY, HIVE_MSG_ANY, HIVE_TAG_ANY}};
-    hive_select_result result;
-    hive_status s = hive_select(&source, 1, &result, timeout_ms);
+    hive_select_result_t result;
+    hive_status_t s = hive_select(&source, 1, &result, timeout_ms);
     if (HIVE_SUCCEEDED(s)) {
         *msg = result.ipc;
     }
     return s;
 }
 
-hive_status hive_ipc_recv_match(actor_id from, hive_msg_class class,
-                                uint32_t tag, hive_message *msg,
-                                int32_t timeout_ms) {
+hive_status_t hive_ipc_recv_match(actor_id_t from, hive_msg_class_t class,
+                                  uint32_t tag, hive_message_t *msg,
+                                  int32_t timeout_ms) {
     // Wrapper around hive_select with single IPC filter
-    hive_select_source source = {.type = HIVE_SEL_IPC,
-                                 .ipc = {from, class, tag}};
-    hive_select_result result;
-    hive_status s = hive_select(&source, 1, &result, timeout_ms);
+    hive_select_source_t source = {.type = HIVE_SEL_IPC,
+                                   .ipc = {from, class, tag}};
+    hive_select_result_t result;
+    hive_status_t s = hive_select(&source, 1, &result, timeout_ms);
     if (HIVE_SUCCEEDED(s)) {
         *msg = result.ipc;
     }
     return s;
 }
 
-hive_status hive_ipc_recv_matches(const hive_recv_filter *filters,
-                                  size_t num_filters, hive_message *msg,
-                                  int32_t timeout_ms, size_t *matched_index) {
+hive_status_t hive_ipc_recv_matches(const hive_recv_filter_t *filters,
+                                    size_t num_filters, hive_message_t *msg,
+                                    int32_t timeout_ms, size_t *matched_index) {
     HIVE_REQUIRE_ACTOR_CONTEXT();
 
     if (!filters || num_filters == 0) {
@@ -384,14 +384,14 @@ hive_status hive_ipc_recv_matches(const hive_recv_filter *filters,
     }
 
     // Build select sources from filters
-    hive_select_source sources[HIVE_MAX_RECV_FILTERS];
+    hive_select_source_t sources[HIVE_MAX_RECV_FILTERS];
     for (size_t i = 0; i < num_filters; i++) {
         sources[i].type = HIVE_SEL_IPC;
         sources[i].ipc = filters[i];
     }
 
-    hive_select_result result;
-    hive_status s = hive_select(sources, num_filters, &result, timeout_ms);
+    hive_select_result_t result;
+    hive_status_t s = hive_select(sources, num_filters, &result, timeout_ms);
     if (HIVE_SUCCEEDED(s)) {
         *msg = result.ipc;
         if (matched_index) {
@@ -405,10 +405,11 @@ hive_status hive_ipc_recv_matches(const hive_recv_filter *filters,
 // Request/Reply Pattern
 // -----------------------------------------------------------------------------
 
-hive_status hive_ipc_request(actor_id to, const void *request, size_t req_len,
-                             hive_message *reply, int32_t timeout_ms) {
+hive_status_t hive_ipc_request(actor_id_t to, const void *request,
+                               size_t req_len, hive_message_t *reply,
+                               int32_t timeout_ms) {
     HIVE_REQUIRE_ACTOR_CONTEXT();
-    actor *current = hive_actor_current();
+    actor_t *current = hive_actor_current();
 
     // Validate data pointer
     if (request == NULL && req_len > 0) {
@@ -418,10 +419,10 @@ hive_status hive_ipc_request(actor_id to, const void *request, size_t req_len,
 
     // Set up temporary monitor to detect if target dies during request
     uint32_t monitor_id;
-    hive_status status = hive_monitor(to, &monitor_id);
+    hive_status_t status = hive_monitor(to, &monitor_id);
     if (HIVE_FAILED(status)) {
         // Target doesn't exist or is already dead
-        return HIVE_ERROR(HIVE_ERR_CLOSED, "Target actor not found");
+        return HIVE_ERROR(HIVE_ERR_CLOSED, "Target actor_t not found");
     }
 
     // Generate unique tag for this call
@@ -436,12 +437,12 @@ hive_status hive_ipc_request(actor_id to, const void *request, size_t req_len,
     }
 
     // Wait for REPLY or EXIT from target
-    hive_recv_filter filters[] = {
+    hive_recv_filter_t filters[] = {
         {to, HIVE_MSG_REPLY, call_tag},
         {to, HIVE_MSG_EXIT, HIVE_TAG_ANY},
     };
 
-    hive_message msg;
+    hive_message_t msg;
     size_t matched;
     status = hive_ipc_recv_matches(filters, 2, &msg, timeout_ms, &matched);
     hive_monitor_cancel(monitor_id);
@@ -452,7 +453,7 @@ hive_status hive_ipc_request(actor_id to, const void *request, size_t req_len,
 
     if (matched == 1) {
         // EXIT - target died
-        return HIVE_ERROR(HIVE_ERR_CLOSED, "Target actor died");
+        return HIVE_ERROR(HIVE_ERR_CLOSED, "Target actor_t died");
     }
 
     // REPLY received - return to caller
@@ -460,10 +461,10 @@ hive_status hive_ipc_request(actor_id to, const void *request, size_t req_len,
     return HIVE_SUCCESS;
 }
 
-hive_status hive_ipc_reply(const hive_message *request, const void *data,
-                           size_t len) {
+hive_status_t hive_ipc_reply(const hive_message_t *request, const void *data,
+                             size_t len) {
     HIVE_REQUIRE_ACTOR_CONTEXT();
-    actor *current = hive_actor_current();
+    actor_t *current = hive_actor_current();
 
     if (!request) {
         return HIVE_ERROR(HIVE_ERR_INVALID, "Invalid request message");
@@ -489,7 +490,7 @@ hive_status hive_ipc_reply(const hive_message *request, const void *data,
 // Message Inspection
 // -----------------------------------------------------------------------------
 
-bool hive_msg_is_timer(const hive_message *msg) {
+bool hive_msg_is_timer(const hive_message_t *msg) {
     if (!msg) {
         return false;
     }
@@ -502,7 +503,7 @@ bool hive_msg_is_timer(const hive_message *msg) {
 // -----------------------------------------------------------------------------
 
 bool hive_ipc_pending(void) {
-    actor *current = hive_actor_current();
+    actor_t *current = hive_actor_current();
     if (!current) {
         return false;
     }
@@ -510,7 +511,7 @@ bool hive_ipc_pending(void) {
 }
 
 size_t hive_ipc_count(void) {
-    actor *current = hive_actor_current();
+    actor_t *current = hive_actor_current();
     if (!current) {
         return 0;
     }
@@ -521,15 +522,15 @@ size_t hive_ipc_count(void) {
 // Cleanup Functions
 // -----------------------------------------------------------------------------
 
-// Clear all entries from a mailbox (called during actor cleanup)
-void hive_ipc_mailbox_clear(mailbox *mbox) {
+// Clear all entries from a mailbox_t (called during actor_t cleanup)
+void hive_ipc_mailbox_clear(mailbox_t *mbox) {
     if (!mbox) {
         return;
     }
 
-    mailbox_entry *entry = mbox->head;
+    mailbox_entry_t *entry = mbox->head;
     while (entry) {
-        mailbox_entry *next = entry->next;
+        mailbox_entry_t *next = entry->next;
         hive_ipc_free_entry(entry);
         entry = next;
     }
@@ -538,8 +539,8 @@ void hive_ipc_mailbox_clear(mailbox *mbox) {
     mbox->count = 0;
 }
 
-// Free an active message entry (called during actor cleanup)
-void hive_ipc_free_active_msg(mailbox_entry *entry) {
+// Free an active message entry (called during actor_t cleanup)
+void hive_ipc_free_active_msg(mailbox_entry_t *entry) {
     hive_ipc_free_entry(entry);
 }
 
@@ -547,11 +548,11 @@ void hive_ipc_free_active_msg(mailbox_entry *entry) {
 // hive_select helpers
 // -----------------------------------------------------------------------------
 
-// Scan mailbox for message matching any of the filters (non-blocking)
-mailbox_entry *hive_ipc_scan_mailbox(const hive_recv_filter *filters,
-                                     size_t num_filters,
-                                     size_t *matched_index) {
-    actor *current = hive_actor_current();
+// Scan mailbox_t for message matching any of the filters (non-blocking)
+mailbox_entry_t *hive_ipc_scan_mailbox(const hive_recv_filter_t *filters,
+                                       size_t num_filters,
+                                       size_t *matched_index) {
+    actor_t *current = hive_actor_current();
     if (!current || !filters || num_filters == 0) {
         return NULL;
     }
@@ -559,9 +560,9 @@ mailbox_entry *hive_ipc_scan_mailbox(const hive_recv_filter *filters,
                                   matched_index);
 }
 
-// Consume (unlink) a mailbox entry and decode into hive_message
-void hive_ipc_consume_entry(mailbox_entry *entry, hive_message *msg) {
-    actor *current = hive_actor_current();
+// Consume (unlink) a mailbox_t entry and decode into hive_message_t
+void hive_ipc_consume_entry(mailbox_entry_t *entry, hive_message_t *msg) {
+    actor_t *current = hive_actor_current();
     if (!current || !entry || !msg) {
         return;
     }
@@ -572,12 +573,12 @@ void hive_ipc_consume_entry(mailbox_entry *entry, hive_message *msg) {
         current->active_msg = NULL;
     }
 
-    // Unlink from mailbox
+    // Unlink from mailbox_t
     mailbox_unlink(&current->mailbox, entry);
 
     // Decode header and fill in message structure
     uint32_t header = *(uint32_t *)entry->data;
-    hive_msg_class msg_class;
+    hive_msg_class_t msg_class;
     uint32_t msg_tag;
     decode_header(header, &msg_class, &msg_tag);
 

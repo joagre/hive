@@ -11,7 +11,7 @@
 // - Client actors find services by name (no hardcoded actor IDs)
 // - Names auto-cleaned when actors exit (handles crashes gracefully)
 //
-// Note: For supervised actors, prefer auto_register in actor_config instead
+// Note: For supervised actors, prefer auto_register in actor_config_t instead
 // of manual hive_register() calls. This example shows the manual API.
 
 #include "hive_runtime.h"
@@ -22,14 +22,14 @@
 #define SERVICE_NAME "calculator"
 
 // Calculator service - registers itself and handles requests
-static void calculator_service(void *args, const hive_spawn_info *siblings,
+static void calculator_service(void *args, const hive_spawn_info_t *siblings,
                                size_t sibling_count) {
     (void)args;
     (void)siblings;
     (void)sibling_count;
 
     // Register with a well-known name so clients can find us
-    hive_status status = hive_register(SERVICE_NAME);
+    hive_status_t status = hive_register(SERVICE_NAME);
     if (HIVE_FAILED(status)) {
         printf("[SERVICE] Failed to register: %s\n", HIVE_ERR_STR(status));
         fflush(stdout);
@@ -42,7 +42,7 @@ static void calculator_service(void *args, const hive_spawn_info *siblings,
     // Handle requests
     int requests_handled = 0;
     while (requests_handled < 3) {
-        hive_message msg;
+        hive_message_t msg;
         status = hive_ipc_recv(&msg, 2000); // 2 second timeout
         if (HIVE_FAILED(status)) {
             printf("[SERVICE] Timeout waiting for requests, shutting down\n");
@@ -76,7 +76,7 @@ static void calculator_service(void *args, const hive_spawn_info *siblings,
 }
 
 // Client - looks up service by name and sends requests
-static void client_actor(void *args, const hive_spawn_info *siblings,
+static void client_actor(void *args, const hive_spawn_info_t *siblings,
                          size_t sibling_count) {
     (void)args;
     (void)siblings;
@@ -86,14 +86,14 @@ static void client_actor(void *args, const hive_spawn_info *siblings,
     fflush(stdout);
 
     // Give service time to register
-    timer_id timer;
+    timer_id_t timer;
     hive_timer_after(100000, &timer); // 100ms
-    hive_message msg;
+    hive_message_t msg;
     hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
 
     // Look up service by name
-    actor_id service;
-    hive_status status = hive_whereis(SERVICE_NAME, &service);
+    actor_id_t service;
+    hive_status_t status = hive_whereis(SERVICE_NAME, &service);
     if (HIVE_FAILED(status)) {
         printf("[CLIENT] Service '%s' not found!\n", SERVICE_NAME);
         fflush(stdout);
@@ -107,7 +107,7 @@ static void client_actor(void *args, const hive_spawn_info *siblings,
 
     for (int i = 0; i < 3; i++) {
         int operands[2] = {test_cases[i][0], test_cases[i][1]};
-        hive_message reply;
+        hive_message_t reply;
 
         printf("[CLIENT] Requesting %d + %d...\n", operands[0], operands[1]);
         fflush(stdout);
@@ -150,7 +150,7 @@ int main(void) {
     printf("- Names auto-cleanup when actors exit\n\n");
 
     // Initialize runtime
-    hive_status status = hive_init();
+    hive_status_t status = hive_init();
     if (HIVE_FAILED(status)) {
         fprintf(stderr, "Failed to initialize runtime: %s\n",
                 HIVE_ERR_STR(status));
@@ -158,10 +158,10 @@ int main(void) {
     }
 
     // Spawn service first so it can register
-    actor_config cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+    actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
     cfg.name = "calc_service";
 
-    actor_id service_id;
+    actor_id_t service_id;
     if (HIVE_FAILED(
             hive_spawn(calculator_service, NULL, NULL, &cfg, &service_id))) {
         fprintf(stderr, "Failed to spawn service\n");
@@ -171,7 +171,7 @@ int main(void) {
 
     // Spawn client
     cfg.name = "client";
-    actor_id client_id;
+    actor_id_t client_id;
     if (HIVE_FAILED(hive_spawn(client_actor, NULL, NULL, &cfg, &client_id))) {
         fprintf(stderr, "Failed to spawn client\n");
         hive_cleanup();

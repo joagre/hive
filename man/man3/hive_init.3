@@ -6,9 +6,9 @@ hive_init, hive_run, hive_run_until_blocked, hive_advance_time, hive_shutdown, h
 .nf
 .B #include <hive_runtime.h>
 .PP
-.BI "hive_status hive_init(void);"
+.BI "hive_status_t hive_init(void);"
 .BI "void hive_run(void);"
-.BI "hive_status hive_run_until_blocked(void);"
+.BI "hive_status_t hive_run_until_blocked(void);"
 .BI "void hive_advance_time(uint64_t " delta_us ");"
 .BI "void hive_shutdown(void);"
 .BI "void hive_cleanup(void);"
@@ -64,7 +64,7 @@ returns. After cleanup, the runtime may be reinitialized with
 .SH RETURN VALUE
 .BR hive_init ()
 returns an
-.I hive_status
+.I hive_status_t
 structure. On success,
 .I status.code
 is
@@ -100,7 +100,7 @@ HIVE_MESSAGE_DATA_POOL    256     IPC message data buffers
 .PP
 No heap allocation occurs in hot paths (scheduling, IPC, I/O). Actor stacks
 use a static arena allocator by default; malloc is only used if
-.I actor_config.malloc_stack
+.I actor_config_t.malloc_stack
 is set to true.
 .SS Single-Threaded Architecture
 The runtime is completely single-threaded. All actors run cooperatively in
@@ -140,20 +140,21 @@ Configurable per-actor stack sizes with arena allocator
 #include <hive_runtime.h>
 #include <stdio.h>
 
-void worker_actor(void *arg) {
+void worker_actor(void *arg, const hive_spawn_info_t *siblings,
+                  size_t sibling_count) {
     printf("Worker running\\n");
     hive_exit();
 }
 
 int main(void) {
-    hive_status status = hive_init();
+    hive_status_t status = hive_init();
     if (HIVE_FAILED(status)) {
         fprintf(stderr, "Init failed: %s\\n", HIVE_ERR_STR(status));
         return 1;
     }
 
-    actor_id worker;
-    hive_spawn(worker_actor, NULL, &worker);
+    actor_id_t worker;
+    hive_spawn(worker_actor, NULL, NULL, NULL, &worker);
 
     hive_run();      /* Blocks until all actors exit */
     hive_cleanup();
@@ -176,12 +177,13 @@ for simulation integration:
 
 #define TIME_STEP_MS 4
 
-void sensor_actor(void *arg) {
-    timer_id timer;
+void sensor_actor(void *arg, const hive_spawn_info_t *siblings,
+                  size_t sibling_count) {
+    timer_id_t timer;
     hive_timer_every(TIME_STEP_MS * 1000, &timer);
 
     while (1) {
-        hive_message msg;
+        hive_message_t msg;
         hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
         /* Read sensors, publish to bus */
     }
@@ -192,8 +194,8 @@ int main(void) {
     hive_init();
 
     /* Spawn timer-driven actors */
-    actor_id sensor;
-    hive_spawn(sensor_actor, NULL, &sensor);
+    actor_id_t sensor;
+    hive_spawn(sensor_actor, NULL, NULL, NULL, &sensor);
 
     while (wb_robot_step(TIME_STEP_MS) != -1) {
         hive_advance_time(TIME_STEP_MS * 1000);  /* ms -> us */

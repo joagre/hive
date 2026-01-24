@@ -8,38 +8,38 @@ This document contains the complete API reference for the Hive actor runtime.
 
 ```c
 // Handles (opaque to user)
-typedef uint32_t actor_id;
-typedef uint32_t bus_id;
-typedef uint32_t timer_id;
+typedef uint32_t actor_id_t;
+typedef uint32_t bus_id_t;
+typedef uint32_t timer_id_t;
 
-#define ACTOR_ID_INVALID  ((actor_id)0)
-#define BUS_ID_INVALID    ((bus_id)0)
-#define TIMER_ID_INVALID  ((timer_id)0)
+#define ACTOR_ID_INVALID  ((actor_id_t)0)
+#define BUS_ID_INVALID    ((bus_id_t)0)
+#define TIMER_ID_INVALID  ((timer_id_t)0)
 
 // Wildcard for selective receive filtering
-#define HIVE_SENDER_ANY     ((actor_id)0xFFFFFFFF)
+#define HIVE_SENDER_ANY     ((actor_id_t)0xFFFFFFFF)
 
 // Actor entry point (see Actor API section for full signature)
-typedef void (*actor_fn)(void *args, const hive_spawn_info *siblings, size_t sibling_count);
+typedef void (*actor_fn_t)(void *args, const hive_spawn_info_t *siblings, size_t sibling_count);
 
 // Init function called in spawner context
-typedef void *(*hive_actor_init_fn)(void *init_args);
+typedef void *(*hive_actor_init_fn_t)(void *init_args);
 
 // Spawn info passed to actors at startup
 typedef struct {
     const char *name;  // Actor name (may be NULL)
-    actor_id id;       // Actor ID
+    actor_id_t id;       // Actor ID
     bool registered;   // Whether registered in name registry
-} hive_spawn_info;
+} hive_spawn_info_t;
 
 // Actor configuration
 typedef struct {
     size_t      stack_size;   // bytes, 0 = default
-    hive_priority_level priority;
+    hive_priority_level_t priority;
     const char *name;         // for debugging, may be NULL
     bool        malloc_stack; // false = use static arena (default), true = malloc
     bool        auto_register;// auto-register name in registry
-} actor_config;
+} actor_config_t;
 ```
 
 ## Actor API
@@ -48,17 +48,17 @@ typedef struct {
 
 ```c
 // Actor entry function receives arguments, sibling info, and sibling count
-typedef void (*actor_fn)(void *args, const hive_spawn_info *siblings, size_t sibling_count);
+typedef void (*actor_fn_t)(void *args, const hive_spawn_info_t *siblings, size_t sibling_count);
 
 // Init function (optional) called in spawner context
-typedef void *(*hive_actor_init_fn)(void *init_args);
+typedef void *(*hive_actor_init_fn_t)(void *init_args);
 
 // Spawn info passed to actors at startup
 typedef struct {
     const char *name;  // Actor name (may be NULL)
-    actor_id id;       // Actor ID
+    actor_id_t id;       // Actor ID
     bool registered;   // Whether registered in name registry
-} hive_spawn_info;
+} hive_spawn_info_t;
 ```
 
 ### Lifecycle
@@ -70,14 +70,14 @@ typedef struct {
 // init_args: Arguments to init (or directly to actor if init is NULL)
 // cfg: Actor configuration (NULL = use defaults)
 // out: Receives the new actor's ID
-hive_status hive_spawn(actor_fn fn, hive_actor_init_fn init, void *init_args,
-                       const actor_config *cfg, actor_id *out);
+hive_status_t hive_spawn(actor_fn_t fn, hive_actor_init_fn_t init, void *init_args,
+                       const actor_config_t *cfg, actor_id_t *out);
 
 // Terminate current actor
 _Noreturn void hive_exit(void);
 
 // Find sibling by name in spawn info array
-const hive_spawn_info *hive_find_sibling(const hive_spawn_info *siblings,
+const hive_spawn_info_t *hive_find_sibling(const hive_spawn_info_t *siblings,
                                           size_t count, const char *name);
 ```
 
@@ -90,7 +90,7 @@ const hive_spawn_info *hive_find_sibling(const hive_spawn_info *siblings,
 - If `cfg->auto_register` is true and `cfg->name` is set, actor is auto-registered in name registry
 
 **Sibling array lifetime**
-The sibling array is a **startup-time snapshot**. If a sibling restarts (getting a new `actor_id`), any cached IDs become stale. For scenarios where siblings may restart:
+The sibling array is a **startup-time snapshot**. If a sibling restarts (getting a new `actor_id_t`), any cached IDs become stale. For scenarios where siblings may restart:
 - Use `hive_whereis()` for dynamic lookups
 - Sibling array is best for stable peer references in ONE_FOR_ALL supervision (all restart together)
 - Registry is best for service discovery patterns where restarts are expected
@@ -108,16 +108,16 @@ This crash detection prevents infinite loops and ensures linked actors are notif
 
 ```c
 // Get current actor's ID
-actor_id hive_self(void);
+actor_id_t hive_self(void);
 
 // Yield to scheduler
 void hive_yield(void);
 
 // Check if actor is alive
-bool hive_actor_alive(actor_id id);
+bool hive_actor_alive(actor_id_t id);
 
 // Kill an actor externally
-hive_status hive_kill(actor_id target);
+hive_status_t hive_kill(actor_id_t target);
 ```
 
 **hive_kill(target)**: Terminates the target actor immediately. This is a **hard kill** - the target cannot resist or defer termination. There is no graceful shutdown protocol; the actor is removed from the scheduler at the next opportunity. The target's exit reason is set to `HIVE_EXIT_KILLED`. Linked/monitoring actors receive exit notifications. Cannot kill self (use `hive_exit()` instead). Used internally by supervisors to terminate children during shutdown or strategy application.
@@ -131,20 +131,20 @@ When `HIVE_STACK_WATERMARK=1`, the runtime fills actor stacks with a pattern at 
 ```c
 // Get stack usage for an actor (bytes used)
 // Returns actual usage if watermarking enabled, or stack_size if disabled
-size_t hive_actor_stack_usage(actor_id id);
+size_t hive_actor_stack_usage(actor_id_t id);
 
 // Callback for stack usage iteration
-typedef void (*stack_usage_callback)(actor_id id, const char *name,
+typedef void (*stack_usage_callback_t)(actor_id_t id, const char *name,
                                      size_t stack_size, size_t used);
 
 // Iterate all live actors and report stack usage via callback
-void hive_actor_stack_usage_all(stack_usage_callback cb);
+void hive_actor_stack_usage_all(stack_usage_callback_t cb);
 ```
 
 **Usage example**
 
 ```c
-void print_stack(actor_id id, const char *name, size_t stack_size, size_t used) {
+void print_stack(actor_id_t id, const char *name, size_t stack_size, size_t used) {
     printf("Actor %u (%s): %zu/%zu bytes (%.1f%%)\n",
            id, name ? name : "unnamed", used, stack_size,
            100.0 * used / stack_size);
@@ -166,12 +166,12 @@ Actors can link to other actors to receive notification when they die:
 
 ```c
 // Bidirectional link: if either dies, the other receives exit message
-hive_status hive_link(actor_id target);
-hive_status hive_link_remove(actor_id target);
+hive_status_t hive_link(actor_id_t target);
+hive_status_t hive_link_remove(actor_id_t target);
 
 // Unidirectional monitor: receive notification when target dies
-hive_status hive_monitor(actor_id target, uint32_t *out);
-hive_status hive_monitor_cancel(uint32_t id);
+hive_status_t hive_monitor(actor_id_t target, uint32_t *out);
+hive_status_t hive_monitor_cancel(uint32_t id);
 ```
 
 Exit message structure:
@@ -182,22 +182,22 @@ typedef enum {
     HIVE_EXIT_CRASH,        // Actor function returned without calling hive_exit()
     HIVE_EXIT_CRASH_STACK,  // Stack overflow detected
     HIVE_EXIT_KILLED,       // Actor was killed externally
-} hive_exit_reason;
+} hive_exit_reason_t;
 
 typedef struct {
-    actor_id         actor;      // who died
-    hive_exit_reason reason;     // why they died
+    actor_id_t         actor;      // who died
+    hive_exit_reason_t reason;     // why they died
     uint32_t         monitor_id; // 0 = link, non-zero = from monitor
-} hive_exit_msg;
+} hive_exit_msg_t;
 
 // Check if message is exit notification
-bool hive_is_exit_msg(const hive_message *msg);
+bool hive_is_exit_msg(const hive_message_t *msg);
 
 // Decode exit message into struct
-hive_status hive_decode_exit(const hive_message *msg, hive_exit_msg *out);
+hive_status_t hive_decode_exit(const hive_message_t *msg, hive_exit_msg_t *out);
 
 // Convert exit reason to string (for logging/debugging)
-const char *hive_exit_reason_str(hive_exit_reason reason);
+const char *hive_exit_reason_str(hive_exit_reason_t reason);
 ```
 
 **The monitor_id field** distinguishes exit notifications from links vs monitors:
@@ -209,11 +209,11 @@ const char *hive_exit_reason_str(hive_exit_reason reason);
 Exit messages should be decoded using `hive_decode_exit()`:
 
 ```c
-hive_message msg;
+hive_message_t msg;
 hive_ipc_recv(&msg, -1);
 
 if (hive_is_exit_msg(&msg)) {
-    hive_exit_msg exit_info;
+    hive_exit_msg_t exit_info;
     hive_decode_exit(&msg, &exit_info);
     if (exit_info.monitor_id == 0) {
         printf("Linked actor %u died: %s\n", exit_info.actor,
@@ -231,13 +231,13 @@ Actor naming. Actors can register themselves with a symbolic name, and other act
 
 ```c
 // Register calling actor with a name (must be unique)
-hive_status hive_register(const char *name);
+hive_status_t hive_register(const char *name);
 
 // Look up actor ID by name
-hive_status hive_whereis(const char *name, actor_id *out);
+hive_status_t hive_whereis(const char *name, actor_id_t *out);
 
 // Unregister a name (also automatic on actor exit)
-hive_status hive_unregister(const char *name);
+hive_status_t hive_unregister(const char *name);
 ```
 
 **Behavior**
@@ -250,7 +250,7 @@ hive_status hive_unregister(const char *name);
 
 **Implementation**
 
-- Static table of `(name, actor_id)` pairs (`HIVE_MAX_REGISTERED_NAMES` = 32 default)
+- Static table of `(name, actor_id_t)` pairs (`HIVE_MAX_REGISTERED_NAMES` = 32 default)
 - Linear scan for lookups (O(n), suitable for small registries)
 - Names are pointers to user-provided strings (not copied)
 - Auto-cleanup in `hive_actor_free()` removes all entries for the exiting actor
@@ -264,7 +264,7 @@ When actors are restarted by a supervisor, they should call `hive_register()` wi
 void database_service(void *arg) {
     hive_register("database");
     while (1) {
-        hive_message msg;
+        hive_message_t msg;
         hive_ipc_recv(&msg, -1);
         // Handle database requests...
     }
@@ -272,7 +272,7 @@ void database_service(void *arg) {
 
 // Client actor that uses whereis (called on each send)
 void send_query(const char *query) {
-    actor_id db;
+    actor_id_t db;
     if (HIVE_SUCCEEDED(hive_whereis("database", &db))) {
         hive_ipc_notify(db, HIVE_TAG_NONE, query, strlen(query) + 1);
     }
@@ -339,7 +339,7 @@ typedef enum {
     HIVE_MSG_EXIT,     // System notifications (actor death)
     // 5-14 reserved for future use
     HIVE_MSG_ANY = 15,   // Wildcard for selective receive filtering
-} hive_msg_class;
+} hive_msg_class_t;
 ```
 
 ### Tag System
@@ -365,18 +365,18 @@ typedef enum {
 
 ```c
 typedef struct {
-    actor_id       sender;       // Sender actor ID
-    hive_msg_class class;        // Message class
+    actor_id_t       sender;       // Sender actor ID
+    hive_msg_class_t class;        // Message class
     uint32_t       tag;          // Message tag
     size_t         len;          // Payload length (excludes 4-byte header)
     const void    *data;         // Payload pointer (past header)
-} hive_message;
+} hive_message_t;
 ```
 
 The message struct provides **direct access to all fields**:
 
 ```c
-hive_message msg;
+hive_message_t msg;
 hive_ipc_recv(&msg, -1);
 
 // Direct access - no boilerplate
@@ -395,17 +395,17 @@ if (msg.class == HIVE_MSG_REQUEST) {
 ```c
 // Fire-and-forget message (class=NOTIFY)
 // Tag enables selective receive filtering on the receiver side
-hive_status hive_ipc_notify(actor_id to, uint32_t tag, const void *data, size_t len);
+hive_status_t hive_ipc_notify(actor_id_t to, uint32_t tag, const void *data, size_t len);
 
 // Send with explicit class and tag (sender is current actor)
-hive_status hive_ipc_notify_ex(actor_id to, hive_msg_class class,
+hive_status_t hive_ipc_notify_ex(actor_id_t to, hive_msg_class_t class,
                                uint32_t tag, const void *data, size_t len);
 
 // Receive any message (no filtering)
 // timeout_ms == 0:  non-blocking, returns HIVE_ERR_WOULDBLOCK if empty
 // timeout_ms < 0:   block forever
 // timeout_ms > 0:   block up to timeout, returns HIVE_ERR_TIMEOUT if exceeded
-hive_status hive_ipc_recv(hive_message *msg, int32_t timeout_ms);
+hive_status_t hive_ipc_recv(hive_message_t *msg, int32_t timeout_ms);
 ```
 
 #### Selective Receive
@@ -414,8 +414,8 @@ hive_status hive_ipc_recv(hive_message *msg, int32_t timeout_ms);
 // Receive with filtering on sender, class, and/or tag
 // Blocks until message matches ALL non-wildcard criteria, or timeout
 // Use HIVE_SENDER_ANY, HIVE_MSG_ANY, HIVE_TAG_ANY as wildcards
-hive_status hive_ipc_recv_match(actor_id from, hive_msg_class class,
-                            uint32_t tag, hive_message *msg, int32_t timeout_ms);
+hive_status_t hive_ipc_recv_match(actor_id_t from, hive_msg_class_t class,
+                            uint32_t tag, hive_message_t *msg, int32_t timeout_ms);
 ```
 
 **Filter semantics**
@@ -444,15 +444,15 @@ hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_REPLY, expected_tag, &msg, 5000);
 ```c
 // Filter structure for multi-pattern matching
 typedef struct {
-    actor_id sender;      // HIVE_SENDER_ANY for any sender
-    hive_msg_class class; // HIVE_MSG_ANY for any class
+    actor_id_t sender;      // HIVE_SENDER_ANY for any sender
+    hive_msg_class_t class; // HIVE_MSG_ANY for any class
     uint32_t tag;         // HIVE_TAG_ANY for any tag
-} hive_recv_filter;
+} hive_recv_filter_t;
 
 // Receive message matching ANY of the provided filters
 // matched_index (optional): which filter matched (0-based)
-hive_status hive_ipc_recv_matches(const hive_recv_filter *filters,
-                            size_t num_filters, hive_message *msg,
+hive_status_t hive_ipc_recv_matches(const hive_recv_filter_t *filters,
+                            size_t num_filters, hive_message_t *msg,
                             int32_t timeout_ms, size_t *matched_index);
 ```
 
@@ -465,11 +465,11 @@ hive_status hive_ipc_recv_matches(const hive_recv_filter *filters,
 ```c
 // Wait for either a sync timer or a landed notification
 enum { FILTER_SYNC_TIMER, FILTER_LANDED };
-hive_recv_filter filters[] = {
+hive_recv_filter_t filters[] = {
     [FILTER_SYNC_TIMER] = {HIVE_SENDER_ANY, HIVE_MSG_TIMER, sync_timer},
     [FILTER_LANDED] = {HIVE_SENDER_ANY, HIVE_MSG_NOTIFY, NOTIFY_LANDED},
 };
-hive_message msg;
+hive_message_t msg;
 size_t matched;
 hive_ipc_recv_matches(filters, 2, &msg, -1, &matched);
 if (matched == FILTER_SYNC_TIMER) {
@@ -483,11 +483,11 @@ if (matched == FILTER_SYNC_TIMER) {
 
 ```c
 // Send REQUEST, block until REPLY with matching tag, or timeout
-hive_status hive_ipc_request(actor_id to, const void *request, size_t req_len,
-                      hive_message *reply, int32_t timeout_ms);
+hive_status_t hive_ipc_request(actor_id_t to, const void *request, size_t req_len,
+                      hive_message_t *reply, int32_t timeout_ms);
 
 // Reply to a received REQUEST (extracts sender and tag from request automatically)
-hive_status hive_ipc_reply(const hive_message *request, const void *data, size_t len);
+hive_status_t hive_ipc_reply(const hive_message_t *request, const void *data, size_t len);
 ```
 
 **Request/reply implementation**
@@ -513,8 +513,8 @@ hive_status hive_ipc_reply(const hive_message *request, const void *data, size_t
 **Target death detection** - `hive_ipc_request()` internally monitors the target actor for the duration of the request. If the target dies before replying, the function returns `HIVE_ERR_CLOSED` immediately without waiting for timeout:
 
 ```c
-hive_message reply;
-hive_status status = hive_ipc_request(target, &req, sizeof(req), &reply, 5000);
+hive_message_t reply;
+hive_status_t status = hive_ipc_request(target, &req, sizeof(req), &reply, 5000);
 if (status.code == HIVE_ERR_CLOSED) {
     // Target died during request - no ambiguity with timeout
     printf("Target actor died\n");
@@ -560,10 +560,10 @@ This eliminates the "timeout but actually dead" ambiguity from previous versions
 hive_ipc_notify(target, HIVE_TAG_NONE, &data, sizeof(data));  // WRONG - message may be lost
 
 // Good: Check and handle with backoff-retry
-hive_status status = hive_ipc_notify(target, HIVE_TAG_NONE, &data, sizeof(data));
+hive_status_t status = hive_ipc_notify(target, HIVE_TAG_NONE, &data, sizeof(data));
 if (status.code == HIVE_ERR_NOMEM) {
     // Pool exhausted - backoff and retry
-    hive_message msg;
+    hive_message_t msg;
     hive_ipc_recv(&msg, 10);  // Wait 10ms, process any incoming messages
     // Retry the send
     status = hive_ipc_notify(target, HIVE_TAG_NONE, &data, sizeof(data));
@@ -587,7 +587,7 @@ if (status.code == HIVE_ERR_NOMEM) {
 
 **Correct pattern**
 ```c
-hive_message msg;
+hive_message_t msg;
 hive_ipc_recv(&msg, -1);
 
 // SAFE: Direct access and copy immediately
@@ -640,7 +640,7 @@ Global pool limits: **Yes** - all actors share:
 
 ```c
 // Using hive_ipc_request() for request/reply (recommended - handles tag generation internally)
-hive_message reply;
+hive_message_t reply;
 hive_ipc_request(server, &request, sizeof(request), &reply, 5000);
 
 // Or manually using selective receive:
@@ -712,16 +712,16 @@ void sender_B(void *arg) {
 // Selective receive - can retrieve out of order
 void request_reply_actor(void *arg) {
     // Start timer
-    timer_id t;
+    timer_id_t t;
     hive_timer_after(1000000, &t);
 
     // Do request/reply
-    hive_message reply;
+    hive_message_t reply;
     hive_ipc_request(server, &req, sizeof(req), &reply, 5000);
     // Timer tick arrived during request/reply wait - it's in mailbox
 
-    // Now process timer using selective receive with timer_id
-    hive_message timer_msg;
+    // Now process timer using selective receive with timer_id_t
+    hive_message_t timer_msg;
     hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, t, &timer_msg, 0);
 }
 ```
@@ -733,19 +733,19 @@ Timer and system messages use the same mailbox and message format as IPC.
 **Timer messages**
 - Class: `HIVE_MSG_TIMER`
 - Sender: Actor that owns the timer
-- Tag: `timer_id`
+- Tag: `timer_id_t`
 - Payload: Empty (len = 0 after decoding header)
 
 **System messages (exit notifications)**
 - Class: `HIVE_MSG_EXIT`
 - Sender: Actor that died
 - Tag: `HIVE_TAG_NONE`
-- Payload: `hive_exit_msg` struct
+- Payload: `hive_exit_msg_t` struct
 
 **Checking message type**
 
 ```c
-hive_message msg;
+hive_message_t msg;
 hive_ipc_recv(&msg, -1);
 
 switch (msg.class) {
@@ -756,7 +756,7 @@ switch (msg.class) {
         handle_call_and_reply(&msg, msg.data, msg.len);
         break;
     case HIVE_MSG_TIMER:
-        handle_timer_tick(msg.tag);  // tag is timer_id
+        handle_timer_tick(msg.tag);  // tag is timer_id_t
         break;
     case HIVE_MSG_EXIT:
         handle_exit_notification(msg.sender, msg.data);
@@ -770,7 +770,7 @@ switch (msg.class) {
 
 ```c
 // Returns true if message is a timer tick
-bool hive_msg_is_timer(const hive_message *msg);
+bool hive_msg_is_timer(const hive_message_t *msg);
 ```
 
 ### Query Functions
@@ -810,10 +810,10 @@ IPC uses two global pools shared by all actors:
 
 **Backoff-retry example**
 ```c
-hive_status status = hive_ipc_notify(target, HIVE_TAG_NONE, data, len);
+hive_status_t status = hive_ipc_notify(target, HIVE_TAG_NONE, data, len);
 if (status.code == HIVE_ERR_NOMEM) {
     // Pool exhausted - backoff before retry
-    hive_message msg;
+    hive_message_t msg;
     status = hive_ipc_recv(&msg, 10);  // Backoff 10ms
 
     if (HIVE_SUCCEEDED(status)) {
@@ -837,7 +837,7 @@ typedef struct {
     uint32_t max_age_ms;      // expire entries after ms, 0 = no expiry
     size_t   max_entries;     // ring buffer capacity
     size_t   max_entry_size;  // max payload bytes per entry
-} hive_bus_config;
+} hive_bus_config_t;
 ```
 
 **Configuration constraints (normative)**
@@ -852,28 +852,28 @@ typedef struct {
 
 ```c
 // Create bus
-hive_status hive_bus_create(const hive_bus_config *cfg, bus_id *out);
+hive_status_t hive_bus_create(const hive_bus_config_t *cfg, bus_id_t *out);
 
 // Destroy bus (fails if subscribers exist)
-hive_status hive_bus_destroy(bus_id bus);
+hive_status_t hive_bus_destroy(bus_id_t bus);
 
 // Publish data
-hive_status hive_bus_publish(bus_id bus, const void *data, size_t len);
+hive_status_t hive_bus_publish(bus_id_t bus, const void *data, size_t len);
 
 // Subscribe/unsubscribe current actor
-hive_status hive_bus_subscribe(bus_id bus);
-hive_status hive_bus_unsubscribe(bus_id bus);
+hive_status_t hive_bus_subscribe(bus_id_t bus);
+hive_status_t hive_bus_unsubscribe(bus_id_t bus);
 
 // Read entry (non-blocking)
 // Returns HIVE_ERR_WOULDBLOCK if no data available
-hive_status hive_bus_read(bus_id bus, void *buf, size_t max_len, size_t *bytes_read);
+hive_status_t hive_bus_read(bus_id_t bus, void *buf, size_t max_len, size_t *bytes_read);
 
 // Read with blocking
-hive_status hive_bus_read_wait(bus_id bus, void *buf, size_t max_len,
+hive_status_t hive_bus_read_wait(bus_id_t bus, void *buf, size_t max_len,
                                size_t *bytes_read, int32_t timeout_ms);
 
 // Query bus state
-size_t hive_bus_entry_count(bus_id bus);
+size_t hive_bus_entry_count(bus_id_t bus);
 ```
 
 **Message size validation**
@@ -1161,23 +1161,23 @@ typedef enum {
 typedef struct {
     hive_select_type type;
     union {
-        hive_recv_filter ipc;  // For HIVE_SEL_IPC
-        bus_id bus;            // For HIVE_SEL_BUS
+        hive_recv_filter_t ipc;  // For HIVE_SEL_IPC
+        bus_id_t bus;            // For HIVE_SEL_BUS
     };
-} hive_select_source;
+} hive_select_source_t;
 
 // Select result
 typedef struct {
     size_t index;           // Which source triggered (0-based)
     hive_select_type type;  // Type of triggered source
     union {
-        hive_message ipc;   // For HIVE_SEL_IPC
+        hive_message_t ipc;   // For HIVE_SEL_IPC
         struct {
             void *data;     // For HIVE_SEL_BUS
             size_t len;
         } bus;
     };
-} hive_select_result;
+} hive_select_result_t;
 ```
 
 ### Function
@@ -1188,8 +1188,8 @@ typedef struct {
 // timeout_ms == 0:  non-blocking, returns HIVE_ERR_WOULDBLOCK if no data
 // timeout_ms < 0:   block forever
 // timeout_ms > 0:   block up to timeout, returns HIVE_ERR_TIMEOUT if exceeded
-hive_status hive_select(const hive_select_source *sources, size_t num_sources,
-                        hive_select_result *result, int32_t timeout_ms);
+hive_status_t hive_select(const hive_select_source_t *sources, size_t num_sources,
+                        hive_select_result_t *result, int32_t timeout_ms);
 ```
 
 ### Priority Semantics
@@ -1211,15 +1211,15 @@ A bus source is "ready" when the bus contains an entry the calling actor has not
 ```c
 // Define event sources
 enum { SEL_SENSOR, SEL_TIMER, SEL_COMMAND };
-hive_select_source sources[] = {
+hive_select_source_t sources[] = {
     [SEL_SENSOR]  = {HIVE_SEL_BUS, .bus = sensor_bus},
     [SEL_TIMER]   = {HIVE_SEL_IPC, .ipc = {HIVE_SENDER_ANY, HIVE_MSG_TIMER, heartbeat}},
     [SEL_COMMAND] = {HIVE_SEL_IPC, .ipc = {HIVE_SENDER_ANY, HIVE_MSG_NOTIFY, CMD_SHUTDOWN}},
 };
 
 while (running) {
-    hive_select_result result;
-    hive_status status = hive_select(sources, 3, &result, 1000);
+    hive_select_result_t result;
+    hive_status_t status = hive_select(sources, 3, &result, 1000);
 
     if (status.code == HIVE_ERR_TIMEOUT) {
         // No events for 1 second
@@ -1281,17 +1281,17 @@ Timers for periodic and one-shot wake-ups.
 
 ```c
 // One-shot: wake current actor after delay
-hive_status hive_timer_after(uint32_t delay_us, timer_id *out);
+hive_status_t hive_timer_after(uint32_t delay_us, timer_id_t *out);
 
 // Periodic: wake current actor every interval
-hive_status hive_timer_every(uint32_t interval_us, timer_id *out);
+hive_status_t hive_timer_every(uint32_t interval_us, timer_id_t *out);
 
 // Cancel timer
-hive_status hive_timer_cancel(timer_id id);
+hive_status_t hive_timer_cancel(timer_id_t id);
 
 // Sleep for specified duration (microseconds)
 // Uses selective receive - other messages remain in mailbox
-hive_status hive_sleep(uint32_t delay_us);
+hive_status_t hive_sleep(uint32_t delay_us);
 
 // Get current time in microseconds (monotonic)
 // Returns monotonic time suitable for measuring elapsed durations.
@@ -1299,14 +1299,14 @@ hive_status hive_sleep(uint32_t delay_us);
 uint64_t hive_get_time(void);
 
 // Check if message is a timer tick
-bool hive_msg_is_timer(const hive_message *msg);
+bool hive_msg_is_timer(const hive_message_t *msg);
 ```
 
-Timer wake-ups are delivered as messages with `class == HIVE_MSG_TIMER`. The tag contains the `timer_id`. The actor receives these in its normal `hive_ipc_recv()` loop and can use `hive_msg_is_timer()` to identify timer messages.
+Timer wake-ups are delivered as messages with `class == HIVE_MSG_TIMER`. The tag contains the `timer_id_t`. The actor receives these in its normal `hive_ipc_recv()` loop and can use `hive_msg_is_timer()` to identify timer messages.
 
-**Important** - When waiting for a specific timer, use selective receive with the timer_id as the tag filter:
+**Important** - When waiting for a specific timer, use selective receive with the timer_id_t as the tag filter:
 ```c
-timer_id my_timer;
+timer_id_t my_timer;
 hive_timer_after(500000, &my_timer);
 hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, my_timer, &msg, -1);
 ```
@@ -1402,7 +1402,7 @@ Platform | Implementation | Resolution | Notes
    - Wraparound: Values > 71.6 minutes wrap around (e.g., 72 minutes becomes 24 seconds)
    - **Mitigation**: Use multiple timers or external tick counting for intervals > 1 hour
 
-2. **Timer ID wraparound** (`timer_id` = `uint32_t`):
+2. **Timer ID wraparound** (`timer_id_t` = `uint32_t`):
    - Global counter `g_timer.next_id` increments on each timer creation
    - Wraps at 4,294,967,295 timers
    - Potential collision: If timer ID wraps and old timer still active, `hive_timer_cancel()` may cancel wrong timer
@@ -1449,16 +1449,16 @@ Supervision for automatic child actor restart. A supervisor is an actor that mon
 #include "hive_supervisor.h"
 
 // Start supervisor with configuration
-hive_status hive_supervisor_start(const hive_supervisor_config *config,
-                                  const actor_config *sup_actor_cfg,
-                                  actor_id *out_supervisor);
+hive_status_t hive_supervisor_start(const hive_supervisor_config_t *config,
+                                  const actor_config_t *sup_actor_cfg,
+                                  actor_id_t *out_supervisor);
 
 // Request graceful shutdown (async)
-hive_status hive_supervisor_stop(actor_id supervisor);
+hive_status_t hive_supervisor_stop(actor_id_t supervisor);
 
 // Utility functions
-const char *hive_restart_strategy_str(hive_restart_strategy strategy);
-const char *hive_child_restart_str(hive_child_restart restart);
+const char *hive_restart_strategy_str(hive_restart_strategy_t strategy);
+const char *hive_child_restart_str(hive_child_restart_t restart);
 ```
 
 ### Child Restart Types
@@ -1468,7 +1468,7 @@ typedef enum {
     HIVE_CHILD_PERMANENT,  // Always restart, regardless of exit reason
     HIVE_CHILD_TRANSIENT,  // Restart only on abnormal exit (crash)
     HIVE_CHILD_TEMPORARY   // Never restart
-} hive_child_restart;
+} hive_child_restart_t;
 ```
 
 | Type | Normal Exit | Crash |
@@ -1484,7 +1484,7 @@ typedef enum {
     HIVE_STRATEGY_ONE_FOR_ONE,   // Restart only the failed child
     HIVE_STRATEGY_ONE_FOR_ALL,   // Restart all children when one fails
     HIVE_STRATEGY_REST_FOR_ONE   // Restart failed child and all started after it
-} hive_restart_strategy;
+} hive_restart_strategy_t;
 ```
 
 **one_for_one**: When a child crashes, only that child is restarted. Other children continue running undisturbed. Use for independent workers.
@@ -1497,15 +1497,15 @@ typedef enum {
 
 ```c
 typedef struct {
-    actor_fn start;              // Actor entry point
-    hive_actor_init_fn init;     // Init function (NULL = skip)
+    actor_fn_t start;              // Actor entry point
+    hive_actor_init_fn_t init;     // Init function (NULL = skip)
     void *init_args;             // Arguments to init/actor
     size_t init_args_size;       // Size to copy (0 = pass pointer directly)
     const char *name;            // Child identifier for tracking
     bool auto_register;          // Auto-register in name registry
-    hive_child_restart restart;  // Restart policy
-    actor_config actor_cfg;      // Actor configuration (stack size, priority, etc.)
-} hive_child_spec;
+    hive_child_restart_t restart;  // Restart policy
+    actor_config_t actor_cfg;      // Actor configuration (stack size, priority, etc.)
+} hive_child_spec_t;
 ```
 
 **Argument handling**
@@ -1523,14 +1523,14 @@ This allows children to discover sibling actor IDs at startup without using the 
 
 ```c
 typedef struct {
-    hive_restart_strategy strategy;  // How to handle child failures
+    hive_restart_strategy_t strategy;  // How to handle child failures
     uint32_t max_restarts;           // Max restarts in period (0 = unlimited)
     uint32_t restart_period_ms;      // Time window for max_restarts
-    const hive_child_spec *children; // Array of child specifications
+    const hive_child_spec_t *children; // Array of child specifications
     size_t num_children;             // Number of children
     void (*on_shutdown)(void *ctx);  // Called when supervisor shuts down
     void *shutdown_ctx;              // Context for shutdown callback
-} hive_supervisor_config;
+} hive_supervisor_config_t;
 
 #define HIVE_SUPERVISOR_CONFIG_DEFAULT {           \
     .strategy = HIVE_STRATEGY_ONE_FOR_ONE,         \
@@ -1613,7 +1613,7 @@ Returns:
 - Preserved mailbox state (mailbox is empty)
 - Preserved bus cursor position (must re-subscribe)
 - Preserved timer IDs (old timers cancelled, must create new ones)
-- Preserved actor_id (new ID assigned on restart)
+- Preserved actor_id_t (new ID assigned on restart)
 - Preserved monitor/link state (must re-establish)
 
 The only state preserved across restarts is the argument passed to the child function (copied by the supervisor at configuration time).
@@ -1633,7 +1633,7 @@ Failure to do so causes "works in simulation, dies on hardware" bugs because res
 - Register its name during startup (call `hive_register()` early)
 - Tolerate name lookup from other actors at any time
 
-**Client Rule** - Actors communicating with supervised children MUST NOT cache `actor_id` across awaits, timeouts, or receive calls. They MUST re-resolve by name (`hive_whereis()`) on each interaction or after any failure signal (timeout, EXIT message).
+**Client Rule** - Actors communicating with supervised children MUST NOT cache `actor_id_t` across awaits, timeouts, or receive calls. They MUST re-resolve by name (`hive_whereis()`) on each interaction or after any failure signal (timeout, EXIT message).
 
 This prevents the classic bug: client caches ID -> server restarts -> client sends to dead ID -> silent failure or mysterious behavior.
 
@@ -1646,7 +1646,7 @@ This prevents the classic bug: client caches ID -> server restarts -> client sen
 - [ ] Bus cursors reset (fresh subscribe required)
 - [ ] Timers cancelled
 - [ ] Links and monitors cleared
-- [ ] actor_id changes
+- [ ] actor_id_t changes
 - [ ] Name registration removed (must re-register)
 - [ ] External handles invalid (must reacquire)
 
@@ -1667,12 +1667,12 @@ This prevents the classic bug: client caches ID -> server restarts -> client sen
 ```c
 #include "hive_supervisor.h"
 
-void worker(void *args, const hive_spawn_info *siblings, size_t sibling_count) {
+void worker(void *args, const hive_spawn_info_t *siblings, size_t sibling_count) {
     int id = *(int *)args;
     printf("Worker %d started\n", id);
 
     // Can find siblings by name
-    const hive_spawn_info *peer = hive_find_sibling(siblings, sibling_count, "worker-1");
+    const hive_spawn_info_t *peer = hive_find_sibling(siblings, sibling_count, "worker-1");
     if (peer) {
         printf("Found sibling worker-1 at actor %u\n", peer->id);
     }
@@ -1682,14 +1682,11 @@ void worker(void *args, const hive_spawn_info *siblings, size_t sibling_count) {
     hive_exit();
 }
 
-void orchestrator(void *args, const hive_spawn_info *siblings, size_t sibling_count) {
-    (void)args;
-    (void)siblings;
-    (void)sibling_count;
+void orchestrator(void *args, const hive_spawn_info_t *siblings, size_t sibling_count) {
 
     // Define children
     static int ids[3] = {0, 1, 2};
-    hive_child_spec children[3] = {
+    hive_child_spec_t children[3] = {
         {.start = worker, .init = NULL, .init_args = &ids[0],
          .init_args_size = sizeof(int), .name = "worker-0",
          .auto_register = false, .restart = HIVE_CHILD_PERMANENT,
@@ -1705,7 +1702,7 @@ void orchestrator(void *args, const hive_spawn_info *siblings, size_t sibling_co
     };
 
     // Configure supervisor
-    hive_supervisor_config cfg = {
+    hive_supervisor_config_t cfg = {
         .strategy = HIVE_STRATEGY_ONE_FOR_ONE,
         .max_restarts = 5,
         .restart_period_ms = 10000,
@@ -1714,7 +1711,7 @@ void orchestrator(void *args, const hive_spawn_info *siblings, size_t sibling_co
     };
 
     // Start supervisor
-    actor_id supervisor;
+    actor_id_t supervisor;
     hive_supervisor_start(&cfg, NULL, &supervisor);
 
     // Monitor supervisor to know when it exits
@@ -1722,7 +1719,7 @@ void orchestrator(void *args, const hive_spawn_info *siblings, size_t sibling_co
     hive_monitor(supervisor, &monitor_id);
 
     // Wait for supervisor exit (intensity exceeded or explicit stop)
-    hive_message msg;
+    hive_message_t msg;
     hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_EXIT, HIVE_TAG_ANY, &msg, -1);
 
     hive_exit();
@@ -1735,14 +1732,14 @@ Non-blocking network I/O with blocking wrappers.
 
 ```c
 // Socket management
-hive_status hive_net_listen(uint16_t port, int *fd_out);
-hive_status hive_net_accept(int listen_fd, int *conn_fd_out, int32_t timeout_ms);
-hive_status hive_net_connect(const char *ip, uint16_t port, int *fd_out, int32_t timeout_ms);
-hive_status hive_net_close(int fd);
+hive_status_t hive_net_listen(uint16_t port, int *fd_out);
+hive_status_t hive_net_accept(int listen_fd, int *conn_fd_out, int32_t timeout_ms);
+hive_status_t hive_net_connect(const char *ip, uint16_t port, int *fd_out, int32_t timeout_ms);
+hive_status_t hive_net_close(int fd);
 
 // Data transfer
-hive_status hive_net_recv(int fd, void *buf, size_t len, size_t *received, int32_t timeout_ms);
-hive_status hive_net_send(int fd, const void *buf, size_t len, size_t *sent, int32_t timeout_ms);
+hive_status_t hive_net_recv(int fd, void *buf, size_t len, size_t *received, int32_t timeout_ms);
+hive_status_t hive_net_send(int fd, const void *buf, size_t len, size_t *sent, int32_t timeout_ms);
 ```
 
 **DNS resolution is out of scope.** The `ip` parameter must be a numeric IPv4 address (e.g., "192.168.1.1"). Hostnames are not supported. Rationale:
@@ -1771,7 +1768,7 @@ On blocking calls, the actor yields to the scheduler. The scheduler's event loop
 size_t total = 0;
 while (total < expected_len) {
     size_t n;
-    hive_status s = hive_net_recv(fd, buf + total, expected_len - total, &n, timeout);
+    hive_status_t s = hive_net_recv(fd, buf + total, expected_len - total, &n, timeout);
     if (HIVE_FAILED(s)) return s;
     if (n == 0) return HIVE_ERROR(HIVE_ERR_IO, "Connection closed");
     total += n;
@@ -1787,7 +1784,7 @@ while (total < expected_len) {
 size_t total = 0;
 while (total < len) {
     size_t n;
-    hive_status s = hive_net_send(fd, buf + total, len - total, &n, timeout);
+    hive_status_t s = hive_net_send(fd, buf + total, len - total, &n, timeout);
     if (HIVE_FAILED(s)) return s;
     total += n;
 }
@@ -1818,16 +1815,16 @@ File I/O operations.
 > **Note** - File I/O is synchronous and briefly pauses the scheduler. This is fine for short operations - use `LOW` priority actors for file work. See [Scheduler-Stalling Calls](design.md#scheduler-stalling-calls) for details.
 
 ```c
-hive_status hive_file_open(const char *path, int flags, int mode, int *fd_out);
-hive_status hive_file_close(int fd);
+hive_status_t hive_file_open(const char *path, int flags, int mode, int *fd_out);
+hive_status_t hive_file_close(int fd);
 
-hive_status hive_file_read(int fd, void *buf, size_t len, size_t *bytes_read);
-hive_status hive_file_pread(int fd, void *buf, size_t len, size_t offset, size_t *bytes_read);
+hive_status_t hive_file_read(int fd, void *buf, size_t len, size_t *bytes_read);
+hive_status_t hive_file_pread(int fd, void *buf, size_t len, size_t offset, size_t *bytes_read);
 
-hive_status hive_file_write(int fd, const void *buf, size_t len, size_t *bytes_written);
-hive_status hive_file_pwrite(int fd, const void *buf, size_t len, size_t offset, size_t *bytes_written);
+hive_status_t hive_file_write(int fd, const void *buf, size_t len, size_t *bytes_written);
+hive_status_t hive_file_pwrite(int fd, const void *buf, size_t len, size_t offset, size_t *bytes_written);
 
-hive_status hive_file_sync(int fd);
+hive_status_t hive_file_sync(int fd);
 ```
 
 ### Platform-Independent Flags
@@ -1954,10 +1951,10 @@ HIVE_LOG_ERROR(fmt, ...)  // Compile out if HIVE_LOG_LEVEL > ERROR
 ### File Logging API
 
 ```c
-hive_status hive_log_init(void);              // Initialize (call once at startup)
-hive_status hive_log_file_open(const char *path);  // Open log file
-hive_status hive_log_file_sync(void);         // Flush to storage
-hive_status hive_log_file_close(void);        // Close log file
+hive_status_t hive_log_init(void);              // Initialize (call once at startup)
+hive_status_t hive_log_file_open(const char *path);  // Open log file
+hive_status_t hive_log_file_sync(void);         // Flush to storage
+hive_status_t hive_log_file_close(void);        // Close log file
 void hive_log_cleanup(void);                  // Cleanup (call at shutdown)
 ```
 
@@ -2013,11 +2010,11 @@ void main_actor(void *arg) {
     hive_log_file_open(HIVE_LOG_FILE_PATH);
 
     // Start periodic sync timer (every 4 seconds)
-    timer_id sync_timer;
+    timer_id_t sync_timer;
     hive_timer_every(4000000, &sync_timer);
 
     while (flying) {
-        hive_message msg;
+        hive_message_t msg;
         hive_ipc_recv(&msg, -1);
         if (msg.class == HIVE_MSG_TIMER && msg.tag == sync_timer) {
             hive_log_file_sync();  // Flush logs to storage

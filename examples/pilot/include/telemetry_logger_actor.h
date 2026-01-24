@@ -29,15 +29,15 @@
 
 // Configuration for telemetry logger actor
 typedef struct {
-    const pilot_buses *buses;
+    const pilot_buses_t *buses;
     const char *log_path;
-} telemetry_logger_config;
+} telemetry_logger_config_t;
 
 // Initialize telemetry logger state from config
 void *telemetry_logger_init(void *init_args);
 
 // Telemetry logger actor entry point
-void telemetry_logger_actor(void *args, const hive_spawn_info *siblings,
+void telemetry_logger_actor(void *args, const hive_spawn_info_t *siblings,
                             size_t sibling_count);
 
 #endif // ENABLE_TELEMETRY_LOG

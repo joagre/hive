@@ -24,21 +24,21 @@
 
 // Actor state - initialized by motor_actor_init
 typedef struct {
-    bus_id torque_bus;
-    actor_id flight_manager;
-} motor_state;
+    bus_id_t torque_bus;
+    actor_id_t flight_manager;
+} motor_state_t;
 
 void *motor_actor_init(void *init_args) {
-    const pilot_buses *buses = init_args;
-    static motor_state state;
+    const pilot_buses_t *buses = init_args;
+    static motor_state_t state;
     state.torque_bus = buses->torque_bus;
     state.flight_manager = ACTOR_ID_INVALID; // Set from siblings in actor
     return &state;
 }
 
-void motor_actor(void *args, const hive_spawn_info *siblings,
+void motor_actor(void *args, const hive_spawn_info_t *siblings,
                  size_t sibling_count) {
-    motor_state *state = args;
+    motor_state_t *state = args;
 
     // Look up flight_manager from sibling info
     state->flight_manager =
@@ -48,7 +48,7 @@ void motor_actor(void *args, const hive_spawn_info *siblings,
         return;
     }
 
-    hive_status status = hive_bus_subscribe(state->torque_bus);
+    hive_status_t status = hive_bus_subscribe(state->torque_bus);
     if (HIVE_FAILED(status)) {
         HIVE_LOG_ERROR("[MOTOR] failed to subscribe to torque bus");
         return;
@@ -58,7 +58,7 @@ void motor_actor(void *args, const hive_spawn_info *siblings,
 
     // Set up hive_select() sources: torque bus + STOP notification
     enum { SEL_TORQUE, SEL_STOP };
-    hive_select_source sources[] = {
+    hive_select_source_t sources[] = {
         [SEL_TORQUE] = {HIVE_SEL_BUS, .bus = state->torque_bus},
         [SEL_STOP] = {HIVE_SEL_IPC,
                       .ipc = {state->flight_manager, HIVE_MSG_NOTIFY,
@@ -70,7 +70,7 @@ void motor_actor(void *args, const hive_spawn_info *siblings,
 
         // Wait for torque command OR STOP notification (unified event waiting)
         // Timeout implements deadman watchdog - zero motors if no command
-        hive_select_result result;
+        hive_select_result_t result;
         status = hive_select(sources, 2, &result, MOTOR_DEADMAN_TIMEOUT_MS);
 
         if (status.code == HIVE_ERR_TIMEOUT) {

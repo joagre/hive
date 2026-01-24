@@ -1,7 +1,7 @@
 #include "hive_pool.h"
 #include <string.h>
 
-void hive_pool_init(hive_pool *pool, void *entries, bool *used,
+void hive_pool_init(hive_pool_t *pool, void *entries, bool *used,
                     size_t entry_size, size_t capacity) {
     pool->entries = entries;
     pool->used = used;
@@ -13,7 +13,7 @@ void hive_pool_init(hive_pool *pool, void *entries, bool *used,
     memset(used, 0, capacity * sizeof(bool));
 }
 
-void *hive_pool_alloc(hive_pool *pool) {
+void *hive_pool_alloc(hive_pool_t *pool) {
     // Find first free entry
     for (size_t i = 0; i < pool->capacity; i++) {
         if (!pool->used[i]) {
@@ -29,7 +29,7 @@ void *hive_pool_alloc(hive_pool *pool) {
     return NULL;
 }
 
-void hive_pool_free(hive_pool *pool, void *entry) {
+void hive_pool_free(hive_pool_t *pool, void *entry) {
     if (!entry) {
         return;
     }

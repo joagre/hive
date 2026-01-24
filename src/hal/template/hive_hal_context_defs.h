@@ -4,12 +4,12 @@
 // cooperative context switching between actors.
 //
 // Copy this file to src/hal/<platform>/hive_hal_context_defs.h and modify
-// the hive_context struct for your architecture.
+// the hive_context_t struct for your architecture.
 //
 // Requirements:
 //   1. The struct must store all callee-saved registers
 //   2. The struct must store the stack pointer
-//   3. Size should be minimal (stored per-actor)
+//   3. Size should be minimal (stored per-actor_t)
 //
 // You also need to implement:
 //   - hive_hal_context_<platform>.c - Context initialization
@@ -35,7 +35,7 @@
 //     void *r13;  // Callee-saved
 //     void *r14;  // Callee-saved
 //     void *r15;  // Callee-saved
-// } hive_context;
+// } hive_context_t;
 
 // =============================================================================
 // Example: ARM Cortex-M Context (STM32)
@@ -59,7 +59,7 @@
 // #ifdef __ARM_FP
 //     uint32_t s16_31[16];  // FPU callee-saved (64 bytes)
 // #endif
-// } hive_context;
+// } hive_context_t;
 
 // =============================================================================
 // Your Platform Context
@@ -70,6 +70,6 @@ typedef struct {
     // TODO: Add callee-saved registers for your architecture
     // Use your platform's ABI documentation to determine which registers
     // must be preserved across function calls.
-} hive_context;
+} hive_context_t;
 
 #endif // HIVE_HAL_CONTEXT_DEFS_H

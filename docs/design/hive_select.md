@@ -37,13 +37,13 @@ while (1) {
 **With `hive_select()`**
 ```c
 enum { SEL_STATE, SEL_LANDING };
-hive_select_source sources[] = {
+hive_select_source_t sources[] = {
     [SEL_STATE] = {HIVE_SEL_BUS, .bus = s_state_bus},
     [SEL_LANDING] = {HIVE_SEL_IPC, .ipc = {HIVE_SENDER_ANY, HIVE_MSG_NOTIFY, NOTIFY_LANDING}},
 };
 
 while (1) {
-    hive_select_result result;
+    hive_select_result_t result;
     hive_select(sources, 2, &result, -1);
 
     if (result.index == SEL_LANDING) {
@@ -77,40 +77,40 @@ typedef enum {
 typedef struct {
     hive_select_type type;
     union {
-        hive_recv_filter ipc;    // For HIVE_SEL_IPC
-        bus_id bus;              // For HIVE_SEL_BUS
+        hive_recv_filter_t ipc;    // For HIVE_SEL_IPC
+        bus_id_t bus;              // For HIVE_SEL_BUS
     };
-} hive_select_source;
+} hive_select_source_t;
 
 // Select result
 typedef struct {
     size_t index;               // Which source triggered (0-based)
     hive_select_type type;      // Convenience copy of triggered type
     union {
-        hive_message ipc;       // For HIVE_SEL_IPC
+        hive_message_t ipc;       // For HIVE_SEL_IPC
         struct {                // For HIVE_SEL_BUS
             void *data;
             size_t len;
         } bus;
     };
-} hive_select_result;
+} hive_select_result_t;
 
 // Block until any source has data
-hive_status hive_select(const hive_select_source *sources, size_t num_sources,
-                        hive_select_result *result, int32_t timeout_ms);
+hive_status_t hive_select(const hive_select_source_t *sources, size_t num_sources,
+                        hive_select_result_t *result, int32_t timeout_ms);
 ```
 
 ## Usage Example
 
 ```c
 enum { SEL_TIMER, SEL_SENSOR_BUS, SEL_COMMAND };
-hive_select_source sources[] = {
+hive_select_source_t sources[] = {
     [SEL_TIMER] = {HIVE_SEL_IPC, .ipc = {HIVE_SENDER_ANY, HIVE_MSG_TIMER, my_timer}},
     [SEL_SENSOR_BUS] = {HIVE_SEL_BUS, .bus = sensor_bus},
     [SEL_COMMAND] = {HIVE_SEL_IPC, .ipc = {HIVE_SENDER_ANY, HIVE_MSG_NOTIFY, CMD_TAG}},
 };
 
-hive_select_result result;
+hive_select_result_t result;
 hive_select(sources, 3, &result, -1);
 
 switch (result.index) {
@@ -142,7 +142,7 @@ switch (result.index) {
 IPC stores filter info in the actor struct:
 ```c
 // In actor struct (hive_actor.h):
-const hive_recv_filter *recv_filters;  // NULL = no filter active
+const hive_recv_filter_t *recv_filters;  // NULL = no filter active
 size_t recv_filter_count;
 ```
 
@@ -198,7 +198,7 @@ for (size_t i = 0; i < bus->config.max_subscribers; i++) {
 
 Add new fields to actor struct:
 ```c
-const hive_select_source *select_sources;  // NULL = not in select
+const hive_select_source_t *select_sources;  // NULL = not in select
 size_t select_source_count;
 ```
 
@@ -317,34 +317,34 @@ hive_select(sources, n, &result, -1);       // IPC + bus combined
 ### Wrapper Implementations
 
 ```c
-hive_status hive_ipc_recv(hive_message *msg, int32_t timeout_ms) {
-    hive_select_source source = {HIVE_SEL_IPC, .ipc = {HIVE_SENDER_ANY, HIVE_MSG_ANY, HIVE_TAG_ANY}};
-    hive_select_result result;
-    hive_status s = hive_select(&source, 1, &result, timeout_ms);
+hive_status_t hive_ipc_recv(hive_message_t *msg, int32_t timeout_ms) {
+    hive_select_source_t source = {HIVE_SEL_IPC, .ipc = {HIVE_SENDER_ANY, HIVE_MSG_ANY, HIVE_TAG_ANY}};
+    hive_select_result_t result;
+    hive_status_t s = hive_select(&source, 1, &result, timeout_ms);
     if (HIVE_SUCCEEDED(s)) *msg = result.ipc;
     return s;
 }
 
-hive_status hive_ipc_recv_match(actor_id from, hive_msg_class class,
-                                uint32_t tag, hive_message *msg,
+hive_status_t hive_ipc_recv_match(actor_id_t from, hive_msg_class_t class,
+                                uint32_t tag, hive_message_t *msg,
                                 int32_t timeout_ms) {
-    hive_select_source source = {HIVE_SEL_IPC, .ipc = {from, class, tag}};
-    hive_select_result result;
-    hive_status s = hive_select(&source, 1, &result, timeout_ms);
+    hive_select_source_t source = {HIVE_SEL_IPC, .ipc = {from, class, tag}};
+    hive_select_result_t result;
+    hive_status_t s = hive_select(&source, 1, &result, timeout_ms);
     if (HIVE_SUCCEEDED(s)) *msg = result.ipc;
     return s;
 }
 
-hive_status hive_ipc_recv_matches(const hive_recv_filter *filters,
-                                  size_t num_filters, hive_message *msg,
+hive_status_t hive_ipc_recv_matches(const hive_recv_filter_t *filters,
+                                  size_t num_filters, hive_message_t *msg,
                                   int32_t timeout_ms, size_t *matched_index) {
     // Build select sources from filters
-    hive_select_source sources[num_filters];  // VLA or fixed max
+    hive_select_source_t sources[num_filters];  // VLA or fixed max
     for (size_t i = 0; i < num_filters; i++) {
-        sources[i] = (hive_select_source){HIVE_SEL_IPC, .ipc = filters[i]};
+        sources[i] = (hive_select_source_t){HIVE_SEL_IPC, .ipc = filters[i]};
     }
-    hive_select_result result;
-    hive_status s = hive_select(sources, num_filters, &result, timeout_ms);
+    hive_select_result_t result;
+    hive_status_t s = hive_select(sources, num_filters, &result, timeout_ms);
     if (HIVE_SUCCEEDED(s)) {
         *msg = result.ipc;
         if (matched_index) *matched_index = result.index;
@@ -352,11 +352,11 @@ hive_status hive_ipc_recv_matches(const hive_recv_filter *filters,
     return s;
 }
 
-hive_status hive_bus_read_wait(bus_id bus, void *buf, size_t max_len,
+hive_status_t hive_bus_read_wait(bus_id_t bus, void *buf, size_t max_len,
                                size_t *actual_len, int32_t timeout_ms) {
-    hive_select_source source = {HIVE_SEL_BUS, .bus = bus};
-    hive_select_result result;
-    hive_status s = hive_select(&source, 1, &result, timeout_ms);
+    hive_select_source_t source = {HIVE_SEL_BUS, .bus = bus};
+    hive_select_result_t result;
+    hive_status_t s = hive_select(&source, 1, &result, timeout_ms);
     if (HIVE_SUCCEEDED(s)) {
         size_t copy_len = result.bus.len < max_len ? result.bus.len : max_len;
         memcpy(buf, result.bus.data, copy_len);
@@ -375,7 +375,7 @@ Result data follows the same "valid until next call" semantics as existing APIs:
 This maintains consistency with existing APIs, enables zero-copy, and matches the mental model users already have. Copy data immediately if needed longer:
 
 ```c
-hive_select_result result;
+hive_select_result_t result;
 hive_select(sources, 2, &result, -1);
 
 if (result.type == HIVE_SEL_BUS) {
@@ -395,7 +395,7 @@ When multiple sources have data simultaneously, sources are checked in **strict 
 **Example**
 ```c
 enum { SEL_STATE, SEL_SENSOR, SEL_COMMAND, SEL_TIMER };
-hive_select_source sources[] = {
+hive_select_source_t sources[] = {
     [SEL_STATE] = {HIVE_SEL_BUS, .bus = state_bus},      // Checked 1st
     [SEL_SENSOR] = {HIVE_SEL_BUS, .bus = sensor_bus},    // Checked 2nd
     [SEL_COMMAND] = {HIVE_SEL_IPC, .ipc = {...}},        // Checked 3rd
@@ -437,21 +437,21 @@ void net_reader(void *arg) {
 
 This keeps network complexity isolated and lets `hive_select()` remain simple and portable.
 
-### `hive_recv_filter` Location
+### `hive_recv_filter_t` Location
 
-**Decision** - Move `hive_recv_filter` from `hive_ipc.h` to `hive_types.h`.
+**Decision** - Move `hive_recv_filter_t` from `hive_ipc.h` to `hive_types.h`.
 
 **Rationale**
-- **Follows existing pattern** - `hive_message` is in `hive_types.h`, and `hive_recv_filter` is a filter pattern for messages. They belong together.
-- **Cross-subsystem type** - Used by both IPC (`hive_ipc_recv_matches`) and select (`hive_select_source`). Shared types belong in `hive_types.h`.
+- **Follows existing pattern** - `hive_message_t` is in `hive_types.h`, and `hive_recv_filter_t` is a filter pattern for messages. They belong together.
+- **Cross-subsystem type** - Used by both IPC (`hive_ipc_recv_matches`) and select (`hive_select_source_t`). Shared types belong in `hive_types.h`.
 - **Conceptual grouping** - Filter constants (`HIVE_SENDER_ANY`, `HIVE_MSG_ANY`, `HIVE_TAG_ANY`) are already in `hive_types.h`. The struct that uses them should be there too.
 
 **Include hierarchy**
 ```
-hive_types.h      <- hive_recv_filter, hive_message, constants
+hive_types.h      <- hive_recv_filter_t, hive_message_t, constants
     ^
-hive_ipc.h        <- uses hive_recv_filter
-hive_select.h     <- uses hive_recv_filter
+hive_ipc.h        <- uses hive_recv_filter_t
+hive_select.h     <- uses hive_recv_filter_t
 ```
 
 ## Implementation Checklist
@@ -459,7 +459,7 @@ hive_select.h     <- uses hive_recv_filter
 Implementation completed 2026-01-17:
 
 ### Core Implementation
-- [x] `include/hive_types.h` - Added select types (`hive_select_source`, `hive_select_result`, `bus_id`)
+- [x] `include/hive_types.h` - Added select types (`hive_select_source_t`, `hive_select_result_t`, `bus_id_t`)
 - [x] `include/hive_select.h` - New header with types and API declaration
 - [x] `src/hive_select.c` - Implementation
 - [x] `include/hive_actor.h` - Added `select_sources` and `select_source_count` fields

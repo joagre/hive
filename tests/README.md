@@ -79,7 +79,7 @@ Tests spawn init function and auto-register features.
 **Tests (5 tests)**
 - Init function transforms arguments before actor starts
 - Init returns NULL (valid case, actor gets NULL)
-- Auto-register with name (actor_config.auto_register)
+- Auto-register with name (actor_config_t.auto_register)
 - Auto-register fails if name already taken
 - No init, direct args passthrough
 

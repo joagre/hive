@@ -10,7 +10,7 @@
 #endif
 
 // Slow processor that drains messages gradually
-void slow_processor_actor(void *args, const hive_spawn_info *siblings,
+void slow_processor_actor(void *args, const hive_spawn_info_t *siblings,
                           size_t sibling_count) {
     (void)args;
     (void)siblings;
@@ -20,8 +20,8 @@ void slow_processor_actor(void *args, const hive_spawn_info *siblings,
     printf("Processor: Starting to process messages slowly...\n");
 
     while (processed < 260) {
-        hive_message msg;
-        hive_status status = hive_ipc_recv(&msg, 50); // 50ms timeout
+        hive_message_t msg;
+        hive_status_t status = hive_ipc_recv(&msg, 50); // 50ms timeout
 
         if (HIVE_SUCCEEDED(status)) {
             processed++;
@@ -45,11 +45,11 @@ void slow_processor_actor(void *args, const hive_spawn_info *siblings,
     hive_exit();
 }
 
-void aggressive_sender_actor(void *args, const hive_spawn_info *siblings,
+void aggressive_sender_actor(void *args, const hive_spawn_info_t *siblings,
                              size_t sibling_count) {
     (void)siblings;
     (void)sibling_count;
-    actor_id processor = *(actor_id *)args;
+    actor_id_t processor = *(actor_id_t *)args;
 
     printf("\nSender: Aggressively sending messages until pool exhausts...\n");
 
@@ -60,7 +60,7 @@ void aggressive_sender_actor(void *args, const hive_spawn_info *siblings,
     // Phase 1: Fill the pool
     for (int i = 0; i < 300; i++) {
         int data = i;
-        hive_status status =
+        hive_status_t status =
             hive_ipc_notify(processor, HIVE_TAG_NONE, &data, sizeof(data));
 
         if (HIVE_SUCCEEDED(status)) {
@@ -76,8 +76,8 @@ void aggressive_sender_actor(void *args, const hive_spawn_info *siblings,
             }
 
             // Backoff-retry pattern
-            hive_message msg;
-            hive_status recv_status = hive_ipc_recv(&msg, 15); // Backoff 15ms
+            hive_message_t msg;
+            hive_status_t recv_status = hive_ipc_recv(&msg, 15); // Backoff 15ms
 
             if (recv_status.code == HIVE_ERR_TIMEOUT) {
                 // No messages during backoff - just retry
@@ -143,11 +143,11 @@ int main(void) {
 
     hive_init();
 
-    actor_id processor;
+    actor_id_t processor;
     hive_spawn(slow_processor_actor, NULL, NULL, NULL, &processor);
     printf("Main: Spawned slow processor (ID: %u)\n", processor);
 
-    actor_id sender;
+    actor_id_t sender;
     hive_spawn(aggressive_sender_actor, NULL, &processor, NULL, &sender);
     printf("Main: Spawned aggressive sender\n");
 

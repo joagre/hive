@@ -32,9 +32,9 @@
 #endif
 
 // Forward declarations for event handlers
-extern void hive_timer_handle_event(io_source *source);
+extern void hive_timer_handle_event(io_source_t *source);
 #if HIVE_ENABLE_NET
-extern void hive_net_handle_event(io_source *source);
+extern void hive_net_handle_event(io_source_t *source);
 #endif
 
 // Event system state
@@ -74,7 +74,7 @@ static void dispatch_epoll_events(int timeout_ms) {
         epoll_wait(s_event.epoll_fd, events, HIVE_EPOLL_MAX_EVENTS, timeout_ms);
 
     for (int i = 0; i < n; i++) {
-        io_source *source = events[i].data.ptr;
+        io_source_t *source = events[i].data.ptr;
 
         if (source->type == IO_SOURCE_TIMER) {
             hive_timer_handle_event(source);
@@ -87,7 +87,7 @@ static void dispatch_epoll_events(int timeout_ms) {
     }
 }
 
-hive_status hive_hal_event_init(void) {
+hive_status_t hive_hal_event_init(void) {
     if (s_event.initialized) {
         return HIVE_SUCCESS;
     }
@@ -122,8 +122,8 @@ void hive_hal_event_wait(int timeout_ms) {
     dispatch_epoll_events(timeout_ms);
 }
 
-hive_status hive_hal_event_register(int fd, uint32_t events,
-                                    io_source *source) {
+hive_status_t hive_hal_event_register(int fd, uint32_t events,
+                                      io_source_t *source) {
     if (!s_event.initialized || s_event.epoll_fd < 0) {
         return HIVE_ERROR(HIVE_ERR_INVALID, "Event system not initialized");
     }
@@ -186,7 +186,7 @@ static int hive_flags_to_posix(int hive_flags) {
     return posix_flags;
 }
 
-hive_status hive_hal_file_init(void) {
+hive_status_t hive_hal_file_init(void) {
     // No initialization needed for POSIX file I/O
     return HIVE_SUCCESS;
 }
@@ -195,8 +195,8 @@ void hive_hal_file_cleanup(void) {
     // No cleanup needed for POSIX file I/O
 }
 
-hive_status hive_hal_file_open(const char *path, int flags, int mode,
-                               int *fd_out) {
+hive_status_t hive_hal_file_open(const char *path, int flags, int mode,
+                                 int *fd_out) {
     int posix_flags = hive_flags_to_posix(flags);
     int fd = open(path, posix_flags, mode);
     if (fd < 0) {
@@ -206,15 +206,15 @@ hive_status hive_hal_file_open(const char *path, int flags, int mode,
     return HIVE_SUCCESS;
 }
 
-hive_status hive_hal_file_close(int fd) {
+hive_status_t hive_hal_file_close(int fd) {
     if (close(fd) < 0) {
         return HIVE_ERROR(HIVE_ERR_IO, "close failed");
     }
     return HIVE_SUCCESS;
 }
 
-hive_status hive_hal_file_read(int fd, void *buf, size_t len,
-                               size_t *bytes_read) {
+hive_status_t hive_hal_file_read(int fd, void *buf, size_t len,
+                                 size_t *bytes_read) {
     ssize_t n = read(fd, buf, len);
     if (n < 0) {
         return HIVE_ERROR(HIVE_ERR_IO, "read failed");
@@ -223,8 +223,8 @@ hive_status hive_hal_file_read(int fd, void *buf, size_t len,
     return HIVE_SUCCESS;
 }
 
-hive_status hive_hal_file_pread(int fd, void *buf, size_t len, size_t offset,
-                                size_t *bytes_read) {
+hive_status_t hive_hal_file_pread(int fd, void *buf, size_t len, size_t offset,
+                                  size_t *bytes_read) {
     ssize_t n = pread(fd, buf, len, offset);
     if (n < 0) {
         return HIVE_ERROR(HIVE_ERR_IO, "pread failed");
@@ -233,8 +233,8 @@ hive_status hive_hal_file_pread(int fd, void *buf, size_t len, size_t offset,
     return HIVE_SUCCESS;
 }
 
-hive_status hive_hal_file_write(int fd, const void *buf, size_t len,
-                                size_t *bytes_written) {
+hive_status_t hive_hal_file_write(int fd, const void *buf, size_t len,
+                                  size_t *bytes_written) {
     ssize_t n = write(fd, buf, len);
     if (n < 0) {
         return HIVE_ERROR(HIVE_ERR_IO, "write failed");
@@ -243,8 +243,8 @@ hive_status hive_hal_file_write(int fd, const void *buf, size_t len,
     return HIVE_SUCCESS;
 }
 
-hive_status hive_hal_file_pwrite(int fd, const void *buf, size_t len,
-                                 size_t offset, size_t *bytes_written) {
+hive_status_t hive_hal_file_pwrite(int fd, const void *buf, size_t len,
+                                   size_t offset, size_t *bytes_written) {
     ssize_t n = pwrite(fd, buf, len, offset);
     if (n < 0) {
         return HIVE_ERROR(HIVE_ERR_IO, "pwrite failed");
@@ -253,7 +253,7 @@ hive_status hive_hal_file_pwrite(int fd, const void *buf, size_t len,
     return HIVE_SUCCESS;
 }
 
-hive_status hive_hal_file_sync(int fd) {
+hive_status_t hive_hal_file_sync(int fd) {
     if (fsync(fd) < 0) {
         return HIVE_ERROR(HIVE_ERR_IO, "fsync failed");
     }
@@ -277,7 +277,7 @@ static int set_socket_nonblocking(int fd) {
     return fcntl(fd, F_SETFL, flags | O_NONBLOCK);
 }
 
-hive_status hive_hal_net_init(void) {
+hive_status_t hive_hal_net_init(void) {
     // No initialization needed for BSD sockets
     return HIVE_SUCCESS;
 }
@@ -286,7 +286,7 @@ void hive_hal_net_cleanup(void) {
     // No cleanup needed for BSD sockets
 }
 
-hive_status hive_hal_net_socket(int *fd_out) {
+hive_status_t hive_hal_net_socket(int *fd_out) {
     int fd = socket(AF_INET, SOCK_STREAM, 0);
     if (fd < 0) {
         return HIVE_ERROR(HIVE_ERR_IO, "socket failed");
@@ -306,7 +306,7 @@ hive_status hive_hal_net_socket(int *fd_out) {
     return HIVE_SUCCESS;
 }
 
-hive_status hive_hal_net_bind(int fd, uint16_t port) {
+hive_status_t hive_hal_net_bind(int fd, uint16_t port) {
     struct sockaddr_in addr = {0};
     addr.sin_family = AF_INET;
     addr.sin_addr.s_addr = INADDR_ANY;
@@ -319,14 +319,14 @@ hive_status hive_hal_net_bind(int fd, uint16_t port) {
     return HIVE_SUCCESS;
 }
 
-hive_status hive_hal_net_listen(int fd, int backlog) {
+hive_status_t hive_hal_net_listen(int fd, int backlog) {
     if (listen(fd, backlog) < 0) {
         return HIVE_ERROR(HIVE_ERR_IO, "listen failed");
     }
     return HIVE_SUCCESS;
 }
 
-hive_status hive_hal_net_accept(int listen_fd, int *conn_fd_out) {
+hive_status_t hive_hal_net_accept(int listen_fd, int *conn_fd_out) {
     struct sockaddr_in client_addr;
     socklen_t client_len = sizeof(client_addr);
     int conn_fd =
@@ -349,7 +349,7 @@ hive_status hive_hal_net_accept(int listen_fd, int *conn_fd_out) {
     return HIVE_SUCCESS;
 }
 
-hive_status hive_hal_net_connect(int fd, const char *ip, uint16_t port) {
+hive_status_t hive_hal_net_connect(int fd, const char *ip, uint16_t port) {
     struct sockaddr_in serv_addr = {0};
     serv_addr.sin_family = AF_INET;
     serv_addr.sin_port = htons(port);
@@ -370,7 +370,7 @@ hive_status hive_hal_net_connect(int fd, const char *ip, uint16_t port) {
     return HIVE_SUCCESS;
 }
 
-hive_status hive_hal_net_connect_check(int fd) {
+hive_status_t hive_hal_net_connect_check(int fd) {
     int error = 0;
     socklen_t len = sizeof(error);
 
@@ -381,14 +381,15 @@ hive_status hive_hal_net_connect_check(int fd) {
     return HIVE_SUCCESS;
 }
 
-hive_status hive_hal_net_close(int fd) {
+hive_status_t hive_hal_net_close(int fd) {
     if (close(fd) < 0) {
         return HIVE_ERROR(HIVE_ERR_IO, "close failed");
     }
     return HIVE_SUCCESS;
 }
 
-hive_status hive_hal_net_recv(int fd, void *buf, size_t len, size_t *received) {
+hive_status_t hive_hal_net_recv(int fd, void *buf, size_t len,
+                                size_t *received) {
     ssize_t n = recv(fd, buf, len, MSG_DONTWAIT);
 
     if (n < 0) {
@@ -402,8 +403,8 @@ hive_status hive_hal_net_recv(int fd, void *buf, size_t len, size_t *received) {
     return HIVE_SUCCESS;
 }
 
-hive_status hive_hal_net_send(int fd, const void *buf, size_t len,
-                              size_t *sent) {
+hive_status_t hive_hal_net_send(int fd, const void *buf, size_t len,
+                                size_t *sent) {
     ssize_t n = send(fd, buf, len, MSG_DONTWAIT);
 
     if (n < 0) {

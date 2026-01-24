@@ -6,12 +6,14 @@
 #include <stdbool.h>
 
 // Opaque handles
-typedef uint32_t actor_id;
+typedef uint32_t actor_id_t;
+typedef uint32_t bus_id_t;
+typedef uint32_t timer_id_t;
 
-#define ACTOR_ID_INVALID ((actor_id)0)
+#define ACTOR_ID_INVALID ((actor_id_t)0)
 
 // Wildcard sender for filtering (use with hive_ipc_recv_match)
-#define HIVE_SENDER_ANY ((actor_id)0xFFFFFFFF)
+#define HIVE_SENDER_ANY ((actor_id_t)0xFFFFFFFF)
 
 // Message header size (prepended to all messages)
 #define HIVE_MSG_HEADER_SIZE 4
@@ -24,7 +26,7 @@ typedef enum {
     HIVE_MSG_TIMER = 3,   // Timer tick
     HIVE_MSG_EXIT = 4,    // Exit notification (actor died)
     HIVE_MSG_ANY = 15,    // Wildcard for filtering
-} hive_msg_class;
+} hive_msg_class_t;
 
 // Tag constants
 #define HIVE_TAG_NONE 0         // No tag
@@ -41,7 +43,7 @@ typedef enum {
     HIVE_PRIORITY_NORMAL = 2,
     HIVE_PRIORITY_LOW = 3,
     HIVE_PRIORITY_COUNT = 4
-} hive_priority_level;
+} hive_priority_level_t;
 
 // Error codes
 typedef enum {
@@ -55,48 +57,48 @@ typedef enum {
     HIVE_ERR_IO,
     HIVE_ERR_EXISTS,    // Name already registered (for auto_register failure)
     HIVE_ERR_TRUNCATED, // Data truncated to fit buffer (bus read)
-} hive_error_code;
+} hive_error_code_t;
 
 // Status with optional message
 typedef struct {
-    hive_error_code code;
+    hive_error_code_t code;
     const char *msg; // string literal or NULL, never heap-allocated
-} hive_status;
+} hive_status_t;
 
 // Convenience macros
-#define HIVE_SUCCESS ((hive_status){HIVE_OK, NULL})
+#define HIVE_SUCCESS ((hive_status_t){HIVE_OK, NULL})
 #define HIVE_SUCCEEDED(s) ((s).code == HIVE_OK)
 #define HIVE_FAILED(s) ((s).code != HIVE_OK)
-#define HIVE_ERROR(c, m) ((hive_status){(c), (m)})
+#define HIVE_ERROR(c, m) ((hive_status_t){(c), (m)})
 #define HIVE_ERR_STR(s) ((s).msg ? (s).msg : "unknown error")
 
 // Forward declaration for spawn info
-typedef struct hive_spawn_info hive_spawn_info;
+typedef struct hive_spawn_info hive_spawn_info_t;
 
 // Actor entry point (receives args, sibling info array, and count)
-typedef void (*actor_fn)(void *args, const hive_spawn_info *siblings,
-                         size_t sibling_count);
+typedef void (*actor_fn_t)(void *args, const hive_spawn_info_t *siblings,
+                           size_t sibling_count);
 
 // Actor init function: transforms init_args before actor runs
 // Called in spawner context. Return value becomes args to actor function.
 // Returning NULL is valid (actor receives NULL args).
-typedef void *(*hive_actor_init_fn)(void *init_args);
+typedef void *(*hive_actor_init_fn_t)(void *init_args);
 
 // Info about a spawned actor (passed to actor function)
 struct hive_spawn_info {
     const char *name; // Actor name (NULL if unnamed)
-    actor_id id;      // Actor ID
+    actor_id_t id;    // Actor ID
     bool registered;  // Whether registered in name registry
 };
 
 // Actor configuration
 typedef struct {
     size_t stack_size; // bytes, 0 = default
-    hive_priority_level priority;
+    hive_priority_level_t priority;
     const char *name;   // for debugging AND registry (if auto_register)
     bool malloc_stack;  // false = use static arena (default), true = malloc
     bool auto_register; // Register name in registry (requires name != NULL)
-} actor_config;
+} actor_config_t;
 
 // Default configuration
 #define HIVE_ACTOR_CONFIG_DEFAULT                                        \
@@ -107,20 +109,20 @@ typedef struct {
 
 // Message structure
 typedef struct {
-    actor_id sender;      // Sender actor ID
-    hive_msg_class class; // Message class
-    uint32_t tag;         // Message tag
-    size_t len;           // Payload length (excludes 4-byte header)
+    actor_id_t sender;      // Sender actor ID
+    hive_msg_class_t class; // Message class
+    uint32_t tag;           // Message tag
+    size_t len;             // Payload length (excludes 4-byte header)
     const void *data; // Payload pointer (past header), valid until next recv
-} hive_message;
+} hive_message_t;
 
 // Filter for selective receive (used by hive_ipc_recv_matches)
 // Use HIVE_SENDER_ANY, HIVE_MSG_ANY, HIVE_TAG_ANY for wildcards
 typedef struct {
-    actor_id sender;      // HIVE_SENDER_ANY for any sender
-    hive_msg_class class; // HIVE_MSG_ANY for any class
-    uint32_t tag;         // HIVE_TAG_ANY for any tag
-} hive_recv_filter;
+    actor_id_t sender;      // HIVE_SENDER_ANY for any sender
+    hive_msg_class_t class; // HIVE_MSG_ANY for any class
+    uint32_t tag;           // HIVE_TAG_ANY for any tag
+} hive_recv_filter_t;
 
 // Exit reason codes
 typedef enum {
@@ -128,50 +130,50 @@ typedef enum {
     HIVE_EXIT_CRASH,  // Actor function returned without calling hive_exit()
     HIVE_EXIT_CRASH_STACK, // Stack overflow detected
     HIVE_EXIT_KILLED, // Actor was killed externally (reserved for future use)
-} hive_exit_reason;
+} hive_exit_reason_t;
 
 // -----------------------------------------------------------------------------
 // Select Types (for hive_select unified event API)
 // -----------------------------------------------------------------------------
 
-// Forward declaration for bus_id (defined in hive_bus.h)
-typedef uint32_t bus_id;
+// Forward declaration for bus_id_t (defined in hive_bus.h)
+typedef uint32_t bus_id_t;
 
 // Select source types
 typedef enum {
     HIVE_SEL_IPC, // Wait for IPC message matching filter
     HIVE_SEL_BUS, // Wait for data on bus
-} hive_select_type;
+} hive_select_type_t;
 
 // Select source (tagged union)
 typedef struct {
-    hive_select_type type;
+    hive_select_type_t type;
     union {
-        hive_recv_filter ipc; // For HIVE_SEL_IPC: message filter
-        bus_id bus;           // For HIVE_SEL_BUS: bus ID
+        hive_recv_filter_t ipc; // For HIVE_SEL_IPC: message filter
+        bus_id_t bus;           // For HIVE_SEL_BUS: bus ID
     };
-} hive_select_source;
+} hive_select_source_t;
 
 // Select result
 typedef struct {
-    size_t index;          // Which source triggered (0-based index in array)
-    hive_select_type type; // Type of triggered source (convenience copy)
+    size_t index;            // Which source triggered (0-based index in array)
+    hive_select_type_t type; // Type of triggered source (convenience copy)
     union {
-        hive_message ipc; // For HIVE_SEL_IPC: the received message
+        hive_message_t ipc; // For HIVE_SEL_IPC: the received message
         struct {
             void *data; // For HIVE_SEL_BUS: pointer to bus data
             size_t len; // Length of bus data
         } bus;
     };
-} hive_select_result;
+} hive_select_result_t;
 
 // -----------------------------------------------------------------------------
 // Sibling Helper Function
 // -----------------------------------------------------------------------------
 
 // Find a sibling actor by name in the spawn info array
-// Returns the actor_id if found, or ACTOR_ID_INVALID if not found
-actor_id hive_find_sibling(const hive_spawn_info *siblings, size_t count,
-                           const char *name);
+// Returns the actor_id_t if found, or ACTOR_ID_INVALID if not found
+actor_id_t hive_find_sibling(const hive_spawn_info_t *siblings, size_t count,
+                             const char *name);
 
 #endif // HIVE_TYPES_H

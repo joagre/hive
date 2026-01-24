@@ -6,13 +6,13 @@ hive_file_open, hive_file_close, hive_file_read, hive_file_pread, hive_file_writ
 .nf
 .B #include <hive_file.h>
 .PP
-.BI "hive_status hive_file_open(const char *" path ", int " flags ", int " mode ", int *" fd_out ");"
-.BI "hive_status hive_file_close(int " fd ");"
-.BI "hive_status hive_file_read(int " fd ", void *" buf ", size_t " len ", size_t *" bytes_read ");"
-.BI "hive_status hive_file_pread(int " fd ", void *" buf ", size_t " len ", size_t " offset ", size_t *" bytes_read ");"
-.BI "hive_status hive_file_write(int " fd ", const void *" buf ", size_t " len ", size_t *" bytes_written ");"
-.BI "hive_status hive_file_pwrite(int " fd ", const void *" buf ", size_t " len ", size_t " offset ", size_t *" bytes_written ");"
-.BI "hive_status hive_file_sync(int " fd ");"
+.BI "hive_status_t hive_file_open(const char *" path ", int " flags ", int " mode ", int *" fd_out ");"
+.BI "hive_status_t hive_file_close(int " fd ");"
+.BI "hive_status_t hive_file_read(int " fd ", void *" buf ", size_t " len ", size_t *" bytes_read ");"
+.BI "hive_status_t hive_file_pread(int " fd ", void *" buf ", size_t " len ", size_t " offset ", size_t *" bytes_read ");"
+.BI "hive_status_t hive_file_write(int " fd ", const void *" buf ", size_t " len ", size_t *" bytes_written ");"
+.BI "hive_status_t hive_file_pwrite(int " fd ", const void *" buf ", size_t " len ", size_t " offset ", size_t *" bytes_written ");"
+.BI "hive_status_t hive_file_sync(int " fd ");"
 .fi
 .SH DESCRIPTION
 These functions provide synchronous file I/O for actors.
@@ -94,7 +94,7 @@ flushes the file's data and metadata to disk. This ensures durability after a
 crash but is slow (may take tens of milliseconds on flash media).
 .SH RETURN VALUE
 All functions return an
-.I hive_status
+.I hive_status_t
 structure. On success,
 .I status.code
 is
@@ -210,7 +210,7 @@ output and loop if needed:
 size_t total = 0;
 while (total < len) {
     size_t n;
-    hive_status s = hive_file_write(fd, buf + total, len - total, &n);
+    hive_status_t s = hive_file_write(fd, buf + total, len - total, &n);
     if (HIVE_FAILED(s)) break;
     if (n == 0) break;  /* Disk full */
     total += n;
@@ -238,9 +238,9 @@ typedef struct {
 } config_t;
 
 /* Load config at startup (before hive_run) */
-hive_status load_config(config_t *cfg) {
+hive_status_t load_config(config_t *cfg) {
     int fd;
-    hive_status s = hive_file_open("/var/lib/pilot/config.bin",
+    hive_status_t s = hive_file_open("/var/lib/pilot/config.bin",
                                    HIVE_O_RDONLY, 0, &fd);
     if (HIVE_FAILED(s)) {
         printf("Config not found, using defaults\\n");
@@ -268,8 +268,8 @@ hive_status load_config(config_t *cfg) {
 #include <hive_file.h>
 
 /* Logger actor runs at LOW priority */
-void logger_actor(void *arg) {
-    (void)arg;
+void logger_actor(void *arg, const hive_spawn_info_t *siblings,
+                  size_t sibling_count) {
 
     /* Open and erase flash log region (blocks 1-4 seconds) */
     int fd;
@@ -286,11 +286,12 @@ void logger_actor(void *arg) {
 }
 
 /* Flight actor pushes data (O(1), never blocks) */
-void flight_actor(void *arg) {
+void flight_actor(void *arg, const hive_spawn_info_t *siblings,
+                  size_t sibling_count) {
     int log_fd = *(int *)arg;
 
     while (running) {
-        flight_data data;
+        flight_data_t data;
         get_current_flight_data(&data);
 
         size_t n;
@@ -306,8 +307,8 @@ int main(void) {
     hive_init();
 
     /* Spawn logger at LOW priority */
-    actor_id logger;
-    actor_config cfg = {.priority = 3};  /* LOW */
+    actor_id_t logger;
+    actor_config_t cfg = {.priority = 3};  /* LOW */
     hive_spawn(logger_actor, NULL, NULL, &cfg, &logger);
 
     hive_run();
@@ -323,10 +324,10 @@ typedef struct {
     float value;
 } record_t;
 
-hive_status read_record(int fd, size_t index, record_t *rec) {
+hive_status_t read_record(int fd, size_t index, record_t *rec) {
     size_t offset = index * sizeof(record_t);
     size_t n;
-    hive_status s = hive_file_pread(fd, rec, sizeof(*rec), offset, &n);
+    hive_status_t s = hive_file_pread(fd, rec, sizeof(*rec), offset, &n);
     if (HIVE_FAILED(s)) return s;
     if (n != sizeof(*rec)) {
         return HIVE_ERROR(HIVE_ERR_IO, "Short read");

@@ -23,19 +23,19 @@ This boilerplate could be eliminated by enhancing `hive_spawn()` and `hive_spawn
 // Init function: transforms init_args before actor runs
 // Called in spawner context. Return value becomes args to actor function.
 // Returning NULL is valid (actor receives NULL args).
-typedef void *(*hive_actor_init_fn)(void *init_args);
+typedef void *(*hive_actor_init_fn_t)(void *init_args);
 
 // Info about a spawned actor (passed to actor function)
 typedef struct {
     const char *name;       // Actor name (NULL if unnamed)
-    actor_id id;            // Actor ID
+    actor_id_t id;            // Actor ID
     bool registered;        // Whether registered in name registry
-} hive_spawn_info;
+} hive_spawn_info_t;
 ```
 
 ### Changed Signatures
 
-#### actor_config (extended)
+#### actor_config_t (extended)
 
 ```c
 // Current
@@ -44,7 +44,7 @@ typedef struct {
     uint8_t priority;       // 0=CRITICAL to 3=LOW
     size_t stack_size;      // Stack size (0 = default)
     bool malloc_stack;      // Use malloc instead of arena
-} actor_config;
+} actor_config_t;
 
 // New
 typedef struct {
@@ -53,33 +53,33 @@ typedef struct {
     size_t stack_size;      // Stack size (0 = default)
     bool malloc_stack;      // Use malloc instead of arena
     bool auto_register;     // Register name in registry (requires name != NULL)
-} actor_config;
+} actor_config_t;
 ```
 
 #### hive_spawn()
 
 ```c
 // Current (two functions)
-hive_status hive_spawn(
+hive_status_t hive_spawn(
     hive_actor_fn fn,
     void *arg,
-    actor_id *out
+    actor_id_t *out
 );
 
-hive_status hive_spawn_ex(
+hive_status_t hive_spawn_ex(
     hive_actor_fn fn,
     void *arg,
-    const actor_config *cfg,
-    actor_id *out
+    const actor_config_t *cfg,
+    actor_id_t *out
 );
 
 // New (single function, hive_spawn_ex removed)
-hive_status hive_spawn(
+hive_status_t hive_spawn(
     hive_actor_fn fn,
-    hive_actor_init_fn init,    // Init function (NULL = skip)
+    hive_actor_init_fn_t init,    // Init function (NULL = skip)
     void *init_args,            // Arguments to init (or direct args if init is NULL)
-    const actor_config *cfg,    // Config (NULL = defaults: no name, no registration)
-    actor_id *out
+    const actor_config_t *cfg,    // Config (NULL = defaults: no name, no registration)
+    actor_id_t *out
 );
 ```
 
@@ -92,7 +92,7 @@ When `cfg` is NULL, defaults are used (no name, no auto-registration, default st
 typedef void (*hive_actor_fn)(void *arg);
 
 // New
-typedef void (*hive_actor_fn)(void *args, const hive_spawn_info *siblings, size_t sibling_count);
+typedef void (*hive_actor_fn)(void *args, const hive_spawn_info_t *siblings, size_t sibling_count);
 ```
 
 ### Supervisor Child Spec Changes
@@ -104,17 +104,17 @@ typedef struct {
     hive_actor_fn start;
     void *arg;
     hive_restart_type restart;
-} hive_child_spec;
+} hive_child_spec_t;
 
 // New
 typedef struct {
     hive_actor_fn start;        // Actor function
-    hive_actor_init_fn init;    // Init function (NULL = skip)
+    hive_actor_init_fn_t init;    // Init function (NULL = skip)
     void *init_args;            // Arguments to init function
     const char *name;           // Actor name (for registry AND supervisor tracking)
     bool auto_register;         // Register in name registry
     hive_restart_type restart;  // permanent, transient, temporary
-} hive_child_spec;
+} hive_child_spec_t;
 ```
 
 Note: Removed separate `id` field. The `name` field serves both purposes:
@@ -131,9 +131,9 @@ Note: Removed separate `id` field. The `name` field serves both purposes:
    - If `init` is NULL: `init_args` becomes `args` directly
    - If `auto_register` and `name` is non-NULL: call `hive_register(name)`
      - If registration fails: deallocate actor, return `HIVE_ERR_EXISTS`
-3. Build `hive_spawn_info` array with single entry (the actor itself)
+3. Build `hive_spawn_info_t` array with single entry (the actor itself)
 4. Schedule actor to run `fn(args, siblings, 1)`
-5. Return `HIVE_OK` with actor_id
+5. Return `HIVE_OK` with actor_id_t
 
 ### Spawn Sequence (supervisor starting children)
 
@@ -145,8 +145,8 @@ Note: Removed separate `id` field. The `name` field serves both purposes:
    - If any fails: deallocate all previously allocated children, return error
 
 2. **Phase 2 - Build sibling array**
-   - Create `hive_spawn_info` array with all children (in spec order)
-   - Each entry contains: name, actor_id, registered status
+   - Create `hive_spawn_info_t` array with all children (in spec order)
+   - Each entry contains: name, actor_id_t, registered status
 
 3. **Phase 3 - Start all children**
    - Schedule each actor with `fn(args, siblings, sibling_count)`
@@ -159,13 +159,13 @@ This two-phase approach ensures every child sees all siblings, including those d
 - For standalone `hive_spawn()`: array contains only the spawned actor (`sibling_count = 1`)
 - For supervisor children: array contains ALL children in spec order
 - Array is stack-allocated, valid only at actor function entry
-- Actor must copy needed `actor_id`s to local variables
+- Actor must copy needed `actor_id_t`s to local variables
 
 ### Example
 
 ```c
 // Child specs for supervisor
-hive_child_spec children[] = {
+hive_child_spec_t children[] = {
     {sensor_actor, sensor_init, &sensor_cfg, "sensor", true, HIVE_RESTART_PERMANENT},
     {motor_actor, NULL, &motor_cfg, "motor", true, HIVE_RESTART_PERMANENT},
     {altitude_actor, altitude_init, &alt_cfg, "altitude", true, HIVE_RESTART_PERMANENT},
@@ -176,19 +176,19 @@ hive_child_spec children[] = {
 // siblings[1] = {"motor", <motor_id>, true}
 // siblings[2] = {"altitude", <altitude_id>, true}
 
-void altitude_actor(void *args, const hive_spawn_info *siblings, size_t count) {
+void altitude_actor(void *args, const hive_spawn_info_t *siblings, size_t count) {
     // args = return value from altitude_init(&alt_cfg)
     // count = 3
 
     // Find motor - no whereis() needed
-    actor_id motor = find_sibling(siblings, count, "motor");
+    actor_id_t motor = find_sibling(siblings, count, "motor");
 
     // Already registered as "altitude" - no hive_register() needed
     // ...
 }
 
 // Helper function (could be provided by runtime)
-actor_id find_sibling(const hive_spawn_info *siblings, size_t count, const char *name) {
+actor_id_t find_sibling(const hive_spawn_info_t *siblings, size_t count, const char *name) {
     for (size_t i = 0; i < count; i++) {
         if (siblings[i].name && strcmp(siblings[i].name, name) == 0) {
             return siblings[i].id;
@@ -207,8 +207,7 @@ All existing actor functions need signature update:
 void my_actor(void *arg) { ... }
 
 // After
-void my_actor(void *args, const hive_spawn_info *siblings, size_t count) {
-    (void)siblings; (void)count;  // Ignore if not needed
+void my_actor(void *args, const hive_spawn_info_t *siblings, size_t count) {
     ...
 }
 ```
@@ -237,7 +236,7 @@ hive_spawn(my_actor, NULL, &args, &cfg, &id);  // With config
 
 3. **Restart behavior**: On supervisor restart, init function is called again (fresh initialization). The restarted actor receives updated sibling info (with new actor_ids for any other restarted siblings).
 
-4. **Sibling array lifetime**: Stack-allocated by runtime, valid only at actor function entry. Actor copies needed `actor_id`s to local variables.
+4. **Sibling array lifetime**: Stack-allocated by runtime, valid only at actor function entry. Actor copies needed `actor_id_t`s to local variables.
 
 5. **Init returning NULL**: Valid. Actor receives `NULL` as `args` parameter.
 
@@ -249,23 +248,23 @@ hive_spawn(my_actor, NULL, &args, &cfg, &id);  // With config
 
 ## Handling Sibling Restarts
 
-If a sibling is restarted by a supervisor, its `actor_id` changes. Actors that cache sibling IDs should:
+If a sibling is restarted by a supervisor, its `actor_id_t` changes. Actors that cache sibling IDs should:
 
 1. Monitor siblings via `hive_monitor()`
 2. Handle exit messages in their event loop
 3. Use `hive_whereis()` to get the new ID after restart
 
 ```c
-void my_actor(void *args, const hive_spawn_info *siblings, size_t count) {
-    actor_id motor = find_sibling(siblings, count, "motor");
+void my_actor(void *args, const hive_spawn_info_t *siblings, size_t count) {
+    actor_id_t motor = find_sibling(siblings, count, "motor");
     hive_monitor(motor);  // Get notified if motor restarts
 
     while (1) {
-        hive_message msg;
+        hive_message_t msg;
         hive_ipc_recv(&msg, -1);
 
         if (hive_is_exit_msg(&msg)) {
-            hive_exit_msg exit;
+            hive_exit_msg_t exit;
             hive_decode_exit(&msg, &exit);
             if (exit.actor == motor) {
                 // Motor restarted, get new ID
@@ -299,9 +298,9 @@ void my_actor(void *args, const hive_spawn_info *siblings, size_t count) {
 ## Implementation Checklist
 
 ### Core Runtime Changes
-- [x] `include/hive_types.h` - Add `hive_spawn_info`, `hive_actor_init_fn`
-- [x] `include/hive_actor.h` - Update `actor_config`, `hive_actor_fn` signature
-- [x] `include/hive_supervisor.h` - Update `hive_child_spec`
+- [x] `include/hive_types.h` - Add `hive_spawn_info_t`, `hive_actor_init_fn_t`
+- [x] `include/hive_actor.h` - Update `actor_config_t`, `hive_actor_fn` signature
+- [x] `include/hive_supervisor.h` - Update `hive_child_spec_t`
 - [x] `src/hive_actor.c` - Implement new `hive_spawn()` logic
 - [x] `src/hive_runtime.c` - Update actor entry point to pass siblings
 - [x] `src/hive_supervisor.c` - Implement two-phase child start

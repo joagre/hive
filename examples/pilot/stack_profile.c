@@ -24,8 +24,8 @@ static size_t s_captured_count = 0;
 
 static volatile bool s_report_requested = false;
 
-static void print_actor_stack(actor_id id, const char *name, size_t stack_size,
-                              size_t used) {
+static void print_actor_stack(actor_id_t id, const char *name,
+                              size_t stack_size, size_t used) {
     (void)id;
     const char *n = name ? name : "(unnamed)";
     float pct =
@@ -37,7 +37,7 @@ void stack_profile_capture(const char *name) {
     if (s_captured_count >= MAX_CAPTURED) {
         return;
     }
-    actor_id self = hive_self();
+    actor_id_t self = hive_self();
     size_t used = hive_actor_stack_usage(self);
 
     // Get stack size from actor (need to access it before actor exits)

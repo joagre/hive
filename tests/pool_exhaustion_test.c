@@ -10,7 +10,7 @@
 #endif
 
 // Receiver that accumulates messages without processing
-void slow_receiver_actor(void *args, const hive_spawn_info *siblings,
+void slow_receiver_actor(void *args, const hive_spawn_info_t *siblings,
                          size_t sibling_count) {
     (void)args;
     (void)siblings;
@@ -19,17 +19,17 @@ void slow_receiver_actor(void *args, const hive_spawn_info *siblings,
 
     // Just sleep - don't process messages
     // This causes sender's messages to accumulate in mailbox
-    hive_message msg;
+    hive_message_t msg;
     hive_ipc_recv(&msg, -1); // Block forever (won't get any messages)
 
     hive_exit();
 }
 
-void sender_actor(void *args, const hive_spawn_info *siblings,
+void sender_actor(void *args, const hive_spawn_info_t *siblings,
                   size_t sibling_count) {
     (void)siblings;
     (void)sibling_count;
-    actor_id receiver = *(actor_id *)args;
+    actor_id_t receiver = *(actor_id_t *)args;
 
     printf("\nSender: Attempting to exhaust IPC pool by sending to slow "
            "receiver...\n");
@@ -39,7 +39,7 @@ void sender_actor(void *args, const hive_spawn_info *siblings,
     // Send messages until pool is exhausted
     int sent_count = 0;
     int data = 0;
-    hive_status status;
+    hive_status_t status;
 
     while (true) {
         data++;
@@ -90,7 +90,7 @@ void sender_actor(void *args, const hive_spawn_info *siblings,
             printf("Sender:   Still exhausted, backing off 20ms...\n");
 
             // Backoff with timeout
-            hive_message msg;
+            hive_message_t msg;
             status = hive_ipc_recv(&msg, 20);
 
             if (status.code == HIVE_ERR_TIMEOUT) {
@@ -131,12 +131,12 @@ int main(void) {
     hive_init();
 
     // Spawn receiver that won't process messages
-    actor_id receiver;
+    actor_id_t receiver;
     hive_spawn(slow_receiver_actor, NULL, NULL, NULL, &receiver);
     printf("Main: Spawned slow receiver (ID: %u)\n", receiver);
 
     // Spawn sender that will exhaust pool and retry
-    actor_id sender;
+    actor_id_t sender;
     hive_spawn(sender_actor, NULL, &receiver, NULL, &sender);
     printf("Main: Spawned sender (ID: %u)\n", sender);
 

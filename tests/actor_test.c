@@ -39,7 +39,7 @@ static int tests_failed = 0;
 
 static bool g_basic_spawn_ran = false;
 
-static void basic_actor(void *args, const hive_spawn_info *siblings,
+static void basic_actor(void *args, const hive_spawn_info_t *siblings,
                         size_t sibling_count) {
     (void)args;
     (void)siblings;
@@ -48,7 +48,7 @@ static void basic_actor(void *args, const hive_spawn_info *siblings,
     hive_exit();
 }
 
-static void test1_basic_spawn(void *args, const hive_spawn_info *siblings,
+static void test1_basic_spawn(void *args, const hive_spawn_info_t *siblings,
                               size_t sibling_count) {
     (void)args;
     (void)siblings;
@@ -57,7 +57,7 @@ static void test1_basic_spawn(void *args, const hive_spawn_info *siblings,
 
     g_basic_spawn_ran = false;
 
-    actor_id id;
+    actor_id_t id;
     if (HIVE_FAILED(hive_spawn(basic_actor, NULL, NULL, NULL, &id))) {
         TEST_FAIL("hive_spawn returned error");
         hive_exit();
@@ -65,7 +65,7 @@ static void test1_basic_spawn(void *args, const hive_spawn_info *siblings,
 
     hive_link(id);
 
-    hive_message msg;
+    hive_message_t msg;
     hive_ipc_recv(&msg, 1000);
 
     if (g_basic_spawn_ran) {
@@ -81,9 +81,9 @@ static void test1_basic_spawn(void *args, const hive_spawn_info *siblings,
 // Test 2: hive_self returns correct ID
 // ============================================================================
 
-static actor_id g_self_id_from_actor = ACTOR_ID_INVALID;
+static actor_id_t g_self_id_from_actor = ACTOR_ID_INVALID;
 
-static void self_reporter_actor(void *args, const hive_spawn_info *siblings,
+static void self_reporter_actor(void *args, const hive_spawn_info_t *siblings,
                                 size_t sibling_count) {
     (void)args;
     (void)siblings;
@@ -92,7 +92,7 @@ static void self_reporter_actor(void *args, const hive_spawn_info *siblings,
     hive_exit();
 }
 
-static void test2_rt_self(void *args, const hive_spawn_info *siblings,
+static void test2_rt_self(void *args, const hive_spawn_info_t *siblings,
                           size_t sibling_count) {
     (void)args;
     (void)siblings;
@@ -101,11 +101,11 @@ static void test2_rt_self(void *args, const hive_spawn_info *siblings,
 
     g_self_id_from_actor = ACTOR_ID_INVALID;
 
-    actor_id spawned_id;
+    actor_id_t spawned_id;
     hive_spawn(self_reporter_actor, NULL, NULL, NULL, &spawned_id);
     hive_link(spawned_id);
 
-    hive_message msg;
+    hive_message_t msg;
     hive_ipc_recv(&msg, 1000);
 
     if (g_self_id_from_actor == spawned_id) {
@@ -124,7 +124,7 @@ static void test2_rt_self(void *args, const hive_spawn_info *siblings,
 
 static int g_received_arg = 0;
 
-static void arg_receiver_actor(void *args, const hive_spawn_info *siblings,
+static void arg_receiver_actor(void *args, const hive_spawn_info_t *siblings,
                                size_t sibling_count) {
     (void)siblings;
     (void)sibling_count;
@@ -133,7 +133,8 @@ static void arg_receiver_actor(void *args, const hive_spawn_info *siblings,
     hive_exit();
 }
 
-static void test3_argument_passing(void *args, const hive_spawn_info *siblings,
+static void test3_argument_passing(void *args,
+                                   const hive_spawn_info_t *siblings,
                                    size_t sibling_count) {
     (void)args;
     (void)siblings;
@@ -143,11 +144,11 @@ static void test3_argument_passing(void *args, const hive_spawn_info *siblings,
     static int test_value = 12345;
     g_received_arg = 0;
 
-    actor_id id;
+    actor_id_t id;
     hive_spawn(arg_receiver_actor, NULL, &test_value, NULL, &id);
     hive_link(id);
 
-    hive_message msg;
+    hive_message_t msg;
     hive_ipc_recv(&msg, 1000);
 
     if (g_received_arg == 12345) {
@@ -168,7 +169,7 @@ static int g_yield_counter = 0;
 static bool g_yielder_done = false;
 static bool g_counter_done = false;
 
-static void counter_actor(void *args, const hive_spawn_info *siblings,
+static void counter_actor(void *args, const hive_spawn_info_t *siblings,
                           size_t sibling_count) {
     (void)args;
     (void)siblings;
@@ -181,7 +182,7 @@ static void counter_actor(void *args, const hive_spawn_info *siblings,
     hive_exit();
 }
 
-static void yielder_actor(void *args, const hive_spawn_info *siblings,
+static void yielder_actor(void *args, const hive_spawn_info_t *siblings,
                           size_t sibling_count) {
     (void)args;
     (void)siblings;
@@ -194,7 +195,7 @@ static void yielder_actor(void *args, const hive_spawn_info *siblings,
     hive_exit();
 }
 
-static void test4_yield(void *args, const hive_spawn_info *siblings,
+static void test4_yield(void *args, const hive_spawn_info_t *siblings,
                         size_t sibling_count) {
     (void)args;
     (void)siblings;
@@ -205,16 +206,16 @@ static void test4_yield(void *args, const hive_spawn_info *siblings,
     g_yielder_done = false;
     g_counter_done = false;
 
-    actor_id counter;
+    actor_id_t counter;
     hive_spawn(counter_actor, NULL, NULL, NULL, &counter);
-    actor_id yielder;
+    actor_id_t yielder;
     hive_spawn(yielder_actor, NULL, NULL, NULL, &yielder);
 
     hive_link(counter);
     hive_link(yielder);
 
     // Wait for both to complete
-    hive_message msg;
+    hive_message_t msg;
     hive_ipc_recv(&msg, 1000);
     hive_ipc_recv(&msg, 1000);
 
@@ -233,7 +234,7 @@ static void test4_yield(void *args, const hive_spawn_info *siblings,
 // Test 5: hive_actor_alive
 // ============================================================================
 
-static void short_lived_actor(void *args, const hive_spawn_info *siblings,
+static void short_lived_actor(void *args, const hive_spawn_info_t *siblings,
                               size_t sibling_count) {
     (void)args;
     (void)siblings;
@@ -241,14 +242,14 @@ static void short_lived_actor(void *args, const hive_spawn_info *siblings,
     hive_exit();
 }
 
-static void test5_actor_alive(void *args, const hive_spawn_info *siblings,
+static void test5_actor_alive(void *args, const hive_spawn_info_t *siblings,
                               size_t sibling_count) {
     (void)args;
     (void)siblings;
     (void)sibling_count;
     printf("\nTest 5: hive_actor_alive\n");
 
-    actor_id id;
+    actor_id_t id;
     hive_spawn(short_lived_actor, NULL, NULL, NULL, &id);
     hive_link(id);
 
@@ -256,7 +257,7 @@ static void test5_actor_alive(void *args, const hive_spawn_info *siblings,
     bool alive_before = hive_actor_alive(id);
 
     // Wait for actor to exit
-    hive_message msg;
+    hive_message_t msg;
     hive_ipc_recv(&msg, 1000);
 
     // Actor should be dead after exit
@@ -291,9 +292,10 @@ static void test5_actor_alive(void *args, const hive_spawn_info *siblings,
 // Test 6: Spawn with custom priority
 // ============================================================================
 
-static hive_priority_level s_captured_priority = HIVE_PRIORITY_NORMAL;
+static hive_priority_level_t s_captured_priority = HIVE_PRIORITY_NORMAL;
 
-static void priority_reporter_actor(void *args, const hive_spawn_info *siblings,
+static void priority_reporter_actor(void *args,
+                                    const hive_spawn_info_t *siblings,
                                     size_t sibling_count) {
     (void)args;
     (void)siblings;
@@ -304,7 +306,7 @@ static void priority_reporter_actor(void *args, const hive_spawn_info *siblings,
     hive_exit();
 }
 
-static void test6_custom_priority(void *args, const hive_spawn_info *siblings,
+static void test6_custom_priority(void *args, const hive_spawn_info_t *siblings,
                                   size_t sibling_count) {
     (void)args;
     (void)siblings;
@@ -313,10 +315,10 @@ static void test6_custom_priority(void *args, const hive_spawn_info *siblings,
 
     s_captured_priority = HIVE_PRIORITY_NORMAL;
 
-    actor_config cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+    actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
     cfg.priority = HIVE_PRIORITY_HIGH;
 
-    actor_id id;
+    actor_id_t id;
     if (HIVE_FAILED(
             hive_spawn(priority_reporter_actor, NULL, NULL, &cfg, &id))) {
         TEST_FAIL("hive_spawn with custom priority failed");
@@ -324,7 +326,7 @@ static void test6_custom_priority(void *args, const hive_spawn_info *siblings,
     }
 
     hive_link(id);
-    hive_message msg;
+    hive_message_t msg;
     hive_ipc_recv(&msg, 1000);
 
     TEST_PASS("spawn with custom priority works");
@@ -345,7 +347,7 @@ static bool g_large_stack_ok = false;
 #define LARGE_STACK_BUFFER_SIZE 32768
 #endif
 
-static void large_stack_actor(void *args, const hive_spawn_info *siblings,
+static void large_stack_actor(void *args, const hive_spawn_info_t *siblings,
                               size_t sibling_count) {
     (void)args;
     (void)siblings;
@@ -359,7 +361,8 @@ static void large_stack_actor(void *args, const hive_spawn_info *siblings,
     hive_exit();
 }
 
-static void test7_custom_stack_size(void *args, const hive_spawn_info *siblings,
+static void test7_custom_stack_size(void *args,
+                                    const hive_spawn_info_t *siblings,
                                     size_t sibling_count) {
     (void)args;
     (void)siblings;
@@ -368,17 +371,17 @@ static void test7_custom_stack_size(void *args, const hive_spawn_info *siblings,
 
     g_large_stack_ok = false;
 
-    actor_config cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+    actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
     cfg.stack_size = TEST_STACK_SIZE(64 * 1024);
 
-    actor_id id;
+    actor_id_t id;
     if (HIVE_FAILED(hive_spawn(large_stack_actor, NULL, NULL, &cfg, &id))) {
         TEST_FAIL("hive_spawn with custom stack size failed");
         hive_exit();
     }
 
     hive_link(id);
-    hive_message msg;
+    hive_message_t msg;
     hive_ipc_recv(&msg, 1000);
 
     if (g_large_stack_ok) {
@@ -396,7 +399,7 @@ static void test7_custom_stack_size(void *args, const hive_spawn_info *siblings,
 
 static bool g_malloc_stack_ran = false;
 
-static void malloc_stack_actor(void *args, const hive_spawn_info *siblings,
+static void malloc_stack_actor(void *args, const hive_spawn_info_t *siblings,
                                size_t sibling_count) {
     (void)args;
     (void)siblings;
@@ -405,7 +408,7 @@ static void malloc_stack_actor(void *args, const hive_spawn_info *siblings,
     hive_exit();
 }
 
-static void test8_malloc_stack(void *args, const hive_spawn_info *siblings,
+static void test8_malloc_stack(void *args, const hive_spawn_info_t *siblings,
                                size_t sibling_count) {
     (void)args;
     (void)siblings;
@@ -414,18 +417,18 @@ static void test8_malloc_stack(void *args, const hive_spawn_info *siblings,
 
     g_malloc_stack_ran = false;
 
-    actor_config cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+    actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
     cfg.malloc_stack = true;
     cfg.stack_size = TEST_STACK_SIZE(32 * 1024);
 
-    actor_id id;
+    actor_id_t id;
     if (HIVE_FAILED(hive_spawn(malloc_stack_actor, NULL, NULL, &cfg, &id))) {
         TEST_FAIL("hive_spawn with malloc_stack failed");
         hive_exit();
     }
 
     hive_link(id);
-    hive_message msg;
+    hive_message_t msg;
     hive_ipc_recv(&msg, 1000);
 
     if (g_malloc_stack_ran) {
@@ -441,7 +444,7 @@ static void test8_malloc_stack(void *args, const hive_spawn_info *siblings,
 // Test 9: Spawn with name
 // ============================================================================
 
-static void named_actor(void *args, const hive_spawn_info *siblings,
+static void named_actor(void *args, const hive_spawn_info_t *siblings,
                         size_t sibling_count) {
     (void)args;
     (void)siblings;
@@ -449,24 +452,24 @@ static void named_actor(void *args, const hive_spawn_info *siblings,
     hive_exit();
 }
 
-static void test9_named_actor(void *args, const hive_spawn_info *siblings,
+static void test9_named_actor(void *args, const hive_spawn_info_t *siblings,
                               size_t sibling_count) {
     (void)args;
     (void)siblings;
     (void)sibling_count;
     printf("\nTest 9: Spawn with name\n");
 
-    actor_config cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+    actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
     cfg.name = "test_actor_name";
 
-    actor_id id;
+    actor_id_t id;
     if (HIVE_FAILED(hive_spawn(named_actor, NULL, NULL, &cfg, &id))) {
         TEST_FAIL("hive_spawn with name failed");
         hive_exit();
     }
 
     hive_link(id);
-    hive_message msg;
+    hive_message_t msg;
     hive_ipc_recv(&msg, 1000);
 
     TEST_PASS("spawn with name works");
@@ -478,14 +481,14 @@ static void test9_named_actor(void *args, const hive_spawn_info *siblings,
 // Test 10: Spawn with NULL function should fail
 // ============================================================================
 
-static void test10_spawn_null_fn(void *args, const hive_spawn_info *siblings,
+static void test10_spawn_null_fn(void *args, const hive_spawn_info_t *siblings,
                                  size_t sibling_count) {
     (void)args;
     (void)siblings;
     (void)sibling_count;
     printf("\nTest 10: Spawn with NULL function\n");
 
-    actor_id id;
+    actor_id_t id;
     if (HIVE_FAILED(hive_spawn(NULL, NULL, NULL, NULL, &id))) {
         TEST_PASS("hive_spawn rejects NULL function");
     } else {
@@ -501,7 +504,7 @@ static void test10_spawn_null_fn(void *args, const hive_spawn_info *siblings,
 
 static int g_multi_spawn_count = 0;
 
-static void counting_actor(void *args, const hive_spawn_info *siblings,
+static void counting_actor(void *args, const hive_spawn_info_t *siblings,
                            size_t sibling_count) {
     (void)args;
     (void)siblings;
@@ -517,7 +520,8 @@ static void counting_actor(void *args, const hive_spawn_info *siblings,
 #define MULTI_SPAWN_COUNT 10
 #endif
 
-static void test11_multiple_spawns(void *args, const hive_spawn_info *siblings,
+static void test11_multiple_spawns(void *args,
+                                   const hive_spawn_info_t *siblings,
                                    size_t sibling_count) {
     (void)args;
     (void)siblings;
@@ -526,7 +530,7 @@ static void test11_multiple_spawns(void *args, const hive_spawn_info *siblings,
 
     g_multi_spawn_count = 0;
 
-    actor_id ids[MULTI_SPAWN_COUNT];
+    actor_id_t ids[MULTI_SPAWN_COUNT];
     for (int i = 0; i < MULTI_SPAWN_COUNT; i++) {
         if (HIVE_FAILED(
                 hive_spawn(counting_actor, NULL, NULL, NULL, &ids[i]))) {
@@ -539,7 +543,7 @@ static void test11_multiple_spawns(void *args, const hive_spawn_info *siblings,
 
     // Wait for all to complete
     for (int i = 0; i < MULTI_SPAWN_COUNT; i++) {
-        hive_message msg;
+        hive_message_t msg;
         hive_ipc_recv(&msg, 1000);
     }
 
@@ -558,7 +562,7 @@ static void test11_multiple_spawns(void *args, const hive_spawn_info *siblings,
 // Test 12: Actor returns without calling hive_exit (crash detection)
 // ============================================================================
 
-static void crashing_actor(void *args, const hive_spawn_info *siblings,
+static void crashing_actor(void *args, const hive_spawn_info_t *siblings,
                            size_t sibling_count) {
     (void)args;
     (void)siblings;
@@ -567,7 +571,7 @@ static void crashing_actor(void *args, const hive_spawn_info *siblings,
     // This should be detected as HIVE_EXIT_CRASH
 }
 
-static void test12_actor_crash(void *args, const hive_spawn_info *siblings,
+static void test12_actor_crash(void *args, const hive_spawn_info_t *siblings,
                                size_t sibling_count) {
     (void)args;
     (void)siblings;
@@ -575,7 +579,7 @@ static void test12_actor_crash(void *args, const hive_spawn_info *siblings,
     printf("\nTest 12: Actor returns without hive_exit (crash detection)\n");
     fflush(stdout);
 
-    actor_id crasher;
+    actor_id_t crasher;
     if (HIVE_FAILED(hive_spawn(crashing_actor, NULL, NULL, NULL, &crasher))) {
         TEST_FAIL("failed to spawn crashing actor");
         hive_exit();
@@ -584,8 +588,8 @@ static void test12_actor_crash(void *args, const hive_spawn_info *siblings,
     hive_link(crasher);
 
     // Wait for exit notification
-    hive_message msg;
-    hive_status status = hive_ipc_recv(&msg, 1000);
+    hive_message_t msg;
+    hive_status_t status = hive_ipc_recv(&msg, 1000);
     if (HIVE_FAILED(status)) {
         printf("    recv failed: %s\n", status.msg ? status.msg : "unknown");
         TEST_FAIL("did not receive exit notification");
@@ -597,7 +601,7 @@ static void test12_actor_crash(void *args, const hive_spawn_info *siblings,
         hive_exit();
     }
 
-    hive_exit_msg exit_msg;
+    hive_exit_msg_t exit_msg;
     status = hive_decode_exit(&msg, &exit_msg);
     if (HIVE_FAILED(status)) {
         TEST_FAIL("failed to decode exit message");
@@ -619,19 +623,19 @@ static void test12_actor_crash(void *args, const hive_spawn_info *siblings,
 // Test 13: Actor table exhaustion (HIVE_MAX_ACTORS)
 // ============================================================================
 
-static void wait_for_signal_actor(void *args, const hive_spawn_info *siblings,
+static void wait_for_signal_actor(void *args, const hive_spawn_info_t *siblings,
                                   size_t sibling_count) {
     (void)args;
     (void)siblings;
     (void)sibling_count;
     // Wait for signal from parent to exit
-    hive_message msg;
+    hive_message_t msg;
     hive_ipc_recv(&msg, 5000); // Timeout after 5s in case parent dies
     hive_exit();
 }
 
 static void test13_actor_table_exhaustion(void *args,
-                                          const hive_spawn_info *siblings,
+                                          const hive_spawn_info_t *siblings,
                                           size_t sibling_count) {
     (void)args;
     (void)siblings;
@@ -642,17 +646,17 @@ static void test13_actor_table_exhaustion(void *args,
 
     // Use malloc stacks with small size to avoid arena exhaustion
     // This tests the actual actor table limit, not stack arena
-    actor_config cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+    actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
     cfg.malloc_stack = true;
     cfg.stack_size = TEST_STACK_SIZE(8 * 1024);
 
     // We're already using slots for: test runner + this test actor
     // Try to spawn until we hit the limit
-    actor_id ids[HIVE_MAX_ACTORS];
+    actor_id_t ids[HIVE_MAX_ACTORS];
     int spawned = 0;
 
     for (int i = 0; i < HIVE_MAX_ACTORS; i++) {
-        actor_id id;
+        actor_id_t id;
         if (HIVE_FAILED(
                 hive_spawn(wait_for_signal_actor, NULL, NULL, &cfg, &id))) {
             // Exhaustion reached
@@ -692,7 +696,7 @@ static void test13_actor_table_exhaustion(void *args,
 // Test runner
 // ============================================================================
 
-static actor_fn test_funcs[] = {
+static actor_fn_t test_funcs[] = {
     test1_basic_spawn,
     test2_rt_self,
     test3_argument_passing,
@@ -710,17 +714,17 @@ static actor_fn test_funcs[] = {
 
 #define NUM_TESTS (sizeof(test_funcs) / sizeof(test_funcs[0]))
 
-static void run_all_tests(void *args, const hive_spawn_info *siblings,
+static void run_all_tests(void *args, const hive_spawn_info_t *siblings,
                           size_t sibling_count) {
     (void)args;
     (void)siblings;
     (void)sibling_count;
 
     for (size_t i = 0; i < NUM_TESTS; i++) {
-        actor_config cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+        actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
         cfg.stack_size = TEST_STACK_SIZE(64 * 1024);
 
-        actor_id test;
+        actor_id_t test;
         if (HIVE_FAILED(hive_spawn(test_funcs[i], NULL, NULL, &cfg, &test))) {
             printf("Failed to spawn test %zu\n", i);
             continue;
@@ -728,7 +732,7 @@ static void run_all_tests(void *args, const hive_spawn_info *siblings,
 
         hive_link(test);
 
-        hive_message msg;
+        hive_message_t msg;
         hive_ipc_recv(&msg, 5000);
     }
 
@@ -739,17 +743,17 @@ int main(void) {
     printf("=== Actor (hive_spawn/hive_exit/hive_yield) Test Suite ===\n");
     fflush(stdout);
 
-    hive_status status = hive_init();
+    hive_status_t status = hive_init();
     if (HIVE_FAILED(status)) {
         fprintf(stderr, "Failed to initialize runtime: %s\n",
                 status.msg ? status.msg : "unknown error");
         return 1;
     }
 
-    actor_config cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+    actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
     cfg.stack_size = TEST_STACK_SIZE(128 * 1024);
 
-    actor_id runner;
+    actor_id_t runner;
     if (HIVE_FAILED(hive_spawn(run_all_tests, NULL, NULL, &cfg, &runner))) {
         fprintf(stderr, "Failed to spawn test runner\n");
         hive_cleanup();

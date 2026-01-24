@@ -52,7 +52,7 @@ Install: `make install-man` (or `sudo make install-man`)
 **Definition - Hot path** - Any operation callable while the scheduler is running, including all API calls from actor context, event dispatch, and wakeup processing.
 
 **Allowed malloc**
-- Actor stack allocation during `hive_spawn()` only if `actor_config.malloc_stack = true`
+- Actor stack allocation during `hive_spawn()` only if `actor_config_t.malloc_stack = true`
 - Corresponding free on actor exit for malloc'd stacks
 
 **All other heap use is forbidden after `hive_init()` returns.**
@@ -109,7 +109,7 @@ The runtime consists of:
 - Bus subscriptions gone, cursors reset (fresh subscribe required)
 - Timers cancelled
 - Links and monitors cleared
-- actor_id changes
+- actor_id_t changes
 - Name registration removed (must re-register)
 - External handles invalid (must reacquire: fds, sockets, HAL handles)
 
@@ -123,7 +123,7 @@ The runtime consists of:
 - Every restart attempt observable (log)
 - Every give-up observable (log + shutdown callback)
 
-**Client rule** - MUST NOT cache `actor_id` across awaits/timeouts. Re-resolve via `hive_whereis()` on each interaction.
+**Client rule** - MUST NOT cache `actor_id_t` across awaits/timeouts. Re-resolve via `hive_whereis()` on each interaction.
 
 ## Key Concepts
 
@@ -148,7 +148,7 @@ The runtime consists of:
   - Default: Static arena allocator (HIVE_STACK_ARENA_SIZE = 1 MB)
     - First-fit allocation with block splitting for variable stack sizes
     - Automatic memory reclamation and reuse when actors exit (coalescing)
-  - Optional: malloc via `actor_config.malloc_stack = true`
+  - Optional: malloc via `actor_config_t.malloc_stack = true`
 - Actor table: Static array (HIVE_MAX_ACTORS), configured at compile time
 - Hot path structures: Static pools with O(1) allocation
   - IPC: Mailbox entry pool (256), message data pool (256)
@@ -161,7 +161,7 @@ The runtime consists of:
 - No heap allocation in hot paths (see Heap Usage Policy above)
 
 ### Error Handling
-All runtime functions return `hive_status` with a code and optional string literal message. The message field is never heap-allocated.
+All runtime functions return `hive_status_t` with a code and optional string literal message. The message field is never heap-allocated.
 
 Convenience macros:
 - `HIVE_SUCCESS` - Success status
@@ -172,7 +172,7 @@ Convenience macros:
 
 ### Actor Lifecycle
 - Spawn actors with `hive_spawn(fn, init, init_args, cfg, out)`:
-  - `fn`: Actor function `void fn(void *args, const hive_spawn_info *siblings, size_t sibling_count)`
+  - `fn`: Actor function `void fn(void *args, const hive_spawn_info_t *siblings, size_t sibling_count)`
   - `init`: Optional init function called in spawner context (NULL to skip)
   - `init_args`: Arguments to init (or directly to actor if init is NULL)
   - `cfg`: Actor configuration (NULL = defaults), includes `auto_register` for name registry
@@ -184,7 +184,7 @@ Convenience macros:
 ### Stack Watermarking
 When `HIVE_STACK_WATERMARK=1`, the runtime fills actor stacks with a pattern at allocation time, allowing measurement of actual stack usage:
 ```c
-size_t hive_actor_stack_usage(actor_id id);  // Get bytes used by actor
+size_t hive_actor_stack_usage(actor_id_t id);  // Get bytes used by actor
 void hive_actor_stack_usage_all(stack_usage_callback cb);  // Iterate all actors
 ```
 Enable via: `make CFLAGS+='-DHIVE_STACK_WATERMARK=1'`
@@ -193,14 +193,14 @@ Enable via: `make CFLAGS+='-DHIVE_STACK_WATERMARK=1'`
 Exit messages are received when linked/monitored actors die:
 ```c
 if (hive_is_exit_msg(&msg)) {
-    hive_exit_msg exit_info;
+    hive_exit_msg_t exit_info;
     hive_decode_exit(&msg, &exit_info);
     printf("Actor %u died: %s (monitor_id=%u)\n", exit_info.actor,
            hive_exit_reason_str(exit_info.reason), exit_info.monitor_id);
 }
 ```
 - `hive_is_exit_msg(msg)` checks if message is an exit notification
-- `hive_decode_exit(msg, out)` decodes exit message into `hive_exit_msg` struct
+- `hive_decode_exit(msg, out)` decodes exit message into `hive_exit_msg_t` struct
 - `hive_exit_reason_str(reason)` returns "NORMAL", "CRASH", "STACK_OVERFLOW", or "KILLED"
 - Exit reasons: `HIVE_EXIT_NORMAL`, `HIVE_EXIT_CRASH`, `HIVE_EXIT_CRASH_STACK`, `HIVE_EXIT_KILLED`
 - `exit_info.monitor_id`: 0 = from link, non-zero = from monitor (matches `hive_monitor()` return value)
@@ -223,9 +223,9 @@ All messages have a 4-byte header prepended to payload:
 **`hive_ipc_request()` errors** - Returns `HIVE_ERR_CLOSED` if target died during request (detected immediately via internal monitor), `HIVE_ERR_TIMEOUT` if no reply within timeout, `HIVE_ERR_NOMEM` if pool exhausted, `HIVE_ERR_INVALID` for bad arguments.
 
 ### Message Structure
-The `hive_message` struct provides direct access to all fields:
+The `hive_message_t` struct provides direct access to all fields:
 ```c
-hive_message msg;
+hive_message_t msg;
 hive_ipc_recv(&msg, -1);
 my_data *data = (my_data *)msg.data;  // Direct payload access
 if (msg.class == HIVE_MSG_REQUEST) { ... }
@@ -303,12 +303,12 @@ Bus shares the message data pool with IPC and has per-bus buffer limits:
 
 **Example**
 ```c
-hive_select_source sources[] = {
+hive_select_source_t sources[] = {
     {HIVE_SEL_BUS, .bus = sensor_bus},
     {HIVE_SEL_IPC, .ipc = {HIVE_SENDER_ANY, HIVE_MSG_TIMER, heartbeat}},
     {HIVE_SEL_IPC, .ipc = {HIVE_SENDER_ANY, HIVE_MSG_NOTIFY, CMD_SHUTDOWN}},
 };
-hive_select_result result;
+hive_select_result_t result;
 hive_select(sources, 3, &result, -1);
 // result.index tells which source triggered
 // result.type tells if it's IPC or bus
@@ -360,7 +360,7 @@ To change these limits, edit `hive_static_config.h` or pass -D flags and recompi
 
 **Memory characteristics**
 - All runtime structures are **statically allocated** based on compile-time limits
-- Actor stacks use static arena by default, with optional malloc via `actor_config.malloc_stack`
+- Actor stacks use static arena by default, with optional malloc via `actor_config_t.malloc_stack`
 - No malloc in hot paths (see Heap Usage Policy above)
 - Memory footprint calculable at link time
 - No heap fragmentation in hot paths (optional malloc'd stacks may fragment process heap)
@@ -479,21 +479,21 @@ Messages are identified by class (accessible directly via `msg.class`):
 - `HIVE_MSG_NOTIFY`: Fire-and-forget notification
 - `HIVE_MSG_REQUEST`: Request expecting a reply
 - `HIVE_MSG_REPLY`: Response to a REQUEST
-- `HIVE_MSG_TIMER`: Timer tick (`msg.tag` contains timer_id)
+- `HIVE_MSG_TIMER`: Timer tick (`msg.tag` contains timer_id_t)
 - `HIVE_MSG_EXIT`: System notification (e.g., actor death)
 - `HIVE_MSG_ANY`: Wildcard for selective receive filtering
 
 Check message type directly: `if (msg.class == HIVE_MSG_TIMER) { ... }` or use `hive_msg_is_timer(&msg)`.
 
 ### Waiting for Timer Messages
-When waiting for a timer, use selective receive with the specific timer_id:
+When waiting for a timer, use selective receive with the specific timer_id_t:
 ```c
-timer_id my_timer;
+timer_id_t my_timer;
 hive_timer_after(500000, &my_timer);
-hive_message msg;
+hive_message_t msg;
 hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, my_timer, &msg, -1);
 ```
-Do NOT use `HIVE_TAG_ANY` for timer messages - always use the timer_id to avoid consuming the wrong timer's message.
+Do NOT use `HIVE_TAG_ANY` for timer messages - always use the timer_id_t to avoid consuming the wrong timer's message.
 
 ### Logging
 

@@ -5,11 +5,11 @@
 #include <stdio.h>
 
 // Shared actor IDs
-static actor_id g_actor_a = ACTOR_ID_INVALID;
-static actor_id g_actor_b = ACTOR_ID_INVALID;
+static actor_id_t g_actor_a = ACTOR_ID_INVALID;
+static actor_id_t g_actor_b = ACTOR_ID_INVALID;
 
 // Actor A - links to B, then waits for exit notification
-static void actor_a(void *args, const hive_spawn_info *siblings,
+static void actor_a(void *args, const hive_spawn_info_t *siblings,
                     size_t sibling_count) {
     (void)args;
     (void)siblings;
@@ -19,15 +19,15 @@ static void actor_a(void *args, const hive_spawn_info *siblings,
     printf("Actor A: Waiting for Actor B to spawn...\n");
 
     // Wait a bit for B to spawn
-    timer_id wait_timer;
+    timer_id_t wait_timer;
     hive_timer_after(100000, &wait_timer); // 100ms
 
-    hive_message msg;
+    hive_message_t msg;
     hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, wait_timer, &msg, -1);
     printf("Actor A: Timer fired, linking to Actor B...\n");
 
     // Link to Actor B
-    hive_status status = hive_link(g_actor_b);
+    hive_status_t status = hive_link(g_actor_b);
     if (HIVE_FAILED(status)) {
         printf("Actor A: Failed to link to B: %s\n", HIVE_ERR_STR(status));
         hive_exit();
@@ -40,7 +40,7 @@ static void actor_a(void *args, const hive_spawn_info *siblings,
     hive_ipc_recv(&msg, -1);
 
     if (msg.class == HIVE_MSG_EXIT) {
-        hive_exit_msg *exit_info = (hive_exit_msg *)msg.data;
+        hive_exit_msg_t *exit_info = (hive_exit_msg_t *)msg.data;
 
         printf("Actor A: Received exit notification!\n");
         printf("Actor A:   Died actor: %u\n", exit_info->actor);
@@ -55,7 +55,7 @@ static void actor_a(void *args, const hive_spawn_info *siblings,
 }
 
 // Actor B - waits a bit, then exits normally
-static void actor_b(void *args, const hive_spawn_info *siblings,
+static void actor_b(void *args, const hive_spawn_info_t *siblings,
                     size_t sibling_count) {
     (void)args;
     (void)siblings;
@@ -65,10 +65,10 @@ static void actor_b(void *args, const hive_spawn_info *siblings,
     printf("Actor B: Waiting 500ms before exiting...\n");
 
     // Wait 500ms
-    timer_id wait_timer;
+    timer_id_t wait_timer;
     hive_timer_after(500000, &wait_timer);
 
-    hive_message msg;
+    hive_message_t msg;
     hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, wait_timer, &msg, -1);
 
     printf("Actor B: Exiting normally\n");
@@ -79,7 +79,7 @@ int main(void) {
     printf("=== Actor Runtime Link Demo ===\n\n");
 
     // Initialize runtime
-    hive_status status = hive_init();
+    hive_status_t status = hive_init();
     if (HIVE_FAILED(status)) {
         fprintf(stderr, "Failed to initialize runtime: %s\n",
                 HIVE_ERR_STR(status));
@@ -87,7 +87,7 @@ int main(void) {
     }
 
     // Spawn Actor B first
-    actor_config actor_cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+    actor_config_t actor_cfg = HIVE_ACTOR_CONFIG_DEFAULT;
     actor_cfg.name = "actor_b";
     if (HIVE_FAILED(hive_spawn(actor_b, NULL, NULL, &actor_cfg, &g_actor_b))) {
         fprintf(stderr, "Failed to spawn Actor B\n");

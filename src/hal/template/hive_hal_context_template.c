@@ -3,18 +3,18 @@
 // This file provides the context initialization function for your platform.
 // Copy to src/hal/<platform>/hive_hal_context_<platform>.c and implement.
 //
-// Context initialization sets up a new actor's stack so that when
-// hive_context_switch() switches to it, execution begins at the actor's
+// Context initialization sets up a new actor_t's stack so that when
+// hive_context_switch() switches to it, execution begins at the actor_t's
 // entry point function.
 
 #include "hal/hive_hal_context.h"
 #include <stdint.h>
 #include <string.h>
 
-// The actor entry point wrapper (defined in hive_actor.c)
+// The actor_t entry point wrapper (defined in hive_actor.c)
 extern void hive_actor_entry(void *args, const void *siblings, size_t count);
 
-// Initialize a context for a new actor.
+// Initialize a context for a new actor_t.
 //
 // Parameters:
 //   ctx        - Context structure to initialize
@@ -43,7 +43,7 @@ extern void hive_actor_entry(void *args, const void *siblings, size_t count);
 //   +------------------+
 //   Low addresses (stack base)
 //
-void hive_context_init(hive_context *ctx, void *stack, size_t stack_size,
+void hive_context_init(hive_context_t *ctx, void *stack, size_t stack_size,
                        void (*fn)(void *, const void *, size_t)) {
     // Calculate stack top (stacks grow down)
     uintptr_t stack_top = (uintptr_t)stack + stack_size;

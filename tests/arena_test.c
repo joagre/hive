@@ -8,7 +8,7 @@
 #endif
 
 // Simple actor that just exits
-void simple_actor(void *args, const hive_spawn_info *siblings,
+void simple_actor(void *args, const hive_spawn_info_t *siblings,
                   size_t sibling_count) {
     (void)args;
     (void)siblings;
@@ -30,7 +30,7 @@ int main(void) {
     printf("Using custom stack size: 32 KB per actor\n");
     printf("Expected actors that fit: ~30-32\n\n");
 
-    actor_config cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+    actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
     cfg.stack_size = TEST_STACK_SIZE(32 * 1024);
     cfg.malloc_stack = false; // Use arena (default)
 
@@ -38,7 +38,7 @@ int main(void) {
 
     printf("Spawning actors until arena exhaustion...\n");
     for (int i = 0; i < 64; i++) {
-        actor_id id;
+        actor_id_t id;
         if (HIVE_FAILED(hive_spawn(simple_actor, NULL, NULL, &cfg, &id))) {
             printf("Actor #%d: FAILED (arena exhausted) [OK]\n", i + 1);
             break;
@@ -51,7 +51,7 @@ int main(void) {
 
     // Verify the arena is exhausted by trying to spawn one more
     printf("\nVerifying arena exhaustion...\n");
-    actor_id id;
+    actor_id_t id;
     if (HIVE_FAILED(hive_spawn(simple_actor, NULL, NULL, &cfg, &id))) {
         printf("[OK] Arena is exhausted (cannot spawn more actors)\n");
     } else {

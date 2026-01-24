@@ -8,7 +8,7 @@
 #include "hive_log.h"
 #include <string.h>
 
-// Static buffer for bus data (single-threaded, one actor at a time)
+// Static buffer for bus data (single-threaded, one actor_t at a time)
 static uint8_t s_bus_data_buffer[HIVE_MAX_MESSAGE_SIZE];
 static size_t s_bus_data_len = 0;
 
@@ -19,14 +19,14 @@ static size_t s_bus_data_len = 0;
 // Scan sources for ready data (non-blocking)
 // Returns true if data found, populates result
 // Priority: strict array order (first ready source wins)
-static bool scan_sources(const hive_select_source *sources, size_t num_sources,
-                         hive_select_result *result) {
+static bool scan_sources(const hive_select_source_t *sources,
+                         size_t num_sources, hive_select_result_t *result) {
     for (size_t i = 0; i < num_sources; i++) {
         if (sources[i].type == HIVE_SEL_BUS) {
             if (hive_bus_has_data(sources[i].bus)) {
                 // Read bus data into static buffer
                 size_t actual_len = 0;
-                hive_status status =
+                hive_status_t status =
                     hive_bus_read(sources[i].bus, s_bus_data_buffer,
                                   sizeof(s_bus_data_buffer), &actual_len);
                 // Accept OK or TRUNCATED (data was read, possibly truncated)
@@ -44,7 +44,7 @@ static bool scan_sources(const hive_select_source *sources, size_t num_sources,
             }
         } else if (sources[i].type == HIVE_SEL_IPC) {
             size_t matched_idx = 0;
-            mailbox_entry *entry =
+            mailbox_entry_t *entry =
                 hive_ipc_scan_mailbox(&sources[i].ipc, 1, &matched_idx);
             if (entry) {
                 // Found matching IPC message
@@ -61,7 +61,7 @@ static bool scan_sources(const hive_select_source *sources, size_t num_sources,
 }
 
 // Clear all bus blocked flags for sources
-static void clear_bus_blocked_flags(const hive_select_source *sources,
+static void clear_bus_blocked_flags(const hive_select_source_t *sources,
                                     size_t num_sources) {
     for (size_t i = 0; i < num_sources; i++) {
         if (sources[i].type == HIVE_SEL_BUS) {
@@ -71,7 +71,7 @@ static void clear_bus_blocked_flags(const hive_select_source *sources,
 }
 
 // Set all bus blocked flags for sources
-static void set_bus_blocked_flags(const hive_select_source *sources,
+static void set_bus_blocked_flags(const hive_select_source_t *sources,
                                   size_t num_sources) {
     for (size_t i = 0; i < num_sources; i++) {
         if (sources[i].type == HIVE_SEL_BUS) {
@@ -84,10 +84,11 @@ static void set_bus_blocked_flags(const hive_select_source *sources,
 // hive_select implementation
 // -----------------------------------------------------------------------------
 
-hive_status hive_select(const hive_select_source *sources, size_t num_sources,
-                        hive_select_result *result, int32_t timeout_ms) {
+hive_status_t hive_select(const hive_select_source_t *sources,
+                          size_t num_sources, hive_select_result_t *result,
+                          int32_t timeout_ms) {
     HIVE_REQUIRE_ACTOR_CONTEXT();
-    actor *current = hive_actor_current();
+    actor_t *current = hive_actor_current();
 
     // Validate inputs
     if (!sources) {
@@ -110,7 +111,7 @@ hive_status hive_select(const hive_select_source *sources, size_t num_sources,
         }
     }
 
-    HIVE_LOG_TRACE("select: actor %u waiting on %zu sources", current->id,
+    HIVE_LOG_TRACE("select: actor_t %u waiting on %zu sources", current->id,
                    num_sources);
 
     // Non-blocking scan
@@ -131,9 +132,9 @@ hive_status hive_select(const hive_select_source *sources, size_t num_sources,
     set_bus_blocked_flags(sources, num_sources);
 
     // Create timeout timer if needed
-    timer_id timeout_timer = TIMER_ID_INVALID;
+    timer_id_t timeout_timer = TIMER_ID_INVALID;
     if (timeout_ms > 0) {
-        hive_status status =
+        hive_status_t status =
             hive_timer_after((uint32_t)timeout_ms * 1000, &timeout_timer);
         if (HIVE_FAILED(status)) {
             current->select_sources = NULL;
@@ -154,7 +155,7 @@ hive_status hive_select(const hive_select_source *sources, size_t num_sources,
 
     // Check for timeout
     if (timeout_timer != TIMER_ID_INVALID) {
-        hive_status timeout_status = hive_mailbox_handle_timeout(
+        hive_status_t timeout_status = hive_mailbox_handle_timeout(
             current, timeout_timer, "Select timeout");
         if (HIVE_FAILED(timeout_status)) {
             return timeout_status;

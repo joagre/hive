@@ -4,7 +4,7 @@
 #include <string.h>
 
 // File writer actor
-static void writer_actor(void *args, const hive_spawn_info *siblings,
+static void writer_actor(void *args, const hive_spawn_info_t *siblings,
                          size_t sibling_count) {
     (void)args;
     (void)siblings;
@@ -17,7 +17,7 @@ static void writer_actor(void *args, const hive_spawn_info *siblings,
 
     // Open file for writing
     int fd;
-    hive_status status = hive_file_open(
+    hive_status_t status = hive_file_open(
         filename, HIVE_O_WRONLY | HIVE_O_CREAT | HIVE_O_TRUNC, 0644, &fd);
     if (HIVE_FAILED(status)) {
         printf("Writer: Failed to open file: %s\n", HIVE_ERR_STR(status));
@@ -54,7 +54,7 @@ static void writer_actor(void *args, const hive_spawn_info *siblings,
 }
 
 // File reader actor
-static void reader_actor(void *args, const hive_spawn_info *siblings,
+static void reader_actor(void *args, const hive_spawn_info_t *siblings,
                          size_t sibling_count) {
     (void)args;
     (void)siblings;
@@ -71,7 +71,7 @@ static void reader_actor(void *args, const hive_spawn_info *siblings,
 
     // Open file for reading
     int fd;
-    hive_status status = hive_file_open(filename, HIVE_O_RDONLY, 0, &fd);
+    hive_status_t status = hive_file_open(filename, HIVE_O_RDONLY, 0, &fd);
     if (HIVE_FAILED(status)) {
         printf("Reader: Failed to open file: %s\n", HIVE_ERR_STR(status));
         hive_exit();
@@ -105,7 +105,7 @@ int main(void) {
     printf("=== Actor Runtime File I/O Example ===\n\n");
 
     // Initialize runtime
-    hive_status status = hive_init();
+    hive_status_t status = hive_init();
     if (HIVE_FAILED(status)) {
         fprintf(stderr, "Failed to initialize runtime: %s\n",
                 HIVE_ERR_STR(status));
@@ -115,11 +115,11 @@ int main(void) {
     printf("Runtime initialized\n");
 
     // Spawn writer actor
-    actor_config writer_cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+    actor_config_t writer_cfg = HIVE_ACTOR_CONFIG_DEFAULT;
     writer_cfg.name = "writer";
     writer_cfg.priority = HIVE_PRIORITY_NORMAL;
 
-    actor_id writer_id;
+    actor_id_t writer_id;
     if (HIVE_FAILED(
             hive_spawn(writer_actor, NULL, NULL, &writer_cfg, &writer_id))) {
         fprintf(stderr, "Failed to spawn writer actor\n");
@@ -130,11 +130,11 @@ int main(void) {
     printf("Spawned writer actor (ID: %u)\n", writer_id);
 
     // Spawn reader actor
-    actor_config reader_cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+    actor_config_t reader_cfg = HIVE_ACTOR_CONFIG_DEFAULT;
     reader_cfg.name = "reader";
     reader_cfg.priority = HIVE_PRIORITY_NORMAL;
 
-    actor_id reader_id;
+    actor_id_t reader_id;
     if (HIVE_FAILED(
             hive_spawn(reader_actor, NULL, NULL, &reader_cfg, &reader_id))) {
         fprintf(stderr, "Failed to spawn reader actor\n");

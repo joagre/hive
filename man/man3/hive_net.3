@@ -6,12 +6,12 @@ hive_net_listen, hive_net_accept, hive_net_connect, hive_net_close, hive_net_rec
 .nf
 .B #include <hive_net.h>
 .PP
-.BI "hive_status hive_net_listen(uint16_t " port ", int *" fd_out ");"
-.BI "hive_status hive_net_accept(int " listen_fd ", int *" conn_fd_out ", int32_t " timeout_ms ");"
-.BI "hive_status hive_net_connect(const char *" ip ", uint16_t " port ", int *" fd_out ", int32_t " timeout_ms ");"
-.BI "hive_status hive_net_close(int " fd ");"
-.BI "hive_status hive_net_recv(int " fd ", void *" buf ", size_t " len ", size_t *" received ", int32_t " timeout_ms ");"
-.BI "hive_status hive_net_send(int " fd ", const void *" buf ", size_t " len ", size_t *" sent ", int32_t " timeout_ms ");"
+.BI "hive_status_t hive_net_listen(uint16_t " port ", int *" fd_out ");"
+.BI "hive_status_t hive_net_accept(int " listen_fd ", int *" conn_fd_out ", int32_t " timeout_ms ");"
+.BI "hive_status_t hive_net_connect(const char *" ip ", uint16_t " port ", int *" fd_out ", int32_t " timeout_ms ");"
+.BI "hive_status_t hive_net_close(int " fd ");"
+.BI "hive_status_t hive_net_recv(int " fd ", void *" buf ", size_t " len ", size_t *" received ", int32_t " timeout_ms ");"
+.BI "hive_status_t hive_net_send(int " fd ", const void *" buf ", size_t " len ", size_t *" sent ", int32_t " timeout_ms ");"
 .fi
 .SH DESCRIPTION
 These functions provide non-blocking TCP network I/O for actors. All operations
@@ -87,7 +87,7 @@ Block up to the specified milliseconds, return
 if exceeded.
 .SH RETURN VALUE
 All functions return an
-.I hive_status
+.I hive_status_t
 structure. On success,
 .I status.code
 is
@@ -137,7 +137,7 @@ output parameter and loop to transfer remaining data:
 size_t total_sent = 0;
 while (total_sent < len) {
     size_t n;
-    hive_status s = hive_net_send(fd, buf + total_sent,
+    hive_status_t s = hive_net_send(fd, buf + total_sent,
                                   len - total_sent, &n, 5000);
     if (HIVE_FAILED(s)) break;
     total_sent += n;
@@ -151,7 +151,7 @@ when the peer closes the connection. This is normal EOF, not an error:
 .PP
 .nf
 size_t n;
-hive_status s = hive_net_recv(fd, buf, sizeof(buf), &n, -1);
+hive_status_t s = hive_net_recv(fd, buf, sizeof(buf), &n, -1);
 if (HIVE_SUCCEEDED(s) && n == 0) {
     /* Peer closed connection */
 }
@@ -200,13 +200,14 @@ Design for network failures (disconnection, latency spikes)
 #include <stdio.h>
 #include <string.h>
 
-void client_handler(void *arg) {
+void client_handler(void *arg, const hive_spawn_info_t *siblings,
+                    size_t sibling_count) {
     int conn_fd = *(int *)arg;
     char buf[256];
 
     while (1) {
         size_t n;
-        hive_status s = hive_net_recv(conn_fd, buf, sizeof(buf), &n, 5000);
+        hive_status_t s = hive_net_recv(conn_fd, buf, sizeof(buf), &n, 5000);
         if (HIVE_FAILED(s)) {
             printf("Recv error: %s\\n", HIVE_ERR_STR(s));
             break;
@@ -220,7 +221,7 @@ void client_handler(void *arg) {
         size_t sent = 0;
         while (sent < n) {
             size_t s_n;
-            hive_status ss = hive_net_send(conn_fd, buf + sent, n - sent, &s_n, 5000);
+            hive_status_t ss = hive_net_send(conn_fd, buf + sent, n - sent, &s_n, 5000);
             if (HIVE_FAILED(ss)) break;
             sent += s_n;
         }
@@ -230,11 +231,11 @@ void client_handler(void *arg) {
     hive_exit();
 }
 
-void server(void *arg) {
-    (void)arg;
+void server(void *arg, const hive_spawn_info_t *siblings,
+            size_t sibling_count) {
     int listen_fd;
 
-    hive_status s = hive_net_listen(8080, &listen_fd);
+    hive_status_t s = hive_net_listen(8080, &listen_fd);
     if (HIVE_FAILED(s)) {
         printf("Listen failed: %s\\n", HIVE_ERR_STR(s));
         hive_exit();
@@ -253,15 +254,15 @@ void server(void *arg) {
         printf("Client connected\\n");
 
         /* Spawn handler actor for this connection */
-        actor_id handler;
-        hive_spawn(client_handler, &conn_fd, &handler);
+        actor_id_t handler;
+        hive_spawn(client_handler, NULL, &conn_fd, NULL, &handler);
     }
 }
 
 int main(void) {
     hive_init();
-    actor_id srv;
-    hive_spawn(server, NULL, &srv);
+    actor_id_t srv;
+    hive_spawn(server, NULL, NULL, NULL, &srv);
     hive_run();
     hive_cleanup();
     return 0;
@@ -269,12 +270,12 @@ int main(void) {
 .fi
 .SS Client with Timeout
 .nf
-void client(void *arg) {
-    (void)arg;
+void client(void *arg, const hive_spawn_info_t *siblings,
+            size_t sibling_count) {
     int fd;
 
     /* Connect with 5 second timeout */
-    hive_status s = hive_net_connect("127.0.0.1", 8080, &fd, 5000);
+    hive_status_t s = hive_net_connect("127.0.0.1", 8080, &fd, 5000);
     if (HIVE_FAILED(s)) {
         printf("Connect failed: %s\\n", HIVE_ERR_STR(s));
         hive_exit();

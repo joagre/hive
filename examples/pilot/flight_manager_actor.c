@@ -44,14 +44,16 @@ void *flight_manager_actor_init(void *init_args) {
     return NULL;
 }
 
-void flight_manager_actor(void *args, const hive_spawn_info *siblings,
+void flight_manager_actor(void *args, const hive_spawn_info_t *siblings,
                           size_t sibling_count) {
     (void)args;
 
     // Look up sibling actors
-    actor_id waypoint = hive_find_sibling(siblings, sibling_count, "waypoint");
-    actor_id altitude = hive_find_sibling(siblings, sibling_count, "altitude");
-    actor_id motor = hive_find_sibling(siblings, sibling_count, "motor");
+    actor_id_t waypoint =
+        hive_find_sibling(siblings, sibling_count, "waypoint");
+    actor_id_t altitude =
+        hive_find_sibling(siblings, sibling_count, "altitude");
+    actor_id_t motor = hive_find_sibling(siblings, sibling_count, "motor");
     if (waypoint == ACTOR_ID_INVALID || altitude == ACTOR_ID_INVALID ||
         motor == ACTOR_ID_INVALID) {
         HIVE_LOG_ERROR("[FLM] Failed to find required siblings");
@@ -80,7 +82,7 @@ void flight_manager_actor(void *args, const hive_spawn_info *siblings,
     // === ARM PHASE: Open log file ===
     // On STM32, this erases the flash sector (blocks 1-4 seconds)
     HIVE_LOG_INFO("[FLM] Opening log file: %s", HIVE_LOG_FILE_PATH);
-    hive_status log_status = hive_log_file_open(HIVE_LOG_FILE_PATH);
+    hive_status_t log_status = hive_log_file_open(HIVE_LOG_FILE_PATH);
     if (HIVE_FAILED(log_status)) {
         HIVE_LOG_WARN("[FLM] Failed to open log file: %s",
                       HIVE_ERR_STR(log_status));
@@ -89,8 +91,8 @@ void flight_manager_actor(void *args, const hive_spawn_info *siblings,
     }
 
     // Start periodic log sync timer (every 4 seconds)
-    timer_id sync_timer;
-    hive_status status = hive_timer_every(LOG_SYNC_INTERVAL_US, &sync_timer);
+    timer_id_t sync_timer;
+    hive_status_t status = hive_timer_every(LOG_SYNC_INTERVAL_US, &sync_timer);
     if (HIVE_FAILED(status)) {
         HIVE_LOG_ERROR("[FLM] sync timer_every failed: %s",
                        HIVE_ERR_STR(status));
@@ -108,7 +110,7 @@ void flight_manager_actor(void *args, const hive_spawn_info *siblings,
     HIVE_LOG_INFO("[FLM] Flight duration: %.0f seconds",
                   FLIGHT_DURATION_US / 1000000.0f);
 
-    timer_id flight_timer;
+    timer_id_t flight_timer;
     status = hive_timer_after(FLIGHT_DURATION_US, &flight_timer);
     if (HIVE_FAILED(status)) {
         HIVE_LOG_ERROR("[FLM] flight timer_after failed: %s",
@@ -118,7 +120,7 @@ void flight_manager_actor(void *args, const hive_spawn_info *siblings,
 
     // Event loop: handle sync timer and flight timer using hive_select()
     enum { SEL_SYNC_TIMER, SEL_FLIGHT_TIMER };
-    hive_select_source flight_sources[] = {
+    hive_select_source_t flight_sources[] = {
         [SEL_SYNC_TIMER] = {HIVE_SEL_IPC, .ipc = {HIVE_SENDER_ANY,
                                                   HIVE_MSG_TIMER, sync_timer}},
         [SEL_FLIGHT_TIMER] = {HIVE_SEL_IPC,
@@ -128,7 +130,7 @@ void flight_manager_actor(void *args, const hive_spawn_info *siblings,
 
     bool flight_timer_fired = false;
     while (!flight_timer_fired) {
-        hive_select_result result;
+        hive_select_result_t result;
         status = hive_select(flight_sources, 2, &result, -1);
         if (HIVE_FAILED(status)) {
             HIVE_LOG_ERROR("[FLM] select (flight) failed: %s",
@@ -152,7 +154,7 @@ void flight_manager_actor(void *args, const hive_spawn_info *siblings,
 
     // Wait for LANDED notification (keep syncing logs while waiting)
     enum { SEL_SYNC, SEL_LANDED };
-    hive_select_source landing_sources[] = {
+    hive_select_source_t landing_sources[] = {
         [SEL_SYNC] = {HIVE_SEL_IPC,
                       .ipc = {HIVE_SENDER_ANY, HIVE_MSG_TIMER, sync_timer}},
         [SEL_LANDED] = {HIVE_SEL_IPC, .ipc = {altitude, HIVE_MSG_NOTIFY,
@@ -161,7 +163,7 @@ void flight_manager_actor(void *args, const hive_spawn_info *siblings,
 
     bool landed = false;
     while (!landed) {
-        hive_select_result result;
+        hive_select_result_t result;
         status = hive_select(landing_sources, 2, &result, -1);
         if (HIVE_FAILED(status)) {
             HIVE_LOG_ERROR("[FLM] select (landing) failed: %s",

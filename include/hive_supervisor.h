@@ -24,7 +24,7 @@ typedef enum {
     HIVE_CHILD_PERMANENT, // Always restart, regardless of exit reason
     HIVE_CHILD_TRANSIENT, // Restart only on abnormal exit (crash)
     HIVE_CHILD_TEMPORARY  // Never restart
-} hive_child_restart;
+} hive_child_restart_t;
 
 // -----------------------------------------------------------------------------
 // Restart Strategies
@@ -39,40 +39,41 @@ typedef enum {
 
     // Restart the failed child and all children started after it
     HIVE_STRATEGY_REST_FOR_ONE
-} hive_restart_strategy;
+} hive_restart_strategy_t;
 
 // -----------------------------------------------------------------------------
 // Child Specification
 // -----------------------------------------------------------------------------
 
 typedef struct {
-    actor_fn start;          // Actor entry point
-    hive_actor_init_fn init; // Init function (NULL = skip)
-    void *init_args;         // Arguments to init function
-    size_t init_args_size;   // Size to copy (0 = pass pointer directly)
+    actor_fn_t start;          // Actor entry point
+    hive_actor_init_fn_t init; // Init function (NULL = skip)
+    void *init_args;           // Arguments to init function
+    size_t init_args_size;     // Size to copy (0 = pass pointer directly)
     const char *name;   // Actor name (for registry AND supervisor tracking)
     bool auto_register; // Register in name registry
-    hive_child_restart
-        restart;            // Restart policy (permanent, transient, temporary)
-    actor_config actor_cfg; // Actor configuration (stack size, priority, etc.)
-} hive_child_spec;
+    hive_child_restart_t
+        restart; // Restart policy (permanent, transient, temporary)
+    actor_config_t
+        actor_cfg; // Actor configuration (stack size, priority, etc.)
+} hive_child_spec_t;
 
 // -----------------------------------------------------------------------------
 // Supervisor Configuration
 // -----------------------------------------------------------------------------
 
 typedef struct {
-    hive_restart_strategy strategy; // How to handle child failures
+    hive_restart_strategy_t strategy; // How to handle child failures
 
     uint32_t max_restarts;      // Max restarts in period (0 = unlimited)
     uint32_t restart_period_ms; // Time window for max_restarts
 
-    const hive_child_spec *children; // Array of child specifications
-    size_t num_children;             // Number of children
+    const hive_child_spec_t *children; // Array of child specifications
+    size_t num_children;               // Number of children
 
     void (*on_shutdown)(void *ctx); // Called when supervisor shuts down
     void *shutdown_ctx;             // Context for shutdown callback
-} hive_supervisor_config;
+} hive_supervisor_config_t;
 
 // Default configuration
 #define HIVE_SUPERVISOR_CONFIG_DEFAULT                                  \
@@ -93,9 +94,9 @@ typedef struct {
 // Errors:
 //   HIVE_ERR_INVALID  - NULL config, too many children, invalid child spec
 //   HIVE_ERR_NOMEM    - No supervisor slots available or spawn failed
-hive_status hive_supervisor_start(const hive_supervisor_config *config,
-                                  const actor_config *sup_actor_cfg,
-                                  actor_id *out_supervisor);
+hive_status_t hive_supervisor_start(const hive_supervisor_config_t *config,
+                                    const actor_config_t *sup_actor_cfg,
+                                    actor_id_t *out_supervisor);
 
 // Request supervisor shutdown (async)
 // The supervisor will stop all children and then exit.
@@ -104,16 +105,16 @@ hive_status hive_supervisor_start(const hive_supervisor_config *config,
 // Errors:
 //   HIVE_ERR_INVALID  - Invalid supervisor ID
 //   HIVE_ERR_NOMEM    - Failed to send shutdown message
-hive_status hive_supervisor_stop(actor_id supervisor);
+hive_status_t hive_supervisor_stop(actor_id_t supervisor);
 
 // -----------------------------------------------------------------------------
 // Utility Functions
 // -----------------------------------------------------------------------------
 
 // Convert restart strategy to string (for logging)
-const char *hive_restart_strategy_str(hive_restart_strategy strategy);
+const char *hive_restart_strategy_str(hive_restart_strategy_t strategy);
 
 // Convert child restart type to string (for logging)
-const char *hive_child_restart_str(hive_child_restart restart);
+const char *hive_child_restart_str(hive_child_restart_t restart);
 
 #endif // HIVE_SUPERVISOR_H

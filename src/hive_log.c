@@ -149,7 +149,7 @@ static void log_to_file(hive_log_level_t level, const char *text,
 // Public API
 // -----------------------------------------------------------------------------
 
-hive_status hive_log_init(void) {
+hive_status_t hive_log_init(void) {
     HIVE_INIT_GUARD(s_initialized);
     s_initialized = true;
 #if HIVE_LOG_TO_FILE
@@ -159,7 +159,7 @@ hive_status hive_log_init(void) {
     return HIVE_SUCCESS;
 }
 
-hive_status hive_log_file_open(const char *path) {
+hive_status_t hive_log_file_open(const char *path) {
 #if HIVE_LOG_TO_FILE
     if (!s_initialized) {
         hive_log_init();
@@ -171,7 +171,7 @@ hive_status hive_log_file_open(const char *path) {
     }
 
     // Open with create+truncate (TRUNC also erases flash sector on STM32)
-    hive_status s = hive_file_open(
+    hive_status_t s = hive_file_open(
         path, HIVE_O_WRONLY | HIVE_O_CREAT | HIVE_O_TRUNC, 0644, &s_log_fd);
     if (HIVE_FAILED(s)) {
         s_log_fd = -1;
@@ -186,7 +186,7 @@ hive_status hive_log_file_open(const char *path) {
 #endif
 }
 
-hive_status hive_log_file_sync(void) {
+hive_status_t hive_log_file_sync(void) {
 #if HIVE_LOG_TO_FILE
     if (s_log_fd < 0) {
         return HIVE_SUCCESS; // No file open, nothing to sync
@@ -197,7 +197,7 @@ hive_status hive_log_file_sync(void) {
 #endif
 }
 
-hive_status hive_log_file_close(void) {
+hive_status_t hive_log_file_close(void) {
 #if HIVE_LOG_TO_FILE
     if (s_log_fd < 0) {
         return HIVE_SUCCESS; // No file open
@@ -205,7 +205,7 @@ hive_status hive_log_file_close(void) {
 
     // Final sync before close
     hive_file_sync(s_log_fd);
-    hive_status s = hive_file_close(s_log_fd);
+    hive_status_t s = hive_file_close(s_log_fd);
     s_log_fd = -1;
     return s;
 #else

@@ -158,7 +158,7 @@ typedef struct {
 ```c
 typedef struct {
     uint8_t  record_type;     // Record type (see below)
-    uint8_t  actor_id;        // Source actor (0 = system)
+    uint8_t  actor_id_t;        // Source actor (0 = system)
     uint16_t payload_len;     // Length of record payload
     uint32_t timestamp_us;    // Record timestamp
     // uint8_t payload[];     // Record-specific data follows

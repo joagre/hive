@@ -26,18 +26,18 @@ static inline uint64_t get_nanos(void) {
 // ============================================================================
 
 typedef struct {
-    actor_id partner;
+    actor_id_t partner;
     uint64_t count;
     uint64_t max_count;
     uint64_t start_time;
     uint64_t end_time;
-} switch_ctx;
+} switch_ctx_t;
 
-static void switch_actor_a(void *args, const hive_spawn_info *siblings,
+static void switch_actor_a(void *args, const hive_spawn_info_t *siblings,
                            size_t sibling_count) {
     (void)siblings;
     (void)sibling_count;
-    switch_ctx *ctx = (switch_ctx *)args;
+    switch_ctx_t *ctx = (switch_ctx_t *)args;
 
     while (ctx->count < ctx->max_count) {
         // Send ping to B
@@ -45,7 +45,7 @@ static void switch_actor_a(void *args, const hive_spawn_info *siblings,
         hive_ipc_notify(ctx->partner, HIVE_TAG_NONE, &msg, sizeof(msg));
 
         // Wait for pong from B
-        hive_message reply;
+        hive_message_t reply;
         hive_ipc_recv(&reply, -1);
 
         ctx->count++;
@@ -55,15 +55,15 @@ static void switch_actor_a(void *args, const hive_spawn_info *siblings,
     hive_exit();
 }
 
-static void switch_actor_b(void *args, const hive_spawn_info *siblings,
+static void switch_actor_b(void *args, const hive_spawn_info_t *siblings,
                            size_t sibling_count) {
     (void)siblings;
     (void)sibling_count;
-    switch_ctx *ctx = (switch_ctx *)args;
+    switch_ctx_t *ctx = (switch_ctx_t *)args;
 
     while (ctx->count < ctx->max_count) {
         // Wait for ping from A
-        hive_message msg;
+        hive_message_t msg;
         hive_ipc_recv(&msg, -1);
 
         // Send pong back to A
@@ -81,15 +81,15 @@ static void bench_context_switch(void) {
     printf("-------------------------\n");
 
     // Warmup
-    switch_ctx *ctx_a_warmup = calloc(1, sizeof(switch_ctx));
-    switch_ctx *ctx_b_warmup = calloc(1, sizeof(switch_ctx));
+    switch_ctx_t *ctx_a_warmup = calloc(1, sizeof(switch_ctx_t));
+    switch_ctx_t *ctx_b_warmup = calloc(1, sizeof(switch_ctx_t));
 
     ctx_a_warmup->max_count = WARMUP_ITERATIONS;
     ctx_b_warmup->max_count = WARMUP_ITERATIONS;
 
-    actor_id b;
+    actor_id_t b;
     hive_spawn(switch_actor_b, NULL, ctx_b_warmup, NULL, &b);
-    actor_id a;
+    actor_id_t a;
     hive_spawn(switch_actor_a, NULL, ctx_a_warmup, NULL, &a);
     ctx_a_warmup->partner = b;
     ctx_b_warmup->partner = a;
@@ -100,8 +100,8 @@ static void bench_context_switch(void) {
     free(ctx_b_warmup);
 
     // Actual benchmark
-    switch_ctx *ctx_a = calloc(1, sizeof(switch_ctx));
-    switch_ctx *ctx_b = calloc(1, sizeof(switch_ctx));
+    switch_ctx_t *ctx_a = calloc(1, sizeof(switch_ctx_t));
+    switch_ctx_t *ctx_b = calloc(1, sizeof(switch_ctx_t));
 
     ctx_a->max_count = ITERATIONS;
     ctx_b->max_count = ITERATIONS;
@@ -139,19 +139,19 @@ static void bench_context_switch(void) {
 // ============================================================================
 
 typedef struct {
-    actor_id partner;
+    actor_id_t partner;
     uint64_t count;
     uint64_t max_count;
     size_t msg_size;
     uint64_t start_time;
     uint64_t end_time;
-} ipc_ctx;
+} ipc_ctx_t;
 
-static void ipc_sender(void *args, const hive_spawn_info *siblings,
+static void ipc_sender(void *args, const hive_spawn_info_t *siblings,
                        size_t sibling_count) {
     (void)siblings;
     (void)sibling_count;
-    ipc_ctx *ctx = (ipc_ctx *)args;
+    ipc_ctx_t *ctx = (ipc_ctx_t *)args;
     uint8_t buffer[256];
     memset(buffer, 0xAA, sizeof(buffer));
 
@@ -161,7 +161,7 @@ static void ipc_sender(void *args, const hive_spawn_info *siblings,
         hive_ipc_notify(ctx->partner, HIVE_TAG_NONE, buffer, ctx->msg_size);
 
         // Wait for ack
-        hive_message ack;
+        hive_message_t ack;
         hive_ipc_recv(&ack, -1);
     }
 
@@ -169,15 +169,15 @@ static void ipc_sender(void *args, const hive_spawn_info *siblings,
     hive_exit();
 }
 
-static void ipc_receiver(void *args, const hive_spawn_info *siblings,
+static void ipc_receiver(void *args, const hive_spawn_info_t *siblings,
                          size_t sibling_count) {
     (void)siblings;
     (void)sibling_count;
-    ipc_ctx *ctx = (ipc_ctx *)args;
+    ipc_ctx_t *ctx = (ipc_ctx_t *)args;
     uint8_t ack = 1;
 
     for (uint64_t i = 0; i < ctx->max_count; i++) {
-        hive_message msg;
+        hive_message_t msg;
         hive_ipc_recv(&msg, -1);
 
         // Send ack
@@ -189,17 +189,17 @@ static void ipc_receiver(void *args, const hive_spawn_info *siblings,
 
 static void bench_ipc_copy(size_t msg_size, const char *label) {
     // Warmup
-    ipc_ctx *ctx_send_warmup = calloc(1, sizeof(ipc_ctx));
-    ipc_ctx *ctx_recv_warmup = calloc(1, sizeof(ipc_ctx));
+    ipc_ctx_t *ctx_send_warmup = calloc(1, sizeof(ipc_ctx_t));
+    ipc_ctx_t *ctx_recv_warmup = calloc(1, sizeof(ipc_ctx_t));
 
     ctx_send_warmup->max_count = WARMUP_ITERATIONS;
     ctx_send_warmup->msg_size = msg_size;
     ctx_recv_warmup->max_count = WARMUP_ITERATIONS;
     ctx_recv_warmup->msg_size = msg_size;
 
-    actor_id recv;
+    actor_id_t recv;
     hive_spawn(ipc_receiver, NULL, ctx_recv_warmup, NULL, &recv);
-    actor_id send;
+    actor_id_t send;
     hive_spawn(ipc_sender, NULL, ctx_send_warmup, NULL, &send);
     ctx_send_warmup->partner = recv;
     ctx_recv_warmup->partner = send;
@@ -210,8 +210,8 @@ static void bench_ipc_copy(size_t msg_size, const char *label) {
     free(ctx_recv_warmup);
 
     // Actual benchmark
-    ipc_ctx *ctx_send = calloc(1, sizeof(ipc_ctx));
-    ipc_ctx *ctx_recv = calloc(1, sizeof(ipc_ctx));
+    ipc_ctx_t *ctx_send = calloc(1, sizeof(ipc_ctx_t));
+    ipc_ctx_t *ctx_recv = calloc(1, sizeof(ipc_ctx_t));
 
     ctx_send->max_count = ITERATIONS;
     ctx_send->msg_size = msg_size;
@@ -267,7 +267,7 @@ static void bench_pool_allocation(void) {
 #define POOL_SIZE 1024
     static uint8_t pool_buffer[POOL_SIZE * 64];
     static bool pool_used[POOL_SIZE];
-    hive_pool pool_mgr;
+    hive_pool_t pool_mgr;
 
     hive_pool_init(&pool_mgr, pool_buffer, pool_used, 64, POOL_SIZE);
 
@@ -334,7 +334,7 @@ static void bench_pool_allocation(void) {
 // 4. Actor Spawn Benchmark
 // ============================================================================
 
-static void dummy_actor(void *args, const hive_spawn_info *siblings,
+static void dummy_actor(void *args, const hive_spawn_info_t *siblings,
                         size_t sibling_count) {
     (void)args;
     (void)siblings;
@@ -349,7 +349,7 @@ static void bench_actor_spawn(void) {
 
     // Warmup
     for (int i = 0; i < 10; i++) {
-        actor_id dummy;
+        actor_id_t dummy;
         hive_spawn(dummy_actor, NULL, NULL, NULL, &dummy);
     }
     hive_run();
@@ -357,7 +357,7 @@ static void bench_actor_spawn(void) {
     // Benchmark
     uint64_t start = get_nanos();
     for (int i = 0; i < 100; i++) {
-        actor_id dummy;
+        actor_id_t dummy;
         hive_spawn(dummy_actor, NULL, NULL, NULL, &dummy);
     }
     hive_run();
@@ -378,18 +378,18 @@ static void bench_actor_spawn(void) {
 // ============================================================================
 
 typedef struct {
-    bus_id bus;
+    bus_id_t bus;
     uint64_t count;
     uint64_t max_count;
     uint64_t start_time;
     uint64_t end_time;
-} bus_ctx;
+} bus_ctx_t;
 
-static void bus_publisher(void *args, const hive_spawn_info *siblings,
+static void bus_publisher(void *args, const hive_spawn_info_t *siblings,
                           size_t sibling_count) {
     (void)siblings;
     (void)sibling_count;
-    bus_ctx *ctx = (bus_ctx *)args;
+    bus_ctx_t *ctx = (bus_ctx_t *)args;
     uint8_t data[64];
     memset(data, 0xBB, sizeof(data));
 
@@ -409,18 +409,18 @@ static void bus_publisher(void *args, const hive_spawn_info *siblings,
     hive_exit();
 }
 
-static void bus_subscriber(void *args, const hive_spawn_info *siblings,
+static void bus_subscriber(void *args, const hive_spawn_info_t *siblings,
                            size_t sibling_count) {
     (void)siblings;
     (void)sibling_count;
-    bus_ctx *ctx = (bus_ctx *)args;
+    bus_ctx_t *ctx = (bus_ctx_t *)args;
 
     hive_bus_subscribe(ctx->bus);
 
     uint8_t buffer[256];
     for (uint64_t i = 0; i < ctx->max_count; i++) {
         size_t len;
-        hive_status status;
+        hive_status_t status;
         // Wait for message to be available
         while (HIVE_FAILED(
             status = hive_bus_read(ctx->bus, buffer, sizeof(buffer), &len))) {
@@ -437,27 +437,27 @@ static void bench_bus(void) {
     printf("---------------\n");
 
     // Create bus with enough capacity for benchmark messages
-    hive_bus_config cfg = {
+    hive_bus_config_t cfg = {
         .max_entries = 64,     // Max allowed by HIVE_MAX_BUS_ENTRIES
         .max_entry_size = 256, // Max size of each message
         .max_subscribers = 8,
         .consume_after_reads = 1, // Remove entries after 1 reader reads them
         .max_age_ms = 0};
-    bus_id bus;
+    bus_id_t bus;
     hive_bus_create(&cfg, &bus);
 
     // Warmup
-    bus_ctx *ctx_pub_warmup = calloc(1, sizeof(bus_ctx));
-    bus_ctx *ctx_sub_warmup = calloc(1, sizeof(bus_ctx));
+    bus_ctx_t *ctx_pub_warmup = calloc(1, sizeof(bus_ctx_t));
+    bus_ctx_t *ctx_sub_warmup = calloc(1, sizeof(bus_ctx_t));
 
     ctx_pub_warmup->bus = bus;
     ctx_pub_warmup->max_count = 100;
     ctx_sub_warmup->bus = bus;
     ctx_sub_warmup->max_count = 100;
 
-    actor_id sub_warmup;
+    actor_id_t sub_warmup;
     hive_spawn(bus_subscriber, NULL, ctx_sub_warmup, NULL, &sub_warmup);
-    actor_id pub_warmup;
+    actor_id_t pub_warmup;
     hive_spawn(bus_publisher, NULL, ctx_pub_warmup, NULL, &pub_warmup);
     hive_run();
 
@@ -468,17 +468,17 @@ static void bench_bus(void) {
     // Use moderate iterations - publisher yields every 10 messages to cooperate
     const uint64_t BUS_ITERATIONS = 1000;
 
-    bus_ctx *ctx_pub = calloc(1, sizeof(bus_ctx));
-    bus_ctx *ctx_sub = calloc(1, sizeof(bus_ctx));
+    bus_ctx_t *ctx_pub = calloc(1, sizeof(bus_ctx_t));
+    bus_ctx_t *ctx_sub = calloc(1, sizeof(bus_ctx_t));
 
     ctx_pub->bus = bus;
     ctx_pub->max_count = BUS_ITERATIONS;
     ctx_sub->bus = bus;
     ctx_sub->max_count = BUS_ITERATIONS;
 
-    actor_id sub;
+    actor_id_t sub;
     hive_spawn(bus_subscriber, NULL, ctx_sub, NULL, &sub);
-    actor_id pub;
+    actor_id_t pub;
     hive_spawn(bus_publisher, NULL, ctx_pub, NULL, &pub);
     hive_run();
 
@@ -521,7 +521,7 @@ int main(void) {
     fflush(stdout);
 
     // Initialize runtime
-    hive_status status = hive_init();
+    hive_status_t status = hive_init();
     if (HIVE_FAILED(status)) {
         fprintf(stderr, "Failed to initialize runtime: %s\n",
                 status.msg ? status.msg : "unknown error");

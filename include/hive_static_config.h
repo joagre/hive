@@ -126,8 +126,8 @@
 // I/O Source Pool Configuration
 // -----------------------------------------------------------------------------
 
-// Size of io_source pool for tracking pending I/O operations in event loop
-// Each pending network I/O operation consumes one io_source until completed
+// Size of io_source_t pool for tracking pending I/O operations in event loop
+// Each pending network I/O operation consumes one io_source_t until completed
 // Defined in hive_io_source.h: HIVE_IO_SOURCE_POOL_SIZE = 128
 
 // -----------------------------------------------------------------------------

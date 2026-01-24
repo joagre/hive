@@ -13,21 +13,21 @@
 // This header is NOT part of the public API
 
 // Subsystem init/cleanup (called by hive_init/hive_cleanup)
-hive_status hive_ipc_init(void);
-hive_status hive_timer_init(void);
+hive_status_t hive_ipc_init(void);
+hive_status_t hive_timer_init(void);
 void hive_timer_cleanup(void);
-hive_status hive_bus_init(void);
+hive_status_t hive_bus_init(void);
 void hive_bus_cleanup(void);
-hive_status hive_link_init(void);
+hive_status_t hive_link_init(void);
 void hive_link_cleanup(void);
 
 #if HIVE_ENABLE_FILE
-hive_status hive_file_init(void);
+hive_status_t hive_file_init(void);
 void hive_file_cleanup(void);
 #endif
 
 #if HIVE_ENABLE_NET
-hive_status hive_net_init(void);
+hive_status_t hive_net_init(void);
 void hive_net_cleanup(void);
 #endif
 
@@ -38,7 +38,7 @@ void hive_net_cleanup(void);
 // Message data entry type (shared by IPC, bus, link, timer subsystems)
 typedef struct {
     uint8_t data[HIVE_MAX_MESSAGE_SIZE];
-} message_data_entry;
+} message_data_entry_t;
 
 // -----------------------------------------------------------------------------
 // Shared Linked List Macros
@@ -139,22 +139,23 @@ void hive_msg_pool_free(void *data);
 
 // Add mailbox entry to actor's mailbox and wake if blocked
 // Used by: timer, link subsystems (via hive_ipc_notify_ex)
-void hive_mailbox_add_entry(actor *recipient, mailbox_entry *entry);
+void hive_mailbox_add_entry(actor_t *recipient, mailbox_entry_t *entry);
 
 // Check for timeout message in mailbox and dequeue if present
 // Returns HIVE_ERR_TIMEOUT if timeout occurred, otherwise cancels timer and
 // returns HIVE_SUCCESS Used by: IPC recv, network I/O, bus
-hive_status hive_mailbox_handle_timeout(actor *current, timer_id timeout_timer,
-                                        const char *operation);
+hive_status_t hive_mailbox_handle_timeout(actor_t *current,
+                                          timer_id_t timeout_timer,
+                                          const char *operation);
 
 // Free a mailbox entry and its associated data buffers
 // Used by: IPC, mailbox clear, actor cleanup
-void hive_ipc_free_entry(mailbox_entry *entry);
+void hive_ipc_free_entry(mailbox_entry_t *entry);
 
 // Dequeue the head entry from an actor's mailbox
 // Returns NULL if mailbox is empty
 // Used by: IPC recv, timeout handling, bus
-mailbox_entry *hive_ipc_dequeue_head(actor *a);
+mailbox_entry_t *hive_ipc_dequeue_head(actor_t *a);
 
 // Actor crash handler (called when actor returns without hive_exit)
 // Sets HIVE_EXIT_CRASH and yields to scheduler - never returns
@@ -163,27 +164,27 @@ _Noreturn void hive_exit_crash(void);
 // Event loop handlers (called by scheduler when I/O sources become ready)
 
 // Handle timer event (timerfd ready)
-void hive_timer_handle_event(io_source *source);
+void hive_timer_handle_event(io_source_t *source);
 
 // Advance simulation time and fire due timers (called by hive_advance_time)
 void hive_timer_advance_time(uint64_t delta_us);
 
 #if HIVE_ENABLE_NET
 // Handle network event (socket ready)
-void hive_net_handle_event(io_source *source);
+void hive_net_handle_event(io_source_t *source);
 #endif
 
 // Clear mailbox entries (used during actor cleanup)
-void hive_ipc_mailbox_clear(mailbox *mailbox);
+void hive_ipc_mailbox_clear(mailbox_t *mailbox);
 
 // Free active message entry (used during actor cleanup)
-void hive_ipc_free_active_msg(mailbox_entry *entry);
+void hive_ipc_free_active_msg(mailbox_entry_t *entry);
 
 // Internal notify with explicit sender, class and tag (used by timer, link,
 // etc.) Not part of public API - use hive_ipc_notify_ex() for user code
-hive_status hive_ipc_notify_internal(actor_id to, actor_id sender,
-                                     hive_msg_class class, uint32_t tag,
-                                     const void *data, size_t len);
+hive_status_t hive_ipc_notify_internal(actor_id_t to, actor_id_t sender,
+                                       hive_msg_class_t class, uint32_t tag,
+                                       const void *data, size_t len);
 
 // -----------------------------------------------------------------------------
 // hive_select internal helpers (implemented in hive_ipc.c and hive_bus.c)
@@ -193,25 +194,26 @@ hive_status hive_ipc_notify_internal(actor_id to, actor_id sender,
 // Returns the matching entry and sets *matched_index to which filter matched
 // Does NOT consume the message - caller must call hive_ipc_consume_entry()
 // Used by: hive_select
-mailbox_entry *hive_ipc_scan_mailbox(const hive_recv_filter *filters,
-                                     size_t num_filters, size_t *matched_index);
+mailbox_entry_t *hive_ipc_scan_mailbox(const hive_recv_filter_t *filters,
+                                       size_t num_filters,
+                                       size_t *matched_index);
 
-// Consume (unlink) a mailbox entry and decode into hive_message
+// Consume (unlink) a mailbox entry and decode into hive_message_t
 // Entry is stored as active_msg for later cleanup
 // Used by: hive_select
-void hive_ipc_consume_entry(mailbox_entry *entry, hive_message *msg);
+void hive_ipc_consume_entry(mailbox_entry_t *entry, hive_message_t *msg);
 
 // Check if bus has unread data for current actor (non-blocking, no consume)
 // Returns true if data is available
 // Used by: hive_select
-bool hive_bus_has_data(bus_id bus);
+bool hive_bus_has_data(bus_id_t bus);
 
 // Set blocked flag for current actor on specified bus
 // Used by: hive_select
-void hive_bus_set_blocked(bus_id bus, bool blocked);
+void hive_bus_set_blocked(bus_id_t bus, bool blocked);
 
 // Check if current actor is subscribed to bus
 // Used by: hive_select for validation
-bool hive_bus_is_subscribed(bus_id bus);
+bool hive_bus_is_subscribed(bus_id_t bus);
 
 #endif // HIVE_INTERNAL_H

@@ -14,15 +14,15 @@
 
 typedef struct {
     const char *name; // Points to user-provided string (must remain valid)
-    actor_id actor;
+    actor_id_t actor;
 } registry_entry_t;
 
 static registry_entry_t s_registry[HIVE_MAX_REGISTERED_NAMES];
 static size_t s_registry_count = 0;
 
-hive_status hive_init(void) {
-    // Initialize actor subsystem
-    hive_status status = hive_actor_init();
+hive_status_t hive_init(void) {
+    // Initialize actor_t subsystem
+    hive_status_t status = hive_actor_init();
     if (HIVE_FAILED(status)) {
         return status;
     }
@@ -113,7 +113,7 @@ void hive_run(void) {
     hive_scheduler_run();
 }
 
-hive_status hive_run_until_blocked(void) {
+hive_status_t hive_run_until_blocked(void) {
     return hive_scheduler_run_until_blocked();
 }
 
@@ -149,8 +149,8 @@ static bool name_is_registered(const char *name) {
     return false;
 }
 
-// Internal function to register an actor by ID (for auto_register)
-static hive_status register_actor_by_id(const char *name, actor_id id) {
+// Internal function to register an actor_t by ID (for auto_register)
+static hive_status_t register_actor_by_id(const char *name, actor_id_t id) {
     if (s_registry_count >= HIVE_MAX_REGISTERED_NAMES) {
         return HIVE_ERROR(HIVE_ERR_NOMEM, "Registry full");
     }
@@ -159,12 +159,13 @@ static hive_status register_actor_by_id(const char *name, actor_id id) {
     s_registry[s_registry_count].actor = id;
     s_registry_count++;
 
-    HIVE_LOG_DEBUG("Auto-registered actor %u as '%s'", id, name);
+    HIVE_LOG_DEBUG("Auto-registered actor_t %u as '%s'", id, name);
     return HIVE_SUCCESS;
 }
 
-hive_status hive_spawn(actor_fn fn, hive_actor_init_fn init, void *init_args,
-                       const actor_config *cfg, actor_id *out) {
+hive_status_t hive_spawn(actor_fn_t fn, hive_actor_init_fn_t init,
+                         void *init_args, const actor_config_t *cfg,
+                         actor_id_t *out) {
     if (!fn) {
         return HIVE_ERROR(HIVE_ERR_INVALID, "NULL function pointer");
     }
@@ -173,13 +174,13 @@ hive_status hive_spawn(actor_fn fn, hive_actor_init_fn init, void *init_args,
     }
 
     // Use default config if none provided
-    actor_config default_cfg = HIVE_ACTOR_CONFIG_DEFAULT;
-    const actor_config *use_cfg = cfg ? cfg : &default_cfg;
+    actor_config_t default_cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+    const actor_config_t *use_cfg = cfg ? cfg : &default_cfg;
 
     // Copy config field by field instead of struct copy to avoid alignment
     // issues (struct copy may use SIMD instructions requiring 16-byte
     // alignment)
-    actor_config actual_cfg;
+    actor_config_t actual_cfg;
     actual_cfg.stack_size = use_cfg->stack_size;
     actual_cfg.priority = use_cfg->priority;
     actual_cfg.name = use_cfg->name;
@@ -207,8 +208,8 @@ hive_status hive_spawn(actor_fn fn, hive_actor_init_fn init, void *init_args,
         args = init(init_args);
     }
 
-    // Allocate actor first (with NULL siblings, we'll set them after)
-    actor *a = hive_actor_alloc(fn, args, NULL, 0, &actual_cfg);
+    // Allocate actor_t first (with NULL siblings, we'll set them after)
+    actor_t *a = hive_actor_alloc(fn, args, NULL, 0, &actual_cfg);
     if (!a) {
         return HIVE_ERROR(HIVE_ERR_NOMEM,
                           "Actor table or stack arena exhausted");
@@ -216,15 +217,15 @@ hive_status hive_spawn(actor_fn fn, hive_actor_init_fn init, void *init_args,
 
     // Handle auto_register
     if (actual_cfg.auto_register) {
-        hive_status reg_status = register_actor_by_id(actual_cfg.name, a->id);
+        hive_status_t reg_status = register_actor_by_id(actual_cfg.name, a->id);
         if (HIVE_FAILED(reg_status)) {
-            // Registration failed, clean up actor
+            // Registration failed, clean up actor_t
             hive_actor_free(a);
             return reg_status;
         }
     }
 
-    // Set up self spawn info in the actor struct (stable storage)
+    // Set up self spawn info in the actor_t struct (stable storage)
     a->self_spawn_info.name = actual_cfg.name;
     a->self_spawn_info.id = a->id;
     a->self_spawn_info.registered = actual_cfg.auto_register;
@@ -238,12 +239,12 @@ hive_status hive_spawn(actor_fn fn, hive_actor_init_fn init, void *init_args,
 }
 
 _Noreturn void hive_exit(void) {
-    actor *current = hive_actor_current();
+    actor_t *current = hive_actor_current();
     if (current) {
         HIVE_LOG_DEBUG("Actor %u (%s) exiting", current->id,
                        current->name ? current->name : "unnamed");
 
-        // Mark exit reason and actor state
+        // Mark exit reason and actor_t state
         // Scheduler will clean up resources - don't free stack here!
         current->exit_reason = HIVE_EXIT_NORMAL;
         current->state = ACTOR_STATE_DEAD;
@@ -258,7 +259,7 @@ _Noreturn void hive_exit(void) {
 }
 
 _Noreturn void hive_exit_crash(void) {
-    actor *current = hive_actor_current();
+    actor_t *current = hive_actor_current();
     if (current) {
         HIVE_LOG_ERROR("Actor %u (%s) returned without calling hive_exit()",
                        (unsigned)current->id,
@@ -277,8 +278,8 @@ _Noreturn void hive_exit_crash(void) {
     abort();
 }
 
-actor_id hive_self(void) {
-    actor *current = hive_actor_current();
+actor_id_t hive_self(void) {
+    actor_t *current = hive_actor_current();
     return current ? current->id : ACTOR_ID_INVALID;
 }
 
@@ -286,31 +287,31 @@ void hive_yield(void) {
     hive_scheduler_yield();
 }
 
-bool hive_actor_alive(actor_id id) {
-    actor *a = hive_actor_get(id);
+bool hive_actor_alive(actor_id_t id) {
+    actor_t *a = hive_actor_get(id);
     return a != NULL && a->state != ACTOR_STATE_DEAD;
 }
 
-hive_status hive_kill(actor_id target) {
+hive_status_t hive_kill(actor_id_t target) {
     // Cannot kill self
-    actor *current = hive_actor_current();
+    actor_t *current = hive_actor_current();
     if (current && current->id == target) {
         return HIVE_ERROR(HIVE_ERR_INVALID, "Cannot kill self (use hive_exit)");
     }
 
-    // Get target actor
-    actor *a = hive_actor_get(target);
+    // Get target actor_t
+    actor_t *a = hive_actor_get(target);
     if (!a || a->state == ACTOR_STATE_DEAD) {
-        return HIVE_ERROR(HIVE_ERR_INVALID, "Invalid or dead actor");
+        return HIVE_ERROR(HIVE_ERR_INVALID, "Invalid or dead actor_t");
     }
 
-    HIVE_LOG_DEBUG("Killing actor %u (%s)", a->id,
+    HIVE_LOG_DEBUG("Killing actor_t %u (%s)", a->id,
                    a->name ? a->name : "unnamed");
 
     // Set exit reason before cleanup (so notifications report correct reason)
     a->exit_reason = HIVE_EXIT_KILLED;
 
-    // Free actor resources and send death notifications
+    // Free actor_t resources and send death notifications
     hive_actor_free(a);
 
     return HIVE_SUCCESS;
@@ -320,14 +321,14 @@ hive_status hive_kill(actor_id target) {
 // Name Registry Implementation
 // =============================================================================
 
-hive_status hive_register(const char *name) {
+hive_status_t hive_register(const char *name) {
     if (!name) {
         return HIVE_ERROR(HIVE_ERR_INVALID, "NULL name");
     }
 
-    actor *current = hive_actor_current();
+    actor_t *current = hive_actor_current();
     if (!current) {
-        return HIVE_ERROR(HIVE_ERR_INVALID, "Not called from actor context");
+        return HIVE_ERROR(HIVE_ERR_INVALID, "Not called from actor_t context");
     }
 
     // Check for duplicate name
@@ -347,12 +348,12 @@ hive_status hive_register(const char *name) {
     s_registry[s_registry_count].actor = current->id;
     s_registry_count++;
 
-    HIVE_LOG_DEBUG("Registered actor %u as '%s'", current->id, name);
+    HIVE_LOG_DEBUG("Registered actor_t %u as '%s'", current->id, name);
 
     return HIVE_SUCCESS;
 }
 
-hive_status hive_whereis(const char *name, actor_id *out) {
+hive_status_t hive_whereis(const char *name, actor_id_t *out) {
     if (!name) {
         return HIVE_ERROR(HIVE_ERR_INVALID, "NULL name");
     }
@@ -370,14 +371,14 @@ hive_status hive_whereis(const char *name, actor_id *out) {
     return HIVE_ERROR(HIVE_ERR_INVALID, "Name not found");
 }
 
-hive_status hive_unregister(const char *name) {
+hive_status_t hive_unregister(const char *name) {
     if (!name) {
         return HIVE_ERROR(HIVE_ERR_INVALID, "NULL name");
     }
 
-    actor *current = hive_actor_current();
+    actor_t *current = hive_actor_current();
     if (!current) {
-        return HIVE_ERROR(HIVE_ERR_INVALID, "Not called from actor context");
+        return HIVE_ERROR(HIVE_ERR_INVALID, "Not called from actor_t context");
     }
 
     for (size_t i = 0; i < s_registry_count; i++) {
@@ -385,10 +386,10 @@ hive_status hive_unregister(const char *name) {
             // Check ownership
             if (s_registry[i].actor != current->id) {
                 return HIVE_ERROR(HIVE_ERR_INVALID,
-                                  "Name not owned by calling actor");
+                                  "Name not owned by calling actor_t");
             }
 
-            HIVE_LOG_DEBUG("Unregistered '%s' (was actor %u)", name,
+            HIVE_LOG_DEBUG("Unregistered '%s' (was actor_t %u)", name,
                            current->id);
 
             // Remove by swapping with last entry
@@ -401,12 +402,12 @@ hive_status hive_unregister(const char *name) {
     return HIVE_ERROR(HIVE_ERR_INVALID, "Name not found");
 }
 
-// Called by hive_actor_free() to clean up registry entries for dying actor
-void hive_registry_cleanup_actor(actor_id id) {
-    // Remove all entries for this actor (scan backwards to allow removal)
+// Called by hive_actor_free() to clean up registry entries for dying actor_t
+void hive_registry_cleanup_actor(actor_id_t id) {
+    // Remove all entries for this actor_t (scan backwards to allow removal)
     for (size_t i = s_registry_count; i > 0; i--) {
         if (s_registry[i - 1].actor == id) {
-            HIVE_LOG_DEBUG("Auto-unregistered '%s' (actor %u exiting)",
+            HIVE_LOG_DEBUG("Auto-unregistered '%s' (actor_t %u exiting)",
                            s_registry[i - 1].name, id);
             // Remove by swapping with last entry
             s_registry[i - 1] = s_registry[s_registry_count - 1];

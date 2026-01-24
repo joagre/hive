@@ -15,7 +15,7 @@
 void *altitude_actor_init(void *init_args);
 
 // Actor entry point
-void altitude_actor(void *args, const hive_spawn_info *siblings,
+void altitude_actor(void *args, const hive_spawn_info_t *siblings,
                     size_t sibling_count);
 
 #endif // ALTITUDE_ACTOR_H

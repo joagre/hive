@@ -17,25 +17,25 @@
 
 // Actor state - initialized by sensor_actor_init
 typedef struct {
-    bus_id sensor_bus;
-} sensor_state;
+    bus_id_t sensor_bus;
+} sensor_state_t;
 
 void *sensor_actor_init(void *init_args) {
-    const pilot_buses *buses = init_args;
-    static sensor_state state;
+    const pilot_buses_t *buses = init_args;
+    static sensor_state_t state;
     state.sensor_bus = buses->sensor_bus;
     return &state;
 }
 
-void sensor_actor(void *args, const hive_spawn_info *siblings,
+void sensor_actor(void *args, const hive_spawn_info_t *siblings,
                   size_t sibling_count) {
     (void)siblings;
     (void)sibling_count;
 
-    sensor_state *state = args;
+    sensor_state_t *state = args;
 
-    timer_id timer;
-    hive_status status = hive_timer_every(SENSOR_INTERVAL_US, &timer);
+    timer_id_t timer;
+    hive_status_t status = hive_timer_every(SENSOR_INTERVAL_US, &timer);
     if (HIVE_FAILED(status)) {
         HIVE_LOG_ERROR("[SENSOR] Failed to create periodic timer: %s",
                        HIVE_ERR_STR(status));
@@ -43,7 +43,7 @@ void sensor_actor(void *args, const hive_spawn_info *siblings,
     }
 
     while (1) {
-        hive_message msg;
+        hive_message_t msg;
         status = hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer,
                                      &msg, -1);
         if (HIVE_FAILED(status)) {

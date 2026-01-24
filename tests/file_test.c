@@ -24,7 +24,7 @@ static int tests_failed = 0;
 // Test file path
 static const char *TEST_FILE = "/tmp/hive_file_test.tmp";
 
-static void run_file_tests(void *args, const hive_spawn_info *siblings,
+static void run_file_tests(void *args, const hive_spawn_info_t *siblings,
                            size_t sibling_count) {
     (void)args;
     (void)siblings;
@@ -36,7 +36,7 @@ static void run_file_tests(void *args, const hive_spawn_info *siblings,
     printf("\nTest 1: Open file for writing (create)\n");
     int fd = -1;
     {
-        hive_status status = hive_file_open(
+        hive_status_t status = hive_file_open(
             TEST_FILE, HIVE_O_WRONLY | HIVE_O_CREAT | HIVE_O_TRUNC, 0644, &fd);
         if (HIVE_FAILED(status)) {
             printf("    Error: %s\n", status.msg ? status.msg : "unknown");
@@ -57,7 +57,7 @@ static void run_file_tests(void *args, const hive_spawn_info *siblings,
         size_t len = strlen(data);
         size_t actual = 0;
 
-        hive_status status = hive_file_write(fd, data, len, &actual);
+        hive_status_t status = hive_file_write(fd, data, len, &actual);
         if (HIVE_FAILED(status)) {
             printf("    Error: %s\n", status.msg ? status.msg : "unknown");
             TEST_FAIL("hive_file_write");
@@ -74,7 +74,7 @@ static void run_file_tests(void *args, const hive_spawn_info *siblings,
     // ========================================================================
     printf("\nTest 3: Sync file to disk\n");
     {
-        hive_status status = hive_file_sync(fd);
+        hive_status_t status = hive_file_sync(fd);
         if (HIVE_FAILED(status)) {
             printf("    Error: %s\n", status.msg ? status.msg : "unknown");
             TEST_FAIL("hive_file_sync");
@@ -88,7 +88,7 @@ static void run_file_tests(void *args, const hive_spawn_info *siblings,
     // ========================================================================
     printf("\nTest 4: Close file\n");
     {
-        hive_status status = hive_file_close(fd);
+        hive_status_t status = hive_file_close(fd);
         if (HIVE_FAILED(status)) {
             printf("    Error: %s\n", status.msg ? status.msg : "unknown");
             TEST_FAIL("hive_file_close");
@@ -102,7 +102,7 @@ static void run_file_tests(void *args, const hive_spawn_info *siblings,
     // ========================================================================
     printf("\nTest 5: Open file for reading\n");
     {
-        hive_status status = hive_file_open(TEST_FILE, HIVE_O_RDONLY, 0, &fd);
+        hive_status_t status = hive_file_open(TEST_FILE, HIVE_O_RDONLY, 0, &fd);
         if (HIVE_FAILED(status)) {
             printf("    Error: %s\n", status.msg ? status.msg : "unknown");
             TEST_FAIL("hive_file_open for read");
@@ -119,7 +119,8 @@ static void run_file_tests(void *args, const hive_spawn_info *siblings,
         char buf[64] = {0};
         size_t actual = 0;
 
-        hive_status status = hive_file_read(fd, buf, sizeof(buf) - 1, &actual);
+        hive_status_t status =
+            hive_file_read(fd, buf, sizeof(buf) - 1, &actual);
         if (HIVE_FAILED(status)) {
             printf("    Error: %s\n", status.msg ? status.msg : "unknown");
             TEST_FAIL("hive_file_read");
@@ -140,7 +141,7 @@ static void run_file_tests(void *args, const hive_spawn_info *siblings,
         size_t actual = 0;
 
         // Read "RT" starting at offset 7
-        hive_status status = hive_file_pread(fd, buf, 2, 7, &actual);
+        hive_status_t status = hive_file_pread(fd, buf, 2, 7, &actual);
         if (HIVE_FAILED(status)) {
             printf("    Error: %s\n", status.msg ? status.msg : "unknown");
             TEST_FAIL("hive_file_pread");
@@ -160,7 +161,7 @@ static void run_file_tests(void *args, const hive_spawn_info *siblings,
     // ========================================================================
     printf("\nTest 8: pwrite (write at offset)\n");
     {
-        hive_status status = hive_file_open(TEST_FILE, HIVE_O_RDWR, 0, &fd);
+        hive_status_t status = hive_file_open(TEST_FILE, HIVE_O_RDWR, 0, &fd);
         if (HIVE_FAILED(status)) {
             TEST_FAIL("open for pwrite");
         } else {
@@ -190,7 +191,7 @@ static void run_file_tests(void *args, const hive_spawn_info *siblings,
     // ========================================================================
     printf("\nTest 9: Open non-existent file fails\n");
     {
-        hive_status status = hive_file_open(
+        hive_status_t status = hive_file_open(
             "/tmp/nonexistent_rt_test_file_xyz.tmp", HIVE_O_RDONLY, 0, &fd);
         if (HIVE_FAILED(status)) {
             TEST_PASS("open non-existent file fails");
@@ -205,7 +206,7 @@ static void run_file_tests(void *args, const hive_spawn_info *siblings,
     // ========================================================================
     printf("\nTest 10: Close invalid fd\n");
     {
-        hive_status status = hive_file_close(-1);
+        hive_status_t status = hive_file_close(-1);
         if (HIVE_FAILED(status)) {
             TEST_PASS("close invalid fd fails");
         } else {
@@ -220,7 +221,7 @@ static void run_file_tests(void *args, const hive_spawn_info *siblings,
     {
         char buf[64];
         size_t actual = 0;
-        hive_status status = hive_file_read(-1, buf, sizeof(buf), &actual);
+        hive_status_t status = hive_file_read(-1, buf, sizeof(buf), &actual);
         if (HIVE_FAILED(status)) {
             TEST_PASS("read from invalid fd fails");
         } else {
@@ -235,7 +236,7 @@ static void run_file_tests(void *args, const hive_spawn_info *siblings,
     {
         const char *data = "test";
         size_t actual = 0;
-        hive_status status = hive_file_write(-1, data, strlen(data), &actual);
+        hive_status_t status = hive_file_write(-1, data, strlen(data), &actual);
         if (HIVE_FAILED(status)) {
             TEST_PASS("write to invalid fd fails");
         } else {
@@ -249,7 +250,7 @@ static void run_file_tests(void *args, const hive_spawn_info *siblings,
     printf("\nTest 13: pread beyond EOF\n");
     {
         // Create a small test file
-        hive_status status = hive_file_open(
+        hive_status_t status = hive_file_open(
             TEST_FILE, HIVE_O_WRONLY | HIVE_O_CREAT | HIVE_O_TRUNC, 0644, &fd);
         if (HIVE_SUCCEEDED(status)) {
             const char *data = "short";
@@ -282,7 +283,7 @@ static void run_file_tests(void *args, const hive_spawn_info *siblings,
     // ========================================================================
     printf("\nTest 14: Double close\n");
     {
-        hive_status status = hive_file_open(TEST_FILE, HIVE_O_RDONLY, 0, &fd);
+        hive_status_t status = hive_file_open(TEST_FILE, HIVE_O_RDONLY, 0, &fd);
         if (HIVE_SUCCEEDED(status)) {
             int saved_fd = fd;
 
@@ -307,7 +308,7 @@ static void run_file_tests(void *args, const hive_spawn_info *siblings,
     // ========================================================================
     printf("\nTest 15: Zero-length read/write\n");
     {
-        hive_status status = hive_file_open(TEST_FILE, HIVE_O_RDWR, 0, &fd);
+        hive_status_t status = hive_file_open(TEST_FILE, HIVE_O_RDWR, 0, &fd);
         if (HIVE_SUCCEEDED(status)) {
             size_t actual = 0;
 
@@ -353,17 +354,17 @@ static void run_file_tests(void *args, const hive_spawn_info *siblings,
 int main(void) {
     printf("=== File I/O (hive_file) Test Suite ===\n");
 
-    hive_status status = hive_init();
+    hive_status_t status = hive_init();
     if (HIVE_FAILED(status)) {
         fprintf(stderr, "Failed to initialize runtime: %s\n",
                 status.msg ? status.msg : "unknown error");
         return 1;
     }
 
-    actor_config cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+    actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
     cfg.stack_size = 128 * 1024;
 
-    actor_id runner;
+    actor_id_t runner;
     if (HIVE_FAILED(hive_spawn(run_file_tests, NULL, NULL, &cfg, &runner))) {
         fprintf(stderr, "Failed to spawn test runner\n");
         hive_cleanup();

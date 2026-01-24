@@ -21,10 +21,10 @@ static struct {
     bool initialized;
 } s_timer = {0};
 
-hive_status hive_timer_init(void) {
+hive_status_t hive_timer_init(void) {
     HIVE_INIT_GUARD(s_timer.initialized);
 
-    hive_status status = hive_hal_timer_init();
+    hive_status_t status = hive_hal_timer_init();
     if (HIVE_FAILED(status)) {
         return status;
     }
@@ -40,7 +40,7 @@ void hive_timer_cleanup(void) {
     s_timer.initialized = false;
 }
 
-hive_status hive_timer_after(uint32_t delay_us, timer_id *out) {
+hive_status_t hive_timer_after(uint32_t delay_us, timer_id_t *out) {
     if (!out) {
         return HIVE_ERROR(HIVE_ERR_INVALID, "NULL out pointer");
     }
@@ -48,11 +48,11 @@ hive_status hive_timer_after(uint32_t delay_us, timer_id *out) {
     HIVE_REQUIRE_INIT(s_timer.initialized, "Timer");
     HIVE_REQUIRE_ACTOR_CONTEXT();
 
-    actor *current = hive_actor_current();
+    actor_t *current = hive_actor_current();
     return hive_hal_timer_create(delay_us, false, current->id, out);
 }
 
-hive_status hive_timer_every(uint32_t interval_us, timer_id *out) {
+hive_status_t hive_timer_every(uint32_t interval_us, timer_id_t *out) {
     if (!out) {
         return HIVE_ERROR(HIVE_ERR_INVALID, "NULL out pointer");
     }
@@ -60,27 +60,27 @@ hive_status hive_timer_every(uint32_t interval_us, timer_id *out) {
     HIVE_REQUIRE_INIT(s_timer.initialized, "Timer");
     HIVE_REQUIRE_ACTOR_CONTEXT();
 
-    actor *current = hive_actor_current();
+    actor_t *current = hive_actor_current();
     return hive_hal_timer_create(interval_us, true, current->id, out);
 }
 
-hive_status hive_timer_cancel(timer_id id) {
+hive_status_t hive_timer_cancel(timer_id_t id) {
     HIVE_REQUIRE_INIT(s_timer.initialized, "Timer");
 
     return hive_hal_timer_cancel(id);
 }
 
-hive_status hive_sleep(uint32_t delay_us) {
+hive_status_t hive_sleep(uint32_t delay_us) {
     // Create one-shot timer
-    timer_id timer;
-    hive_status s = hive_timer_after(delay_us, &timer);
+    timer_id_t timer;
+    hive_status_t s = hive_timer_after(delay_us, &timer);
     if (HIVE_FAILED(s)) {
         return s;
     }
 
     // Wait specifically for THIS timer message
-    // Other messages remain in mailbox (selective receive)
-    hive_message msg;
+    // Other messages remain in mailbox_t (selective receive)
+    hive_message_t msg;
     return hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg,
                                -1);
 }

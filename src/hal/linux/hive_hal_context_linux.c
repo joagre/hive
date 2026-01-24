@@ -10,33 +10,33 @@
 #include <string.h>
 
 // Forward declaration of assembly function
-extern void hive_context_switch_asm(hive_context *from, hive_context *to);
+extern void hive_context_switch_asm(hive_context_t *from, hive_context_t *to);
 
-// Wrapper function that calls the actor function and handles return
+// Wrapper function that calls the actor_t function and handles return
 static void context_entry(void) {
     // When we first enter, r12 contains our function pointer
     // We need to extract it via inline assembly
-    void (*fn)(void *, const hive_spawn_info *, size_t);
+    void (*fn)(void *, const hive_spawn_info_t *, size_t);
 
     __asm__ volatile("movq %%r12, %0\n" : "=r"(fn) : : "r12");
 
-    // Get startup info from current actor
-    actor *current = hive_actor_current();
+    // Get startup info from current actor_t
+    actor_t *current = hive_actor_current();
     void *args = current->startup_args;
-    const hive_spawn_info *siblings = current->startup_siblings;
+    const hive_spawn_info_t *siblings = current->startup_siblings;
     size_t sibling_count = current->startup_sibling_count;
 
-    // Call the actor function with all three arguments
+    // Call the actor_t function with all three arguments
     fn(args, siblings, sibling_count);
 
     // Actor returned without calling hive_exit() - this is a crash
     hive_exit_crash();
 }
 
-void hive_context_init(hive_context *ctx, void *stack, size_t stack_size,
+void hive_context_init(hive_context_t *ctx, void *stack, size_t stack_size,
                        void (*fn)(void *, const void *, size_t)) {
     // Zero out context
-    memset(ctx, 0, sizeof(hive_context));
+    memset(ctx, 0, sizeof(hive_context_t));
 
     // Stack grows down on x86-64
     // Calculate stack top (align to 16 bytes as required by x86-64 ABI)
@@ -50,7 +50,7 @@ void hive_context_init(hive_context *ctx, void *stack, size_t stack_size,
     // already have 16-byte alignment, so just push the return address
 
     // Store function pointer in callee-saved register r12
-    // Other startup info (args, siblings, count) is stored in actor struct
+    // Other startup info (args, siblings, count) is stored in actor_t struct
     // Use a union to safely convert function pointer to void pointer
     union {
         void (*fn_ptr)(void *, const void *, size_t);
@@ -80,6 +80,6 @@ void hive_context_init(hive_context *ctx, void *stack, size_t stack_size,
     ctx->rsp = (void *)stack_top;
 }
 
-void hive_context_switch(hive_context *from, hive_context *to) {
+void hive_context_switch(hive_context_t *from, hive_context_t *to) {
     hive_context_switch_asm(from, to);
 }

@@ -16,26 +16,26 @@
 
 // Actor state - initialized by attitude_actor_init
 typedef struct {
-    bus_id state_bus;
-    bus_id attitude_setpoint_bus;
-    bus_id rate_setpoint_bus;
-} attitude_state;
+    bus_id_t state_bus;
+    bus_id_t attitude_setpoint_bus;
+    bus_id_t rate_setpoint_bus;
+} attitude_state_t;
 
 void *attitude_actor_init(void *init_args) {
-    const pilot_buses *buses = init_args;
-    static attitude_state state;
+    const pilot_buses_t *buses = init_args;
+    static attitude_state_t state;
     state.state_bus = buses->state_bus;
     state.attitude_setpoint_bus = buses->attitude_setpoint_bus;
     state.rate_setpoint_bus = buses->rate_setpoint_bus;
     return &state;
 }
 
-void attitude_actor(void *args, const hive_spawn_info *siblings,
+void attitude_actor(void *args, const hive_spawn_info_t *siblings,
                     size_t sibling_count) {
     (void)siblings;
     (void)sibling_count;
 
-    attitude_state *state = args;
+    attitude_state_t *state = args;
 
     if (HIVE_FAILED(hive_bus_subscribe(state->state_bus)) ||
         HIVE_FAILED(hive_bus_subscribe(state->attitude_setpoint_bus))) {
@@ -64,7 +64,7 @@ void attitude_actor(void *args, const hive_spawn_info *siblings,
         state_estimate_t est;
         attitude_setpoint_t new_attitude_sp;
         size_t len;
-        hive_status status;
+        hive_status_t status;
 
         // Block until state available
         status =

@@ -35,12 +35,12 @@ static int tests_failed = 0;
 static size_t s_standalone_sibling_count = 0;
 static bool s_standalone_self_in_siblings = false;
 
-static void standalone_actor(void *args, const hive_spawn_info *siblings,
+static void standalone_actor(void *args, const hive_spawn_info_t *siblings,
                              size_t sibling_count) {
     (void)args;
     s_standalone_sibling_count = sibling_count;
 
-    actor_id self = hive_self();
+    actor_id_t self = hive_self();
     for (size_t i = 0; i < sibling_count; i++) {
         if (siblings[i].id == self) {
             s_standalone_self_in_siblings = true;
@@ -52,7 +52,7 @@ static void standalone_actor(void *args, const hive_spawn_info *siblings,
 }
 
 static void test1_standalone_siblings(void *args,
-                                      const hive_spawn_info *siblings,
+                                      const hive_spawn_info_t *siblings,
                                       size_t sibling_count) {
     (void)args;
     (void)siblings;
@@ -62,15 +62,15 @@ static void test1_standalone_siblings(void *args,
     s_standalone_sibling_count = 0;
     s_standalone_self_in_siblings = false;
 
-    actor_id id;
-    hive_status s = hive_spawn(standalone_actor, NULL, NULL, NULL, &id);
+    actor_id_t id;
+    hive_status_t s = hive_spawn(standalone_actor, NULL, NULL, NULL, &id);
     if (HIVE_FAILED(s)) {
         TEST_FAIL("spawn failed");
         hive_exit();
     }
 
     hive_link(id);
-    hive_message msg;
+    hive_message_t msg;
     hive_ipc_recv(&msg, 1000);
 
     if (s_standalone_sibling_count == 1) {
@@ -97,9 +97,9 @@ static void test1_standalone_siblings(void *args,
 
 static size_t s_child_sibling_counts[NUM_CHILDREN] = {0};
 static bool s_child_saw_all_siblings[NUM_CHILDREN] = {false};
-static actor_id s_child_ids[NUM_CHILDREN] = {0};
+static actor_id_t s_child_ids[NUM_CHILDREN] = {0};
 
-static void child_actor(void *args, const hive_spawn_info *siblings,
+static void child_actor(void *args, const hive_spawn_info_t *siblings,
                         size_t sibling_count) {
     int index = *(int *)args;
     s_child_sibling_counts[index] = sibling_count;
@@ -119,7 +119,7 @@ static void child_actor(void *args, const hive_spawn_info *siblings,
     s_child_ids[index] = hive_self();
 
     // Wait for shutdown
-    hive_message msg;
+    hive_message_t msg;
     hive_ipc_recv(&msg, 5000);
     hive_exit();
 }
@@ -130,7 +130,7 @@ static void *child_init(void *init_args) {
 }
 
 static void test2_supervisor_siblings(void *args,
-                                      const hive_spawn_info *siblings,
+                                      const hive_spawn_info_t *siblings,
                                       size_t sibling_count) {
     (void)args;
     (void)siblings;
@@ -146,7 +146,7 @@ static void test2_supervisor_siblings(void *args,
 
     static int indices[NUM_CHILDREN] = {0, 1, 2};
 
-    hive_child_spec children[] = {
+    hive_child_spec_t children[] = {
         {.start = child_actor,
          .init = child_init,
          .init_args = &indices[0],
@@ -173,7 +173,7 @@ static void test2_supervisor_siblings(void *args,
          .actor_cfg = HIVE_ACTOR_CONFIG_DEFAULT},
     };
 
-    hive_supervisor_config cfg = {
+    hive_supervisor_config_t cfg = {
         .strategy = HIVE_STRATEGY_ONE_FOR_ONE,
         .max_restarts = 0,
         .restart_period_ms = 1000,
@@ -183,8 +183,8 @@ static void test2_supervisor_siblings(void *args,
         .shutdown_ctx = NULL,
     };
 
-    actor_id sup_id;
-    hive_status s = hive_supervisor_start(&cfg, NULL, &sup_id);
+    actor_id_t sup_id;
+    hive_status_t s = hive_supervisor_start(&cfg, NULL, &sup_id);
     if (HIVE_FAILED(s)) {
         TEST_FAIL("supervisor start failed");
         hive_exit();
@@ -231,30 +231,30 @@ static void test2_supervisor_siblings(void *args,
 // Test 3: hive_find_sibling helper function
 // ============================================================================
 
-static actor_id s_found_sibling_id = ACTOR_ID_INVALID;
+static actor_id_t s_found_sibling_id = ACTOR_ID_INVALID;
 
-static void finder_actor(void *args, const hive_spawn_info *siblings,
+static void finder_actor(void *args, const hive_spawn_info_t *siblings,
                          size_t sibling_count) {
     (void)args;
 
     s_found_sibling_id = hive_find_sibling(siblings, sibling_count, "target");
 
-    hive_message msg;
+    hive_message_t msg;
     hive_ipc_recv(&msg, 5000);
     hive_exit();
 }
 
-static void target_actor(void *args, const hive_spawn_info *siblings,
+static void target_actor(void *args, const hive_spawn_info_t *siblings,
                          size_t sibling_count) {
     (void)args;
     (void)siblings;
     (void)sibling_count;
-    hive_message msg;
+    hive_message_t msg;
     hive_ipc_recv(&msg, 5000);
     hive_exit();
 }
 
-static void test3_find_sibling(void *args, const hive_spawn_info *siblings,
+static void test3_find_sibling(void *args, const hive_spawn_info_t *siblings,
                                size_t sibling_count) {
     (void)args;
     (void)siblings;
@@ -263,7 +263,7 @@ static void test3_find_sibling(void *args, const hive_spawn_info *siblings,
 
     s_found_sibling_id = ACTOR_ID_INVALID;
 
-    hive_child_spec children[] = {
+    hive_child_spec_t children[] = {
         {.start = finder_actor,
          .init = NULL,
          .init_args = NULL,
@@ -282,7 +282,7 @@ static void test3_find_sibling(void *args, const hive_spawn_info *siblings,
          .actor_cfg = HIVE_ACTOR_CONFIG_DEFAULT},
     };
 
-    hive_supervisor_config cfg = {
+    hive_supervisor_config_t cfg = {
         .strategy = HIVE_STRATEGY_ONE_FOR_ONE,
         .max_restarts = 0,
         .restart_period_ms = 1000,
@@ -292,8 +292,8 @@ static void test3_find_sibling(void *args, const hive_spawn_info *siblings,
         .shutdown_ctx = NULL,
     };
 
-    actor_id sup_id;
-    hive_status s = hive_supervisor_start(&cfg, NULL, &sup_id);
+    actor_id_t sup_id;
+    hive_status_t s = hive_supervisor_start(&cfg, NULL, &sup_id);
     if (HIVE_FAILED(s)) {
         TEST_FAIL("supervisor start failed");
         hive_exit();
@@ -319,18 +319,19 @@ static void test3_find_sibling(void *args, const hive_spawn_info *siblings,
 
 static bool s_not_found_returned_null = false;
 
-static void not_finder_actor(void *args, const hive_spawn_info *siblings,
+static void not_finder_actor(void *args, const hive_spawn_info_t *siblings,
                              size_t sibling_count) {
     (void)args;
 
-    actor_id found = hive_find_sibling(siblings, sibling_count, "nonexistent");
+    actor_id_t found =
+        hive_find_sibling(siblings, sibling_count, "nonexistent");
     s_not_found_returned_null = (found == ACTOR_ID_INVALID);
 
     hive_exit();
 }
 
 static void test4_find_sibling_not_found(void *args,
-                                         const hive_spawn_info *siblings,
+                                         const hive_spawn_info_t *siblings,
                                          size_t sibling_count) {
     (void)args;
     (void)siblings;
@@ -339,18 +340,18 @@ static void test4_find_sibling_not_found(void *args,
 
     s_not_found_returned_null = false;
 
-    actor_id id;
-    actor_config cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+    actor_id_t id;
+    actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
     cfg.name = "searcher";
 
-    hive_status s = hive_spawn(not_finder_actor, NULL, NULL, &cfg, &id);
+    hive_status_t s = hive_spawn(not_finder_actor, NULL, NULL, &cfg, &id);
     if (HIVE_FAILED(s)) {
         TEST_FAIL("spawn failed");
         hive_exit();
     }
 
     hive_link(id);
-    hive_message msg;
+    hive_message_t msg;
     hive_ipc_recv(&msg, 1000);
 
     if (s_not_found_returned_null) {
@@ -366,7 +367,7 @@ static void test4_find_sibling_not_found(void *args,
 // Main test runner
 // ============================================================================
 
-typedef void (*test_func_t)(void *, const hive_spawn_info *, size_t);
+typedef void (*test_func_t)(void *, const hive_spawn_info_t *, size_t);
 
 static test_func_t test_funcs[] = {
     test1_standalone_siblings,
@@ -377,19 +378,19 @@ static test_func_t test_funcs[] = {
 
 static size_t current_test = 0;
 
-static void run_next_test(void *args, const hive_spawn_info *siblings,
+static void run_next_test(void *args, const hive_spawn_info_t *siblings,
                           size_t sibling_count) {
     (void)args;
     (void)siblings;
     (void)sibling_count;
 
     if (current_test < sizeof(test_funcs) / sizeof(test_funcs[0])) {
-        actor_id id;
+        actor_id_t id;
         hive_spawn(test_funcs[current_test], NULL, NULL, NULL, &id);
         hive_link(id);
         current_test++;
 
-        hive_message msg;
+        hive_message_t msg;
         hive_ipc_recv(&msg, 10000);
 
         // Run next test
@@ -404,7 +405,7 @@ int main(void) {
 
     hive_init();
 
-    actor_id runner;
+    actor_id_t runner;
     hive_spawn(run_next_test, NULL, NULL, NULL, &runner);
 
     hive_run();

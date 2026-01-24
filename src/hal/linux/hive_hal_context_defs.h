@@ -14,6 +14,6 @@ typedef struct {
     void *r13;
     void *r14;
     void *r15;
-} hive_context;
+} hive_context_t;
 
 #endif // HIVE_HAL_CONTEXT_DEFS_H

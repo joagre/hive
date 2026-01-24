@@ -1,7 +1,7 @@
 // Hardware Abstraction Layer - STM32 Timer Implementation
 //
 // Software timer wheel driven by hardware tick interrupt (SysTick or TIMx).
-// Provides timer_id-based API compatible with Linux implementation.
+// Provides timer_id_t-based API compatible with Linux implementation.
 // Default tick resolution: 1ms (HIVE_TIMER_TICK_US)
 
 #include "hal/hive_hal_timer.h"
@@ -26,25 +26,25 @@
 #endif
 
 // Active timer entry
-typedef struct timer_entry {
-    timer_id id;
-    actor_id owner;
+typedef struct timer_entry_t {
+    timer_id_t id;
+    actor_id_t owner;
     uint32_t expiry_ticks;   // When timer expires (absolute tick count)
     uint32_t interval_ticks; // For periodic timers (0 = one-shot)
     bool periodic;
-    struct timer_entry *next;
-} timer_entry;
+    struct timer_entry_t *next;
+} timer_entry_t;
 
 // Static pool for timer entries
-static timer_entry s_timer_pool[HIVE_TIMER_ENTRY_POOL_SIZE];
+static timer_entry_t s_timer_pool[HIVE_TIMER_ENTRY_POOL_SIZE];
 static bool s_timer_used[HIVE_TIMER_ENTRY_POOL_SIZE];
-static hive_pool s_timer_pool_mgr;
+static hive_pool_t s_timer_pool_mgr;
 
 // Timer subsystem state
 static struct {
     bool initialized;
-    timer_entry *timers; // Active timers list (sorted by expiry)
-    timer_id next_id;
+    timer_entry_t *timers; // Active timers list (sorted by expiry)
+    timer_id_t next_id;
     volatile uint32_t tick_count; // Current tick count (updated by ISR)
     volatile bool tick_pending;   // Set by ISR, cleared by scheduler
 } s_hal_timer = {0};
@@ -76,15 +76,15 @@ void hive_timer_process_pending(void) {
     uint32_t now = s_hal_timer.tick_count;
 
     // Process all expired timers
-    timer_entry **pp = &s_hal_timer.timers;
+    timer_entry_t **pp = &s_hal_timer.timers;
     while (*pp) {
-        timer_entry *entry = *pp;
+        timer_entry_t *entry = *pp;
 
         // Check if timer expired (handle wrap-around)
         int32_t delta = (int32_t)(entry->expiry_ticks - now);
         if (delta <= 0) {
             // Timer expired - send message to owner
-            actor *a = hive_actor_get(entry->owner);
+            actor_t *a = hive_actor_get(entry->owner);
             if (a) {
                 hive_ipc_notify_internal(entry->owner, entry->owner,
                                          HIVE_MSG_TIMER, entry->id, NULL, 0);
@@ -95,7 +95,7 @@ void hive_timer_process_pending(void) {
                 entry->expiry_ticks = now + entry->interval_ticks;
                 pp = &entry->next;
             } else {
-                // Remove one-shot or dead actor's timer
+                // Remove one-shot or dead actor_t's timer
                 *pp = entry->next;
                 hive_pool_free(&s_timer_pool_mgr, entry);
             }
@@ -105,21 +105,21 @@ void hive_timer_process_pending(void) {
     }
 }
 
-// Handle timer event from scheduler (compatibility with io_source interface)
-void hive_timer_handle_event(io_source *source) {
+// Handle timer event from scheduler (compatibility with io_source_t interface)
+void hive_timer_handle_event(io_source_t *source) {
     (void)source;
     // On STM32, timer processing is done via hive_timer_process_pending()
     // This function exists for API compatibility but shouldn't be called
 }
 
-hive_status hive_hal_timer_init(void) {
+hive_status_t hive_hal_timer_init(void) {
     if (s_hal_timer.initialized) {
         return HIVE_SUCCESS;
     }
 
     // Initialize timer entry pool
     hive_pool_init(&s_timer_pool_mgr, s_timer_pool, s_timer_used,
-                   sizeof(timer_entry), HIVE_TIMER_ENTRY_POOL_SIZE);
+                   sizeof(timer_entry_t), HIVE_TIMER_ENTRY_POOL_SIZE);
 
     // Initialize timer state
     s_hal_timer.timers = NULL;
@@ -141,9 +141,9 @@ void hive_hal_timer_cleanup(void) {
     }
 
     // Clean up all active timers
-    timer_entry *entry = s_hal_timer.timers;
+    timer_entry_t *entry = s_hal_timer.timers;
     while (entry) {
-        timer_entry *next = entry->next;
+        timer_entry_t *next = entry->next;
         hive_pool_free(&s_timer_pool_mgr, entry);
         entry = next;
     }
@@ -152,10 +152,10 @@ void hive_hal_timer_cleanup(void) {
     s_hal_timer.initialized = false;
 }
 
-hive_status hive_hal_timer_create(uint32_t interval_us, bool periodic,
-                                  actor_id owner, timer_id *out) {
+hive_status_t hive_hal_timer_create(uint32_t interval_us, bool periodic,
+                                    actor_id_t owner, timer_id_t *out) {
     // Allocate timer entry from pool
-    timer_entry *entry = hive_pool_alloc(&s_timer_pool_mgr);
+    timer_entry_t *entry = hive_pool_alloc(&s_timer_pool_mgr);
     if (!entry) {
         return HIVE_ERROR(HIVE_ERR_NOMEM, "Timer entry pool exhausted");
     }
@@ -180,9 +180,9 @@ hive_status hive_hal_timer_create(uint32_t interval_us, bool periodic,
     return HIVE_SUCCESS;
 }
 
-hive_status hive_hal_timer_cancel(timer_id id) {
+hive_status_t hive_hal_timer_cancel(timer_id_t id) {
     // Find and remove timer from list
-    timer_entry *found = NULL;
+    timer_entry_t *found = NULL;
     SLIST_FIND_REMOVE(s_hal_timer.timers, entry->id == id, found);
 
     if (found) {

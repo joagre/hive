@@ -16,15 +16,15 @@
 
 // Actor state - initialized by rate_actor_init
 typedef struct {
-    bus_id state_bus;
-    bus_id thrust_bus;
-    bus_id rate_setpoint_bus;
-    bus_id torque_bus;
-} rate_state;
+    bus_id_t state_bus;
+    bus_id_t thrust_bus;
+    bus_id_t rate_setpoint_bus;
+    bus_id_t torque_bus;
+} rate_state_t;
 
 void *rate_actor_init(void *init_args) {
-    const pilot_buses *buses = init_args;
-    static rate_state state;
+    const pilot_buses_t *buses = init_args;
+    static rate_state_t state;
     state.state_bus = buses->state_bus;
     state.thrust_bus = buses->thrust_bus;
     state.rate_setpoint_bus = buses->rate_setpoint_bus;
@@ -32,12 +32,12 @@ void *rate_actor_init(void *init_args) {
     return &state;
 }
 
-void rate_actor(void *args, const hive_spawn_info *siblings,
+void rate_actor(void *args, const hive_spawn_info_t *siblings,
                 size_t sibling_count) {
     (void)siblings;
     (void)sibling_count;
 
-    rate_state *state = args;
+    rate_state_t *state = args;
 
     if (HIVE_FAILED(hive_bus_subscribe(state->state_bus)) ||
         HIVE_FAILED(hive_bus_subscribe(state->thrust_bus)) ||
@@ -66,7 +66,7 @@ void rate_actor(void *args, const hive_spawn_info *siblings,
         thrust_cmd_t thrust_cmd;
         rate_setpoint_t new_rate_sp;
         size_t len;
-        hive_status status;
+        hive_status_t status;
 
         // Block until state available
         status =

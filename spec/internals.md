@@ -40,7 +40,7 @@ All resource limits are defined at compile-time and require recompilation to cha
 
 Feature toggles can also be set via Makefile: `make ENABLE_NET=0 ENABLE_FILE=0`.
 
-All runtime structures are **statically allocated** based on these limits. Actor stacks use a static arena allocator by default (configurable via `actor_config.malloc_stack` for malloc). This ensures:
+All runtime structures are **statically allocated** based on these limits. Actor stacks use a static arena allocator by default (configurable via `actor_config_t.malloc_stack` for malloc). This ensures:
 - Bounded memory footprint (calculable at link time)
 - Zero heap allocation in runtime operations (see [Heap Usage Policy](design.md#heap-usage-policy))
 - O(1) pool allocation for hot paths (scheduling, IPC); O(n) bounded arena allocation for cold paths (spawn/exit)
@@ -118,7 +118,7 @@ Per-actor stacks      Sum of all actor stack_size values (if malloc_stack=true)
 
 ```c
 // Initialize runtime (call once from main)
-hive_status hive_init(void);
+hive_status_t hive_init(void);
 
 // Run scheduler (blocks until all actors exit or hive_shutdown called)
 void hive_run(void);
@@ -286,10 +286,10 @@ procedure hive_run_until_blocked():
 ```c
 // All actors use timers (same code as production)
 void sensor_actor(void *arg) {
-    timer_id timer;
+    timer_id_t timer;
     hive_timer_every(TIME_STEP_MS * 1000, &timer);  // Timer-driven
     while (1) {
-        hive_message msg;
+        hive_message_t msg;
         hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
         read_sensors();
         publish_to_bus();
@@ -321,10 +321,10 @@ while (wb_robot_step(TIME_STEP_MS) != -1) {
 **Correct pattern**
 ```c
 void sensor_actor(void *arg) {
-    timer_id timer;
+    timer_id_t timer;
     hive_timer_every(TIME_STEP_MS * 1000, &timer);
     while (1) {
-        hive_message msg;
+        hive_message_t msg;
         hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);  // BLOCKS
         read_sensors();
         publish_to_bus();

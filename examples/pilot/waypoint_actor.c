@@ -22,14 +22,14 @@
 
 // Actor state - initialized by waypoint_actor_init
 typedef struct {
-    bus_id state_bus;
-    bus_id position_target_bus;
-    actor_id flight_manager;
-} waypoint_state;
+    bus_id_t state_bus;
+    bus_id_t position_target_bus;
+    actor_id_t flight_manager;
+} waypoint_state_t;
 
 void *waypoint_actor_init(void *init_args) {
-    const pilot_buses *buses = init_args;
-    static waypoint_state state;
+    const pilot_buses_t *buses = init_args;
+    static waypoint_state_t state;
     state.state_bus = buses->state_bus;
     state.position_target_bus = buses->position_target_bus;
     state.flight_manager = ACTOR_ID_INVALID; // Set from siblings in actor
@@ -51,9 +51,9 @@ static bool check_arrival(const waypoint_t *wp, const state_estimate_t *est) {
            (yaw_err < WAYPOINT_TOLERANCE_YAW) && (vel < WAYPOINT_TOLERANCE_VEL);
 }
 
-void waypoint_actor(void *args, const hive_spawn_info *siblings,
+void waypoint_actor(void *args, const hive_spawn_info_t *siblings,
                     size_t sibling_count) {
-    waypoint_state *state = args;
+    waypoint_state_t *state = args;
 
     // Look up flight_manager from sibling info
     state->flight_manager =
@@ -63,7 +63,7 @@ void waypoint_actor(void *args, const hive_spawn_info *siblings,
         return;
     }
 
-    hive_status status = hive_bus_subscribe(state->state_bus);
+    hive_status_t status = hive_bus_subscribe(state->state_bus);
     if (HIVE_FAILED(status)) {
         HIVE_LOG_ERROR("[WPT] Failed to subscribe to state bus: %s",
                        HIVE_ERR_STR(status));
@@ -75,7 +75,7 @@ void waypoint_actor(void *args, const hive_spawn_info *siblings,
                   FLIGHT_PROFILE_NAME, (int)NUM_WAYPOINTS,
                   WAYPOINT_HOVER_TIME_US / 1000000.0f);
     HIVE_LOG_INFO("[WPT] Waiting for flight manager START signal");
-    hive_message msg;
+    hive_message_t msg;
     status = hive_ipc_recv_match(state->flight_manager, HIVE_MSG_NOTIFY,
                                  NOTIFY_FLIGHT_START, &msg, -1);
     if (HIVE_FAILED(status)) {
@@ -86,7 +86,7 @@ void waypoint_actor(void *args, const hive_spawn_info *siblings,
     HIVE_LOG_INFO("[WPT] START received - beginning flight sequence");
 
     int waypoint_index = 0;
-    timer_id hover_timer = TIMER_ID_INVALID;
+    timer_id_t hover_timer = TIMER_ID_INVALID;
     bool hovering = false;
 
     // Set up hive_select() sources (dynamically adjust count based on hovering)
@@ -104,14 +104,14 @@ void waypoint_actor(void *args, const hive_spawn_info *siblings,
         }
 
         // Wait for state update OR hover timer (unified event waiting)
-        hive_select_source sources[] = {
+        hive_select_source_t sources[] = {
             [SEL_STATE] = {HIVE_SEL_BUS, .bus = state->state_bus},
             [SEL_HOVER_TIMER] = {HIVE_SEL_IPC,
                                  .ipc = {HIVE_SENDER_ANY, HIVE_MSG_TIMER,
                                          hover_timer}},
         };
 
-        hive_select_result result;
+        hive_select_result_t result;
         // Only include hover timer source when hovering
         size_t num_sources = hovering ? 2 : 1;
         status = hive_select(sources, num_sources, &result, -1);

@@ -6,8 +6,8 @@ hive_select \- wait for data from multiple event sources
 .nf
 .B #include <hive_select.h>
 .PP
-.BI "hive_status hive_select(const hive_select_source *" sources ", size_t " num_sources ","
-.BI "                        hive_select_result *" result ", int32_t " timeout_ms ");"
+.BI "hive_status_t hive_select(const hive_select_source_t *" sources ", size_t " num_sources ","
+.BI "                        hive_select_result_t *" result ", int32_t " timeout_ms ");"
 .fi
 .SH DESCRIPTION
 .BR hive_select ()
@@ -65,10 +65,10 @@ typedef enum {
 typedef struct {
     hive_select_type type;
     union {
-        hive_recv_filter ipc;  /* For HIVE_SEL_IPC */
-        bus_id bus;            /* For HIVE_SEL_BUS */
+        hive_recv_filter_t ipc;  /* For HIVE_SEL_IPC */
+        bus_id_t bus;            /* For HIVE_SEL_BUS */
     };
-} hive_select_source;
+} hive_select_source_t;
 .fi
 .SS Select Result Structure
 .PP
@@ -77,13 +77,13 @@ typedef struct {
     size_t index;           /* Which source triggered (0-based) */
     hive_select_type type;  /* Type of triggered source */
     union {
-        hive_message ipc;   /* For HIVE_SEL_IPC */
+        hive_message_t ipc;   /* For HIVE_SEL_IPC */
         struct {
             void *data;     /* For HIVE_SEL_BUS */
             size_t len;
         } bus;
     };
-} hive_select_result;
+} hive_select_result_t;
 .fi
 .PP
 After a successful call,
@@ -105,7 +105,7 @@ To prioritize certain sources, place them earlier in the array. For example,
 to ensure sensor data is processed before commands:
 .PP
 .nf
-hive_select_source sources[] = {
+hive_select_source_t sources[] = {
     {HIVE_SEL_BUS, .bus = sensor_bus},   /* Checked first */
     {HIVE_SEL_IPC, .ipc = {...}},        /* Checked second */
 };
@@ -148,7 +148,7 @@ or
 Copy data immediately if needed longer:
 .PP
 .nf
-hive_select_result result;
+hive_select_result_t result;
 hive_select(sources, 2, &result, -1);
 
 if (result.type == HIVE_SEL_BUS) {
@@ -202,25 +202,26 @@ Works on all platforms (Linux and STM32)
 #include <hive_timer.h>
 
 /* Wait for either sensor data OR a command notification */
-void controller(void *arg) {
-    bus_id sensor_bus = *(bus_id *)arg;
+void controller(void *arg, const hive_spawn_info_t *siblings,
+                size_t sibling_count) {
+    bus_id_t sensor_bus = *(bus_id_t *)arg;
 
     /* Subscribe to sensor bus */
     hive_bus_subscribe(sensor_bus);
 
     /* Create periodic timer for status updates */
-    timer_id tick;
+    timer_id_t tick;
     hive_timer_every(100000, &tick);  /* 100ms */
 
     enum { SEL_SENSOR, SEL_TIMER, SEL_COMMAND };
-    hive_select_source sources[] = {
+    hive_select_source_t sources[] = {
         [SEL_SENSOR] = {HIVE_SEL_BUS, .bus = sensor_bus},
         [SEL_TIMER] = {HIVE_SEL_IPC, .ipc = {HIVE_SENDER_ANY, HIVE_MSG_TIMER, tick}},
         [SEL_COMMAND] = {HIVE_SEL_IPC, .ipc = {HIVE_SENDER_ANY, HIVE_MSG_NOTIFY, CMD_TAG}},
     };
 
     while (1) {
-        hive_select_result result;
+        hive_select_result_t result;
         hive_select(sources, 3, &result, -1);
 
         switch (result.index) {

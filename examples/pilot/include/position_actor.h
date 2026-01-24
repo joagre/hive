@@ -12,7 +12,7 @@
 void *position_actor_init(void *init_args);
 
 // Actor entry point
-void position_actor(void *args, const hive_spawn_info *siblings,
+void position_actor(void *args, const hive_spawn_info_t *siblings,
                     size_t sibling_count);
 
 #endif // POSITION_ACTOR_H

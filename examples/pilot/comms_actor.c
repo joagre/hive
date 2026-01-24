@@ -125,9 +125,9 @@ static inline uint16_t float_to_u16(float val) {
 
 // Actor state
 typedef struct {
-    bus_id state_bus;
-    bus_id sensor_bus;
-    bus_id thrust_bus;
+    bus_id_t state_bus;
+    bus_id_t sensor_bus;
+    bus_id_t thrust_bus;
     bool next_is_attitude; // Alternate between packet types
     uint32_t tick_count;   // Tick counter for timestamps (10ms per tick)
     // Log download state
@@ -135,11 +135,11 @@ typedef struct {
     int log_fd;
     uint32_t log_offset;
     uint16_t log_sequence;
-} comms_state;
+} comms_state_t;
 
 // RX callback - handles incoming commands from ground station
 static void radio_rx_callback(const void *data, size_t len, void *user_data) {
-    comms_state *state = (comms_state *)user_data;
+    comms_state_t *state = (comms_state_t *)user_data;
     if (len < 1 || !state) {
         return;
     }
@@ -151,7 +151,7 @@ static void radio_rx_callback(const void *data, size_t len, void *user_data) {
         // Ground station requests log download
         // Open log file and switch to download mode
         int fd;
-        hive_status s = hive_file_open("/log", HIVE_O_RDONLY, 0, &fd);
+        hive_status_t s = hive_file_open("/log", HIVE_O_RDONLY, 0, &fd);
         if (HIVE_FAILED(s)) {
             HIVE_LOG_WARN(
                 "[COMMS] Log download request failed: cannot open /log");
@@ -167,8 +167,8 @@ static void radio_rx_callback(const void *data, size_t len, void *user_data) {
 }
 
 void *comms_actor_init(void *init_args) {
-    const pilot_buses *buses = init_args;
-    static comms_state state;
+    const pilot_buses_t *buses = init_args;
+    static comms_state_t state;
     state.state_bus = buses->state_bus;
     state.sensor_bus = buses->sensor_bus;
     state.thrust_bus = buses->thrust_bus;
@@ -181,12 +181,12 @@ void *comms_actor_init(void *init_args) {
     return &state;
 }
 
-void comms_actor(void *args, const hive_spawn_info *siblings,
+void comms_actor(void *args, const hive_spawn_info_t *siblings,
                  size_t sibling_count) {
     (void)siblings;
     (void)sibling_count;
 
-    comms_state *state = args;
+    comms_state_t *state = args;
 
     // Initialize radio
     if (hal_radio_init() != 0) {
@@ -208,7 +208,7 @@ void comms_actor(void *args, const hive_spawn_info *siblings,
     }
 
     // Start telemetry timer
-    timer_id timer;
+    timer_id_t timer;
     if (HIVE_FAILED(hive_timer_every(TELEMETRY_INTERVAL_US, &timer))) {
         HIVE_LOG_ERROR("[COMMS] Timer setup failed");
         return;
@@ -222,8 +222,8 @@ void comms_actor(void *args, const hive_spawn_info *siblings,
     thrust_cmd_t latest_thrust = THRUST_CMD_ZERO;
 
     while (1) {
-        hive_message msg;
-        hive_status status = hive_ipc_recv_match(
+        hive_message_t msg;
+        hive_status_t status = hive_ipc_recv_match(
             HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
         if (HIVE_FAILED(status)) {
             HIVE_LOG_ERROR("[COMMS] recv_match failed: %s",
@@ -278,7 +278,7 @@ void comms_actor(void *args, const hive_spawn_info *siblings,
 
             // Read next chunk from file
             size_t bytes_read;
-            hive_status s =
+            hive_status_t s =
                 hive_file_pread(state->log_fd, chunk.data, LOG_CHUNK_DATA_SIZE,
                                 state->log_offset, &bytes_read);
 

@@ -32,15 +32,15 @@
 
 // Actor state - initialized by altitude_actor_init
 typedef struct {
-    bus_id state_bus;
-    bus_id thrust_bus;
-    bus_id position_target_bus;
-    actor_id flight_manager;
-} altitude_state;
+    bus_id_t state_bus;
+    bus_id_t thrust_bus;
+    bus_id_t position_target_bus;
+    actor_id_t flight_manager;
+} altitude_state_t;
 
 void *altitude_actor_init(void *init_args) {
-    const pilot_buses *buses = init_args;
-    static altitude_state state;
+    const pilot_buses_t *buses = init_args;
+    static altitude_state_t state;
     state.state_bus = buses->state_bus;
     state.thrust_bus = buses->thrust_bus;
     state.position_target_bus = buses->position_target_bus;
@@ -48,9 +48,9 @@ void *altitude_actor_init(void *init_args) {
     return &state;
 }
 
-void altitude_actor(void *args, const hive_spawn_info *siblings,
+void altitude_actor(void *args, const hive_spawn_info_t *siblings,
                     size_t sibling_count) {
-    altitude_state *state = args;
+    altitude_state_t *state = args;
 
     // Look up flight_manager from sibling info
     state->flight_manager =
@@ -83,7 +83,7 @@ void altitude_actor(void *args, const hive_spawn_info *siblings,
 
     // Set up hive_select() sources: state bus + landing command
     enum { SEL_STATE, SEL_LANDING };
-    hive_select_source sources[] = {
+    hive_select_source_t sources[] = {
         [SEL_STATE] = {HIVE_SEL_BUS, .bus = state->state_bus},
         [SEL_LANDING] = {HIVE_SEL_IPC,
                          .ipc = {state->flight_manager, HIVE_MSG_NOTIFY,
@@ -94,10 +94,10 @@ void altitude_actor(void *args, const hive_spawn_info *siblings,
         state_estimate_t est;
         position_target_t target;
         size_t len;
-        hive_status status;
+        hive_status_t status;
 
         // Wait for state update OR landing command (unified event waiting)
-        hive_select_result result;
+        hive_select_result_t result;
         status = hive_select(sources, 2, &result, -1);
         if (HIVE_FAILED(status)) {
             HIVE_LOG_ERROR("[ALT] select failed: %s", HIVE_ERR_STR(status));

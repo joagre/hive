@@ -341,7 +341,7 @@ static vfile_t *get_vfile(int fd) {
 // HAL File API Implementation
 // ----------------------------------------------------------------------------
 
-hive_status hive_hal_file_init(void) {
+hive_status_t hive_hal_file_init(void) {
     // Reset ring buffer
     s_ring_head = 0;
     s_ring_tail = 0;
@@ -368,8 +368,8 @@ void hive_hal_file_cleanup(void) {
     }
 }
 
-hive_status hive_hal_file_open(const char *path, int flags, int mode,
-                               int *fd_out) {
+hive_status_t hive_hal_file_open(const char *path, int flags, int mode,
+                                 int *fd_out) {
     (void)mode; // Not used for flash files
 
     vfile_t *vf = find_vfile(path);
@@ -428,7 +428,7 @@ hive_status hive_hal_file_open(const char *path, int flags, int mode,
     return HIVE_SUCCESS;
 }
 
-hive_status hive_hal_file_close(int fd) {
+hive_status_t hive_hal_file_close(int fd) {
     vfile_t *vf = get_vfile(fd);
     if (!vf || !vf->opened) {
         return HIVE_ERROR(HIVE_ERR_INVALID, "invalid fd");
@@ -446,8 +446,8 @@ hive_status hive_hal_file_close(int fd) {
     return HIVE_SUCCESS;
 }
 
-hive_status hive_hal_file_read(int fd, void *buf, size_t len,
-                               size_t *bytes_read) {
+hive_status_t hive_hal_file_read(int fd, void *buf, size_t len,
+                                 size_t *bytes_read) {
     (void)fd;
     (void)buf;
     (void)len;
@@ -458,8 +458,8 @@ hive_status hive_hal_file_read(int fd, void *buf, size_t len,
     return HIVE_ERROR(HIVE_ERR_INVALID, "read not implemented for flash files");
 }
 
-hive_status hive_hal_file_pread(int fd, void *buf, size_t len, size_t offset,
-                                size_t *bytes_read) {
+hive_status_t hive_hal_file_pread(int fd, void *buf, size_t len, size_t offset,
+                                  size_t *bytes_read) {
     vfile_t *vf = get_vfile(fd);
     if (!vf || !vf->opened) {
         return HIVE_ERROR(HIVE_ERR_INVALID, "invalid fd");
@@ -483,8 +483,8 @@ hive_status hive_hal_file_pread(int fd, void *buf, size_t len, size_t offset,
     return HIVE_SUCCESS;
 }
 
-hive_status hive_hal_file_write(int fd, const void *buf, size_t len,
-                                size_t *bytes_written) {
+hive_status_t hive_hal_file_write(int fd, const void *buf, size_t len,
+                                  size_t *bytes_written) {
     vfile_t *vf = get_vfile(fd);
     if (!vf || !vf->opened) {
         return HIVE_ERROR(HIVE_ERR_INVALID, "invalid fd");
@@ -526,8 +526,8 @@ hive_status hive_hal_file_write(int fd, const void *buf, size_t len,
     return HIVE_SUCCESS;
 }
 
-hive_status hive_hal_file_pwrite(int fd, const void *buf, size_t len,
-                                 size_t offset, size_t *bytes_written) {
+hive_status_t hive_hal_file_pwrite(int fd, const void *buf, size_t len,
+                                   size_t offset, size_t *bytes_written) {
     // pwrite not supported for ring-buffered flash writes
     (void)fd;
     (void)buf;
@@ -537,7 +537,7 @@ hive_status hive_hal_file_pwrite(int fd, const void *buf, size_t len,
     return HIVE_ERROR(HIVE_ERR_INVALID, "pwrite not supported for flash files");
 }
 
-hive_status hive_hal_file_sync(int fd) {
+hive_status_t hive_hal_file_sync(int fd) {
     vfile_t *vf = get_vfile(fd);
     if (!vf || !vf->opened) {
         return HIVE_ERROR(HIVE_ERR_INVALID, "invalid fd");

@@ -59,7 +59,7 @@ static struct {
     int16_t p9;
     int8_t p10;
     int8_t p11;
-} bmp388_calib;
+} bmp388_calib_t;
 
 static bool s_flow_deck_present = false;
 
@@ -166,20 +166,20 @@ void sensors_init(void) {
     // Read calibration data
     uint8_t calib[21];
     i2c_read_regs(I2C_ADDR_BMP388, BMP388_CALIB_REG, calib, 21);
-    bmp388_calib.t1 = (uint16_t)(calib[1] << 8 | calib[0]);
-    bmp388_calib.t2 = (uint16_t)(calib[3] << 8 | calib[2]);
-    bmp388_calib.t3 = (int8_t)calib[4];
-    bmp388_calib.p1 = (int16_t)(calib[6] << 8 | calib[5]);
-    bmp388_calib.p2 = (int16_t)(calib[8] << 8 | calib[7]);
-    bmp388_calib.p3 = (int8_t)calib[9];
-    bmp388_calib.p4 = (int8_t)calib[10];
-    bmp388_calib.p5 = (uint16_t)(calib[12] << 8 | calib[11]);
-    bmp388_calib.p6 = (uint16_t)(calib[14] << 8 | calib[13]);
-    bmp388_calib.p7 = (int8_t)calib[15];
-    bmp388_calib.p8 = (int8_t)calib[16];
-    bmp388_calib.p9 = (int16_t)(calib[18] << 8 | calib[17]);
-    bmp388_calib.p10 = (int8_t)calib[19];
-    bmp388_calib.p11 = (int8_t)calib[20];
+    bmp388_calib_t.t1 = (uint16_t)(calib[1] << 8 | calib[0]);
+    bmp388_calib_t.t2 = (uint16_t)(calib[3] << 8 | calib[2]);
+    bmp388_calib_t.t3 = (int8_t)calib[4];
+    bmp388_calib_t.p1 = (int16_t)(calib[6] << 8 | calib[5]);
+    bmp388_calib_t.p2 = (int16_t)(calib[8] << 8 | calib[7]);
+    bmp388_calib_t.p3 = (int8_t)calib[9];
+    bmp388_calib_t.p4 = (int8_t)calib[10];
+    bmp388_calib_t.p5 = (uint16_t)(calib[12] << 8 | calib[11]);
+    bmp388_calib_t.p6 = (uint16_t)(calib[14] << 8 | calib[13]);
+    bmp388_calib_t.p7 = (int8_t)calib[15];
+    bmp388_calib_t.p8 = (int8_t)calib[16];
+    bmp388_calib_t.p9 = (int16_t)(calib[18] << 8 | calib[17]);
+    bmp388_calib_t.p10 = (int8_t)calib[19];
+    bmp388_calib_t.p11 = (int8_t)calib[20];
 
     // Set OSR x8 for pressure and temperature
     i2c_write_reg(I2C_ADDR_BMP388, BMP388_OSR_REG, 0x13);
@@ -287,25 +287,26 @@ bool sensor_read_baro(baro_data_t *data) {
     uint32_t temp_raw = (uint32_t)(raw[5] << 16 | raw[4] << 8 | raw[3]);
 
     // Compensate temperature
-    float partial1 = (float)temp_raw - (float)bmp388_calib.t1 * 256.0f;
-    float partial2 = partial1 * ((float)bmp388_calib.t2 / 1073741824.0f);
-    float t_lin = partial2 + partial1 * partial1 *
-                                 ((float)bmp388_calib.t3 / 281474976710656.0f);
+    float partial1 = (float)temp_raw - (float)bmp388_calib_t.t1 * 256.0f;
+    float partial2 = partial1 * ((float)bmp388_calib_t.t2 / 1073741824.0f);
+    float t_lin =
+        partial2 +
+        partial1 * partial1 * ((float)bmp388_calib_t.t3 / 281474976710656.0f);
 
     data->temperature = t_lin;
 
     // Compensate pressure (simplified)
     float partial3 = t_lin * t_lin;
     float partial4 = partial3 / 64.0f;
-    float partial6 = (float)bmp388_calib.p8 * partial3 / 32.0f;
-    float partial7 = partial6 + (float)bmp388_calib.p7 * t_lin;
+    float partial6 = (float)bmp388_calib_t.p8 * partial3 / 32.0f;
+    float partial7 = partial6 + (float)bmp388_calib_t.p7 * t_lin;
 
-    float offset = (float)bmp388_calib.p5 * 32768.0f + partial7 +
-                   (float)bmp388_calib.p6 * partial4;
+    float offset = (float)bmp388_calib_t.p5 * 32768.0f + partial7 +
+                   (float)bmp388_calib_t.p6 * partial4;
 
-    float sens = (float)bmp388_calib.p1 - 16384.0f +
-                 (float)bmp388_calib.p2 * t_lin / 8192.0f +
-                 (float)bmp388_calib.p3 * partial3 / 8192.0f;
+    float sens = (float)bmp388_calib_t.p1 - 16384.0f +
+                 (float)bmp388_calib_t.p2 * t_lin / 8192.0f +
+                 (float)bmp388_calib_t.p3 * partial3 / 8192.0f;
 
     float pressure_comp = offset + (float)press_raw * sens / 4096.0f;
 

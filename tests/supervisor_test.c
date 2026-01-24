@@ -44,9 +44,9 @@ static void reset_test_state(void) {
 
 // Wait for a condition with timeout
 static void wait_ms(int ms) {
-    timer_id t;
+    timer_id_t t;
     hive_timer_after((uint64_t)ms * 1000, &t);
-    hive_message msg;
+    hive_message_t msg;
     hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, t, &msg, -1);
 }
 
@@ -55,7 +55,7 @@ static void wait_ms(int ms) {
 // =============================================================================
 
 // Simple child that runs until killed
-static void stable_child(void *args, const hive_spawn_info *siblings,
+static void stable_child(void *args, const hive_spawn_info_t *siblings,
                          size_t sibling_count) {
     (void)siblings;
     (void)sibling_count;
@@ -63,7 +63,7 @@ static void stable_child(void *args, const hive_spawn_info *siblings,
     s_child_started[id]++;
 
     // Wait indefinitely (will be killed by supervisor)
-    hive_message msg;
+    hive_message_t msg;
     hive_ipc_recv(&msg, -1);
 
     s_child_exited[id]++;
@@ -71,7 +71,7 @@ static void stable_child(void *args, const hive_spawn_info *siblings,
 }
 
 // Child that crashes immediately
-static void crashing_child(void *args, const hive_spawn_info *siblings,
+static void crashing_child(void *args, const hive_spawn_info_t *siblings,
                            size_t sibling_count) {
     (void)siblings;
     (void)sibling_count;
@@ -82,7 +82,7 @@ static void crashing_child(void *args, const hive_spawn_info *siblings,
 }
 
 // Child that exits normally
-static void exiting_child(void *args, const hive_spawn_info *siblings,
+static void exiting_child(void *args, const hive_spawn_info_t *siblings,
                           size_t sibling_count) {
     (void)siblings;
     (void)sibling_count;
@@ -93,7 +93,7 @@ static void exiting_child(void *args, const hive_spawn_info *siblings,
 }
 
 // Child that crashes after a short delay
-static void delayed_crash_child(void *args, const hive_spawn_info *siblings,
+static void delayed_crash_child(void *args, const hive_spawn_info_t *siblings,
                                 size_t sibling_count) {
     (void)siblings;
     (void)sibling_count;
@@ -116,7 +116,7 @@ static void test_shutdown_callback(void *ctx) {
 // Test 1: Basic lifecycle (start/stop supervisor)
 // =============================================================================
 
-static void test1_basic_lifecycle(void *args, const hive_spawn_info *siblings,
+static void test1_basic_lifecycle(void *args, const hive_spawn_info_t *siblings,
                                   size_t sibling_count) {
     (void)args;
     (void)siblings;
@@ -125,7 +125,7 @@ static void test1_basic_lifecycle(void *args, const hive_spawn_info *siblings,
     reset_test_state();
 
     static int child_ids[2] = {0, 1};
-    hive_child_spec children[2] = {
+    hive_child_spec_t children[2] = {
         {.start = stable_child,
          .init = NULL,
          .init_args = &child_ids[0],
@@ -146,16 +146,16 @@ static void test1_basic_lifecycle(void *args, const hive_spawn_info *siblings,
     children[0].actor_cfg.stack_size = TEST_STACK_SIZE(32 * 1024);
     children[1].actor_cfg.stack_size = TEST_STACK_SIZE(32 * 1024);
 
-    hive_supervisor_config cfg = HIVE_SUPERVISOR_CONFIG_DEFAULT;
+    hive_supervisor_config_t cfg = HIVE_SUPERVISOR_CONFIG_DEFAULT;
     cfg.children = children;
     cfg.num_children = 2;
     cfg.on_shutdown = test_shutdown_callback;
 
-    actor_config sup_cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+    actor_config_t sup_cfg = HIVE_ACTOR_CONFIG_DEFAULT;
     sup_cfg.stack_size = TEST_STACK_SIZE(64 * 1024);
 
-    actor_id supervisor;
-    hive_status status = hive_supervisor_start(&cfg, &sup_cfg, &supervisor);
+    actor_id_t supervisor;
+    hive_status_t status = hive_supervisor_start(&cfg, &sup_cfg, &supervisor);
     if (HIVE_FAILED(status)) {
         TEST_FAIL("hive_supervisor_start");
         hive_exit();
@@ -184,7 +184,7 @@ static void test1_basic_lifecycle(void *args, const hive_spawn_info *siblings,
     }
 
     // Wait for supervisor exit
-    hive_message msg;
+    hive_message_t msg;
     status = hive_ipc_recv_match(supervisor, HIVE_MSG_EXIT, HIVE_TAG_ANY, &msg,
                                  1000);
     if (HIVE_FAILED(status)) {
@@ -206,7 +206,7 @@ static void test1_basic_lifecycle(void *args, const hive_spawn_info *siblings,
 // Test 2: one_for_one - crash one child, only that child restarts
 // =============================================================================
 
-static void test2_one_for_one(void *args, const hive_spawn_info *siblings,
+static void test2_one_for_one(void *args, const hive_spawn_info_t *siblings,
                               size_t sibling_count) {
     (void)args;
     (void)siblings;
@@ -215,7 +215,7 @@ static void test2_one_for_one(void *args, const hive_spawn_info *siblings,
     reset_test_state();
 
     static int child_ids[2] = {0, 1};
-    hive_child_spec children[2] = {
+    hive_child_spec_t children[2] = {
         {.start = delayed_crash_child,
          .init = NULL,
          .init_args = &child_ids[0],
@@ -236,18 +236,18 @@ static void test2_one_for_one(void *args, const hive_spawn_info *siblings,
     children[0].actor_cfg.stack_size = TEST_STACK_SIZE(32 * 1024);
     children[1].actor_cfg.stack_size = TEST_STACK_SIZE(32 * 1024);
 
-    hive_supervisor_config cfg = HIVE_SUPERVISOR_CONFIG_DEFAULT;
+    hive_supervisor_config_t cfg = HIVE_SUPERVISOR_CONFIG_DEFAULT;
     cfg.strategy = HIVE_STRATEGY_ONE_FOR_ONE;
     cfg.max_restarts = 5;
     cfg.restart_period_ms = 5000;
     cfg.children = children;
     cfg.num_children = 2;
 
-    actor_config sup_cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+    actor_config_t sup_cfg = HIVE_ACTOR_CONFIG_DEFAULT;
     sup_cfg.stack_size = TEST_STACK_SIZE(64 * 1024);
 
-    actor_id supervisor;
-    hive_status status = hive_supervisor_start(&cfg, &sup_cfg, &supervisor);
+    actor_id_t supervisor;
+    hive_status_t status = hive_supervisor_start(&cfg, &sup_cfg, &supervisor);
     if (HIVE_FAILED(status)) {
         TEST_FAIL("hive_supervisor_start");
         hive_exit();
@@ -276,7 +276,7 @@ static void test2_one_for_one(void *args, const hive_spawn_info *siblings,
 // Test 3: one_for_all - crash one child, all restart
 // =============================================================================
 
-static void test3_one_for_all(void *args, const hive_spawn_info *siblings,
+static void test3_one_for_all(void *args, const hive_spawn_info_t *siblings,
                               size_t sibling_count) {
     (void)args;
     (void)siblings;
@@ -285,7 +285,7 @@ static void test3_one_for_all(void *args, const hive_spawn_info *siblings,
     reset_test_state();
 
     static int child_ids[2] = {0, 1};
-    hive_child_spec children[2] = {
+    hive_child_spec_t children[2] = {
         {.start = delayed_crash_child,
          .init = NULL,
          .init_args = &child_ids[0],
@@ -306,18 +306,18 @@ static void test3_one_for_all(void *args, const hive_spawn_info *siblings,
     children[0].actor_cfg.stack_size = TEST_STACK_SIZE(32 * 1024);
     children[1].actor_cfg.stack_size = TEST_STACK_SIZE(32 * 1024);
 
-    hive_supervisor_config cfg = HIVE_SUPERVISOR_CONFIG_DEFAULT;
+    hive_supervisor_config_t cfg = HIVE_SUPERVISOR_CONFIG_DEFAULT;
     cfg.strategy = HIVE_STRATEGY_ONE_FOR_ALL;
     cfg.max_restarts = 2;
     cfg.restart_period_ms = 5000;
     cfg.children = children;
     cfg.num_children = 2;
 
-    actor_config sup_cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+    actor_config_t sup_cfg = HIVE_ACTOR_CONFIG_DEFAULT;
     sup_cfg.stack_size = TEST_STACK_SIZE(64 * 1024);
 
-    actor_id supervisor;
-    hive_status status = hive_supervisor_start(&cfg, &sup_cfg, &supervisor);
+    actor_id_t supervisor;
+    hive_status_t status = hive_supervisor_start(&cfg, &sup_cfg, &supervisor);
     if (HIVE_FAILED(status)) {
         TEST_FAIL("hive_supervisor_start");
         hive_exit();
@@ -345,7 +345,7 @@ static void test3_one_for_all(void *args, const hive_spawn_info *siblings,
 // Test 4: rest_for_one - crash child N, children N+ restart
 // =============================================================================
 
-static void test4_rest_for_one(void *args, const hive_spawn_info *siblings,
+static void test4_rest_for_one(void *args, const hive_spawn_info_t *siblings,
                                size_t sibling_count) {
     (void)args;
     (void)siblings;
@@ -354,7 +354,7 @@ static void test4_rest_for_one(void *args, const hive_spawn_info *siblings,
     reset_test_state();
 
     static int child_ids[3] = {0, 1, 2};
-    hive_child_spec children[3] = {
+    hive_child_spec_t children[3] = {
         {.start = stable_child,
          .init = NULL,
          .init_args = &child_ids[0],
@@ -384,18 +384,18 @@ static void test4_rest_for_one(void *args, const hive_spawn_info *siblings,
     children[1].actor_cfg.stack_size = TEST_STACK_SIZE(32 * 1024);
     children[2].actor_cfg.stack_size = TEST_STACK_SIZE(32 * 1024);
 
-    hive_supervisor_config cfg = HIVE_SUPERVISOR_CONFIG_DEFAULT;
+    hive_supervisor_config_t cfg = HIVE_SUPERVISOR_CONFIG_DEFAULT;
     cfg.strategy = HIVE_STRATEGY_REST_FOR_ONE;
     cfg.max_restarts = 2;
     cfg.restart_period_ms = 5000;
     cfg.children = children;
     cfg.num_children = 3;
 
-    actor_config sup_cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+    actor_config_t sup_cfg = HIVE_ACTOR_CONFIG_DEFAULT;
     sup_cfg.stack_size = TEST_STACK_SIZE(64 * 1024);
 
-    actor_id supervisor;
-    hive_status status = hive_supervisor_start(&cfg, &sup_cfg, &supervisor);
+    actor_id_t supervisor;
+    hive_status_t status = hive_supervisor_start(&cfg, &sup_cfg, &supervisor);
     if (HIVE_FAILED(status)) {
         TEST_FAIL("hive_supervisor_start");
         hive_exit();
@@ -426,7 +426,8 @@ static void test4_rest_for_one(void *args, const hive_spawn_info *siblings,
 // Test 5: Restart intensity exceeded
 // =============================================================================
 
-static void test5_restart_intensity(void *args, const hive_spawn_info *siblings,
+static void test5_restart_intensity(void *args,
+                                    const hive_spawn_info_t *siblings,
                                     size_t sibling_count) {
     (void)args;
     (void)siblings;
@@ -435,7 +436,7 @@ static void test5_restart_intensity(void *args, const hive_spawn_info *siblings,
     reset_test_state();
 
     static int child_id = 0;
-    hive_child_spec children[1] = {
+    hive_child_spec_t children[1] = {
         {.start = crashing_child,
          .init = NULL,
          .init_args = &child_id,
@@ -447,18 +448,18 @@ static void test5_restart_intensity(void *args, const hive_spawn_info *siblings,
     };
     children[0].actor_cfg.stack_size = TEST_STACK_SIZE(32 * 1024);
 
-    hive_supervisor_config cfg = HIVE_SUPERVISOR_CONFIG_DEFAULT;
+    hive_supervisor_config_t cfg = HIVE_SUPERVISOR_CONFIG_DEFAULT;
     cfg.max_restarts = 3;
     cfg.restart_period_ms = 5000;
     cfg.children = children;
     cfg.num_children = 1;
     cfg.on_shutdown = test_shutdown_callback;
 
-    actor_config sup_cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+    actor_config_t sup_cfg = HIVE_ACTOR_CONFIG_DEFAULT;
     sup_cfg.stack_size = TEST_STACK_SIZE(64 * 1024);
 
-    actor_id supervisor;
-    hive_status status = hive_supervisor_start(&cfg, &sup_cfg, &supervisor);
+    actor_id_t supervisor;
+    hive_status_t status = hive_supervisor_start(&cfg, &sup_cfg, &supervisor);
     if (HIVE_FAILED(status)) {
         TEST_FAIL("hive_supervisor_start");
         hive_exit();
@@ -469,7 +470,7 @@ static void test5_restart_intensity(void *args, const hive_spawn_info *siblings,
     hive_monitor(supervisor, &monitor_id);
 
     // Wait for supervisor to give up and shut down
-    hive_message msg;
+    hive_message_t msg;
     status = hive_ipc_recv_match(supervisor, HIVE_MSG_EXIT, HIVE_TAG_ANY, &msg,
                                  2000);
 
@@ -492,7 +493,7 @@ static void test5_restart_intensity(void *args, const hive_spawn_info *siblings,
 // Test 6: Restart types (permanent/transient/temporary)
 // =============================================================================
 
-static void test6_restart_types(void *args, const hive_spawn_info *siblings,
+static void test6_restart_types(void *args, const hive_spawn_info_t *siblings,
                                 size_t sibling_count) {
     (void)args;
     (void)siblings;
@@ -501,7 +502,7 @@ static void test6_restart_types(void *args, const hive_spawn_info *siblings,
     reset_test_state();
 
     static int child_ids[3] = {0, 1, 2};
-    hive_child_spec children[3] = {
+    hive_child_spec_t children[3] = {
         // Permanent: should restart on normal exit
         {.start = exiting_child,
          .init = NULL,
@@ -534,17 +535,17 @@ static void test6_restart_types(void *args, const hive_spawn_info *siblings,
     children[1].actor_cfg.stack_size = TEST_STACK_SIZE(32 * 1024);
     children[2].actor_cfg.stack_size = TEST_STACK_SIZE(32 * 1024);
 
-    hive_supervisor_config cfg = HIVE_SUPERVISOR_CONFIG_DEFAULT;
+    hive_supervisor_config_t cfg = HIVE_SUPERVISOR_CONFIG_DEFAULT;
     cfg.max_restarts = 10;
     cfg.restart_period_ms = 5000;
     cfg.children = children;
     cfg.num_children = 3;
 
-    actor_config sup_cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+    actor_config_t sup_cfg = HIVE_ACTOR_CONFIG_DEFAULT;
     sup_cfg.stack_size = TEST_STACK_SIZE(64 * 1024);
 
-    actor_id supervisor;
-    hive_status status = hive_supervisor_start(&cfg, &sup_cfg, &supervisor);
+    actor_id_t supervisor;
+    hive_status_t status = hive_supervisor_start(&cfg, &sup_cfg, &supervisor);
     if (HIVE_FAILED(status)) {
         TEST_FAIL("hive_supervisor_start");
         hive_exit();
@@ -587,7 +588,7 @@ static void test6_restart_types(void *args, const hive_spawn_info *siblings,
 // Test 7: Empty children
 // =============================================================================
 
-static void test7_empty_children(void *args, const hive_spawn_info *siblings,
+static void test7_empty_children(void *args, const hive_spawn_info_t *siblings,
                                  size_t sibling_count) {
     (void)args;
     (void)siblings;
@@ -595,16 +596,16 @@ static void test7_empty_children(void *args, const hive_spawn_info *siblings,
     printf("\nTest 7: Empty children list\n");
     reset_test_state();
 
-    hive_supervisor_config cfg = HIVE_SUPERVISOR_CONFIG_DEFAULT;
+    hive_supervisor_config_t cfg = HIVE_SUPERVISOR_CONFIG_DEFAULT;
     cfg.children = NULL;
     cfg.num_children = 0;
     cfg.on_shutdown = test_shutdown_callback;
 
-    actor_config sup_cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+    actor_config_t sup_cfg = HIVE_ACTOR_CONFIG_DEFAULT;
     sup_cfg.stack_size = TEST_STACK_SIZE(64 * 1024);
 
-    actor_id supervisor;
-    hive_status status = hive_supervisor_start(&cfg, &sup_cfg, &supervisor);
+    actor_id_t supervisor;
+    hive_status_t status = hive_supervisor_start(&cfg, &sup_cfg, &supervisor);
     if (HIVE_FAILED(status)) {
         TEST_FAIL("hive_supervisor_start with empty children");
         hive_exit();
@@ -620,7 +621,7 @@ static void test7_empty_children(void *args, const hive_spawn_info *siblings,
     hive_supervisor_stop(supervisor);
 
     // Wait for exit
-    hive_message msg;
+    hive_message_t msg;
     status = hive_ipc_recv_match(supervisor, HIVE_MSG_EXIT, HIVE_TAG_ANY, &msg,
                                  1000);
     if (HIVE_SUCCEEDED(status)) {
@@ -636,17 +637,17 @@ static void test7_empty_children(void *args, const hive_spawn_info *siblings,
 // Test 8: Invalid configurations
 // =============================================================================
 
-static void test8_invalid_config(void *args, const hive_spawn_info *siblings,
+static void test8_invalid_config(void *args, const hive_spawn_info_t *siblings,
                                  size_t sibling_count) {
     (void)args;
     (void)siblings;
     (void)sibling_count;
     printf("\nTest 8: Invalid configurations\n");
 
-    actor_id supervisor;
+    actor_id_t supervisor;
 
     // NULL config
-    hive_status status = hive_supervisor_start(NULL, NULL, &supervisor);
+    hive_status_t status = hive_supervisor_start(NULL, NULL, &supervisor);
     if (HIVE_FAILED(status)) {
         TEST_PASS("rejects NULL config");
     } else {
@@ -654,7 +655,7 @@ static void test8_invalid_config(void *args, const hive_spawn_info *siblings,
     }
 
     // NULL out_supervisor
-    hive_supervisor_config cfg = HIVE_SUPERVISOR_CONFIG_DEFAULT;
+    hive_supervisor_config_t cfg = HIVE_SUPERVISOR_CONFIG_DEFAULT;
     status = hive_supervisor_start(&cfg, NULL, NULL);
     if (HIVE_FAILED(status)) {
         TEST_PASS("rejects NULL out_supervisor");
@@ -682,7 +683,7 @@ static void test8_invalid_config(void *args, const hive_spawn_info *siblings,
     }
 
     // NULL child function
-    hive_child_spec bad_child = {
+    hive_child_spec_t bad_child = {
         .start = NULL,
         .init = NULL,
         .init_args = NULL,
@@ -708,7 +709,8 @@ static void test8_invalid_config(void *args, const hive_spawn_info *siblings,
 // Test 9: Utility functions
 // =============================================================================
 
-static void test9_utility_functions(void *args, const hive_spawn_info *siblings,
+static void test9_utility_functions(void *args,
+                                    const hive_spawn_info_t *siblings,
                                     size_t sibling_count) {
     (void)args;
     (void)siblings;
@@ -766,7 +768,7 @@ static void test9_utility_functions(void *args, const hive_spawn_info *siblings,
 // Test Runner
 // =============================================================================
 
-static actor_fn test_funcs[] = {
+static actor_fn_t test_funcs[] = {
     test1_basic_lifecycle, test2_one_for_one,       test3_one_for_all,
     test4_rest_for_one,    test5_restart_intensity, test6_restart_types,
     test7_empty_children,  test8_invalid_config,    test9_utility_functions,
@@ -774,17 +776,17 @@ static actor_fn test_funcs[] = {
 
 #define NUM_TESTS (sizeof(test_funcs) / sizeof(test_funcs[0]))
 
-static void run_all_tests(void *args, const hive_spawn_info *siblings,
+static void run_all_tests(void *args, const hive_spawn_info_t *siblings,
                           size_t sibling_count) {
     (void)args;
     (void)siblings;
     (void)sibling_count;
 
     for (size_t i = 0; i < NUM_TESTS; i++) {
-        actor_config cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+        actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
         cfg.stack_size = TEST_STACK_SIZE(128 * 1024);
 
-        actor_id test;
+        actor_id_t test;
         if (HIVE_FAILED(hive_spawn(test_funcs[i], NULL, NULL, &cfg, &test))) {
             printf("Failed to spawn test %zu\n", i);
             continue;
@@ -792,7 +794,7 @@ static void run_all_tests(void *args, const hive_spawn_info *siblings,
 
         hive_link(test);
 
-        hive_message msg;
+        hive_message_t msg;
         hive_ipc_recv(&msg, 10000);
     }
 
@@ -802,17 +804,17 @@ static void run_all_tests(void *args, const hive_spawn_info *siblings,
 int main(void) {
     printf("=== Supervisor (hive_supervisor) Test Suite ===\n");
 
-    hive_status status = hive_init();
+    hive_status_t status = hive_init();
     if (HIVE_FAILED(status)) {
         fprintf(stderr, "Failed to initialize runtime: %s\n",
                 status.msg ? status.msg : "unknown error");
         return 1;
     }
 
-    actor_config cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+    actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
     cfg.stack_size = TEST_STACK_SIZE(128 * 1024);
 
-    actor_id runner;
+    actor_id_t runner;
     if (HIVE_FAILED(hive_spawn(run_all_tests, NULL, NULL, &cfg, &runner))) {
         fprintf(stderr, "Failed to spawn test runner\n");
         hive_cleanup();

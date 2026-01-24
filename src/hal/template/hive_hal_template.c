@@ -90,9 +90,9 @@ void hive_hal_critical_exit(uint32_t state) {
 // =============================================================================
 
 // Forward declarations for event handlers (defined in hive core)
-extern void hive_timer_handle_event(io_source *source);
+extern void hive_timer_handle_event(io_source_t *source);
 #if HIVE_ENABLE_NET
-extern void hive_net_handle_event(io_source *source);
+extern void hive_net_handle_event(io_source_t *source);
 #endif
 
 // Initialize event system.
@@ -104,7 +104,7 @@ extern void hive_net_handle_event(io_source *source);
 //   - STM32: Initialize software timer wheel, configure SysTick
 //   - Bare metal: Setup interrupt handlers
 //
-hive_status hive_hal_event_init(void) {
+hive_status_t hive_hal_event_init(void) {
     // TODO: Implement for your platform
     return HIVE_SUCCESS;
 }
@@ -162,9 +162,9 @@ void hive_hal_event_wait(int timeout_ms) {
 // Parameters:
 //   fd - File descriptor or handle to watch
 //   events - Events to watch for (HIVE_EVENT_READ, HIVE_EVENT_WRITE)
-//   source - io_source pointer passed to handler when event occurs
+//   source - io_source_t pointer passed to handler when event occurs
 //
-// Called when an actor needs to wait for I/O.
+// Called when an actor_t needs to wait for I/O.
 // The source->type determines which handler to call when event fires.
 //
 // Examples:
@@ -172,8 +172,8 @@ void hive_hal_event_wait(int timeout_ms) {
 //   - STM32 timers: Add to software timer wheel
 //   - STM32 network: Add to lwIP event list
 //
-hive_status hive_hal_event_register(int fd, uint32_t events,
-                                    io_source *source) {
+hive_status_t hive_hal_event_register(int fd, uint32_t events,
+                                      io_source_t *source) {
     // TODO: Implement for your platform
     // For platforms without file descriptors (STM32 timers), this may be a no-op
     (void)fd;
@@ -203,7 +203,7 @@ void hive_hal_event_unregister(int fd) {
 #include "hal/hive_hal_file.h"
 
 // Initialize file I/O subsystem.
-hive_status hive_hal_file_init(void) {
+hive_status_t hive_hal_file_init(void) {
     // TODO: Implement for your platform
     // Examples:
     //   - Linux: No-op (POSIX always available)
@@ -226,8 +226,8 @@ void hive_hal_file_cleanup(void) {
 //
 // Note: STM32 only supports virtual paths like "/log", "/config"
 //
-hive_status hive_hal_file_open(const char *path, int flags, int mode,
-                               int *fd_out) {
+hive_status_t hive_hal_file_open(const char *path, int flags, int mode,
+                                 int *fd_out) {
     (void)path;
     (void)flags;
     (void)mode;
@@ -236,14 +236,14 @@ hive_status hive_hal_file_open(const char *path, int flags, int mode,
 }
 
 // Close a file.
-hive_status hive_hal_file_close(int fd) {
+hive_status_t hive_hal_file_close(int fd) {
     (void)fd;
     return HIVE_ERROR(HIVE_ERR_INVALID, "File I/O not implemented");
 }
 
 // Read from file (sequential).
-hive_status hive_hal_file_read(int fd, void *buf, size_t len,
-                               size_t *bytes_read) {
+hive_status_t hive_hal_file_read(int fd, void *buf, size_t len,
+                                 size_t *bytes_read) {
     (void)fd;
     (void)buf;
     (void)len;
@@ -252,8 +252,8 @@ hive_status hive_hal_file_read(int fd, void *buf, size_t len,
 }
 
 // Read from file at offset (random access).
-hive_status hive_hal_file_pread(int fd, void *buf, size_t len, size_t offset,
-                                size_t *bytes_read) {
+hive_status_t hive_hal_file_pread(int fd, void *buf, size_t len, size_t offset,
+                                  size_t *bytes_read) {
     (void)fd;
     (void)buf;
     (void)len;
@@ -263,8 +263,8 @@ hive_status hive_hal_file_pread(int fd, void *buf, size_t len, size_t offset,
 }
 
 // Write to file (sequential).
-hive_status hive_hal_file_write(int fd, const void *buf, size_t len,
-                                size_t *bytes_written) {
+hive_status_t hive_hal_file_write(int fd, const void *buf, size_t len,
+                                  size_t *bytes_written) {
     (void)fd;
     (void)buf;
     (void)len;
@@ -273,8 +273,8 @@ hive_status hive_hal_file_write(int fd, const void *buf, size_t len,
 }
 
 // Write to file at offset (random access).
-hive_status hive_hal_file_pwrite(int fd, const void *buf, size_t len,
-                                 size_t offset, size_t *bytes_written) {
+hive_status_t hive_hal_file_pwrite(int fd, const void *buf, size_t len,
+                                   size_t offset, size_t *bytes_written) {
     (void)fd;
     (void)buf;
     (void)len;
@@ -284,7 +284,7 @@ hive_status hive_hal_file_pwrite(int fd, const void *buf, size_t len,
 }
 
 // Sync file to storage.
-hive_status hive_hal_file_sync(int fd) {
+hive_status_t hive_hal_file_sync(int fd) {
     (void)fd;
     return HIVE_ERROR(HIVE_ERR_INVALID, "File I/O not implemented");
 }
@@ -300,7 +300,7 @@ hive_status hive_hal_file_sync(int fd) {
 #include "hal/hive_hal_net.h"
 
 // Initialize network subsystem.
-hive_status hive_hal_net_init(void) {
+hive_status_t hive_hal_net_init(void) {
     // TODO: Implement for your platform
     // Examples:
     //   - Linux: No-op (BSD sockets always available)
@@ -314,20 +314,20 @@ void hive_hal_net_cleanup(void) {
 }
 
 // Create a TCP socket (non-blocking).
-hive_status hive_hal_net_socket(int *fd_out) {
+hive_status_t hive_hal_net_socket(int *fd_out) {
     (void)fd_out;
     return HIVE_ERROR(HIVE_ERR_INVALID, "Network not implemented");
 }
 
 // Bind socket to port.
-hive_status hive_hal_net_bind(int fd, uint16_t port) {
+hive_status_t hive_hal_net_bind(int fd, uint16_t port) {
     (void)fd;
     (void)port;
     return HIVE_ERROR(HIVE_ERR_INVALID, "Network not implemented");
 }
 
 // Start listening for connections.
-hive_status hive_hal_net_listen(int fd, int backlog) {
+hive_status_t hive_hal_net_listen(int fd, int backlog) {
     (void)fd;
     (void)backlog;
     return HIVE_ERROR(HIVE_ERR_INVALID, "Network not implemented");
@@ -340,7 +340,7 @@ hive_status hive_hal_net_listen(int fd, int backlog) {
 //   HIVE_ERR_WOULDBLOCK - No pending connections
 //   Other error on failure
 //
-hive_status hive_hal_net_accept(int listen_fd, int *conn_fd_out) {
+hive_status_t hive_hal_net_accept(int listen_fd, int *conn_fd_out) {
     (void)listen_fd;
     (void)conn_fd_out;
     return HIVE_ERROR(HIVE_ERR_INVALID, "Network not implemented");
@@ -353,7 +353,7 @@ hive_status hive_hal_net_accept(int listen_fd, int *conn_fd_out) {
 //   HIVE_ERR_INPROGRESS - Connection in progress (normal)
 //   Other error on failure
 //
-hive_status hive_hal_net_connect(int fd, const char *ip, uint16_t port) {
+hive_status_t hive_hal_net_connect(int fd, const char *ip, uint16_t port) {
     (void)fd;
     (void)ip;
     (void)port;
@@ -361,13 +361,13 @@ hive_status hive_hal_net_connect(int fd, const char *ip, uint16_t port) {
 }
 
 // Check if async connect completed.
-hive_status hive_hal_net_connect_check(int fd) {
+hive_status_t hive_hal_net_connect_check(int fd) {
     (void)fd;
     return HIVE_ERROR(HIVE_ERR_INVALID, "Network not implemented");
 }
 
 // Close a socket.
-hive_status hive_hal_net_close(int fd) {
+hive_status_t hive_hal_net_close(int fd) {
     (void)fd;
     return HIVE_ERROR(HIVE_ERR_INVALID, "Network not implemented");
 }
@@ -379,7 +379,8 @@ hive_status hive_hal_net_close(int fd) {
 //   HIVE_ERR_WOULDBLOCK - No data available
 //   Other error on failure
 //
-hive_status hive_hal_net_recv(int fd, void *buf, size_t len, size_t *received) {
+hive_status_t hive_hal_net_recv(int fd, void *buf, size_t len,
+                                size_t *received) {
     (void)fd;
     (void)buf;
     (void)len;
@@ -394,8 +395,8 @@ hive_status hive_hal_net_recv(int fd, void *buf, size_t len, size_t *received) {
 //   HIVE_ERR_WOULDBLOCK - Send buffer full
 //   Other error on failure
 //
-hive_status hive_hal_net_send(int fd, const void *buf, size_t len,
-                              size_t *sent) {
+hive_status_t hive_hal_net_send(int fd, const void *buf, size_t len,
+                                size_t *sent) {
     (void)fd;
     (void)buf;
     (void)len;

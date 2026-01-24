@@ -17,7 +17,7 @@
 static volatile int s_worker_iterations[3] = {0};
 
 // Worker actor - does some work, occasionally crashes
-static void worker_actor(void *args, const hive_spawn_info *siblings,
+static void worker_actor(void *args, const hive_spawn_info_t *siblings,
                          size_t sibling_count) {
     (void)siblings;
     (void)sibling_count;
@@ -30,9 +30,9 @@ static void worker_actor(void *args, const hive_spawn_info *siblings,
         s_worker_iterations[worker_id]++;
 
         // Simulate work with a short delay
-        timer_id t;
+        timer_id_t t;
         hive_timer_after(100000, &t); // 100ms
-        hive_message msg;
+        hive_message_t msg;
         hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, t, &msg, -1);
 
         printf("Worker %d: iteration %d (total: %d)\n", worker_id, i + 1,
@@ -58,7 +58,7 @@ static void on_supervisor_shutdown(void *ctx) {
 }
 
 // Main orchestrator actor
-static void orchestrator_actor(void *args, const hive_spawn_info *siblings,
+static void orchestrator_actor(void *args, const hive_spawn_info_t *siblings,
                                size_t sibling_count) {
     (void)args;
     (void)siblings;
@@ -71,7 +71,7 @@ static void orchestrator_actor(void *args, const hive_spawn_info *siblings,
 
     // Define child specifications
     static int worker_ids[3] = {0, 1, 2};
-    hive_child_spec children[3] = {
+    hive_child_spec_t children[3] = {
         {
             .start = worker_actor,
             .init = NULL,
@@ -105,7 +105,7 @@ static void orchestrator_actor(void *args, const hive_spawn_info *siblings,
     };
 
     // Configure supervisor
-    hive_supervisor_config sup_config = {
+    hive_supervisor_config_t sup_config = {
         .strategy = HIVE_STRATEGY_ONE_FOR_ONE, // Restart only failed child
         .max_restarts = 10,                    // Max 10 restarts...
         .restart_period_ms = 10000,            // ...within 10 seconds
@@ -127,8 +127,9 @@ static void orchestrator_actor(void *args, const hive_spawn_info *siblings,
     printf("\n");
 
     // Start supervisor
-    actor_id supervisor;
-    hive_status status = hive_supervisor_start(&sup_config, NULL, &supervisor);
+    actor_id_t supervisor;
+    hive_status_t status =
+        hive_supervisor_start(&sup_config, NULL, &supervisor);
     if (HIVE_FAILED(status)) {
         printf("Failed to start supervisor: %s\n", HIVE_ERR_STR(status));
         hive_exit();
@@ -143,11 +144,11 @@ static void orchestrator_actor(void *args, const hive_spawn_info *siblings,
     // Let the workers run for a while
     printf("=== Running for 3 seconds... ===\n\n");
 
-    timer_id run_timer;
+    timer_id_t run_timer;
     hive_timer_after(3000000, &run_timer); // 3 seconds
 
     // Wait for either timer or supervisor exit
-    hive_message msg;
+    hive_message_t msg;
     while (1) {
         status = hive_ipc_recv(&msg, -1);
         if (HIVE_FAILED(status)) {
@@ -160,7 +161,7 @@ static void orchestrator_actor(void *args, const hive_spawn_info *siblings,
             hive_supervisor_stop(supervisor);
         } else if (msg.class == HIVE_MSG_EXIT) {
             // Supervisor exited (either stopped or intensity exceeded)
-            hive_exit_msg exit_info;
+            hive_exit_msg_t exit_info;
             hive_decode_exit(&msg, &exit_info);
             if (exit_info.actor == supervisor) {
                 printf("Supervisor exited (reason: %s)\n",
@@ -178,7 +179,7 @@ int main(void) {
     printf("=== Hive Supervisor Library Demo ===\n\n");
 
     // Initialize runtime
-    hive_status status = hive_init();
+    hive_status_t status = hive_init();
     if (HIVE_FAILED(status)) {
         fprintf(stderr, "Failed to initialize runtime: %s\n",
                 HIVE_ERR_STR(status));
@@ -186,11 +187,11 @@ int main(void) {
     }
 
     // Spawn orchestrator with larger stack
-    actor_config cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+    actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
     cfg.name = "orchestrator";
     cfg.stack_size = 128 * 1024;
 
-    actor_id orchestrator;
+    actor_id_t orchestrator;
     if (HIVE_FAILED(
             hive_spawn(orchestrator_actor, NULL, NULL, &cfg, &orchestrator))) {
         fprintf(stderr, "Failed to spawn orchestrator\n");

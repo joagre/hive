@@ -39,7 +39,7 @@ static const char *TEST_LOG_FILE = "/tmp/hive_logging_test.log";
 #define LOG_MAGIC 0x4C47
 #define LOG_HEADER_SIZE 12
 
-static void run_logging_tests(void *args, const hive_spawn_info *siblings,
+static void run_logging_tests(void *args, const hive_spawn_info_t *siblings,
                               size_t sibling_count) {
     (void)args;
     (void)siblings;
@@ -53,7 +53,7 @@ static void run_logging_tests(void *args, const hive_spawn_info *siblings,
     // ========================================================================
     printf("\nTest 1: Open log file\n");
     {
-        hive_status status = hive_log_file_open(TEST_LOG_FILE);
+        hive_status_t status = hive_log_file_open(TEST_LOG_FILE);
         if (HIVE_FAILED(status)) {
             printf("    Error: %s\n", HIVE_ERR_STR(status));
             TEST_FAIL("hive_log_file_open");
@@ -85,7 +85,7 @@ static void run_logging_tests(void *args, const hive_spawn_info *siblings,
     // ========================================================================
     printf("\nTest 3: Sync log file\n");
     {
-        hive_status status = hive_log_file_sync();
+        hive_status_t status = hive_log_file_sync();
         if (HIVE_FAILED(status)) {
             printf("    Error: %s\n", HIVE_ERR_STR(status));
             TEST_FAIL("hive_log_file_sync");
@@ -99,7 +99,7 @@ static void run_logging_tests(void *args, const hive_spawn_info *siblings,
     // ========================================================================
     printf("\nTest 4: Close log file\n");
     {
-        hive_status status = hive_log_file_close();
+        hive_status_t status = hive_log_file_close();
         if (HIVE_FAILED(status)) {
             printf("    Error: %s\n", HIVE_ERR_STR(status));
             TEST_FAIL("hive_log_file_close");
@@ -219,7 +219,7 @@ static void run_logging_tests(void *args, const hive_spawn_info *siblings,
     printf("\nTest 8: Reopen log file\n");
     {
         // Opening again should work (will truncate on Linux)
-        hive_status status = hive_log_file_open(TEST_LOG_FILE);
+        hive_status_t status = hive_log_file_open(TEST_LOG_FILE);
         if (HIVE_FAILED(status)) {
             printf("    Error: %s\n", HIVE_ERR_STR(status));
             TEST_FAIL("cannot reopen log file");
@@ -240,14 +240,14 @@ static void run_logging_tests(void *args, const hive_spawn_info *siblings,
 int main(void) {
     printf("=== Logging (hive_log) Test Suite ===\n");
 
-    hive_status status = hive_init();
+    hive_status_t status = hive_init();
     if (HIVE_FAILED(status)) {
         fprintf(stderr, "Failed to initialize runtime: %s\n",
                 HIVE_ERR_STR(status));
         return 1;
     }
 
-    actor_id runner;
+    actor_id_t runner;
     if (HIVE_FAILED(hive_spawn(run_logging_tests, NULL, NULL, NULL, &runner))) {
         fprintf(stderr, "Failed to spawn test runner\n");
         hive_cleanup();

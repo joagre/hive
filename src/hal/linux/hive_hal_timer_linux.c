@@ -24,33 +24,33 @@
 #include <sys/timerfd.h>
 
 // Active timer entry
-typedef struct timer_entry {
-    timer_id id;
-    actor_id owner;
+typedef struct timer_entry_t {
+    timer_id_t id;
+    actor_id_t owner;
     int fd; // timerfd (only used in real-time mode)
     bool periodic;
     uint64_t expiry_us;   // Expiry time in microseconds (simulation mode)
     uint64_t interval_us; // Interval for periodic timers (simulation mode)
-    struct timer_entry *next;
-    io_source source; // For epoll registration
-} timer_entry;
+    struct timer_entry_t *next;
+    io_source_t source; // For epoll registration
+} timer_entry_t;
 
 // Static pool for timer entries
-static timer_entry s_timer_pool[HIVE_TIMER_ENTRY_POOL_SIZE];
+static timer_entry_t s_timer_pool[HIVE_TIMER_ENTRY_POOL_SIZE];
 static bool s_timer_used[HIVE_TIMER_ENTRY_POOL_SIZE];
-static hive_pool s_timer_pool_mgr;
+static hive_pool_t s_timer_pool_mgr;
 
 // Timer subsystem state
 static struct {
     bool initialized;
-    timer_entry *timers; // Active timers list
-    timer_id next_id;
+    timer_entry_t *timers; // Active timers list
+    timer_id_t next_id;
     bool sim_mode;        // Simulation time mode (enabled by hive_advance_time)
     uint64_t sim_time_us; // Current simulation time in microseconds
 } s_hal_timer = {0};
 
 // Helper: Close timer fd and remove from event system (only in real-time mode)
-static void timer_close_fd(timer_entry *entry) {
+static void timer_close_fd(timer_entry_t *entry) {
     if (entry->fd >= 0) {
         hive_hal_event_unregister(entry->fd);
         close(entry->fd);
@@ -59,16 +59,16 @@ static void timer_close_fd(timer_entry *entry) {
 }
 
 // Handle timer event from scheduler (called when timerfd fires)
-void hive_timer_handle_event(io_source *source) {
-    timer_entry *entry = source->data.timer;
+void hive_timer_handle_event(io_source_t *source) {
+    timer_entry_t *entry = source->data.timer;
 
     // Read timerfd to acknowledge
     uint64_t expirations;
     ssize_t n = read(entry->fd, &expirations, sizeof(expirations));
     (void)n; // Suppress unused result warning
 
-    // Get the actor
-    actor *a = hive_actor_get(entry->owner);
+    // Get the actor_t
+    actor_t *a = hive_actor_get(entry->owner);
     if (!a) {
         // Actor is dead - cleanup timer
         timer_close_fd(entry);
@@ -77,10 +77,10 @@ void hive_timer_handle_event(io_source *source) {
         return;
     }
 
-    // Send timer tick message to actor
-    // Use HIVE_MSG_TIMER class with timer_id as tag, sender is the owning actor
-    // No payload needed - timer_id is encoded in the tag
-    hive_status status = hive_ipc_notify_internal(
+    // Send timer tick message to actor_t
+    // Use HIVE_MSG_TIMER class with timer_id_t as tag, sender is the owning actor_t
+    // No payload needed - timer_id_t is encoded in the tag
+    hive_status_t status = hive_ipc_notify_internal(
         entry->owner, entry->owner, HIVE_MSG_TIMER, entry->id, NULL, 0);
     if (HIVE_FAILED(status)) {
         HIVE_LOG_ERROR("Failed to send timer tick: %s", status.msg);
@@ -96,14 +96,14 @@ void hive_timer_handle_event(io_source *source) {
     }
 }
 
-hive_status hive_hal_timer_init(void) {
+hive_status_t hive_hal_timer_init(void) {
     if (s_hal_timer.initialized) {
         return HIVE_SUCCESS;
     }
 
     // Initialize timer entry pool
     hive_pool_init(&s_timer_pool_mgr, s_timer_pool, s_timer_used,
-                   sizeof(timer_entry), HIVE_TIMER_ENTRY_POOL_SIZE);
+                   sizeof(timer_entry_t), HIVE_TIMER_ENTRY_POOL_SIZE);
 
     // Initialize timer state
     s_hal_timer.timers = NULL;
@@ -121,9 +121,9 @@ void hive_hal_timer_cleanup(void) {
     }
 
     // Clean up all active timers
-    timer_entry *entry = s_hal_timer.timers;
+    timer_entry_t *entry = s_hal_timer.timers;
     while (entry) {
-        timer_entry *next = entry->next;
+        timer_entry_t *next = entry->next;
         timer_close_fd(entry);
         hive_pool_free(&s_timer_pool_mgr, entry);
         entry = next;
@@ -133,10 +133,10 @@ void hive_hal_timer_cleanup(void) {
     s_hal_timer.initialized = false;
 }
 
-hive_status hive_hal_timer_create(uint32_t interval_us, bool periodic,
-                                  actor_id owner, timer_id *out) {
+hive_status_t hive_hal_timer_create(uint32_t interval_us, bool periodic,
+                                    actor_id_t owner, timer_id_t *out) {
     // Allocate timer entry from pool
-    timer_entry *entry = hive_pool_alloc(&s_timer_pool_mgr);
+    timer_entry_t *entry = hive_pool_alloc(&s_timer_pool_mgr);
     if (!entry) {
         return HIVE_ERROR(HIVE_ERR_NOMEM, "Timer entry pool exhausted");
     }
@@ -195,12 +195,12 @@ hive_status hive_hal_timer_create(uint32_t interval_us, bool periodic,
         entry->fd = tfd;
         entry->expiry_us = 0; // Not used in real-time mode
 
-        // Setup io_source for event system
+        // Setup io_source_t for event system
         entry->source.type = IO_SOURCE_TIMER;
         entry->source.data.timer = entry;
 
         // Register with HAL event system (timers use read events)
-        hive_status reg_status =
+        hive_status_t reg_status =
             hive_hal_event_register(tfd, HIVE_EVENT_READ, &entry->source);
         if (HIVE_FAILED(reg_status)) {
             close(tfd);
@@ -214,9 +214,9 @@ hive_status hive_hal_timer_create(uint32_t interval_us, bool periodic,
     return HIVE_SUCCESS;
 }
 
-hive_status hive_hal_timer_cancel(timer_id id) {
+hive_status_t hive_hal_timer_cancel(timer_id_t id) {
     // Find and remove timer from list
-    timer_entry *found = NULL;
+    timer_entry_t *found = NULL;
     SLIST_FIND_REMOVE(s_hal_timer.timers, entry->id == id, found);
 
     if (found) {
@@ -249,7 +249,7 @@ void hive_hal_timer_advance_time(uint64_t delta_us) {
         HIVE_LOG_INFO("Simulation time mode enabled");
 
         // Convert any existing timerfd-based timers to simulation mode
-        for (timer_entry *entry = s_hal_timer.timers; entry;
+        for (timer_entry_t *entry = s_hal_timer.timers; entry;
              entry = entry->next) {
             if (entry->fd >= 0) {
                 // Close timerfd and unregister from epoll
@@ -265,21 +265,21 @@ void hive_hal_timer_advance_time(uint64_t delta_us) {
     s_hal_timer.sim_time_us += delta_us;
 
     // Fire all due timers
-    // We need to iterate carefully since firing a timer may cause actor to
+    // We need to iterate carefully since firing a timer may cause actor_t to
     // create/cancel timers
     bool fired_any;
     do {
         fired_any = false;
-        timer_entry *entry = s_hal_timer.timers;
-        timer_entry *prev = NULL;
+        timer_entry_t *entry = s_hal_timer.timers;
+        timer_entry_t *prev = NULL;
 
         while (entry) {
-            timer_entry *next = entry->next;
+            timer_entry_t *next = entry->next;
 
             // Check if timer is due (only for simulation mode timers)
             if (entry->fd < 0 && entry->expiry_us <= s_hal_timer.sim_time_us) {
-                // Get the actor
-                actor *a = hive_actor_get(entry->owner);
+                // Get the actor_t
+                actor_t *a = hive_actor_get(entry->owner);
                 if (!a) {
                     // Actor is dead - cleanup timer
                     if (prev) {
@@ -292,14 +292,14 @@ void hive_hal_timer_advance_time(uint64_t delta_us) {
                     continue;
                 }
 
-                // Send timer tick message to actor
+                // Send timer tick message to actor_t
                 HIVE_LOG_DEBUG(
-                    "Timer %u fired for actor %u (sim_time=%lu, expiry=%lu)",
+                    "Timer %u fired for actor_t %u (sim_time=%lu, expiry=%lu)",
                     entry->id, entry->owner,
                     (unsigned long)s_hal_timer.sim_time_us,
                     (unsigned long)entry->expiry_us);
 
-                hive_status status = hive_ipc_notify_internal(
+                hive_status_t status = hive_ipc_notify_internal(
                     entry->owner, entry->owner, HIVE_MSG_TIMER, entry->id, NULL,
                     0);
 

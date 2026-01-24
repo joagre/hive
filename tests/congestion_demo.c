@@ -13,12 +13,12 @@
 #define BURST_SIZE 100
 
 typedef struct {
-    actor_id workers[NUM_WORKERS];
+    actor_id_t workers[NUM_WORKERS];
     int worker_count;
-} coordinator_args;
+} coordinator_args_t;
 
 // Worker that processes messages
-void worker_actor(void *args, const hive_spawn_info *siblings,
+void worker_actor(void *args, const hive_spawn_info_t *siblings,
                   size_t sibling_count) {
     (void)siblings;
     (void)sibling_count;
@@ -26,8 +26,8 @@ void worker_actor(void *args, const hive_spawn_info *siblings,
     int processed = 0;
 
     while (true) {
-        hive_message msg;
-        hive_status status = hive_ipc_recv(&msg, 500); // 500ms timeout
+        hive_message_t msg;
+        hive_status_t status = hive_ipc_recv(&msg, 500); // 500ms timeout
 
         if (status.code == HIVE_ERR_TIMEOUT) {
             // No more work
@@ -44,11 +44,11 @@ void worker_actor(void *args, const hive_spawn_info *siblings,
 }
 
 // Coordinator that distributes work with backoff-retry
-void coordinator_actor(void *args, const hive_spawn_info *siblings,
+void coordinator_actor(void *args, const hive_spawn_info_t *siblings,
                        size_t sibling_count) {
     (void)siblings;
     (void)sibling_count;
-    coordinator_args *cargs = (coordinator_args *)args;
+    coordinator_args_t *cargs = (coordinator_args_t *)args;
 
     printf("\nCoordinator: Distributing %d messages to %d workers...\n",
            BURST_SIZE * NUM_WORKERS, NUM_WORKERS);
@@ -62,7 +62,7 @@ void coordinator_actor(void *args, const hive_spawn_info *siblings,
         for (int w = 0; w < cargs->worker_count; w++) {
             int data = burst * NUM_WORKERS + w;
 
-            hive_status status = hive_ipc_notify(
+            hive_status_t status = hive_ipc_notify(
                 cargs->workers[w], HIVE_TAG_NONE, &data, sizeof(data));
 
             if (status.code == HIVE_ERR_NOMEM) {
@@ -74,7 +74,7 @@ void coordinator_actor(void *args, const hive_spawn_info *siblings,
                 }
 
                 // Backoff-retry pattern
-                hive_message msg;
+                hive_message_t msg;
                 hive_ipc_recv(&msg, 5); // Backoff 5ms
 
                 // Retry
@@ -125,7 +125,7 @@ int main(void) {
 
     hive_init();
 
-    coordinator_args args;
+    coordinator_args_t args;
     args.worker_count = NUM_WORKERS;
 
     // Spawn workers
@@ -137,7 +137,7 @@ int main(void) {
     printf("Main: Spawned %d workers\n", NUM_WORKERS);
 
     // Spawn coordinator
-    actor_id coordinator;
+    actor_id_t coordinator;
     hive_spawn(coordinator_actor, NULL, &args, NULL, &coordinator);
     printf("Main: Spawned coordinator\n");
 

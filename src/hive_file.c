@@ -17,10 +17,10 @@ static struct {
     bool initialized;
 } s_file = {0};
 
-hive_status hive_file_init(void) {
+hive_status_t hive_file_init(void) {
     HIVE_INIT_GUARD(s_file.initialized);
 
-    hive_status status = hive_hal_file_init();
+    hive_status_t status = hive_hal_file_init();
     if (HIVE_FAILED(status)) {
         return status;
     }
@@ -36,7 +36,8 @@ void hive_file_cleanup(void) {
     s_file.initialized = false;
 }
 
-hive_status hive_file_open(const char *path, int flags, int mode, int *fd_out) {
+hive_status_t hive_file_open(const char *path, int flags, int mode,
+                             int *fd_out) {
     if (!path || !fd_out) {
         return HIVE_ERROR(HIVE_ERR_INVALID, "NULL path or fd_out pointer");
     }
@@ -46,13 +47,14 @@ hive_status hive_file_open(const char *path, int flags, int mode, int *fd_out) {
     return hive_hal_file_open(path, flags, mode, fd_out);
 }
 
-hive_status hive_file_close(int fd) {
+hive_status_t hive_file_close(int fd) {
     HIVE_REQUIRE_INIT(s_file.initialized, "File I/O");
 
     return hive_hal_file_close(fd);
 }
 
-hive_status hive_file_read(int fd, void *buf, size_t len, size_t *bytes_read) {
+hive_status_t hive_file_read(int fd, void *buf, size_t len,
+                             size_t *bytes_read) {
     if (!buf || !bytes_read) {
         return HIVE_ERROR(HIVE_ERR_INVALID,
                           "NULL buffer or bytes_read pointer");
@@ -63,8 +65,8 @@ hive_status hive_file_read(int fd, void *buf, size_t len, size_t *bytes_read) {
     return hive_hal_file_read(fd, buf, len, bytes_read);
 }
 
-hive_status hive_file_pread(int fd, void *buf, size_t len, size_t offset,
-                            size_t *bytes_read) {
+hive_status_t hive_file_pread(int fd, void *buf, size_t len, size_t offset,
+                              size_t *bytes_read) {
     if (!buf || !bytes_read) {
         return HIVE_ERROR(HIVE_ERR_INVALID,
                           "NULL buffer or bytes_read pointer");
@@ -75,8 +77,8 @@ hive_status hive_file_pread(int fd, void *buf, size_t len, size_t offset,
     return hive_hal_file_pread(fd, buf, len, offset, bytes_read);
 }
 
-hive_status hive_file_write(int fd, const void *buf, size_t len,
-                            size_t *bytes_written) {
+hive_status_t hive_file_write(int fd, const void *buf, size_t len,
+                              size_t *bytes_written) {
     if (!buf || !bytes_written) {
         return HIVE_ERROR(HIVE_ERR_INVALID,
                           "NULL buffer or bytes_written pointer");
@@ -87,8 +89,8 @@ hive_status hive_file_write(int fd, const void *buf, size_t len,
     return hive_hal_file_write(fd, buf, len, bytes_written);
 }
 
-hive_status hive_file_pwrite(int fd, const void *buf, size_t len, size_t offset,
-                             size_t *bytes_written) {
+hive_status_t hive_file_pwrite(int fd, const void *buf, size_t len,
+                               size_t offset, size_t *bytes_written) {
     if (!buf || !bytes_written) {
         return HIVE_ERROR(HIVE_ERR_INVALID,
                           "NULL buffer or bytes_written pointer");
@@ -99,7 +101,7 @@ hive_status hive_file_pwrite(int fd, const void *buf, size_t len, size_t offset,
     return hive_hal_file_pwrite(fd, buf, len, offset, bytes_written);
 }
 
-hive_status hive_file_sync(int fd) {
+hive_status_t hive_file_sync(int fd) {
     HIVE_REQUIRE_INIT(s_file.initialized, "File I/O");
 
     return hive_hal_file_sync(fd);

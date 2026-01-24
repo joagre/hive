@@ -23,26 +23,26 @@
 
 // Actor state - initialized by estimator_actor_init
 typedef struct {
-    bus_id sensor_bus;
-    bus_id state_bus;
-} estimator_state;
+    bus_id_t sensor_bus;
+    bus_id_t state_bus;
+} estimator_state_t;
 
 void *estimator_actor_init(void *init_args) {
-    const pilot_buses *buses = init_args;
-    static estimator_state state;
+    const pilot_buses_t *buses = init_args;
+    static estimator_state_t state;
     state.sensor_bus = buses->sensor_bus;
     state.state_bus = buses->state_bus;
     return &state;
 }
 
-void estimator_actor(void *args, const hive_spawn_info *siblings,
+void estimator_actor(void *args, const hive_spawn_info_t *siblings,
                      size_t sibling_count) {
     (void)siblings;
     (void)sibling_count;
 
-    estimator_state *state = args;
+    estimator_state_t *state = args;
 
-    hive_status status = hive_bus_subscribe(state->sensor_bus);
+    hive_status_t status = hive_bus_subscribe(state->sensor_bus);
     if (HIVE_FAILED(status)) {
         HIVE_LOG_ERROR("[EST] bus subscribe failed: %s", HIVE_ERR_STR(status));
         return;

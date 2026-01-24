@@ -12,7 +12,7 @@
 void *rate_actor_init(void *init_args);
 
 // Actor entry point
-void rate_actor(void *args, const hive_spawn_info *siblings,
+void rate_actor(void *args, const hive_spawn_info_t *siblings,
                 size_t sibling_count);
 
 #endif // RATE_ACTOR_H

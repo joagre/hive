@@ -24,16 +24,16 @@
 typedef struct {
     int job_id;
     int data;
-} work_request;
+} work_request_t;
 
 // Work result sent back from consumer to producer
 typedef struct {
     int job_id;
     int result;
-} work_result;
+} work_result_t;
 
 // Slow consumer that processes work requests
-static void consumer_actor(void *args, const hive_spawn_info *siblings,
+static void consumer_actor(void *args, const hive_spawn_info_t *siblings,
                            size_t sibling_count) {
     (void)args;
     (void)siblings;
@@ -44,8 +44,8 @@ static void consumer_actor(void *args, const hive_spawn_info *siblings,
 
     for (int jobs_processed = 0; jobs_processed < 5; jobs_processed++) {
         // Wait for work request (HIVE_MSG_REQUEST)
-        hive_message msg;
-        hive_status status = hive_ipc_recv(&msg, 5000); // 5 second timeout
+        hive_message_t msg;
+        hive_status_t status = hive_ipc_recv(&msg, 5000); // 5 second timeout
 
         if (status.code == HIVE_ERR_TIMEOUT) {
             printf("Consumer: Timeout waiting for work, exiting\n");
@@ -63,7 +63,7 @@ static void consumer_actor(void *args, const hive_spawn_info *siblings,
             continue;
         }
 
-        work_request *req = (work_request *)msg.data;
+        work_request_t *req = (work_request_t *)msg.data;
         printf("Consumer: Received job #%d (data=%d) from producer %u\n",
                req->job_id, req->data, msg.sender);
 
@@ -77,7 +77,7 @@ static void consumer_actor(void *args, const hive_spawn_info *siblings,
         }
 
         // Prepare result
-        work_result result = {
+        work_result_t result = {
             .job_id = req->job_id,
             .result = req->data * 2 // Simple processing: double the input
         };
@@ -99,26 +99,26 @@ static void consumer_actor(void *args, const hive_spawn_info *siblings,
 }
 
 // Fast producer that sends work requests
-static void producer_actor(void *args, const hive_spawn_info *siblings,
+static void producer_actor(void *args, const hive_spawn_info_t *siblings,
                            size_t sibling_count) {
     (void)siblings;
     (void)sibling_count;
-    actor_id consumer_id = (actor_id)(uintptr_t)args;
+    actor_id_t consumer_id = (actor_id_t)(uintptr_t)args;
 
     printf("Producer: Started (ID: %u)\n", hive_self());
     printf("Producer: Sending 5 jobs with hive_ipc_request (blocks until "
            "reply)\n\n");
 
     for (int i = 1; i <= 5; i++) {
-        work_request req = {.job_id = i, .data = i * 100};
+        work_request_t req = {.job_id = i, .data = i * 100};
 
         printf("Producer: Calling consumer with job #%d (will block until "
                "reply)...\n",
                i);
 
         // Call consumer - this BLOCKS until consumer sends hive_ipc_reply()
-        hive_message reply;
-        hive_status status =
+        hive_message_t reply;
+        hive_status_t status =
             hive_ipc_request(consumer_id, &req, sizeof(req), &reply, 10000);
 
         if (HIVE_FAILED(status)) {
@@ -130,7 +130,7 @@ static void producer_actor(void *args, const hive_spawn_info *siblings,
             break;
         }
 
-        work_result *result = (work_result *)reply.data;
+        work_result_t *result = (work_result_t *)reply.data;
 
         printf("Producer: Job #%d completed! Result=%d\n\n", result->job_id,
                result->result);
@@ -141,11 +141,11 @@ static void producer_actor(void *args, const hive_spawn_info *siblings,
 }
 
 // Demo simple message passing (async notify vs request/reply)
-static void demo_actor(void *args, const hive_spawn_info *siblings,
+static void demo_actor(void *args, const hive_spawn_info_t *siblings,
                        size_t sibling_count) {
     (void)siblings;
     (void)sibling_count;
-    actor_id peer_id = (actor_id)(uintptr_t)args;
+    actor_id_t peer_id = (actor_id_t)(uintptr_t)args;
     (void)peer_id;
 
     printf("\n--- Message Passing Patterns Demo ---\n");
@@ -154,9 +154,9 @@ static void demo_actor(void *args, const hive_spawn_info *siblings,
     printf("Demo: Fire-and-forget (hive_ipc_notify) - sender continues "
            "immediately\n");
     int data = 42;
-    hive_status status = hive_ipc_notify(hive_self(), 0, &data, sizeof(data));
+    hive_status_t status = hive_ipc_notify(hive_self(), 0, &data, sizeof(data));
     if (HIVE_SUCCEEDED(status)) {
-        hive_message msg;
+        hive_message_t msg;
         hive_ipc_recv(&msg, 0);
         printf("Demo: Received self-sent message: %d\n", *(int *)msg.data);
     }
@@ -174,7 +174,7 @@ int main(void) {
     printf("2. Consumer processes and replies with hive_ipc_reply()\n");
     printf("3. Producer only proceeds after receiving reply\n\n");
 
-    hive_status status = hive_init();
+    hive_status_t status = hive_init();
     if (HIVE_FAILED(status)) {
         fprintf(stderr, "Failed to initialize runtime: %s\n",
                 HIVE_ERR_STR(status));
@@ -182,7 +182,7 @@ int main(void) {
     }
 
     // First, run the demo actor
-    actor_id demo;
+    actor_id_t demo;
     if (HIVE_FAILED(hive_spawn(demo_actor, NULL, NULL, NULL, &demo))) {
         fprintf(stderr, "Failed to spawn demo actor\n");
         hive_cleanup();
@@ -190,7 +190,7 @@ int main(void) {
     }
 
     // Spawn consumer first (it will wait for messages)
-    actor_id consumer;
+    actor_id_t consumer;
     if (HIVE_FAILED(hive_spawn(consumer_actor, NULL, NULL, NULL, &consumer))) {
         fprintf(stderr, "Failed to spawn consumer\n");
         hive_cleanup();
@@ -198,7 +198,7 @@ int main(void) {
     }
 
     // Spawn producer with consumer's ID
-    actor_id producer;
+    actor_id_t producer;
     if (HIVE_FAILED(hive_spawn(producer_actor, NULL,
                                (void *)(uintptr_t)consumer, NULL, &producer))) {
         fprintf(stderr, "Failed to spawn producer\n");

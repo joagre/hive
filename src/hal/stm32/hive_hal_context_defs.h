@@ -21,6 +21,6 @@ typedef struct {
     float s20, s21, s22, s23;
     float s24, s25, s26, s27;
     float s28, s29, s30, s31;
-} hive_context;
+} hive_context_t;
 
 #endif // HIVE_HAL_CONTEXT_DEFS_H

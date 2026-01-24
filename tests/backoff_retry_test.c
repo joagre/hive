@@ -15,9 +15,9 @@
 #define MESSAGES_TO_FILL_POOL (HIVE_MAILBOX_ENTRY_POOL_SIZE / 2)
 
 typedef struct {
-    actor_id receiver;
-    actor_id sender;
-} test_args;
+    actor_id_t receiver;
+    actor_id_t sender;
+} test_args_t;
 
 // Message tags for selective receive
 #define TAG_DATA 0
@@ -25,7 +25,7 @@ typedef struct {
 #define TAG_DONE 2
 
 // Receiver that processes messages
-void receiver_actor(void *args, const hive_spawn_info *siblings,
+void receiver_actor(void *args, const hive_spawn_info_t *siblings,
                     size_t sibling_count) {
     (void)args;
     (void)siblings;
@@ -42,10 +42,10 @@ void receiver_actor(void *args, const hive_spawn_info *siblings,
     int scanned = 0;
     int found_start = 0;
     int found_done = 0;
-    hive_message msg;
+    hive_message_t msg;
 
     while (scanned < 300) {
-        hive_status status = hive_ipc_recv(&msg, 0); // Non-blocking
+        hive_status_t status = hive_ipc_recv(&msg, 0); // Non-blocking
         if (status.code == HIVE_ERR_WOULDBLOCK) {
             break;
         }
@@ -81,8 +81,8 @@ void receiver_actor(void *args, const hive_spawn_info *siblings,
         printf("Receiver: Waiting for sender DONE signal...\n");
         fflush(stdout);
 
-        hive_status status = hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_ANY,
-                                                 TAG_DONE, &msg, 5000);
+        hive_status_t status = hive_ipc_recv_match(
+            HIVE_SENDER_ANY, HIVE_MSG_ANY, TAG_DONE, &msg, 5000);
 
         if (HIVE_SUCCEEDED(status)) {
             printf("Receiver: Got DONE signal\n");
@@ -97,12 +97,12 @@ void receiver_actor(void *args, const hive_spawn_info *siblings,
     hive_exit();
 }
 
-void sender_actor(void *arg, const hive_spawn_info *siblings,
+void sender_actor(void *arg, const hive_spawn_info_t *siblings,
                   size_t sibling_count) {
     (void)siblings;
     (void)sibling_count;
-    test_args *args = (test_args *)arg;
-    actor_id receiver = args->receiver;
+    test_args_t *args = (test_args_t *)arg;
+    actor_id_t receiver = args->receiver;
 
     printf("Sender: Started (ID: %u), receiver ID: %u\n", hive_self(),
            receiver);
@@ -118,8 +118,8 @@ void sender_actor(void *arg, const hive_spawn_info *siblings,
 
     for (int i = 0; i < MESSAGES_TO_FILL_POOL; i++) {
         data++;
-        hive_status status = hive_ipc_notify_ex(receiver, HIVE_MSG_NOTIFY,
-                                                TAG_DATA, &data, sizeof(data));
+        hive_status_t status = hive_ipc_notify_ex(
+            receiver, HIVE_MSG_NOTIFY, TAG_DATA, &data, sizeof(data));
         if (HIVE_FAILED(status)) {
             if (status.code == HIVE_ERR_NOMEM) {
                 printf("Sender: Pool exhausted after %d messages\n",
@@ -139,8 +139,8 @@ void sender_actor(void *arg, const hive_spawn_info *siblings,
     int failed_count = 0;
     for (int i = 0; i < 50; i++) {
         data++;
-        hive_status status = hive_ipc_notify_ex(receiver, HIVE_MSG_NOTIFY,
-                                                TAG_DATA, &data, sizeof(data));
+        hive_status_t status = hive_ipc_notify_ex(
+            receiver, HIVE_MSG_NOTIFY, TAG_DATA, &data, sizeof(data));
         if (status.code == HIVE_ERR_NOMEM) {
             failed_count++;
         } else if (HIVE_SUCCEEDED(status)) {
@@ -158,7 +158,7 @@ void sender_actor(void *arg, const hive_spawn_info *siblings,
     // Send START signal
     printf("\nSender: Sending START signal (tag=%d)...\n", TAG_START);
     fflush(stdout);
-    hive_status status =
+    hive_status_t status =
         hive_ipc_notify_ex(receiver, HIVE_MSG_NOTIFY, TAG_START, NULL, 0);
     if (HIVE_FAILED(status)) {
         printf("Sender: Failed to send START: %s\n",
@@ -194,7 +194,7 @@ void sender_actor(void *arg, const hive_spawn_info *siblings,
 
         if (status.code == HIVE_ERR_NOMEM) {
             retry_count++;
-            hive_message msg;
+            hive_message_t msg;
             hive_ipc_recv(&msg, 5); // Backoff 5ms
             if (attempt % 10 == 0) {
                 printf("Sender: Attempt %d - pool exhausted\n", attempt + 1);
@@ -231,7 +231,7 @@ int main(void) {
 
     hive_init();
 
-    test_args args = {0};
+    test_args_t args = {0};
 
     hive_spawn(receiver_actor, NULL, &args, NULL, &args.receiver);
     printf("Main: Spawned receiver (ID: %u)\n", args.receiver);

@@ -21,26 +21,26 @@
 
 // Actor state - initialized by position_actor_init
 typedef struct {
-    bus_id state_bus;
-    bus_id attitude_setpoint_bus;
-    bus_id position_target_bus;
-} position_state;
+    bus_id_t state_bus;
+    bus_id_t attitude_setpoint_bus;
+    bus_id_t position_target_bus;
+} position_state_t;
 
 void *position_actor_init(void *init_args) {
-    const pilot_buses *buses = init_args;
-    static position_state state;
+    const pilot_buses_t *buses = init_args;
+    static position_state_t state;
     state.state_bus = buses->state_bus;
     state.attitude_setpoint_bus = buses->attitude_setpoint_bus;
     state.position_target_bus = buses->position_target_bus;
     return &state;
 }
 
-void position_actor(void *args, const hive_spawn_info *siblings,
+void position_actor(void *args, const hive_spawn_info_t *siblings,
                     size_t sibling_count) {
     (void)siblings;
     (void)sibling_count;
 
-    position_state *state = args;
+    position_state_t *state = args;
 
     if (HIVE_FAILED(hive_bus_subscribe(state->state_bus)) ||
         HIVE_FAILED(hive_bus_subscribe(state->position_target_bus))) {
@@ -55,7 +55,7 @@ void position_actor(void *args, const hive_spawn_info *siblings,
         state_estimate_t est;
         position_target_t new_target;
         size_t len;
-        hive_status status;
+        hive_status_t status;
 
         // Block until state available
         status =

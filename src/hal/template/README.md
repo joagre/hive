@@ -60,11 +60,11 @@ void hive_hal_critical_exit(uint32_t state);
 ### Event Functions (5 functions)
 
 ```c
-hive_status hive_hal_event_init(void);
+hive_status_t hive_hal_event_init(void);
 void hive_hal_event_cleanup(void);
 void hive_hal_event_poll(void);
 void hive_hal_event_wait(int timeout_ms);
-hive_status hive_hal_event_register(int fd, uint32_t events, io_source *source);
+hive_status_t hive_hal_event_register(int fd, uint32_t events, io_source *source);
 void hive_hal_event_unregister(int fd);
 ```
 
@@ -78,11 +78,11 @@ For platforms without file descriptors (bare metal), register/unregister can be 
 ### Timer Functions (6 functions)
 
 ```c
-hive_status hive_hal_timer_init(void);
+hive_status_t hive_hal_timer_init(void);
 void hive_hal_timer_cleanup(void);
-hive_status hive_hal_timer_create(uint32_t interval_us, bool periodic,
-                                  actor_id owner, timer_id *out);
-hive_status hive_hal_timer_cancel(timer_id id);
+hive_status_t hive_hal_timer_create(uint32_t interval_us, bool periodic,
+                                  actor_id_t owner, timer_id_t *out);
+hive_status_t hive_hal_timer_cancel(timer_id_t id);
 uint64_t hive_hal_timer_get_time(void);
 void hive_hal_timer_advance_time(uint64_t delta_us);
 ```
@@ -104,11 +104,11 @@ See `include/hal/hive_hal_timer.h` for the full API specification.
 
 ```c
 // In hive_hal_context_<platform>.c
-void hive_context_init(hive_context *ctx, void *stack, size_t stack_size,
+void hive_context_init(hive_context_t *ctx, void *stack, size_t stack_size,
                        void (*fn)(void *, const void *, size_t));
 
 // In hive_context_<arch>.S (assembly)
-void hive_context_switch(hive_context *from, hive_context *to);
+void hive_context_switch(hive_context_t *from, hive_context_t *to);
 ```
 
 Plus the context struct in `hive_hal_context_defs.h`:
@@ -117,7 +117,7 @@ Plus the context struct in `hive_hal_context_defs.h`:
 typedef struct {
     void *sp;           // Stack pointer
     // ... callee-saved registers for your architecture
-} hive_context;
+} hive_context_t;
 ```
 
 **Implementation notes**
@@ -130,31 +130,31 @@ typedef struct {
 ### File I/O (8 functions, HIVE_ENABLE_FILE=1)
 
 ```c
-hive_status hive_hal_file_init(void);
+hive_status_t hive_hal_file_init(void);
 void hive_hal_file_cleanup(void);
-hive_status hive_hal_file_open(const char *path, int flags, int mode, int *fd_out);
-hive_status hive_hal_file_close(int fd);
-hive_status hive_hal_file_read(int fd, void *buf, size_t len, size_t *bytes_read);
-hive_status hive_hal_file_pread(int fd, void *buf, size_t len, size_t offset, size_t *bytes_read);
-hive_status hive_hal_file_write(int fd, const void *buf, size_t len, size_t *bytes_written);
-hive_status hive_hal_file_pwrite(int fd, const void *buf, size_t len, size_t offset, size_t *bytes_written);
-hive_status hive_hal_file_sync(int fd);
+hive_status_t hive_hal_file_open(const char *path, int flags, int mode, int *fd_out);
+hive_status_t hive_hal_file_close(int fd);
+hive_status_t hive_hal_file_read(int fd, void *buf, size_t len, size_t *bytes_read);
+hive_status_t hive_hal_file_pread(int fd, void *buf, size_t len, size_t offset, size_t *bytes_read);
+hive_status_t hive_hal_file_write(int fd, const void *buf, size_t len, size_t *bytes_written);
+hive_status_t hive_hal_file_pwrite(int fd, const void *buf, size_t len, size_t offset, size_t *bytes_written);
+hive_status_t hive_hal_file_sync(int fd);
 ```
 
 ### Network I/O (10 functions, HIVE_ENABLE_NET=1)
 
 ```c
-hive_status hive_hal_net_init(void);
+hive_status_t hive_hal_net_init(void);
 void hive_hal_net_cleanup(void);
-hive_status hive_hal_net_socket(int *fd_out);
-hive_status hive_hal_net_bind(int fd, uint16_t port);
-hive_status hive_hal_net_listen(int fd, int backlog);
-hive_status hive_hal_net_accept(int listen_fd, int *conn_fd_out);
-hive_status hive_hal_net_connect(int fd, const char *ip, uint16_t port);
-hive_status hive_hal_net_connect_check(int fd);
-hive_status hive_hal_net_close(int fd);
-hive_status hive_hal_net_recv(int fd, void *buf, size_t len, size_t *received);
-hive_status hive_hal_net_send(int fd, const void *buf, size_t len, size_t *sent);
+hive_status_t hive_hal_net_socket(int *fd_out);
+hive_status_t hive_hal_net_bind(int fd, uint16_t port);
+hive_status_t hive_hal_net_listen(int fd, int backlog);
+hive_status_t hive_hal_net_accept(int listen_fd, int *conn_fd_out);
+hive_status_t hive_hal_net_connect(int fd, const char *ip, uint16_t port);
+hive_status_t hive_hal_net_connect_check(int fd);
+hive_status_t hive_hal_net_close(int fd);
+hive_status_t hive_hal_net_recv(int fd, void *buf, size_t len, size_t *received);
+hive_status_t hive_hal_net_send(int fd, const void *buf, size_t len, size_t *sent);
 ```
 
 **Implementation notes**

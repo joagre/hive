@@ -30,16 +30,16 @@ static int tests_failed = 0;
 // Test 1: Basic register and whereis
 // ============================================================================
 
-static actor_id g_test1_expected_id = ACTOR_ID_INVALID;
+static actor_id_t g_test1_expected_id = ACTOR_ID_INVALID;
 static bool g_test1_lookup_success = false;
 
-static void test1_register_actor(void *args, const hive_spawn_info *siblings,
+static void test1_register_actor(void *args, const hive_spawn_info_t *siblings,
                                  size_t sibling_count) {
     (void)args;
     (void)siblings;
     (void)sibling_count;
 
-    hive_status status = hive_register("test_actor");
+    hive_status_t status = hive_register("test_actor");
     if (HIVE_FAILED(status)) {
         hive_exit();
     }
@@ -47,28 +47,28 @@ static void test1_register_actor(void *args, const hive_spawn_info *siblings,
     g_test1_expected_id = hive_self();
 
     // Wait for lookup to complete
-    timer_id timer;
+    timer_id_t timer;
     hive_timer_after(100000, &timer);
-    hive_message msg;
+    hive_message_t msg;
     hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
 
     hive_exit();
 }
 
-static void test1_lookup_actor(void *args, const hive_spawn_info *siblings,
+static void test1_lookup_actor(void *args, const hive_spawn_info_t *siblings,
                                size_t sibling_count) {
     (void)args;
     (void)siblings;
     (void)sibling_count;
 
     // Give time for registration
-    timer_id timer;
+    timer_id_t timer;
     hive_timer_after(50000, &timer);
-    hive_message msg;
+    hive_message_t msg;
     hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
 
-    actor_id found;
-    hive_status status = hive_whereis("test_actor", &found);
+    actor_id_t found;
+    hive_status_t status = hive_whereis("test_actor", &found);
     if (HIVE_SUCCEEDED(status) && found == g_test1_expected_id) {
         g_test1_lookup_success = true;
     }
@@ -77,7 +77,7 @@ static void test1_lookup_actor(void *args, const hive_spawn_info *siblings,
 }
 
 static void test1_basic_register_whereis(void *args,
-                                         const hive_spawn_info *siblings,
+                                         const hive_spawn_info_t *siblings,
                                          size_t sibling_count) {
     (void)args;
     (void)siblings;
@@ -87,14 +87,14 @@ static void test1_basic_register_whereis(void *args,
     g_test1_expected_id = ACTOR_ID_INVALID;
     g_test1_lookup_success = false;
 
-    actor_id reg_actor, lookup_actor;
+    actor_id_t reg_actor, lookup_actor;
     hive_spawn(test1_register_actor, NULL, NULL, NULL, &reg_actor);
     hive_spawn(test1_lookup_actor, NULL, NULL, NULL, &lookup_actor);
 
     // Wait for completion
-    timer_id timer;
+    timer_id_t timer;
     hive_timer_after(200000, &timer);
-    hive_message msg;
+    hive_message_t msg;
     hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
 
     if (g_test1_lookup_success) {
@@ -113,39 +113,39 @@ static void test1_basic_register_whereis(void *args,
 static bool g_test2_first_registered = false;
 static bool g_test2_second_failed = false;
 
-static void test2_first_actor(void *args, const hive_spawn_info *siblings,
+static void test2_first_actor(void *args, const hive_spawn_info_t *siblings,
                               size_t sibling_count) {
     (void)args;
     (void)siblings;
     (void)sibling_count;
 
-    hive_status status = hive_register("shared_name");
+    hive_status_t status = hive_register("shared_name");
     if (HIVE_SUCCEEDED(status)) {
         g_test2_first_registered = true;
     }
 
     // Wait
-    timer_id timer;
+    timer_id_t timer;
     hive_timer_after(100000, &timer);
-    hive_message msg;
+    hive_message_t msg;
     hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
 
     hive_exit();
 }
 
-static void test2_second_actor(void *args, const hive_spawn_info *siblings,
+static void test2_second_actor(void *args, const hive_spawn_info_t *siblings,
                                size_t sibling_count) {
     (void)args;
     (void)siblings;
     (void)sibling_count;
 
     // Give time for first actor
-    timer_id timer;
+    timer_id_t timer;
     hive_timer_after(50000, &timer);
-    hive_message msg;
+    hive_message_t msg;
     hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
 
-    hive_status status = hive_register("shared_name");
+    hive_status_t status = hive_register("shared_name");
     if (HIVE_FAILED(status)) {
         g_test2_second_failed = true;
     }
@@ -153,7 +153,7 @@ static void test2_second_actor(void *args, const hive_spawn_info *siblings,
     hive_exit();
 }
 
-static void test2_duplicate_name(void *args, const hive_spawn_info *siblings,
+static void test2_duplicate_name(void *args, const hive_spawn_info_t *siblings,
                                  size_t sibling_count) {
     (void)args;
     (void)siblings;
@@ -163,13 +163,13 @@ static void test2_duplicate_name(void *args, const hive_spawn_info *siblings,
     g_test2_first_registered = false;
     g_test2_second_failed = false;
 
-    actor_id first, second;
+    actor_id_t first, second;
     hive_spawn(test2_first_actor, NULL, NULL, NULL, &first);
     hive_spawn(test2_second_actor, NULL, NULL, NULL, &second);
 
-    timer_id timer;
+    timer_id_t timer;
     hive_timer_after(200000, &timer);
-    hive_message msg;
+    hive_message_t msg;
     hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
 
     if (g_test2_first_registered && g_test2_second_failed) {
@@ -188,7 +188,8 @@ static void test2_duplicate_name(void *args, const hive_spawn_info *siblings,
 static bool g_test3_found_before = false;
 static bool g_test3_not_found_after = false;
 
-static void test3_registering_actor(void *args, const hive_spawn_info *siblings,
+static void test3_registering_actor(void *args,
+                                    const hive_spawn_info_t *siblings,
                                     size_t sibling_count) {
     (void)args;
     (void)siblings;
@@ -197,29 +198,29 @@ static void test3_registering_actor(void *args, const hive_spawn_info *siblings,
     hive_register("auto_cleanup_name");
 
     // Wait before exiting to give checker time to verify
-    timer_id timer;
+    timer_id_t timer;
     hive_timer_after(100000, &timer);
-    hive_message msg;
+    hive_message_t msg;
     hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
 
     // Exit - name should be auto-cleaned
     hive_exit();
 }
 
-static void test3_checker_actor(void *args, const hive_spawn_info *siblings,
+static void test3_checker_actor(void *args, const hive_spawn_info_t *siblings,
                                 size_t sibling_count) {
     (void)args;
     (void)siblings;
     (void)sibling_count;
 
     // Wait for registration
-    timer_id timer;
+    timer_id_t timer;
     hive_timer_after(50000, &timer);
-    hive_message msg;
+    hive_message_t msg;
     hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
 
     // Check name exists
-    actor_id found;
+    actor_id_t found;
     if (HIVE_SUCCEEDED(hive_whereis("auto_cleanup_name", &found))) {
         g_test3_found_before = true;
     }
@@ -236,7 +237,7 @@ static void test3_checker_actor(void *args, const hive_spawn_info *siblings,
     hive_exit();
 }
 
-static void test3_auto_cleanup(void *args, const hive_spawn_info *siblings,
+static void test3_auto_cleanup(void *args, const hive_spawn_info_t *siblings,
                                size_t sibling_count) {
     (void)args;
     (void)siblings;
@@ -246,13 +247,13 @@ static void test3_auto_cleanup(void *args, const hive_spawn_info *siblings,
     g_test3_found_before = false;
     g_test3_not_found_after = false;
 
-    actor_id reg, checker;
+    actor_id_t reg, checker;
     hive_spawn(test3_registering_actor, NULL, NULL, NULL, &reg);
     hive_spawn(test3_checker_actor, NULL, NULL, NULL, &checker);
 
-    timer_id timer;
+    timer_id_t timer;
     hive_timer_after(400000, &timer); // Increased to account for longer checks
-    hive_message msg;
+    hive_message_t msg;
     hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
 
     if (g_test3_found_before && g_test3_not_found_after) {
@@ -273,7 +274,8 @@ static void test3_auto_cleanup(void *args, const hive_spawn_info *siblings,
 static bool g_test4_found_before = false;
 static bool g_test4_not_found_after = false;
 
-static void test4_unregister_actor(void *args, const hive_spawn_info *siblings,
+static void test4_unregister_actor(void *args,
+                                   const hive_spawn_info_t *siblings,
                                    size_t sibling_count) {
     (void)args;
     (void)siblings;
@@ -282,9 +284,9 @@ static void test4_unregister_actor(void *args, const hive_spawn_info *siblings,
     hive_register("will_unregister");
 
     // Yield to let checker find it
-    timer_id timer;
+    timer_id_t timer;
     hive_timer_after(50000, &timer);
-    hive_message msg;
+    hive_message_t msg;
     hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
 
     hive_unregister("will_unregister");
@@ -296,19 +298,19 @@ static void test4_unregister_actor(void *args, const hive_spawn_info *siblings,
     hive_exit();
 }
 
-static void test4_checker_actor(void *args, const hive_spawn_info *siblings,
+static void test4_checker_actor(void *args, const hive_spawn_info_t *siblings,
                                 size_t sibling_count) {
     (void)args;
     (void)siblings;
     (void)sibling_count;
 
     // Wait for registration
-    timer_id timer;
+    timer_id_t timer;
     hive_timer_after(25000, &timer);
-    hive_message msg;
+    hive_message_t msg;
     hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
 
-    actor_id found;
+    actor_id_t found;
     if (HIVE_SUCCEEDED(hive_whereis("will_unregister", &found))) {
         g_test4_found_before = true;
     }
@@ -324,7 +326,7 @@ static void test4_checker_actor(void *args, const hive_spawn_info *siblings,
     hive_exit();
 }
 
-static void test4_unregister(void *args, const hive_spawn_info *siblings,
+static void test4_unregister(void *args, const hive_spawn_info_t *siblings,
                              size_t sibling_count) {
     (void)args;
     (void)siblings;
@@ -334,13 +336,13 @@ static void test4_unregister(void *args, const hive_spawn_info *siblings,
     g_test4_found_before = false;
     g_test4_not_found_after = false;
 
-    actor_id unreg, checker;
+    actor_id_t unreg, checker;
     hive_spawn(test4_unregister_actor, NULL, NULL, NULL, &unreg);
     hive_spawn(test4_checker_actor, NULL, NULL, NULL, &checker);
 
-    timer_id timer;
+    timer_id_t timer;
     hive_timer_after(250000, &timer);
-    hive_message msg;
+    hive_message_t msg;
     hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
 
     if (g_test4_found_before && g_test4_not_found_after) {
@@ -357,15 +359,15 @@ static void test4_unregister(void *args, const hive_spawn_info *siblings,
 // ============================================================================
 
 static void test5_whereis_nonexistent(void *args,
-                                      const hive_spawn_info *siblings,
+                                      const hive_spawn_info_t *siblings,
                                       size_t sibling_count) {
     (void)args;
     (void)siblings;
     (void)sibling_count;
     printf("\nTest 5: Whereis non-existent name fails\n");
 
-    actor_id found;
-    hive_status status = hive_whereis("nonexistent_name", &found);
+    actor_id_t found;
+    hive_status_t status = hive_whereis("nonexistent_name", &found);
     if (HIVE_FAILED(status)) {
         TEST_PASS("hive_whereis returns error for non-existent name");
     } else {
@@ -379,21 +381,21 @@ static void test5_whereis_nonexistent(void *args,
 // Test 6: NULL arguments rejected
 // ============================================================================
 
-static void test6_null_args(void *args, const hive_spawn_info *siblings,
+static void test6_null_args(void *args, const hive_spawn_info_t *siblings,
                             size_t sibling_count) {
     (void)args;
     (void)siblings;
     (void)sibling_count;
     printf("\nTest 6: NULL arguments rejected\n");
 
-    hive_status status = hive_register(NULL);
+    hive_status_t status = hive_register(NULL);
     if (HIVE_FAILED(status)) {
         TEST_PASS("hive_register rejects NULL name");
     } else {
         TEST_FAIL("hive_register should reject NULL");
     }
 
-    actor_id found;
+    actor_id_t found;
     status = hive_whereis(NULL, &found);
     if (HIVE_FAILED(status)) {
         TEST_PASS("hive_whereis rejects NULL name");
@@ -424,7 +426,7 @@ static void test6_null_args(void *args, const hive_spawn_info *siblings,
 
 static bool g_test7_unregister_failed = false;
 
-static void test7_owner_actor(void *args, const hive_spawn_info *siblings,
+static void test7_owner_actor(void *args, const hive_spawn_info_t *siblings,
                               size_t sibling_count) {
     (void)args;
     (void)siblings;
@@ -433,28 +435,28 @@ static void test7_owner_actor(void *args, const hive_spawn_info *siblings,
     hive_register("owned_name");
 
     // Wait for thief attempt
-    timer_id timer;
+    timer_id_t timer;
     hive_timer_after(150000, &timer);
-    hive_message msg;
+    hive_message_t msg;
     hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
 
     hive_exit();
 }
 
-static void test7_thief_actor(void *args, const hive_spawn_info *siblings,
+static void test7_thief_actor(void *args, const hive_spawn_info_t *siblings,
                               size_t sibling_count) {
     (void)args;
     (void)siblings;
     (void)sibling_count;
 
     // Wait for registration
-    timer_id timer;
+    timer_id_t timer;
     hive_timer_after(50000, &timer);
-    hive_message msg;
+    hive_message_t msg;
     hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
 
     // Try to unregister name we don't own
-    hive_status status = hive_unregister("owned_name");
+    hive_status_t status = hive_unregister("owned_name");
     if (HIVE_FAILED(status)) {
         g_test7_unregister_failed = true;
     }
@@ -463,7 +465,7 @@ static void test7_thief_actor(void *args, const hive_spawn_info *siblings,
 }
 
 static void test7_cannot_unregister_others(void *args,
-                                           const hive_spawn_info *siblings,
+                                           const hive_spawn_info_t *siblings,
                                            size_t sibling_count) {
     (void)args;
     (void)siblings;
@@ -472,13 +474,13 @@ static void test7_cannot_unregister_others(void *args,
 
     g_test7_unregister_failed = false;
 
-    actor_id owner, thief;
+    actor_id_t owner, thief;
     hive_spawn(test7_owner_actor, NULL, NULL, NULL, &owner);
     hive_spawn(test7_thief_actor, NULL, NULL, NULL, &thief);
 
-    timer_id timer;
+    timer_id_t timer;
     hive_timer_after(250000, &timer);
-    hive_message msg;
+    hive_message_t msg;
     hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
 
     if (g_test7_unregister_failed) {
@@ -496,7 +498,8 @@ static void test7_cannot_unregister_others(void *args,
 
 static bool g_test8_all_found = false;
 
-static void test8_multi_name_actor(void *args, const hive_spawn_info *siblings,
+static void test8_multi_name_actor(void *args,
+                                   const hive_spawn_info_t *siblings,
                                    size_t sibling_count) {
     (void)args;
     (void)siblings;
@@ -507,27 +510,27 @@ static void test8_multi_name_actor(void *args, const hive_spawn_info *siblings,
     hive_register("name_three");
 
     // Wait for checker
-    timer_id timer;
+    timer_id_t timer;
     hive_timer_after(100000, &timer);
-    hive_message msg;
+    hive_message_t msg;
     hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
 
     hive_exit();
 }
 
-static void test8_checker_actor(void *args, const hive_spawn_info *siblings,
+static void test8_checker_actor(void *args, const hive_spawn_info_t *siblings,
                                 size_t sibling_count) {
     (void)args;
     (void)siblings;
     (void)sibling_count;
 
     // Wait for registrations
-    timer_id timer;
+    timer_id_t timer;
     hive_timer_after(50000, &timer);
-    hive_message msg;
+    hive_message_t msg;
     hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
 
-    actor_id a1, a2, a3;
+    actor_id_t a1, a2, a3;
     bool found1 = HIVE_SUCCEEDED(hive_whereis("name_one", &a1));
     bool found2 = HIVE_SUCCEEDED(hive_whereis("name_two", &a2));
     bool found3 = HIVE_SUCCEEDED(hive_whereis("name_three", &a3));
@@ -539,7 +542,7 @@ static void test8_checker_actor(void *args, const hive_spawn_info *siblings,
     hive_exit();
 }
 
-static void test8_multiple_names(void *args, const hive_spawn_info *siblings,
+static void test8_multiple_names(void *args, const hive_spawn_info_t *siblings,
                                  size_t sibling_count) {
     (void)args;
     (void)siblings;
@@ -548,13 +551,13 @@ static void test8_multiple_names(void *args, const hive_spawn_info *siblings,
 
     g_test8_all_found = false;
 
-    actor_id multi, checker;
+    actor_id_t multi, checker;
     hive_spawn(test8_multi_name_actor, NULL, NULL, NULL, &multi);
     hive_spawn(test8_checker_actor, NULL, NULL, NULL, &checker);
 
-    timer_id timer;
+    timer_id_t timer;
     hive_timer_after(200000, &timer);
-    hive_message msg;
+    hive_message_t msg;
     hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
 
     if (g_test8_all_found) {
@@ -570,7 +573,7 @@ static void test8_multiple_names(void *args, const hive_spawn_info *siblings,
 // Test runner
 // ============================================================================
 
-static void (*test_funcs[])(void *, const hive_spawn_info *, size_t) = {
+static void (*test_funcs[])(void *, const hive_spawn_info_t *, size_t) = {
     test1_basic_register_whereis,
     test2_duplicate_name,
     test3_auto_cleanup,
@@ -583,17 +586,17 @@ static void (*test_funcs[])(void *, const hive_spawn_info *, size_t) = {
 
 #define NUM_TESTS (sizeof(test_funcs) / sizeof(test_funcs[0]))
 
-static void run_all_tests(void *args, const hive_spawn_info *siblings,
+static void run_all_tests(void *args, const hive_spawn_info_t *siblings,
                           size_t sibling_count) {
     (void)args;
     (void)siblings;
     (void)sibling_count;
 
     for (size_t i = 0; i < NUM_TESTS; i++) {
-        actor_config cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+        actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
         cfg.stack_size = TEST_STACK_SIZE(64 * 1024);
 
-        actor_id test;
+        actor_id_t test;
         if (HIVE_FAILED(hive_spawn(test_funcs[i], NULL, NULL, &cfg, &test))) {
             printf("Failed to spawn test %zu\n", i);
             continue;
@@ -601,7 +604,7 @@ static void run_all_tests(void *args, const hive_spawn_info *siblings,
 
         hive_link(test);
 
-        hive_message msg;
+        hive_message_t msg;
         hive_ipc_recv(&msg, 5000);
     }
 
@@ -611,17 +614,17 @@ static void run_all_tests(void *args, const hive_spawn_info *siblings,
 int main(void) {
     printf("=== Name Registry (hive_register/whereis) Test Suite ===\n");
 
-    hive_status status = hive_init();
+    hive_status_t status = hive_init();
     if (HIVE_FAILED(status)) {
         fprintf(stderr, "Failed to initialize runtime: %s\n",
                 status.msg ? status.msg : "unknown error");
         return 1;
     }
 
-    actor_config cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+    actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
     cfg.stack_size = TEST_STACK_SIZE(128 * 1024);
 
-    actor_id runner;
+    actor_id_t runner;
     if (HIVE_FAILED(hive_spawn(run_all_tests, NULL, NULL, &cfg, &runner))) {
         fprintf(stderr, "Failed to spawn test runner\n");
         hive_cleanup();

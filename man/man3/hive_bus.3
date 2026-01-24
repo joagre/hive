@@ -6,15 +6,15 @@ hive_bus_create, hive_bus_destroy, hive_bus_publish, hive_bus_subscribe, hive_bu
 .nf
 .B #include <hive_bus.h>
 .PP
-.BI "hive_status hive_bus_create(const hive_bus_config *" cfg ", bus_id *" out ");"
-.BI "hive_status hive_bus_destroy(bus_id " bus ");"
-.BI "hive_status hive_bus_publish(bus_id " bus ", const void *" data ", size_t " len ");"
-.BI "hive_status hive_bus_subscribe(bus_id " bus ");"
-.BI "hive_status hive_bus_unsubscribe(bus_id " bus ");"
-.BI "hive_status hive_bus_read(bus_id " bus ", void *" buf ", size_t " max_len ", size_t *" bytes_read ");"
-.BI "hive_status hive_bus_read_wait(bus_id " bus ", void *" buf ", size_t " max_len ","
+.BI "hive_status_t hive_bus_create(const hive_bus_config_t *" cfg ", bus_id_t *" out ");"
+.BI "hive_status_t hive_bus_destroy(bus_id_t " bus ");"
+.BI "hive_status_t hive_bus_publish(bus_id_t " bus ", const void *" data ", size_t " len ");"
+.BI "hive_status_t hive_bus_subscribe(bus_id_t " bus ");"
+.BI "hive_status_t hive_bus_unsubscribe(bus_id_t " bus ");"
+.BI "hive_status_t hive_bus_read(bus_id_t " bus ", void *" buf ", size_t " max_len ", size_t *" bytes_read ");"
+.BI "hive_status_t hive_bus_read_wait(bus_id_t " bus ", void *" buf ", size_t " max_len ","
 .BI "                               size_t *" bytes_read ", int32_t " timeout_ms ");"
-.BI "size_t hive_bus_entry_count(bus_id " bus ");"
+.BI "size_t hive_bus_entry_count(bus_id_t " bus ");"
 .fi
 .SH DESCRIPTION
 These functions implement a publish-subscribe message bus for broadcasting data to
@@ -30,7 +30,7 @@ typedef struct {
     uint32_t max_age_ms;          /* expire after ms, 0 = no expiry */
     size_t   max_entries;         /* ring buffer capacity */
     size_t   max_entry_size;      /* max payload bytes per entry */
-} hive_bus_config;
+} hive_bus_config_t;
 
 #define HIVE_BUS_CONFIG_DEFAULT { \\
     .max_subscribers = 32, \\
@@ -110,7 +110,7 @@ time-sensitive data like sensor readings.
 returns the number of valid entries currently in the bus ring buffer.
 .SH RETURN VALUE
 Functions returning
-.I hive_status
+.I hive_status_t
 indicate success when
 .I status.code
 is
@@ -211,13 +211,13 @@ Microsecond timestamps for max_age_ms (gettimeofday on Linux, hardware timer on 
 typedef struct {
     float temperature;
     float humidity;
-} sensor_data;
+} sensor_data_t;
 
-bus_id sensor_bus;
+bus_id_t sensor_bus;
 
-void sensor_publisher(void *arg) {
-    (void)arg;
-    sensor_data data = {25.0f, 60.0f};
+void sensor_publisher(void *arg, const hive_spawn_info_t *siblings,
+                      size_t sibling_count) {
+    sensor_data_t data = {25.0f, 60.0f};
 
     for (int i = 0; i < 5; i++) {
         data.temperature += 0.5f;
@@ -229,14 +229,14 @@ void sensor_publisher(void *arg) {
     hive_exit();
 }
 
-void display_actor(void *arg) {
-    (void)arg;
+void display_actor(void *arg, const hive_spawn_info_t *siblings,
+                   size_t sibling_count) {
     hive_bus_subscribe(sensor_bus);
 
     for (int i = 0; i < 5; i++) {
-        sensor_data data;
+        sensor_data_t data;
         size_t len;
-        hive_status s = hive_bus_read_wait(sensor_bus, &data, sizeof(data),
+        hive_status_t s = hive_bus_read_wait(sensor_bus, &data, sizeof(data),
                                            &len, 5000);
         if (HIVE_FAILED(s)) {
             printf("Read failed: %s\\n", HIVE_ERR_STR(s));
@@ -249,14 +249,14 @@ void display_actor(void *arg) {
     hive_exit();
 }
 
-void logger_actor(void *arg) {
-    (void)arg;
+void logger_actor(void *arg, const hive_spawn_info_t *siblings,
+                  size_t sibling_count) {
     hive_bus_subscribe(sensor_bus);
 
     for (int i = 0; i < 5; i++) {
-        sensor_data data;
+        sensor_data_t data;
         size_t len;
-        hive_status s = hive_bus_read_wait(sensor_bus, &data, sizeof(data),
+        hive_status_t s = hive_bus_read_wait(sensor_bus, &data, sizeof(data),
                                            &len, 5000);
         if (HIVE_FAILED(s)) break;
         printf("Logger: recorded temp=%.1f at tick %d\\n",
@@ -271,14 +271,14 @@ int main(void) {
     hive_init();
 
     /* Create bus with 100ms expiry */
-    hive_bus_config cfg = HIVE_BUS_CONFIG_DEFAULT;
+    hive_bus_config_t cfg = HIVE_BUS_CONFIG_DEFAULT;
     cfg.max_age_ms = 100;
     hive_bus_create(&cfg, &sensor_bus);
 
-    actor_id pub, disp, log;
-    hive_spawn(display_actor, NULL, &disp);
-    hive_spawn(logger_actor, NULL, &log);
-    hive_spawn(sensor_publisher, NULL, &pub);
+    actor_id_t pub, disp, log;
+    hive_spawn(display_actor, NULL, NULL, NULL, &disp);
+    hive_spawn(logger_actor, NULL, NULL, NULL, &log);
+    hive_spawn(sensor_publisher, NULL, NULL, NULL, &pub);
 
     hive_run();
     hive_bus_destroy(sensor_bus);
@@ -289,7 +289,7 @@ int main(void) {
 .SS Work Queue Pattern
 .nf
 /* Use consume_after_reads=1 for work queue semantics */
-hive_bus_config cfg = HIVE_BUS_CONFIG_DEFAULT;
+hive_bus_config_t cfg = HIVE_BUS_CONFIG_DEFAULT;
 cfg.consume_after_reads = 1;  /* Entry removed after first read */
 cfg.max_entries = 64;         /* Queue depth */
 hive_bus_create(&cfg, &work_queue);

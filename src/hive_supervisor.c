@@ -16,23 +16,23 @@
 
 // Child runtime state
 typedef struct {
-    actor_id id;         // Current actor ID (0 if not running)
+    actor_id_t id;       // Current actor_t ID (0 if not running)
     uint32_t monitor_id; // Monitor ID
     bool running;        // Is child currently running
-} child_state;
+} child_state_t;
 
 // Restart timestamp for intensity tracking
 typedef struct {
     uint64_t timestamp_us;
-} restart_record;
+} restart_record_t;
 
 // Supervisor instance state
 typedef struct {
     bool in_use;
-    actor_id supervisor_id;
+    actor_id_t supervisor_id;
 
     // Configuration (copied from user)
-    hive_restart_strategy strategy;
+    hive_restart_strategy_t strategy;
     uint32_t max_restarts;
     uint32_t restart_period_ms;
     size_t num_children;
@@ -40,32 +40,32 @@ typedef struct {
     void *shutdown_ctx;
 
     // Child specs (copied from user)
-    hive_child_spec children[HIVE_MAX_SUPERVISOR_CHILDREN];
+    hive_child_spec_t children[HIVE_MAX_SUPERVISOR_CHILDREN];
     // Storage for copied child init_args
     uint8_t arg_storage[HIVE_MAX_SUPERVISOR_CHILDREN][HIVE_MAX_MESSAGE_SIZE];
 
     // Runtime state
-    child_state child_states[HIVE_MAX_SUPERVISOR_CHILDREN];
+    child_state_t child_states[HIVE_MAX_SUPERVISOR_CHILDREN];
 
     // Sibling info array (built during two-phase start)
-    hive_spawn_info sibling_info[HIVE_MAX_SUPERVISOR_CHILDREN];
+    hive_spawn_info_t sibling_info[HIVE_MAX_SUPERVISOR_CHILDREN];
 
     // Restart intensity tracking (ring buffer)
-    restart_record restarts[HIVE_MAX_SUPERVISOR_CHILDREN];
+    restart_record_t restarts[HIVE_MAX_SUPERVISOR_CHILDREN];
     size_t restart_head;
     size_t restart_count;
-} supervisor_state;
+} supervisor_state_t;
 
 // =============================================================================
 // Static Pool
 // =============================================================================
 
-static supervisor_state s_supervisors[HIVE_MAX_SUPERVISORS];
+static supervisor_state_t s_supervisors[HIVE_MAX_SUPERVISORS];
 
-static supervisor_state *alloc_supervisor(void) {
+static supervisor_state_t *alloc_supervisor(void) {
     for (size_t i = 0; i < HIVE_MAX_SUPERVISORS; i++) {
         if (!s_supervisors[i].in_use) {
-            memset(&s_supervisors[i], 0, sizeof(supervisor_state));
+            memset(&s_supervisors[i], 0, sizeof(supervisor_state_t));
             s_supervisors[i].in_use = true;
             return &s_supervisors[i];
         }
@@ -73,13 +73,13 @@ static supervisor_state *alloc_supervisor(void) {
     return NULL;
 }
 
-static void free_supervisor(supervisor_state *sup) {
+static void free_supervisor(supervisor_state_t *sup) {
     if (sup) {
         sup->in_use = false;
     }
 }
 
-static supervisor_state *find_supervisor_by_id(actor_id id) {
+static supervisor_state_t *find_supervisor_by_id(actor_id_t id) {
     for (size_t i = 0; i < HIVE_MAX_SUPERVISORS; i++) {
         if (s_supervisors[i].in_use && s_supervisors[i].supervisor_id == id) {
             return &s_supervisors[i];
@@ -102,7 +102,7 @@ static uint64_t get_time_us(void) {
 // Restart Intensity Tracking
 // =============================================================================
 
-static void record_restart(supervisor_state *sup) {
+static void record_restart(supervisor_state_t *sup) {
     uint64_t now = get_time_us();
 
     // Add new restart record
@@ -113,7 +113,7 @@ static void record_restart(supervisor_state *sup) {
     }
 }
 
-static bool restart_intensity_exceeded(supervisor_state *sup) {
+static bool restart_intensity_exceeded(supervisor_state_t *sup) {
     if (sup->max_restarts == 0) {
         return false; // Unlimited restarts
     }
@@ -140,7 +140,7 @@ static bool restart_intensity_exceeded(supervisor_state *sup) {
 // =============================================================================
 
 // Build sibling info array from current child states
-static void build_sibling_info(supervisor_state *sup) {
+static void build_sibling_info(supervisor_state_t *sup) {
     for (size_t i = 0; i < sup->num_children; i++) {
         sup->sibling_info[i].name = sup->children[i].name;
         sup->sibling_info[i].id = sup->child_states[i].id;
@@ -148,9 +148,9 @@ static void build_sibling_info(supervisor_state *sup) {
     }
 }
 
-// Update actor's startup info to point to supervisor's sibling array
-static void set_child_siblings(supervisor_state *sup, size_t index) {
-    actor *a = hive_actor_get(sup->child_states[index].id);
+// Update actor_t's startup info to point to supervisor's sibling array
+static void set_child_siblings(supervisor_state_t *sup, size_t index) {
+    actor_t *a = hive_actor_get(sup->child_states[index].id);
     if (a) {
         a->startup_siblings = sup->sibling_info;
         a->startup_sibling_count = sup->num_children;
@@ -158,9 +158,9 @@ static void set_child_siblings(supervisor_state *sup, size_t index) {
 }
 
 // Spawn a single child with sibling info
-static hive_status spawn_child(supervisor_state *sup, size_t index) {
-    hive_child_spec *spec = &sup->children[index];
-    child_state *state = &sup->child_states[index];
+static hive_status_t spawn_child(supervisor_state_t *sup, size_t index) {
+    hive_child_spec_t *spec = &sup->children[index];
+    child_state_t *state = &sup->child_states[index];
 
     // Determine init_args to pass
     void *init_args = spec->init_args;
@@ -169,13 +169,13 @@ static hive_status spawn_child(supervisor_state *sup, size_t index) {
         init_args = sup->arg_storage[index];
     }
 
-    // Build actor config with name from child spec
-    actor_config cfg = spec->actor_cfg;
+    // Build actor_t config with name from child spec
+    actor_config_t cfg = spec->actor_cfg;
     cfg.name = spec->name;
     cfg.auto_register = spec->auto_register;
 
     // Spawn the child using new spawn API
-    hive_status status =
+    hive_status_t status =
         hive_spawn(spec->start, spec->init, init_args, &cfg, &state->id);
     if (HIVE_FAILED(status)) {
         HIVE_LOG_ERROR("[SUP] Failed to spawn child \"%s\": %s", spec->name,
@@ -188,7 +188,7 @@ static hive_status spawn_child(supervisor_state *sup, size_t index) {
     sup->sibling_info[index].id = state->id;
     sup->sibling_info[index].registered = spec->auto_register;
 
-    // Set sibling info in the actor
+    // Set sibling info in the actor_t
     set_child_siblings(sup, index);
 
     // Monitor the child
@@ -203,18 +203,18 @@ static hive_status spawn_child(supervisor_state *sup, size_t index) {
         return status;
     }
 
-    HIVE_LOG_DEBUG("[SUP] Child \"%s\" spawned (actor %u)", spec->name,
+    HIVE_LOG_DEBUG("[SUP] Child \"%s\" spawned (actor_t %u)", spec->name,
                    state->id);
     state->running = true;
     return HIVE_SUCCESS;
 }
 
 // Two-phase start: spawn all children, then set sibling info for all
-static hive_status spawn_all_children_two_phase(supervisor_state *sup) {
+static hive_status_t spawn_all_children_two_phase(supervisor_state_t *sup) {
     // Phase 1: Spawn all children
     for (size_t i = 0; i < sup->num_children; i++) {
-        hive_child_spec *spec = &sup->children[i];
-        child_state *state = &sup->child_states[i];
+        hive_child_spec_t *spec = &sup->children[i];
+        child_state_t *state = &sup->child_states[i];
 
         // Determine init_args to pass
         void *init_args = spec->init_args;
@@ -222,13 +222,13 @@ static hive_status spawn_all_children_two_phase(supervisor_state *sup) {
             init_args = sup->arg_storage[i];
         }
 
-        // Build actor config
-        actor_config cfg = spec->actor_cfg;
+        // Build actor_t config
+        actor_config_t cfg = spec->actor_cfg;
         cfg.name = spec->name;
         cfg.auto_register = spec->auto_register;
 
         // Spawn the child
-        hive_status status =
+        hive_status_t status =
             hive_spawn(spec->start, spec->init, init_args, &cfg, &state->id);
         if (HIVE_FAILED(status)) {
             HIVE_LOG_ERROR("[SUP] Failed to spawn child \"%s\": %s", spec->name,
@@ -253,8 +253,8 @@ static hive_status spawn_all_children_two_phase(supervisor_state *sup) {
         set_child_siblings(sup, i);
 
         // Monitor the child
-        hive_status status = hive_monitor(sup->child_states[i].id,
-                                          &sup->child_states[i].monitor_id);
+        hive_status_t status = hive_monitor(sup->child_states[i].id,
+                                            &sup->child_states[i].monitor_id);
         if (HIVE_FAILED(status)) {
             HIVE_LOG_ERROR("[SUP] Failed to monitor child \"%s\": %s",
                            sup->children[i].name, HIVE_ERR_STR(status));
@@ -270,21 +270,21 @@ static hive_status spawn_all_children_two_phase(supervisor_state *sup) {
             return status;
         }
 
-        HIVE_LOG_DEBUG("[SUP] Child \"%s\" spawned (actor %u)",
+        HIVE_LOG_DEBUG("[SUP] Child \"%s\" spawned (actor_t %u)",
                        sup->children[i].name, sup->child_states[i].id);
     }
 
     return HIVE_SUCCESS;
 }
 
-static void stop_child(supervisor_state *sup, size_t index) {
-    child_state *state = &sup->child_states[index];
+static void stop_child(supervisor_state_t *sup, size_t index) {
+    child_state_t *state = &sup->child_states[index];
 
     if (state->running && state->id != ACTOR_ID_INVALID) {
         // Cancel monitor first (ignore errors - child may already be dead)
         hive_monitor_cancel(state->monitor_id);
 
-        // Kill the child actor
+        // Kill the child actor_t
         hive_kill(state->id);
 
         state->running = false;
@@ -292,7 +292,7 @@ static void stop_child(supervisor_state *sup, size_t index) {
     }
 }
 
-static size_t find_child_by_actor(supervisor_state *sup, actor_id id) {
+static size_t find_child_by_actor(supervisor_state_t *sup, actor_id_t id) {
     for (size_t i = 0; i < sup->num_children; i++) {
         if (sup->child_states[i].id == id) {
             return i;
@@ -305,8 +305,8 @@ static size_t find_child_by_actor(supervisor_state *sup, actor_id id) {
 // Restart Strategies
 // =============================================================================
 
-static bool should_restart_child(hive_child_restart restart,
-                                 hive_exit_reason reason) {
+static bool should_restart_child(hive_child_restart_t restart,
+                                 hive_exit_reason_t reason) {
     switch (restart) {
     case HIVE_CHILD_PERMANENT:
         return true;
@@ -319,11 +319,11 @@ static bool should_restart_child(hive_child_restart restart,
     }
 }
 
-static hive_status restart_one_for_one(supervisor_state *sup,
-                                       size_t failed_index,
-                                       hive_exit_reason reason) {
-    hive_child_spec *spec = &sup->children[failed_index];
-    child_state *state = &sup->child_states[failed_index];
+static hive_status_t restart_one_for_one(supervisor_state_t *sup,
+                                         size_t failed_index,
+                                         hive_exit_reason_t reason) {
+    hive_child_spec_t *spec = &sup->children[failed_index];
+    child_state_t *state = &sup->child_states[failed_index];
 
     state->running = false;
     state->id = ACTOR_ID_INVALID;
@@ -340,10 +340,10 @@ static hive_status restart_one_for_one(supervisor_state *sup,
     return spawn_child(sup, failed_index);
 }
 
-static hive_status restart_one_for_all(supervisor_state *sup,
-                                       size_t failed_index,
-                                       hive_exit_reason reason) {
-    hive_child_spec *spec = &sup->children[failed_index];
+static hive_status_t restart_one_for_all(supervisor_state_t *sup,
+                                         size_t failed_index,
+                                         hive_exit_reason_t reason) {
+    hive_child_spec_t *spec = &sup->children[failed_index];
 
     // Mark failed child as stopped
     sup->child_states[failed_index].running = false;
@@ -367,7 +367,7 @@ static hive_status restart_one_for_all(supervisor_state *sup,
 
     // Restart all children
     for (size_t i = 0; i < sup->num_children; i++) {
-        hive_status status = spawn_child(sup, i);
+        hive_status_t status = spawn_child(sup, i);
         if (HIVE_FAILED(status)) {
             return status;
         }
@@ -376,10 +376,10 @@ static hive_status restart_one_for_all(supervisor_state *sup,
     return HIVE_SUCCESS;
 }
 
-static hive_status restart_rest_for_one(supervisor_state *sup,
-                                        size_t failed_index,
-                                        hive_exit_reason reason) {
-    hive_child_spec *spec = &sup->children[failed_index];
+static hive_status_t restart_rest_for_one(supervisor_state_t *sup,
+                                          size_t failed_index,
+                                          hive_exit_reason_t reason) {
+    hive_child_spec_t *spec = &sup->children[failed_index];
 
     // Mark failed child as stopped
     sup->child_states[failed_index].running = false;
@@ -401,7 +401,7 @@ static hive_status restart_rest_for_one(supervisor_state *sup,
 
     // Restart failed child and all after it
     for (size_t i = failed_index; i < sup->num_children; i++) {
-        hive_status status = spawn_child(sup, i);
+        hive_status_t status = spawn_child(sup, i);
         if (HIVE_FAILED(status)) {
             return status;
         }
@@ -410,8 +410,9 @@ static hive_status restart_rest_for_one(supervisor_state *sup,
     return HIVE_SUCCESS;
 }
 
-static hive_status handle_child_exit(supervisor_state *sup, actor_id child,
-                                     hive_exit_reason reason) {
+static hive_status_t handle_child_exit(supervisor_state_t *sup,
+                                       actor_id_t child,
+                                       hive_exit_reason_t reason) {
     size_t index = find_child_by_actor(sup, child);
     if (index == (size_t)-1) {
         // Unknown child - ignore (might be from previous restart cycle)
@@ -437,17 +438,17 @@ static hive_status handle_child_exit(supervisor_state *sup, actor_id child,
 // Supervisor Actor
 // =============================================================================
 
-static void supervisor_actor_fn(void *args, const hive_spawn_info *siblings,
+static void supervisor_actor_fn(void *args, const hive_spawn_info_t *siblings,
                                 size_t sibling_count) {
     (void)siblings;
     (void)sibling_count;
-    supervisor_state *sup = (supervisor_state *)args;
+    supervisor_state_t *sup = (supervisor_state_t *)args;
 
     HIVE_LOG_INFO("[SUP] Starting with %zu children (strategy: %s)",
                   sup->num_children, hive_restart_strategy_str(sup->strategy));
 
     // Spawn all children using two-phase start
-    hive_status status = spawn_all_children_two_phase(sup);
+    hive_status_t status = spawn_all_children_two_phase(sup);
     if (HIVE_FAILED(status)) {
         // Failed to spawn initial children - shut down
         HIVE_LOG_ERROR("[SUP] Startup failed - shutting down");
@@ -464,8 +465,8 @@ static void supervisor_actor_fn(void *args, const hive_spawn_info *siblings,
     bool shutdown_requested = false;
 
     while (!shutdown_requested) {
-        hive_message msg;
-        hive_status status = hive_ipc_recv(&msg, -1);
+        hive_message_t msg;
+        hive_status_t status = hive_ipc_recv(&msg, -1);
 
         if (HIVE_FAILED(status)) {
             continue;
@@ -473,7 +474,7 @@ static void supervisor_actor_fn(void *args, const hive_spawn_info *siblings,
 
         if (msg.class == HIVE_MSG_EXIT) {
             // Child died
-            hive_exit_msg exit_info;
+            hive_exit_msg_t exit_info;
             hive_decode_exit(&msg, &exit_info);
 
             status = handle_child_exit(sup, exit_info.actor, exit_info.reason);
@@ -495,7 +496,7 @@ static void supervisor_actor_fn(void *args, const hive_spawn_info *siblings,
     }
 
     // Drain any remaining exit messages briefly
-    hive_message msg;
+    hive_message_t msg;
     while (HIVE_SUCCEEDED(hive_ipc_recv(&msg, 10))) {
         // Discard
     }
@@ -513,9 +514,9 @@ static void supervisor_actor_fn(void *args, const hive_spawn_info *siblings,
 // Public API
 // =============================================================================
 
-hive_status hive_supervisor_start(const hive_supervisor_config *config,
-                                  const actor_config *sup_actor_cfg,
-                                  actor_id *out_supervisor) {
+hive_status_t hive_supervisor_start(const hive_supervisor_config_t *config,
+                                    const actor_config_t *sup_actor_cfg,
+                                    actor_id_t *out_supervisor) {
     if (!config || !out_supervisor) {
         return HIVE_ERROR(HIVE_ERR_INVALID, "NULL config or out_supervisor");
     }
@@ -540,7 +541,7 @@ hive_status hive_supervisor_start(const hive_supervisor_config *config,
     }
 
     // Allocate supervisor state
-    supervisor_state *sup = alloc_supervisor();
+    supervisor_state_t *sup = alloc_supervisor();
     if (!sup) {
         return HIVE_ERROR(HIVE_ERR_NOMEM, "no supervisor slots available");
     }
@@ -565,8 +566,8 @@ hive_status hive_supervisor_start(const hive_supervisor_config *config,
         }
     }
 
-    // Use provided actor config or default
-    actor_config cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+    // Use provided actor_t config or default
+    actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
     if (sup_actor_cfg) {
         cfg = *sup_actor_cfg;
     }
@@ -574,8 +575,8 @@ hive_status hive_supervisor_start(const hive_supervisor_config *config,
         cfg.name = "supervisor";
     }
 
-    // Spawn supervisor actor using new spawn API
-    hive_status status =
+    // Spawn supervisor actor_t using new spawn API
+    hive_status_t status =
         hive_spawn(supervisor_actor_fn, NULL, sup, &cfg, out_supervisor);
     if (HIVE_FAILED(status)) {
         free_supervisor(sup);
@@ -586,8 +587,8 @@ hive_status hive_supervisor_start(const hive_supervisor_config *config,
     return HIVE_SUCCESS;
 }
 
-hive_status hive_supervisor_stop(actor_id supervisor) {
-    supervisor_state *sup = find_supervisor_by_id(supervisor);
+hive_status_t hive_supervisor_stop(actor_id_t supervisor) {
+    supervisor_state_t *sup = find_supervisor_by_id(supervisor);
     if (!sup) {
         return HIVE_ERROR(HIVE_ERR_INVALID, "invalid supervisor ID");
     }
@@ -596,7 +597,7 @@ hive_status hive_supervisor_stop(actor_id supervisor) {
     return hive_ipc_notify(supervisor, SUP_TAG_STOP, NULL, 0);
 }
 
-const char *hive_restart_strategy_str(hive_restart_strategy strategy) {
+const char *hive_restart_strategy_str(hive_restart_strategy_t strategy) {
     switch (strategy) {
     case HIVE_STRATEGY_ONE_FOR_ONE:
         return "one_for_one";
@@ -609,7 +610,7 @@ const char *hive_restart_strategy_str(hive_restart_strategy strategy) {
     }
 }
 
-const char *hive_child_restart_str(hive_child_restart restart) {
+const char *hive_child_restart_str(hive_child_restart_t restart) {
     switch (restart) {
     case HIVE_CHILD_PERMANENT:
         return "permanent";

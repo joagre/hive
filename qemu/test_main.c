@@ -53,7 +53,7 @@ static volatile int s_test_failed = 0;
 static volatile int s_pong_count = 0;
 static volatile int s_context_switches = 0;
 static volatile int s_sleep_done = 0;
-static actor_id g_pong_actor = 0;
+static actor_id_t g_pong_actor = 0;
 
 /* Test macros */
 #define TEST_ASSERT(cond, msg)                      \
@@ -68,18 +68,15 @@ static actor_id g_pong_actor = 0;
     } while (0)
 
 /* Pong actor - responds to ping messages, no timeout */
-static void pong_actor(void *args, const hive_spawn_info *siblings,
+static void pong_actor(void *args, const hive_spawn_info_t *siblings,
                        size_t sibling_count) {
-    (void)args;
-    (void)siblings;
-    (void)sibling_count;
     semihosting_printf("Pong actor started (id=%u)\n", (unsigned)hive_self());
     s_context_switches++;
 
     /* Receive 3 pings and reply to each */
     for (int i = 0; i < 3; i++) {
-        hive_message msg;
-        hive_status s = hive_ipc_recv(
+        hive_message_t msg;
+        hive_status_t s = hive_ipc_recv(
             &msg, 0); /* Non-blocking - message should already be there */
 
         if (HIVE_FAILED(s)) {
@@ -102,18 +99,15 @@ static void pong_actor(void *args, const hive_spawn_info *siblings,
 }
 
 /* Ping actor - sends pings immediately (no sleep) */
-static void ping_actor(void *args, const hive_spawn_info *siblings,
+static void ping_actor(void *args, const hive_spawn_info_t *siblings,
                        size_t sibling_count) {
-    (void)args;
-    (void)siblings;
-    (void)sibling_count;
     semihosting_printf("Ping actor started (id=%u)\n", (unsigned)hive_self());
     s_context_switches++;
 
     /* Send 3 pings */
     for (int i = 0; i < 3; i++) {
         const char *ping = "PING";
-        hive_message reply;
+        hive_message_t reply;
 
         semihosting_printf("Ping: sending request #%d to actor %u\n", i + 1,
                            (unsigned)g_pong_actor);
@@ -130,10 +124,8 @@ static void ping_actor(void *args, const hive_spawn_info *siblings,
 }
 
 /* Simple yield test actor */
-static void yield_actor(void *args, const hive_spawn_info *siblings,
+static void yield_actor(void *args, const hive_spawn_info_t *siblings,
                         size_t sibling_count) {
-    (void)siblings;
-    (void)sibling_count;
     int id = (int)(intptr_t)args;
     semihosting_printf("Yield actor %d started\n", id);
     s_context_switches++;
@@ -148,11 +140,8 @@ static void yield_actor(void *args, const hive_spawn_info *siblings,
 }
 
 /* Sleep test actor - tests timer-based sleep */
-static void sleep_actor(void *args, const hive_spawn_info *siblings,
+static void sleep_actor(void *args, const hive_spawn_info_t *siblings,
                         size_t sibling_count) {
-    (void)args;
-    (void)siblings;
-    (void)sibling_count;
     semihosting_printf("Sleep actor started (id=%u)\n", (unsigned)hive_self());
 
     uint32_t start = hive_timer_get_ticks();
@@ -160,7 +149,7 @@ static void sleep_actor(void *args, const hive_spawn_info *siblings,
                        (unsigned)start);
 
     /* Sleep for 50ms (50 ticks at 1ms/tick) */
-    hive_status s = hive_sleep(50000);
+    hive_status_t s = hive_sleep(50000);
 
     uint32_t end = hive_timer_get_ticks();
     uint32_t elapsed = end - start;
@@ -192,7 +181,7 @@ int main(void) {
                        (unsigned)SYSTICK_RELOAD, (unsigned)TICK_RATE_HZ);
 
     /* Test 1: Runtime initialization */
-    hive_status s = hive_init();
+    hive_status_t s = hive_init();
     TEST_ASSERT(!HIVE_FAILED(s), "Runtime initialization");
 
     if (HIVE_FAILED(s)) {
@@ -202,7 +191,7 @@ int main(void) {
 
     /* Test 2: Spawn yield test actors */
     semihosting_printf("\n--- Test: Context Switching ---\n");
-    actor_id yield1, yield2;
+    actor_id_t yield1, yield2;
 
     s = hive_spawn(yield_actor, NULL, (void *)1, NULL, &yield1);
     TEST_ASSERT(!HIVE_FAILED(s), "Spawn yield actor 1");
@@ -220,7 +209,7 @@ int main(void) {
     semihosting_printf("\n--- Test: IPC Message Passing ---\n");
     s_context_switches = 0;
 
-    actor_id pong_id, ping_id;
+    actor_id_t pong_id, ping_id;
 
     s = hive_spawn(pong_actor, NULL, NULL, NULL, &pong_id);
     TEST_ASSERT(!HIVE_FAILED(s), "Spawn pong actor");
@@ -276,7 +265,7 @@ int main(void) {
 
     if (tick2 > tick1) {
         /* Ticks working, test sleep */
-        actor_id sleep_id;
+        actor_id_t sleep_id;
         s = hive_spawn(sleep_actor, NULL, NULL, NULL, &sleep_id);
         TEST_ASSERT(!HIVE_FAILED(s), "Spawn sleep actor");
 
