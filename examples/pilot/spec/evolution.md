@@ -25,9 +25,9 @@ What a production flight controller would need beyond this demonstration:
 | GPS signal lost | Position control uses stale data | Hold last position, descend slowly, or return-to-home |
 | IMU data invalid | Garbage in, garbage out | Sanity checks, sensor voting, reject outliers |
 
-### Implemented Safety Features (STM32 only)
+### Implemented Safety Features
 
-The following safety features are enabled for real hardware (not in Webots simulation):
+The following safety features run on all platforms (Webots and STM32):
 
 | Feature | Location | Behavior |
 |---------|----------|----------|
@@ -35,8 +35,13 @@ The following safety features are enabled for real hardware (not in Webots simul
 | Altitude cutoff | altitude_actor.c | Motors off if altitude >2m |
 | Landed detection | altitude_actor.c | Motors off when target <5cm and altitude <15cm |
 | Thrust ramp | altitude_actor.c | Gradual thrust increase over 0.5 seconds on takeoff |
+| Flight duration | flight_manager_actor.c | Controlled landing after timeout (10-60s depending on flight profile) |
+
+The following safety features are STM32-only (disabled in Webots):
+
+| Feature | Location | Behavior |
+|---------|----------|----------|
 | Startup delay | flight_manager_actor.c | Flight blocked for 60 seconds after boot |
-| Hard cutoff | flight_manager_actor.c | Motors forced off 12 seconds after flight starts |
 
 ### Future Safety Features
 
