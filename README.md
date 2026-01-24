@@ -6,7 +6,7 @@
 
 **No shared state.** Each actor owns its data. No locks, no races. A bug in one actor can't corrupt another actor's state.
 
-**Supervision.** When an actor crashes, its supervisor restarts it with clean state. The system keeps running.
+**Supervision.** Supervisors can restart crashed actors with clean state. Fault isolation without taking down the system.
 
 **Bounded memory.** All memory is allocated at init from static pools. No heap allocation after startup. Memory footprint is known at link time.
 
