@@ -2,6 +2,20 @@
 
 > **Erlang-style actors in C for embedded systems. Deterministic memory, cooperative scheduling, no GC.**
 
+## Why Hive?
+
+**Write concurrent embedded code without the usual pain.** No shared memory bugs. No lock ordering nightmares. No mysterious race conditions. Each actor owns its state—period.
+
+**Let it crash, then recover.** Hive brings Erlang's battle-tested supervision model to embedded C. When an actor fails, its supervisor restarts it with clean state. Your system keeps running. This isn't theoretical—it's how telecom systems achieve five-nines uptime.
+
+**Know exactly what you're getting.** Every byte of memory is accounted for at compile time. No heap allocation in hot paths. No GC pauses. No surprises. You can calculate your memory footprint before you flash.
+
+**Proven on real hardware.** The included [pilot example](examples/pilot/) is a complete quadcopter flight controller—11 actors, cascaded PID control, sensor fusion, fail-safe supervision. It flies. On a Crazyflie. In 60KB of flash.
+
+For the complete design specification, see [spec/](spec/).
+
+---
+
 ## Table of Contents
 
 **Overview**
@@ -35,25 +49,15 @@
 
 ---
 
-A complete actor-based runtime designed for **embedded and safety-critical systems**. Features cooperative multitasking with priority-based scheduling and message passing using the actor model.
+## What Hive Is (and Isn't)
 
-**Platforms:** x86-64 Linux (fully implemented), STM32/ARM Cortex-M bare metal (core runtime implemented)
+**Hive is** a single-threaded, cooperative actor runtime with Erlang-inspired semantics—mailboxes, selective receive, links, monitors, and supervisors. It's designed for MCUs and safety-conscious embedded systems, emphasizing bounded memory, explicit failure handling, and predictable scheduling.
 
-The runtime uses **statically bounded memory** for predictable behavior—no heap allocation. It features **priority-based scheduling** (4 levels: CRITICAL, HIGH, NORMAL, LOW) with fast context switching. Provides message passing (IPC with selective receive and request/reply), linking, monitoring, supervision (automatic restart strategies), timers, pub-sub messaging (bus), network I/O, and file I/O.
-
-**Hive is:**
-- A single-threaded, cooperative actor runtime
-- With Erlang-inspired semantics (mailboxes, selective receive, links, monitors, supervisors)
-- Designed for MCUs and safety-conscious embedded systems
-- Emphasizing bounded memory, explicit failure handling, and predictable scheduling
-
-**Hive is not:**
-- An RTOS (no preemption, no priority inversion protection)
-- A hard real-time guarantee engine (no deadline enforcement)
-- A distributed actor framework (single process only)
-- A statechart or FSM framework
+**Hive is not** an RTOS (no preemption), a hard real-time engine (no deadline enforcement), a distributed framework (single process only), or a statechart library.
 
 **Hive favors boundedness and inspectability over fairness and throughput.**
+
+**Platforms:** x86-64 Linux (fully implemented), STM32/ARM Cortex-M bare metal (core runtime implemented)
 
 ## Features
 
