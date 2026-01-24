@@ -2,6 +2,35 @@
 
 A complete quadcopter autopilot—not a toy demo, but a flight controller targeting real hardware. Demonstrates Hive in a safety-critical embedded context with 11 actors, cascaded PID control, sensor fusion, pub-sub data flow, and fail-safe supervision.
 
+## Table of Contents
+
+**Overview**
+- [What it does](#what-it-does)
+
+**Getting Started**
+- [Prerequisites](#prerequisites)
+- [Build and Run](#build-and-run)
+
+**Architecture**
+- [Architecture](#architecture)
+- [Supervision and Spawn Order](#supervision-and-spawn-order)
+- [Control System](#control-system)
+- [Main Loop](#main-loop)
+
+**Development**
+- [Stack Profiling](#stack-profiling)
+- [Error Handling](#error-handling)
+
+**Telemetry & Logging**
+- [Radio Telemetry](#radio-telemetry-crazyflie-21-only) (Crazyflie)
+- [Log Download](#log-download-crazyflie-21-only) (Crazyflie)
+- [CSV Telemetry Logging](#csv-telemetry-logging-webots-only) (Webots)
+
+**Reference**
+- [Files](#files)
+
+---
+
 **Platforms:**
 - **Webots simulation** (default) - Crazyflie quadcopter in Webots simulator
 - **Crazyflie 2.1+** - Bitcraze nano quadcopter (~63 KB flash, ~120 KB RAM)
@@ -74,83 +103,6 @@ make -f Makefile.<platform> clean  # Clean build artifacts
 ```
 
 See `hal/<platform>/README.md` for hardware details, pin mapping, and flight profiles.
-
-## Files
-
-### Actor Implementations
-
-| File | Description |
-|------|-------------|
-| `pilot.c` | Main entry point, bus setup, supervisor config |
-| `sensor_actor.c` | Reads sensors via HAL → sensor bus |
-| `estimator_actor.c` | Sensor fusion → state bus |
-| `altitude_actor.c` | Altitude PID → thrust |
-| `waypoint_actor.c` | Waypoint manager → position target bus |
-| `position_actor.c` | Position PD → attitude setpoints |
-| `attitude_actor.c` | Attitude PIDs → rate setpoints |
-| `rate_actor.c` | Rate PIDs → torque commands |
-| `motor_actor.c` | Output: torque → HAL → motors |
-| `flight_manager_actor.c` | Startup delay, flight window cutoff |
-| `comms_actor.c` | Radio telemetry (Crazyflie only) |
-| `telemetry_logger_actor.c` | CSV logging for PID tuning (Webots only) |
-| `pid.c` | Reusable PID controller |
-| `stack_profile.c` | Stack usage profiling |
-| `fusion/complementary_filter.c` | Portable attitude estimation (accel+gyro fusion) |
-
-### Headers (in `include/`)
-
-| File | Description |
-|------|-------------|
-| `include/*_actor.h` | Actor interfaces |
-| `include/types.h` | Shared data types (sensor_data_t, state_estimate_t, etc.) |
-| `include/config.h` | Configuration constants (timing, thresholds, bus config) |
-| `include/pilot_buses.h` | Bus handle struct passed to actors |
-| `include/pid.h` | PID controller interface |
-| `include/math_utils.h` | Math macros (CLAMPF, LPF, NORMALIZE_ANGLE) |
-| `include/notifications.h` | IPC notification tags (NOTIFY_FLIGHT_START, etc.) |
-| `include/flight_profiles.h` | Waypoint definitions per flight profile |
-
-### Build System
-
-| File | Description |
-|------|-------------|
-| `Makefile` | Webots simulation build |
-| `Makefile.crazyflie-2.1+` | Crazyflie 2.1+ build (STM32F405, 168 MHz) |
-| `hive_config.mk` | Shared Hive memory config (included by all Makefiles) |
-| `hal/<platform>/hal_config.h` | Platform-specific PID gains and thrust |
-
-Hive memory settings (actors, buses, pool sizes) are shared across all platforms
-via `hive_config.mk`. Only stack sizes differ per platform based on available RAM.
-
-### Analysis Tools
-
-| File | Description |
-|------|-------------|
-| `tools/analyze_pid.py` | PID metrics analysis (overshoot, rise time, settling time) |
-| `tools/plot_telemetry.py` | 6-panel telemetry visualization |
-| `tools/plot_flight.py` | Full flight summary with 3D trajectory |
-| `tools/ground_station.py` | Radio telemetry receiver (Crazyflie only) |
-| `tools/README.md` | Tools documentation and PID tuning workflow |
-
-### Documentation
-
-| File | Description |
-|------|-------------|
-| `README.md` | This file |
-| `SPEC.md` | Detailed design specification |
-| `FIRST_FLIGHT_CHECKLIST.md` | Hardware bring-up and first flight guide |
-
-### Directories
-
-| Directory | Description |
-|-----------|-------------|
-| `include/` | Header files (types, config, actor interfaces) |
-| `hal/` | Hardware abstraction layer (see `hal/<platform>/README.md`) |
-| `hal/crazyflie-2.1+/bringup/` | Hardware bring-up test firmware |
-| `tools/` | PID tuning and telemetry analysis tools |
-| `controllers/pilot/` | Webots controller (installed by `make`) |
-| `worlds/` | Webots world files |
-| `fusion/` | Portable sensor fusion algorithms |
 
 ## Architecture
 
@@ -395,4 +347,81 @@ See [SPEC.md](SPEC.md#error-handling-pattern) for detailed examples and rational
 
 **Logging (Crazyflie):** INFO/WARN/ERROR captured to flash, TRACE/DEBUG compiled out.
 Logs downloadable over radio after flight (see Log Download section).
+
+## Files
+
+### Actor Implementations
+
+| File | Description |
+|------|-------------|
+| `pilot.c` | Main entry point, bus setup, supervisor config |
+| `sensor_actor.c` | Reads sensors via HAL → sensor bus |
+| `estimator_actor.c` | Sensor fusion → state bus |
+| `altitude_actor.c` | Altitude PID → thrust |
+| `waypoint_actor.c` | Waypoint manager → position target bus |
+| `position_actor.c` | Position PD → attitude setpoints |
+| `attitude_actor.c` | Attitude PIDs → rate setpoints |
+| `rate_actor.c` | Rate PIDs → torque commands |
+| `motor_actor.c` | Output: torque → HAL → motors |
+| `flight_manager_actor.c` | Startup delay, flight window cutoff |
+| `comms_actor.c` | Radio telemetry (Crazyflie only) |
+| `telemetry_logger_actor.c` | CSV logging for PID tuning (Webots only) |
+| `pid.c` | Reusable PID controller |
+| `stack_profile.c` | Stack usage profiling |
+| `fusion/complementary_filter.c` | Portable attitude estimation (accel+gyro fusion) |
+
+### Headers (in `include/`)
+
+| File | Description |
+|------|-------------|
+| `include/*_actor.h` | Actor interfaces |
+| `include/types.h` | Shared data types (sensor_data_t, state_estimate_t, etc.) |
+| `include/config.h` | Configuration constants (timing, thresholds, bus config) |
+| `include/pilot_buses.h` | Bus handle struct passed to actors |
+| `include/pid.h` | PID controller interface |
+| `include/math_utils.h` | Math macros (CLAMPF, LPF, NORMALIZE_ANGLE) |
+| `include/notifications.h` | IPC notification tags (NOTIFY_FLIGHT_START, etc.) |
+| `include/flight_profiles.h` | Waypoint definitions per flight profile |
+
+### Build System
+
+| File | Description |
+|------|-------------|
+| `Makefile` | Webots simulation build |
+| `Makefile.crazyflie-2.1+` | Crazyflie 2.1+ build (STM32F405, 168 MHz) |
+| `hive_config.mk` | Shared Hive memory config (included by all Makefiles) |
+| `hal/<platform>/hal_config.h` | Platform-specific PID gains and thrust |
+
+Hive memory settings (actors, buses, pool sizes) are shared across all platforms
+via `hive_config.mk`. Only stack sizes differ per platform based on available RAM.
+
+### Analysis Tools
+
+| File | Description |
+|------|-------------|
+| `tools/analyze_pid.py` | PID metrics analysis (overshoot, rise time, settling time) |
+| `tools/plot_telemetry.py` | 6-panel telemetry visualization |
+| `tools/plot_flight.py` | Full flight summary with 3D trajectory |
+| `tools/ground_station.py` | Radio telemetry receiver (Crazyflie only) |
+| `tools/README.md` | Tools documentation and PID tuning workflow |
+
+### Documentation
+
+| File | Description |
+|------|-------------|
+| `README.md` | This file |
+| `SPEC.md` | Detailed design specification |
+| `FIRST_FLIGHT_CHECKLIST.md` | Hardware bring-up and first flight guide |
+
+### Directories
+
+| Directory | Description |
+|-----------|-------------|
+| `include/` | Header files (types, config, actor interfaces) |
+| `hal/` | Hardware abstraction layer (see `hal/<platform>/README.md`) |
+| `hal/crazyflie-2.1+/bringup/` | Hardware bring-up test firmware |
+| `tools/` | PID tuning and telemetry analysis tools |
+| `controllers/pilot/` | Webots controller (installed by `make`) |
+| `worlds/` | Webots world files |
+| `fusion/` | Portable sensor fusion algorithms |
 
