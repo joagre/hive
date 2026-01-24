@@ -84,7 +84,7 @@ man man/man3/hive_ipc.3
 | **Message Handling** | Selective receive with pattern matching | Event dispatch to state handlers |
 | **Blocking** | Actors block on receive, bus read, or unified select (with timeout) | Run-to-completion (no blocking in handlers) |
 | **Supervision** | Supervisors (restart strategies, intensity) | Less emphasis on fault supervision |
-| **Error Philosophy** | "Let it crash" + restart | Defensive, state machine guards |
+| **Error Philosophy** | Handle errors locally, supervision as safety net | Defensive, state machine guards |
 | **API Style** | Minimalist C functions | Object-oriented C macros |
 | **Learning Curve** | Lower (if familiar with actors) | Steeper (requires statechart knowledge) |
 
