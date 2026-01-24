@@ -37,7 +37,7 @@ A complete quadcopter autopilot—not a toy demo, but a flight controller target
 
 **Philosophy:** The pilot is a stress test for the runtime. If it reveals weaknesses (latency, scheduling, memory), the runtime is fixed—not the pilot. The pilot code should be clean and idiomatic, not full of workarounds.
 
-**Full specification:** [SPEC.md](SPEC.md) — design rationale, supervision semantics, error handling patterns, and architecture details.
+**Full specification:** [spec/](spec/) — design rationale, supervision semantics, error handling patterns, and architecture details.
 
 ## What it does
 
@@ -152,7 +152,7 @@ hardware-specific details.
 ## Supervision and Spawn Order
 
 All actors supervised with **ONE_FOR_ALL** strategy - if any flight-critical actor
-crashes, all restart together. See [SPEC.md](SPEC.md#supervision-semantics) for why
+crashes, all restart together. See [spec/design.md](spec/design.md#supervision-semantics) for why
 this is correct for a control pipeline.
 
 Spawn order determines execution order (round-robin within priority level):
@@ -258,7 +258,7 @@ detect and restart failed actors:
 - **Hot path blocking:** Log error and return → fundamental runtime problem
 - **Hot path non-blocking:** Log warning and continue → next iteration proceeds
 
-See [SPEC.md](SPEC.md#error-handling-pattern) for detailed examples and rationale.
+See [spec/design.md](spec/design.md#error-handling-pattern) for detailed examples and rationale.
 
 **Logging (Crazyflie):** INFO/WARN/ERROR captured to flash, TRACE/DEBUG compiled out.
 Logs downloadable over radio after flight (see Log Download section).
@@ -410,14 +410,16 @@ via `hive_config.mk`. Only stack sizes differ per platform based on available RA
 | File | Description |
 |------|-------------|
 | `README.md` | This file |
-| `SPEC.md` | Detailed design specification |
-| `first_flight_checklist.md` | Hardware bring-up and first flight guide |
+| `spec/` | Detailed design specification (design, implementation, evolution) |
+| `docs/first_flight_checklist.md` | Hardware bring-up and first flight guide |
 
 ### Directories
 
 | Directory | Description |
 |-----------|-------------|
 | `include/` | Header files (types, config, actor interfaces) |
+| `spec/` | Design specification (design, implementation, evolution) |
+| `docs/` | Documentation (first flight checklist) |
 | `hal/` | Hardware abstraction layer (see `hal/<platform>/README.md`) |
 | `hal/crazyflie-2.1+/bringup/` | Hardware bring-up test firmware |
 | `tools/` | PID tuning and telemetry analysis tools |
