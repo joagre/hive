@@ -6,9 +6,38 @@ adding new features.
 
 ---
 
+## Documentation Structure
+
+```
+spec/                           # Runtime specification (source of truth)
+  README.md                     # Overview and navigation
+  design.md                     # Architecture, scheduling, memory model
+  api.md                        # Complete API reference
+  internals.md                  # Implementation details, HAL
+
+docs/                           # Internal working documents
+  sync_these_things.md          # This file
+  design/                       # Design documents
+  reviews/                      # Review feedback
+
+examples/pilot/
+  README.md                     # Usage and build instructions
+  spec/                         # Pilot specification
+    README.md                   # Overview
+    design.md                   # Architecture, supervision, error handling
+    implementation.md           # Control algorithms, HAL, file structure
+    evolution.md                # Architecture roadmap, future work
+  docs/
+    first_flight_checklist.md   # Hardware bring-up guide
+
+man/man3/                       # API man pages
+```
+
+---
+
 ## Top-Level Runtime Documentation
 
-**Source of truth:** `spec/` directory (complete design specification)
+**Source of truth:** `spec/` directory
 
 **Must stay in sync with spec/:**
 
@@ -118,13 +147,22 @@ grep -rn "hal_" examples/pilot/README.md | grep -v "\.c:"
 
 ## Last Sync
 
-**Date:** 2026-01-23
+**Date:** 2026-01-24
 
 **What was synced:**
+- Documentation reorganization:
+  - Split top-level SPEC.md → `spec/` directory (design.md, api.md, internals.md)
+  - Split pilot SPEC.md → `examples/pilot/spec/` (design.md, implementation.md, evolution.md)
+  - Organized `docs/` → `design/` and `reviews/` subdirectories
+  - Moved `first_flight_checklist.md` → `examples/pilot/docs/`
+- Converted ASCII diagram to mermaid in `spec/design.md`
+- Updated README.md with "Why Hive?" section
+- Updated all cross-references to new paths
+- Verified no broken links
+
+**Previous sync (2026-01-23):**
 - Stack measurements updated after fixing STACK_PROFILE build
-- Kalman filter mentions added to SPEC.md
+- Kalman filter mentions added
 - Diagrams verified (StateBus-->Rate, TLog actor)
 - Actor counts verified (10-11)
 - Memory footprint verified (~60KB flash, ~58KB RAM, 52KB stack arena)
-- Added examples and pilot reference to CLAUDE.md
-- Full sync verification passed (all checks green)
