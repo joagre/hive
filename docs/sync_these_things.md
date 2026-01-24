@@ -45,7 +45,7 @@ man/man3/                       # API man pages
 |----------|--------------|
 | `README.md` | API overview, memory config, error handling, platform differences |
 | `CLAUDE.md` | Key concepts, memory limits, HAL functions, error handling |
-| `man/man3/*.3` | API signatures, return values, error codes |
+| `man/man3/*.3` | API signatures, return values, error codes, code examples |
 
 **Common drift points**
 - [ ] Memory pool sizes (`HIVE_*_POOL_SIZE`, `HIVE_MAX_*`)
@@ -55,6 +55,27 @@ man/man3/                       # API man pages
 - [ ] Platform differences (Linux vs STM32)
 - [ ] Bus retention policies
 - [ ] Subscriber limits
+- [ ] Type names in code examples (all typedefs must use `_t` suffix)
+
+---
+
+## Type Naming Convention
+
+**All typedefs must end with `_t` suffix.** This includes:
+- `actor_id_t`, `bus_id_t`, `timer_id_t`
+- `hive_message_t`, `hive_status_t`, `hive_spawn_info_t`
+- `actor_config_t`, `child_spec_t`, `supervisor_config_t`
+- `hive_bus_config_t`, `hive_recv_filter_t`, `hive_exit_msg_t`
+- `hive_select_source_t`, `hive_select_result_t`
+- All internal types: `arena_block_t`, `bus_entry_t`, etc.
+
+**Files to check for type name consistency:**
+- `spec/api.md` - all code examples
+- `README.md` - API overview examples
+- `CLAUDE.md` - key concepts examples
+- `man/man3/*.3` - all man page examples
+- `include/hive_*.h` - comment examples
+- `docs/design/*.md` - design document examples
 
 ---
 
@@ -85,7 +106,7 @@ man/man3/                       # API man pages
 
 **Code files to check for bus subscriptions**
 ```
-sensor_actor.c      - publishes to sensor_bus
+sensor_actor.c      - publishes sensor_bus
 estimator_actor.c   - subscribes sensor_bus, publishes state_bus
 waypoint_actor.c    - subscribes state_bus, publishes position_target_bus
 altitude_actor.c    - subscribes state_bus + position_target_bus, publishes thrust_bus
@@ -95,6 +116,7 @@ rate_actor.c        - subscribes state_bus + thrust_bus + rate_sp_bus, publishes
 motor_actor.c       - subscribes torque_bus
 comms_actor.c       - subscribes sensor_bus + state_bus + thrust_bus
 telemetry_logger_actor.c - subscribes sensor_bus + state_bus + thrust_bus + position_target_bus
+flight_manager_actor.c   - no bus usage (uses IPC for control commands)
 ```
 
 ---
@@ -107,6 +129,15 @@ telemetry_logger_actor.c - subscribes sensor_bus + state_bus + thrust_bus + posi
 3. Update `CLAUDE.md` key concepts
 4. Update relevant man pages
 5. Run `make` to verify examples still compile
+6. Run `make test` to verify tests pass
+
+### After typedef changes:
+1. Update all typedefs in headers
+2. Update all source files
+3. Update all examples, tests, benchmarks
+4. Update all documentation code examples
+5. Update man page examples
+6. Run verification commands below
 
 ### After pilot changes:
 1. Update code
@@ -121,6 +152,7 @@ telemetry_logger_actor.c - subscribes sensor_bus + state_bus + thrust_bus + posi
 2. Compare diagrams against code
 3. Run stack profiling and compare to documented values
 4. Check HAL function lists are complete
+5. Check type names in all documentation examples
 
 ---
 
@@ -128,7 +160,7 @@ telemetry_logger_actor.c - subscribes sensor_bus + state_bus + thrust_bus + posi
 
 ```bash
 # Check actor counts across docs
-grep -rn "10-11 actors\|11 actors" README.md spec/ examples/pilot/
+grep -rn "10-11 actors\|11 actors\|10 actors" README.md spec/ examples/pilot/
 
 # Check memory footprint consistency
 grep -rn "60KB\|58KB\|52KB" README.md examples/pilot/
@@ -141,6 +173,13 @@ grep -rn "hive_bus_subscribe\|hive_bus_publish" examples/pilot/*.c
 
 # Check HAL function mentions
 grep -rn "hal_" examples/pilot/README.md | grep -v "\.c:"
+
+# Check for old type names without _t suffix (should return nothing)
+grep -rn '\b\(actor_id\|hive_message\|hive_status\|bus_id\|timer_id\)\b' \
+  --include='*.md' --include='*.3' . | grep -v '_t'
+
+# Verify typedef endings in headers
+grep -rn 'typedef' include/ src/hal/ | grep '} [a-z_]*;$' | grep -v '_t;$'
 ```
 
 ---
@@ -150,15 +189,22 @@ grep -rn "hal_" examples/pilot/README.md | grep -v "\.c:"
 **Date** - 2026-01-24
 
 **What was synced**
+- Added `_t` suffix to all typedefs for C convention compliance:
+  - `actor_id` -> `actor_id_t`, `bus_id` -> `bus_id_t`, `timer_id` -> `timer_id_t`
+  - `hive_message` -> `hive_message_t`, `hive_status` -> `hive_status_t`
+  - All struct/enum typedefs updated (133 files changed)
+- Updated all code examples in documentation to use correct type names
+- Removed unnecessary `(void)arg;` lines from documentation examples
+- Updated man pages with correct type names and signatures
+- All tests pass (Linux 19/19, QEMU 12/12)
+
+**Previous sync (2026-01-24)**
 - Documentation reorganization:
-  - Split former top-level SPEC.md into `spec/` directory (design.md, api.md, internals.md)
-  - Split former pilot SPEC.md into `examples/pilot/spec/` (design.md, implementation.md, evolution.md)
+  - Split former top-level SPEC.md into `spec/` directory
+  - Split former pilot SPEC.md into `examples/pilot/spec/`
   - Organized `docs/` -> `design/` and `reviews/` subdirectories
-  - Moved `first_flight_checklist.md` -> `examples/pilot/docs/`
 - Converted ASCII diagram to mermaid in `spec/design.md`
 - Updated README.md with "Why Hive?" section
-- Updated all cross-references to new paths
-- Verified no broken links
 
 **Previous sync (2026-01-23)**
 - Stack measurements updated after fixing STACK_PROFILE build
