@@ -680,6 +680,134 @@ examples/pilot/
 ...
 ```
 
+## Memory Requirements
+
+### STM32 Builds
+
+| Platform | Flash | RAM | MCU |
+|----------|-------|-----|-----|
+| Crazyflie 2.1+ | ~63 KB | ~120 KB | STM32F405 (1 MB / 192 KB) |
+
+### Configuration Split
+
+Hive memory settings are split between shared and platform-specific files:
+
+| File | Contents |
+|------|----------|
+| `hive_config.mk` | Shared settings: actors, buses, pools, message size, supervisor limits |
+| `Makefile.<platform>` | Platform-specific: stack sizes, flash layout |
+
+The shared settings in `hive_config.mk` are determined by the pilot application
+(10-11 actors, 7 buses, pool sizes for supervision) and are identical across all
+platforms. Only stack sizes vary based on available RAM.
+
+Key memory optimizations in `hive_config.mk`:
+- Supervisor pool reduced to 1 supervisor with 12 children (saves ~23 KB vs default)
+- Pool sizes tuned for pilot's actual usage patterns
+
+### Measured Stack Usage
+
+Build with `STACK_PROFILE=1` to measure actual stack usage via watermarking.
+Results from x86-64 Linux (Webots simulation) with 4KB stacks:
+
+| Actor | Used | Usage | Notes |
+|-------|------|-------|-------|
+| sensor | 2056 | 50.2% | Highest - HAL sensor structs |
+| tlog | 1912 | 46.7% | CSV formatting + file I/O |
+| estimator | 1480 | 36.1% | Kalman filter + complementary filter state |
+| altitude | 1304 | 31.8% | PID state + landing logic |
+| waypoint | 1288 | 31.4% | Waypoint list + arrival detection |
+| flight_mgr | 1192 | 29.1% | Log file management + IPC |
+| supervisor | 1128 | 27.5% | Child management overhead |
+| rate | 792 | 19.3% | Rate PIDs |
+| attitude | 760 | 18.6% | Attitude PIDs |
+| position | 664 | 16.2% | Position PD |
+| motor | 504 | 12.3% | Lowest - simple output |
+
+All actors fit comfortably in 4KB with ~50% headroom (50.2% peak).
+ARM Cortex-M may differ slightly due to calling conventions.
+
+---
+
+## Production Gaps
+
+What a production flight controller would need beyond this demonstration:
+
+### Missing Error Handling
+
+| Scenario | Current Behavior | Production Requirement |
+|----------|------------------|------------------------|
+| Sensor read fails | `hive_bus_read()` returns error, actor skips iteration | Watchdog timeout, switch to backup sensor or land |
+| Bus publish fails | Error ignored | Log error, trigger failsafe |
+| Actor crashes | Runtime notifies linked actors | Auto-restart or emergency landing |
+| GPS signal lost | Position control uses stale data | Hold last position, descend slowly, or return-to-home |
+| IMU data invalid | Garbage in, garbage out | Sanity checks, sensor voting, reject outliers |
+
+### Implemented Safety Features (STM32 only)
+
+The following safety features are enabled for real hardware (not in Webots simulation):
+
+| Feature | Location | Behavior |
+|---------|----------|----------|
+| Attitude cutoff | altitude_actor.c | Motors off if roll or pitch >45° |
+| Altitude cutoff | altitude_actor.c | Motors off if altitude >2m |
+| Landed detection | altitude_actor.c | Motors off when target <5cm and altitude <15cm |
+| Thrust ramp | altitude_actor.c | Gradual thrust increase over 0.5 seconds on takeoff |
+| Startup delay | flight_manager_actor.c | Flight blocked for 60 seconds after boot |
+| Hard cutoff | flight_manager_actor.c | Motors forced off 12 seconds after flight starts |
+
+### Future Safety Features
+
+The following may be added after initial flight testing:
+
+- **Rate cutoff**: Motors off if angular rate exceeds threshold (e.g., >300°/s) - catches violent oscillation while within tilt limits
+- **Accelerometer sanity check**: Motors off if acceleration readings are implausible
+- **Sensor timeout**: Motors off if no sensor updates within expected interval
+
+### Missing Safety Features (Production Requirements)
+
+- **Geofence**: No boundary limits - drone can fly away indefinitely
+- **Battery monitoring**: No low-voltage warning or auto-land
+- **Arming/disarming**: No safety switch to prevent accidental motor start
+- **Pre-flight checks**: No sensor validation before takeoff
+- **Communication loss**: No failsafe if telemetry link drops
+
+### Why These Are Omitted
+
+This example focuses on demonstrating the actor runtime architecture, not building a safe drone. Adding proper failsafes would obscure the core concepts (actors, buses, control loops) with error handling code.
+
+For a production system, each actor should:
+1. Validate inputs before processing
+2. Handle bus read/write failures
+3. Implement timeouts for expected data
+4. Report health status to a flight manager actor
+5. Respond to emergency stop commands
+
+### Production Instrumentation Requirements
+
+The following instrumentation should be added for production flight software:
+
+**Error Counters (per actor):**
+- `bus_read_fail_count` - incremented when `hive_bus_read()` returns error
+- `bus_publish_fail_count` - incremented when `hive_bus_publish()` returns error
+- Counters exposed via telemetry or debug interface
+
+**Motor Deadman Watchdog:** ✓ Implemented
+- Motor actor uses `hive_select()` with `MOTOR_DEADMAN_TIMEOUT_MS` timeout (50ms)
+- If no torque command received within timeout, all motors are zeroed
+- Protects against controller actor crash leaving motors at last commanded value
+- Timeout of 50ms (~12 control cycles at 250Hz) provides margin while remaining safe
+- Logs warning on timeout: `[MOTOR] Deadman timeout - zeroing motors`
+
+## Deferred Features
+
+Features intentionally omitted from this demonstration:
+
+- Full state estimation (unified EKF for position/velocity/attitude) — separate estimators used instead (altitude KF + complementary filter for attitude)
+- Failsafe handling (return-to-home, auto-land) — requires GPS and mission planning
+- Parameter tuning UI — gains are hardcoded per platform
+- Multiple vehicle types — single X-configuration quadcopter
+
 ---
 
 ## Architecture Evolution Roadmap
@@ -1031,136 +1159,6 @@ python3 tools/plot_flight.py /tmp/pilot_telemetry.csv
 - Takeoff/landing sequences
 - Mode switching (hover, land, follow-me, etc.)
 - Dynamic waypoint updates via telemetry
-
----
-
-## Memory Requirements
-
-### STM32 Builds
-
-| Platform | Flash | RAM | MCU |
-|----------|-------|-----|-----|
-| Crazyflie 2.1+ | ~63 KB | ~120 KB | STM32F405 (1 MB / 192 KB) |
-
-### Configuration Split
-
-Hive memory settings are split between shared and platform-specific files:
-
-| File | Contents |
-|------|----------|
-| `hive_config.mk` | Shared settings: actors, buses, pools, message size, supervisor limits |
-| `Makefile.<platform>` | Platform-specific: stack sizes, flash layout |
-
-The shared settings in `hive_config.mk` are determined by the pilot application
-(10-11 actors, 7 buses, pool sizes for supervision) and are identical across all
-platforms. Only stack sizes vary based on available RAM.
-
-Key memory optimizations in `hive_config.mk`:
-- Supervisor pool reduced to 1 supervisor with 12 children (saves ~23 KB vs default)
-- Pool sizes tuned for pilot's actual usage patterns
-
-### Measured Stack Usage
-
-Build with `STACK_PROFILE=1` to measure actual stack usage via watermarking.
-Results from x86-64 Linux (Webots simulation) with 4KB stacks:
-
-| Actor | Used | Usage | Notes |
-|-------|------|-------|-------|
-| sensor | 2056 | 50.2% | Highest - HAL sensor structs |
-| tlog | 1912 | 46.7% | CSV formatting + file I/O |
-| estimator | 1480 | 36.1% | Kalman filter + complementary filter state |
-| altitude | 1304 | 31.8% | PID state + landing logic |
-| waypoint | 1288 | 31.4% | Waypoint list + arrival detection |
-| flight_mgr | 1192 | 29.1% | Log file management + IPC |
-| supervisor | 1128 | 27.5% | Child management overhead |
-| rate | 792 | 19.3% | Rate PIDs |
-| attitude | 760 | 18.6% | Attitude PIDs |
-| position | 664 | 16.2% | Position PD |
-| motor | 504 | 12.3% | Lowest - simple output |
-
-All actors fit comfortably in 4KB with ~50% headroom (50.2% peak).
-ARM Cortex-M may differ slightly due to calling conventions.
-
----
-
-## Production Gaps
-
-What a production flight controller would need beyond this demonstration:
-
-### Missing Error Handling
-
-| Scenario | Current Behavior | Production Requirement |
-|----------|------------------|------------------------|
-| Sensor read fails | `hive_bus_read()` returns error, actor skips iteration | Watchdog timeout, switch to backup sensor or land |
-| Bus publish fails | Error ignored | Log error, trigger failsafe |
-| Actor crashes | Runtime notifies linked actors | Auto-restart or emergency landing |
-| GPS signal lost | Position control uses stale data | Hold last position, descend slowly, or return-to-home |
-| IMU data invalid | Garbage in, garbage out | Sanity checks, sensor voting, reject outliers |
-
-### Implemented Safety Features (STM32 only)
-
-The following safety features are enabled for real hardware (not in Webots simulation):
-
-| Feature | Location | Behavior |
-|---------|----------|----------|
-| Attitude cutoff | altitude_actor.c | Motors off if roll or pitch >45° |
-| Altitude cutoff | altitude_actor.c | Motors off if altitude >2m |
-| Landed detection | altitude_actor.c | Motors off when target <5cm and altitude <15cm |
-| Thrust ramp | altitude_actor.c | Gradual thrust increase over 0.5 seconds on takeoff |
-| Startup delay | flight_manager_actor.c | Flight blocked for 60 seconds after boot |
-| Hard cutoff | flight_manager_actor.c | Motors forced off 12 seconds after flight starts |
-
-### Future Safety Features
-
-The following may be added after initial flight testing:
-
-- **Rate cutoff**: Motors off if angular rate exceeds threshold (e.g., >300°/s) - catches violent oscillation while within tilt limits
-- **Accelerometer sanity check**: Motors off if acceleration readings are implausible
-- **Sensor timeout**: Motors off if no sensor updates within expected interval
-
-### Missing Safety Features (Production Requirements)
-
-- **Geofence**: No boundary limits - drone can fly away indefinitely
-- **Battery monitoring**: No low-voltage warning or auto-land
-- **Arming/disarming**: No safety switch to prevent accidental motor start
-- **Pre-flight checks**: No sensor validation before takeoff
-- **Communication loss**: No failsafe if telemetry link drops
-
-### Why These Are Omitted
-
-This example focuses on demonstrating the actor runtime architecture, not building a safe drone. Adding proper failsafes would obscure the core concepts (actors, buses, control loops) with error handling code.
-
-For a production system, each actor should:
-1. Validate inputs before processing
-2. Handle bus read/write failures
-3. Implement timeouts for expected data
-4. Report health status to a flight manager actor
-5. Respond to emergency stop commands
-
-### Production Instrumentation Requirements
-
-The following instrumentation should be added for production flight software:
-
-**Error Counters (per actor):**
-- `bus_read_fail_count` - incremented when `hive_bus_read()` returns error
-- `bus_publish_fail_count` - incremented when `hive_bus_publish()` returns error
-- Counters exposed via telemetry or debug interface
-
-**Motor Deadman Watchdog:** ✓ Implemented
-- Motor actor uses `hive_select()` with `MOTOR_DEADMAN_TIMEOUT_MS` timeout (50ms)
-- If no torque command received within timeout, all motors are zeroed
-- Protects against controller actor crash leaving motors at last commanded value
-- Timeout of 50ms (~12 control cycles at 250Hz) provides margin while remaining safe
-- Logs warning on timeout: `[MOTOR] Deadman timeout - zeroing motors`
-
-## Deferred Features
-
-Features intentionally omitted from this demonstration:
-
-- Full state estimation (unified EKF for position/velocity/attitude) — separate estimators used instead (altitude KF + complementary filter for attitude)
-- Failsafe handling (return-to-home, auto-land) — requires GPS and mission planning
-- Parameter tuning UI — gains are hardcoded per platform
-- Multiple vehicle types — single X-configuration quadcopter
 
 ---
 

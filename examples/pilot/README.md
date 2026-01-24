@@ -249,6 +249,20 @@ usage at 50.2% (sensor), leaving ~2KB headroom.
 
 Note: Comms actor (Crazyflie only) not included in Webots measurements.
 
+## Error Handling
+
+Actors use explicit error checking instead of `assert()`, enabling the supervisor to
+detect and restart failed actors:
+
+- **Cold path (init):** Log error and return → supervisor sees CRASH, attempts restart
+- **Hot path blocking:** Log error and return → fundamental runtime problem
+- **Hot path non-blocking:** Log warning and continue → next iteration proceeds
+
+See [SPEC.md](SPEC.md#error-handling-pattern) for detailed examples and rationale.
+
+**Logging (Crazyflie):** INFO/WARN/ERROR captured to flash, TRACE/DEBUG compiled out.
+Logs downloadable over radio after flight (see Log Download section).
+
 ## Radio Telemetry (Crazyflie 2.1+ only)
 
 The Crazyflie build includes a comms actor that sends flight data over radio
@@ -333,20 +347,6 @@ See `tools/README.md` for the full PID tuning workflow.
 
 The telemetry logger runs at LOW priority and uses TEMPORARY restart type, so it
 doesn't affect flight-critical control loops and won't trigger restarts if it fails.
-
-## Error Handling
-
-Actors use explicit error checking instead of `assert()`, enabling the supervisor to
-detect and restart failed actors:
-
-- **Cold path (init):** Log error and return → supervisor sees CRASH, attempts restart
-- **Hot path blocking:** Log error and return → fundamental runtime problem
-- **Hot path non-blocking:** Log warning and continue → next iteration proceeds
-
-See [SPEC.md](SPEC.md#error-handling-pattern) for detailed examples and rationale.
-
-**Logging (Crazyflie):** INFO/WARN/ERROR captured to flash, TRACE/DEBUG compiled out.
-Logs downloadable over radio after flight (see Log Download section).
 
 ## Files
 
