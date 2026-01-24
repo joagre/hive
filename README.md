@@ -141,8 +141,10 @@ All resource limits are defined at compile time. Edit and recompile to change:
 #define HIVE_MESSAGE_DATA_POOL_SIZE 256   // Message pool size
 #define HIVE_MAX_MESSAGE_SIZE 256         // Max message size (4-byte header + 252 payload)
 #define HIVE_MAX_BUSES 32                 // Maximum concurrent buses
-// ... see hive_static_config.h for full list
+// ... see include/hive_static_config.h for full list
 ```
+
+See [`include/hive_static_config.h`](include/hive_static_config.h) for all compile-time configuration options.
 
 All structures are statically allocated. Actor stacks use a static arena allocator by default (configurable size), with optional malloc via `actor_config.malloc_stack = true`. Stack sizes are configurable per actor, allowing different actors to use different stack sizes. Arena memory is automatically reclaimed and reused when actors exit. No malloc in hot paths. Memory footprint calculable at link time when using arena allocator (default); optional malloc'd stacks add runtime-dependent heap usage.
 
