@@ -43,7 +43,7 @@ void sender_actor(void *args, const hive_spawn_info *siblings,
 
     while (true) {
         data++;
-        status = hive_ipc_notify(receiver, 0, &data, sizeof(data));
+        status = hive_ipc_notify(receiver, HIVE_TAG_NONE, &data, sizeof(data));
 
         if (HIVE_FAILED(status)) {
             if (status.code == HIVE_ERR_NOMEM) {
@@ -78,7 +78,7 @@ void sender_actor(void *args, const hive_spawn_info *siblings,
         printf("Sender: Attempt %d - trying to send...\n", attempt + 1);
 
         data++;
-        status = hive_ipc_notify(receiver, 0, &data, sizeof(data));
+        status = hive_ipc_notify(receiver, HIVE_TAG_NONE, &data, sizeof(data));
 
         if (HIVE_SUCCEEDED(status)) {
             printf("Sender: [OK] Send succeeded on attempt %d!\n", attempt + 1);

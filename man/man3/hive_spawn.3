@@ -434,7 +434,7 @@ void client(void *args, const hive_spawn_info *siblings,
 
     /* Send request to database */
     char query[] = "SELECT * FROM users";
-    hive_ipc_notify(db, 0, query, sizeof(query));
+    hive_ipc_notify(db, HIVE_TAG_NONE, query, sizeof(query));
 
     hive_exit();
 }

@@ -177,7 +177,7 @@ static void test3_auto_register(void *args, const hive_spawn_info *siblings,
     s = hive_whereis("test_registered", &found);
     if (HIVE_FAILED(s)) {
         TEST_FAIL("hive_whereis failed to find registered actor");
-        hive_ipc_notify(id, 0, NULL, 0);
+        hive_ipc_notify(id, HIVE_TAG_NONE, NULL, 0);
         hive_exit();
     }
 
@@ -187,7 +187,7 @@ static void test3_auto_register(void *args, const hive_spawn_info *siblings,
         TEST_FAIL("found actor ID doesn't match spawned ID");
     }
 
-    hive_ipc_notify(id, 0, NULL, 0);
+    hive_ipc_notify(id, HIVE_TAG_NONE, NULL, 0);
     hive_sleep(100000);
     hive_exit();
 }
@@ -238,7 +238,7 @@ static void test4_register_conflict(void *args, const hive_spawn_info *siblings,
         TEST_FAIL("second spawn failed with wrong error");
     }
 
-    hive_ipc_notify(id1, 0, NULL, 0);
+    hive_ipc_notify(id1, HIVE_TAG_NONE, NULL, 0);
     hive_sleep(100000);
     hive_exit();
 }

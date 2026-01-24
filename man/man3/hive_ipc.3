@@ -292,7 +292,7 @@ immediately. They do
 block or drop messages. Implement backoff-retry:
 .PP
 .nf
-hive_status s = hive_ipc_notify(target, 0, data, len);
+hive_status s = hive_ipc_notify(target, HIVE_TAG_NONE, data, len);
 if (s.code == HIVE_ERR_NOMEM) {
     hive_message msg;
     hive_ipc_recv(&msg, 10);  /* Backoff 10ms */

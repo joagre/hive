@@ -250,7 +250,7 @@ if (HIVE_FAILED(status)) {
 
 // Notify (async message with tag for selective receive)
 int data = 42;
-status = hive_ipc_notify(target, 0, &data, sizeof(data));  // tag=0
+status = hive_ipc_notify(target, HIVE_TAG_NONE, &data, sizeof(data));
 if (HIVE_FAILED(status)) {
     // Pool exhausted: HIVE_MAILBOX_ENTRY_POOL_SIZE or HIVE_MESSAGE_DATA_POOL_SIZE
     // Notify does NOT block or drop - caller must handle HIVE_ERR_NOMEM

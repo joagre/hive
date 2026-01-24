@@ -119,7 +119,7 @@ static void ping_actor(void *args, const hive_spawn_info *siblings,
                            (unsigned)g_pong_actor);
 
         /* Use notify + recv instead of request to avoid timeout dependency */
-        hive_ipc_notify(g_pong_actor, 0, ping, 5);
+        hive_ipc_notify(g_pong_actor, HIVE_TAG_NONE, ping, 5);
 
         /* Yield to let pong process */
         hive_yield();

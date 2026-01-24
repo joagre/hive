@@ -677,7 +677,7 @@ static void test13_actor_table_exhaustion(void *args,
     // Signal all waiting actors to exit
     int dummy = 1;
     for (int i = 0; i < spawned; i++) {
-        hive_ipc_notify(ids[i], 0, &dummy, sizeof(dummy));
+        hive_ipc_notify(ids[i], HIVE_TAG_NONE, &dummy, sizeof(dummy));
     }
 
     // Yield a few times to let them exit

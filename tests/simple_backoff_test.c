@@ -60,7 +60,8 @@ void aggressive_sender_actor(void *args, const hive_spawn_info *siblings,
     // Phase 1: Fill the pool
     for (int i = 0; i < 300; i++) {
         int data = i;
-        hive_status status = hive_ipc_notify(processor, 0, &data, sizeof(data));
+        hive_status status =
+            hive_ipc_notify(processor, HIVE_TAG_NONE, &data, sizeof(data));
 
         if (HIVE_SUCCEEDED(status)) {
             sent++;
@@ -88,7 +89,8 @@ void aggressive_sender_actor(void *args, const hive_spawn_info *siblings,
             }
 
             // Retry the send
-            status = hive_ipc_notify(processor, 0, &data, sizeof(data));
+            status =
+                hive_ipc_notify(processor, HIVE_TAG_NONE, &data, sizeof(data));
             if (HIVE_SUCCEEDED(status)) {
                 succeeded_after_retry++;
                 if (succeeded_after_retry == 1) {

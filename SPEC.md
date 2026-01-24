@@ -416,7 +416,7 @@ void socket_reader_actor(void *arg) {
     while (1) {
         size_t received;
         hive_net_recv(sock, buf, len, &received, -1);  // Blocks in event loop
-        hive_ipc_notify(worker, 0, buf, received);  // Forward to actors
+        hive_ipc_notify(worker, HIVE_TAG_NONE, buf, received);  // Forward to actors
     }
 }
 ```
@@ -958,7 +958,7 @@ void database_service(void *arg) {
 void send_query(const char *query) {
     actor_id db;
     if (HIVE_SUCCEEDED(hive_whereis("database", &db))) {
-        hive_ipc_notify(db, 0, query, strlen(query) + 1);
+        hive_ipc_notify(db, HIVE_TAG_NONE, query, strlen(query) + 1);
     }
 }
 ```
@@ -1241,16 +1241,16 @@ This eliminates the "timeout but actually dead" ambiguity from previous versions
 
 ```c
 // Bad: Ignoring return value
-hive_ipc_notify(target, 0, &data, sizeof(data));  // WRONG - message may be lost
+hive_ipc_notify(target, HIVE_TAG_NONE, &data, sizeof(data));  // WRONG - message may be lost
 
 // Good: Check and handle with backoff-retry
-hive_status status = hive_ipc_notify(target, 0, &data, sizeof(data));
+hive_status status = hive_ipc_notify(target, HIVE_TAG_NONE, &data, sizeof(data));
 if (status.code == HIVE_ERR_NOMEM) {
     // Pool exhausted - backoff and retry
     hive_message msg;
     hive_ipc_recv(&msg, 10);  // Wait 10ms, process any incoming messages
     // Retry the send
-    status = hive_ipc_notify(target, 0, &data, sizeof(data));
+    status = hive_ipc_notify(target, HIVE_TAG_NONE, &data, sizeof(data));
     if (HIVE_FAILED(status)) {
         // Still failing - drop message or take other action
     }
@@ -1379,17 +1379,17 @@ hive_ipc_recv(&msg, 0);  // Gets first skipped message
 ```c
 // Single sender - FIFO guaranteed
 void sender_actor(void *arg) {
-    hive_ipc_notify(receiver, 0, &msg1, sizeof(msg1));  // Sent first
-    hive_ipc_notify(receiver, 0, &msg2, sizeof(msg2));  // Sent second
+    hive_ipc_notify(receiver, HIVE_TAG_NONE, &msg1, sizeof(msg1));  // Sent first
+    hive_ipc_notify(receiver, HIVE_TAG_NONE, &msg2, sizeof(msg2));  // Sent second
     // Receiver will see: msg1, then msg2 (guaranteed)
 }
 
 // Multiple senders - order depends on scheduling
 void sender_A(void *arg) {
-    hive_ipc_notify(receiver, 0, &msgA, sizeof(msgA));
+    hive_ipc_notify(receiver, HIVE_TAG_NONE, &msgA, sizeof(msgA));
 }
 void sender_B(void *arg) {
-    hive_ipc_notify(receiver, 0, &msgB, sizeof(msgB));
+    hive_ipc_notify(receiver, HIVE_TAG_NONE, &msgB, sizeof(msgB));
 }
 // Receiver may see: msgA then msgB, OR msgB then msgA
 
@@ -1494,7 +1494,7 @@ IPC uses two global pools shared by all actors:
 
 **Backoff-retry example:**
 ```c
-hive_status status = hive_ipc_notify(target, 0, data, len);
+hive_status status = hive_ipc_notify(target, HIVE_TAG_NONE, data, len);
 if (status.code == HIVE_ERR_NOMEM) {
     // Pool exhausted - backoff before retry
     hive_message msg;
@@ -2893,8 +2893,8 @@ Exit notifications (steps 2-3 above) are enqueued in recipient mailboxes **durin
 ```c
 // Dying actor sends messages before death
 void actor_A(void *arg) {
-    hive_ipc_notify(B, 0, &msg1, sizeof(msg1));  // Enqueued in B's mailbox
-    hive_ipc_notify(C, 0, &msg2, sizeof(msg2));  // Enqueued in C's mailbox
+    hive_ipc_notify(B, HIVE_TAG_NONE, &msg1, sizeof(msg1));  // Enqueued in B's mailbox
+    hive_ipc_notify(C, HIVE_TAG_NONE, &msg2, sizeof(msg2));  // Enqueued in C's mailbox
     hive_exit();  // Exit notifications sent to links/monitors
 }
 // Linked actor B will receive: msg1, then EXIT(A) (class=HIVE_MSG_EXIT)
@@ -2902,7 +2902,7 @@ void actor_A(void *arg) {
 
 // Messages sent TO dying actor are lost
 void actor_B(void *arg) {
-    hive_ipc_notify(A, 0, &msg, sizeof(msg));  // Enqueued in A's mailbox
+    hive_ipc_notify(A, HIVE_TAG_NONE, &msg, sizeof(msg));  // Enqueued in A's mailbox
 }
 void actor_A(void *arg) {
     // ... does some work ...

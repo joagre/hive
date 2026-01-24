@@ -508,7 +508,7 @@ static void test9_monitor_pool_exhaustion(void *args,
     // Signal all actors to exit
     for (int i = 0; i < spawned; i++) {
         int done = 1;
-        hive_ipc_notify(targets[i], 0, &done, sizeof(done));
+        hive_ipc_notify(targets[i], HIVE_TAG_NONE, &done, sizeof(done));
     }
 
     // Wait for cleanup

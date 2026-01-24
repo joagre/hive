@@ -36,7 +36,7 @@ static void test_timeout_actor(void *args, const hive_spawn_info *siblings,
     printf("\nTest 2: Message arrives before timeout\n");
     actor_id self = hive_self();
     int data = 42;
-    hive_ipc_notify(self, 0, &data, sizeof(data));
+    hive_ipc_notify(self, HIVE_TAG_NONE, &data, sizeof(data));
 
     start = get_time_ms();
     status = hive_ipc_recv(&msg, 100); // 100ms timeout

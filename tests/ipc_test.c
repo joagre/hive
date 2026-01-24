@@ -56,7 +56,7 @@ static void test1_async_basic(void *args, const hive_spawn_info *siblings,
     const char *msg_data = "Hello ASYNC";
 
     hive_status status =
-        hive_ipc_notify(self, 0, msg_data, strlen(msg_data) + 1);
+        hive_ipc_notify(self, HIVE_TAG_NONE, msg_data, strlen(msg_data) + 1);
     if (HIVE_FAILED(status)) {
         TEST_FAIL("hive_ipc_notify ASYNC failed");
         hive_exit();
@@ -100,14 +100,14 @@ static void test2_async_invalid_receiver(void *args,
     int data = 42;
 
     hive_status status =
-        hive_ipc_notify(ACTOR_ID_INVALID, 0, &data, sizeof(data));
+        hive_ipc_notify(ACTOR_ID_INVALID, HIVE_TAG_NONE, &data, sizeof(data));
     if (HIVE_FAILED(status)) {
         TEST_PASS("send to ACTOR_ID_INVALID fails");
     } else {
         TEST_FAIL("send to ACTOR_ID_INVALID should fail");
     }
 
-    status = hive_ipc_notify(9999, 0, &data, sizeof(data));
+    status = hive_ipc_notify(9999, HIVE_TAG_NONE, &data, sizeof(data));
     if (HIVE_FAILED(status)) {
         TEST_PASS("send to non-existent actor fails");
     } else {
@@ -132,7 +132,7 @@ static void test3_message_ordering(void *args, const hive_spawn_info *siblings,
 
     // Send 5 messages
     for (int i = 1; i <= 5; i++) {
-        hive_ipc_notify(self, 0, &i, sizeof(i));
+        hive_ipc_notify(self, HIVE_TAG_NONE, &i, sizeof(i));
     }
 
     // Receive and verify order
@@ -172,7 +172,7 @@ static void sender_actor(void *args, const hive_spawn_info *siblings,
     (void)siblings;
     (void)sibling_count;
     int id = *(int *)args;
-    hive_ipc_notify(g_receiver_id, 0, &id, sizeof(id));
+    hive_ipc_notify(g_receiver_id, HIVE_TAG_NONE, &id, sizeof(id));
     hive_exit();
 }
 
@@ -236,7 +236,8 @@ static void test5_send_to_self(void *args, const hive_spawn_info *siblings,
     actor_id self = hive_self();
     int data = 42;
 
-    hive_status status = hive_ipc_notify(self, 0, &data, sizeof(data));
+    hive_status status =
+        hive_ipc_notify(self, HIVE_TAG_NONE, &data, sizeof(data));
     if (HIVE_SUCCEEDED(status)) {
         // Receive the message we sent to ourselves
         hive_message msg;
@@ -356,9 +357,9 @@ static void test7_pending_count(void *args, const hive_spawn_info *siblings,
 
     // Send 3 messages
     int data = 42;
-    hive_ipc_notify(self, 0, &data, sizeof(data));
-    hive_ipc_notify(self, 0, &data, sizeof(data));
-    hive_ipc_notify(self, 0, &data, sizeof(data));
+    hive_ipc_notify(self, HIVE_TAG_NONE, &data, sizeof(data));
+    hive_ipc_notify(self, HIVE_TAG_NONE, &data, sizeof(data));
+    hive_ipc_notify(self, HIVE_TAG_NONE, &data, sizeof(data));
 
     if (hive_ipc_pending()) {
         TEST_PASS("hive_ipc_pending returns true with messages");
@@ -421,7 +422,7 @@ static void test8_nonblocking_recv(void *args, const hive_spawn_info *siblings,
     // With a message in queue
     actor_id self = hive_self();
     int data = 42;
-    hive_ipc_notify(self, 0, &data, sizeof(data));
+    hive_ipc_notify(self, HIVE_TAG_NONE, &data, sizeof(data));
 
     status = hive_ipc_recv(&msg, 0);
     if (HIVE_SUCCEEDED(status)) {
@@ -486,7 +487,7 @@ static void delayed_sender_actor(void *args, const hive_spawn_info *siblings,
     hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
 
     int data = 123;
-    hive_ipc_notify(target, 0, &data, sizeof(data));
+    hive_ipc_notify(target, HIVE_TAG_NONE, &data, sizeof(data));
 
     hive_exit();
 }
@@ -548,7 +549,8 @@ static void test11_message_size_limits(void *args,
     char max_msg[HIVE_MAX_MESSAGE_SIZE]; // Oversize buffer for safety
     memset(max_msg, 'A', sizeof(max_msg));
 
-    hive_status status = hive_ipc_notify(self, 0, max_msg, max_payload_size);
+    hive_status status =
+        hive_ipc_notify(self, HIVE_TAG_NONE, max_msg, max_payload_size);
     if (HIVE_SUCCEEDED(status)) {
         TEST_PASS("can send message at max payload size");
     } else {
@@ -568,7 +570,8 @@ static void test11_message_size_limits(void *args,
     }
 
     // Send message exceeding max size (payload larger than max_payload_size)
-    status = hive_ipc_notify(self, 0, max_msg, max_payload_size + 1);
+    status =
+        hive_ipc_notify(self, HIVE_TAG_NONE, max_msg, max_payload_size + 1);
     if (HIVE_FAILED(status)) {
         TEST_PASS("oversized message is rejected");
     } else {
@@ -592,9 +595,9 @@ static void selective_sender_actor(void *args, const hive_spawn_info *siblings,
 
     // Send three messages with different data
     int a = 1, b = 2, c = 3;
-    hive_ipc_notify(target, 0, &a, sizeof(a));
-    hive_ipc_notify(target, 0, &b, sizeof(b));
-    hive_ipc_notify(target, 0, &c, sizeof(c));
+    hive_ipc_notify(target, HIVE_TAG_NONE, &a, sizeof(a));
+    hive_ipc_notify(target, HIVE_TAG_NONE, &b, sizeof(b));
+    hive_ipc_notify(target, HIVE_TAG_NONE, &c, sizeof(c));
 
     hive_exit();
 }
@@ -658,7 +661,7 @@ static void test13_zero_length_message(void *args,
 
     actor_id self = hive_self();
 
-    hive_status status = hive_ipc_notify(self, 0, NULL, 0);
+    hive_status status = hive_ipc_notify(self, HIVE_TAG_NONE, NULL, 0);
     if (HIVE_SUCCEEDED(status)) {
         TEST_PASS("can send zero-length payload");
 
@@ -707,7 +710,8 @@ static void test14_send_to_dead_actor(void *args,
 
     // Now try to send to dead actor
     int data = 42;
-    hive_status status = hive_ipc_notify(target, 0, &data, sizeof(data));
+    hive_status status =
+        hive_ipc_notify(target, HIVE_TAG_NONE, &data, sizeof(data));
 
     if (HIVE_FAILED(status)) {
         TEST_PASS("send to dead actor fails");
@@ -747,7 +751,8 @@ static void test15_message_pool_info(void *args,
 
     for (int i = 0; i < POOL_TEST_MSG_COUNT; i++) {
         int data = i;
-        hive_status status = hive_ipc_notify(self, 0, &data, sizeof(data));
+        hive_status status =
+            hive_ipc_notify(self, HIVE_TAG_NONE, &data, sizeof(data));
         if (HIVE_FAILED(status)) {
             printf("    Send failed at %d: %s\n", i,
                    status.msg ? status.msg : "unknown");
@@ -791,7 +796,7 @@ static void test16_null_data_send(void *args, const hive_spawn_info *siblings,
     actor_id self = hive_self();
 
     // Sending NULL data with len > 0 should fail or be handled safely
-    hive_status status = hive_ipc_notify(self, 0, NULL, 10);
+    hive_status status = hive_ipc_notify(self, HIVE_TAG_NONE, NULL, 10);
     if (HIVE_FAILED(status)) {
         TEST_PASS("hive_ipc_notify rejects NULL data with non-zero length");
     } else {
@@ -815,7 +820,7 @@ static void short_lived_actor(void *args, const hive_spawn_info *siblings,
     actor_id parent = *(actor_id *)args;
     // Send a message then die
     int data = 42;
-    hive_ipc_notify(parent, 0, &data, sizeof(data));
+    hive_ipc_notify(parent, HIVE_TAG_NONE, &data, sizeof(data));
     hive_exit();
 }
 

@@ -212,7 +212,7 @@ All messages have a 4-byte header prepended to payload:
 - **tag** (27 bits): Correlation identifier for request/reply
 
 ### IPC API
-- **`hive_ipc_notify(to, tag, data, len)`**: Fire-and-forget notification (class=NOTIFY) with tag for selective receive
+- **`hive_ipc_notify(to, tag, data, len)`**: Fire-and-forget notification (class=NOTIFY). Use `HIVE_TAG_NONE` when no correlation needed
 - **`hive_ipc_notify_ex(to, class, tag, data, len)`**: Send with explicit class and tag
 - **`hive_ipc_recv(msg, timeout)`**: Receive any message
 - **`hive_ipc_recv_match(from, class, tag, msg, timeout)`**: Selective receive with filtering
@@ -237,6 +237,7 @@ if (msg.class == HIVE_MSG_REQUEST) { ... }
 - `hive_ipc_recv_matches()` waits for any message matching one of several filters (useful for waiting on timer OR notification, REPLY OR EXIT)
 - Non-matching messages are **skipped but not dropped** - they remain in mailbox
 - Filter on sender (`HIVE_SENDER_ANY` = wildcard), class (`HIVE_MSG_ANY`), tag (`HIVE_TAG_ANY`)
+- Use `HIVE_TAG_NONE` when sending notifications that don't need correlation
 - Enables request/reply pattern: send REQUEST with generated tag, wait for REPLY with matching tag
 
 ### IPC Pool Exhaustion
