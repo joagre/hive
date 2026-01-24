@@ -10,7 +10,7 @@
 
 **Bounded memory.** All memory comes from static pools. No heap allocation. Memory footprint is known at link time.
 
-**Real hardware.** The [pilot example](examples/pilot/) is a quadcopter flight controller running on a Crazyflie 2.1—11 actors, sensor fusion, cascaded PID, 60KB flash.
+**Real-world example.** The [pilot example](examples/pilot/) is a quadcopter flight controller running on a Crazyflie 2.1—11 actors, sensor fusion, cascaded PID, 60KB flash.
 
 See [spec/](spec/) for design details.
 
