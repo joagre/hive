@@ -4,7 +4,7 @@ This document describes how to implement radio communication for the Hive runtim
 on Crazyflie 2.1, enabling real-time telemetry logging over the radio link.
 
 **Use case:** High-frequency logging (100Hz+) during flight for PID tuning and
-control analysis as described in [STABILIZATION.md](STABILIZATION.md).
+control analysis as described in [stabilization.md](stabilization.md).
 
 ---
 

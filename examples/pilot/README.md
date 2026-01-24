@@ -411,7 +411,7 @@ via `hive_config.mk`. Only stack sizes differ per platform based on available RA
 |------|-------------|
 | `README.md` | This file |
 | `SPEC.md` | Detailed design specification |
-| `FIRST_FLIGHT_CHECKLIST.md` | Hardware bring-up and first flight guide |
+| `first_flight_checklist.md` | Hardware bring-up and first flight guide |
 
 ### Directories
 

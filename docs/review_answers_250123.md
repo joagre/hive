@@ -1,6 +1,6 @@
 # Review Response - 2025-01-23
 
-Response to reviewer comments in `REVIEW-250123.md`.
+Response to reviewer comments in `review_250123.md`.
 
 ## Categorization
 

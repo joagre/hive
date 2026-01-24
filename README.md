@@ -107,7 +107,7 @@ Actors run until they **yield** - there is no preemption. Operations that yield:
 | `hive_net_*()` | |
 | `hive_exit()` | |
 
-**File I/O** (`hive_file_*`) is synchronous and briefly stalls the scheduler. This is fine for short, bursty operations—use LOW priority actors for file work. See [SPEC.md](SPEC.md#scheduler-stalling-calls) for details.
+**File I/O** (`hive_file_*`) is synchronous and briefly stalls the scheduler. This is fine for short, bursty operations—use LOW priority actors for file work. See [spec/design.md](spec/design.md#scheduler-stalling-calls) for details.
 
 ## Performance
 
@@ -601,7 +601,7 @@ flash before continuing. Virtual file paths are hardcoded (`/log`, `/config`), e
 -DHIVE_FILE_RING_SIZE=4096         // RAM ring buffer size
 // Optional: -DHIVE_VFILE_CONFIG_BASE/SIZE/SECTOR enables "/config"
 ```
-See `examples/pilot/Makefile.crazyflie-2.1+` for a complete example and SPEC.md for full platform differences.
+See `examples/pilot/Makefile.crazyflie-2.1+` for a complete example and [spec/api.md](spec/api.md#file-api) for full platform differences.
 
 ### Logging
 
@@ -690,7 +690,7 @@ The runtime is **completely single-threaded**. All actors run cooperatively in a
 
 All runtime APIs must be called from actor context. External threads must use platform IPC (sockets/pipes) with dedicated reader actors.
 
-See [SPEC.md](SPEC.md#thread-safety) for complete thread safety contract and external thread communication patterns.
+See [spec/design.md](spec/design.md#thread-safety) for complete thread safety contract and external thread communication patterns.
 
 ### Hardware Abstraction Layer (HAL)
 
@@ -820,7 +820,7 @@ Compatible examples exclude `echo`, `fileio`, and `logging` (same reason).
 
 ## Quick Links
 
-- **[Full Specification](SPEC.md)** - Complete design and implementation details
+- **[Full Specification](spec/)** - Complete design and implementation details
 - **[Examples Directory](examples/)** - Working examples (pingpong, bus, echo server, etc.)
 - **[Static Configuration](include/hive_static_config.h)** - Compile-time memory limits and pool sizes
 - **[Man Pages](man/man3/)** - API reference documentation

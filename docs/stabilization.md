@@ -2,7 +2,7 @@
 
 A practical, incremental path from current hover to acrobatic-ready flight control.
 
-**Context:** This document is a prerequisite for [COPTER_ARENA_IDEA.md](COPTER_ARENA_IDEA.md).
+**Context:** This document is a prerequisite for [copter_arena_idea.md](copter_arena_idea.md).
 Before attempting aggressive maneuvers, pursuit-evasion, or any form of aerial acrobatics,
 the flight controller must have rock-solid stabilization. Quick, precise, noise-tolerant
 attitude control is the foundation everything else builds on.

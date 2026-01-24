@@ -642,7 +642,7 @@ examples/pilot/
     hive_config.mk           # Shared Hive memory config
     SPEC.md              # This specification
     README.md            # Usage instructions
-    FIRST_FLIGHT_CHECKLIST.md  # Hardware bring-up and flight checklist
+    first_flight_checklist.md  # Hardware bring-up and flight checklist
     worlds/
         hover_test.wbt   # Webots world file
     controllers/
