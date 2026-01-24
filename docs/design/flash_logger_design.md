@@ -47,7 +47,7 @@ dense logging at 1 KB/s, or ~10+ minutes at typical rates.
 
 - **Erase time** - 1-4 seconds per 128KB sector (blocking!)
 - **Program granularity** - Byte/half-word/word (we'll use word = 32-bit)
-- **Program time** - ~16 µs per word typical
+- **Program time** - ~16 us per word typical
 - **Read stall** - CPU stalls on flash read while BSY=1 (same bank)
 - **Endurance** - 10K erase cycles (not a concern for flight logging)
 
@@ -366,9 +366,9 @@ bool flash_write_block(uint32_t offset, const void *data, uint32_t len) {
 
 ### IRQ-Off Timing Analysis
 
-- Word program time: ~16 µs
+- Word program time: ~16 us
 - 256 bytes = 64 words
-- Total: 64 × 16 µs = **~1 ms** with IRQs disabled
+- Total: 64 x 16 us = **~1 ms** with IRQs disabled
 
 This is acceptable. Control loop at 500 Hz has 2ms period, so 1ms IRQ-off
 occasionally is tolerable (will delay one control cycle slightly).
@@ -542,8 +542,8 @@ void log_dump_uart(void);
 3. **What to log** - Which actors log what? Every state update? Every N updates?
    Need to balance detail vs. flash space.
 
-4. **Timestamp source** - Use `HAL_GetTick()` (ms) or implement µs timer?
-   Flight events may need µs resolution.
+4. **Timestamp source** - Use `HAL_GetTick()` (ms) or implement us timer?
+   Flight events may need us resolution.
 
 5. **Compression** - Simple RLE or delta encoding could 2-3x the log capacity.
    Worth the complexity?

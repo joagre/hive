@@ -518,7 +518,7 @@ hive_log_file_close();      // Close log file
 
 **Binary Log Format** (12-byte header + text payload)
 - Magic: `0x4C47` ("LG" little-endian)
-- Sequence number, timestamp (µs), length, level
+- Sequence number, timestamp (us), length, level
 - Use `tools/decode_log.py` to decode
 
 **Platform Defaults**

@@ -257,9 +257,9 @@ size_t select_source_count;
 |-----|------------|
 | `hive_ipc_recv()` | O(1) - first entry always matches |
 | `hive_ipc_recv_match()` | O(mailbox_depth) |
-| `hive_ipc_recv_matches()` | O(filters × mailbox_depth) |
+| `hive_ipc_recv_matches()` | O(filters x mailbox_depth) |
 | `hive_select()` with 1 source | O(1) if wildcards, O(depth) if specific |
-| `hive_select()` with N sources | O(N × sources_depth) |
+| `hive_select()` with N sources | O(N x sources_depth) |
 
 **Why this is acceptable**
 - Source counts are tiny (2-5 typical)

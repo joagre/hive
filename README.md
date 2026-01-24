@@ -125,8 +125,8 @@ Benchmarks measured on Intel Core i7-8565U (x86-64 Linux, performance governor):
 
 | Operation | Latency | Throughput | Notes |
 |-----------|---------|------------|-------|
-| **Context switch** | ~1.1 µs/switch | 0.94 M switches/sec | Manual assembly, cooperative |
-| **IPC send/recv** | ~2.0-2.2 µs/msg | 0.46-0.49 M msgs/sec | 8-252 byte messages |
+| **Context switch** | ~1.1 us/switch | 0.94 M switches/sec | Manual assembly, cooperative |
+| **IPC send/recv** | ~2.0-2.2 us/msg | 0.46-0.49 M msgs/sec | 8-252 byte messages |
 | **Pool allocation** | ~9 ns/op | 111 M ops/sec | 1.1x faster than malloc |
 | **Actor spawn** | ~300 ns/actor | 3.3 M actors/sec | Includes stack allocation (arena) |
 | **Bus pub/sub** | ~260 ns/msg | 3.84 M msgs/sec | With cooperative yields |

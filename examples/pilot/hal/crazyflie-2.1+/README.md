@@ -397,7 +397,7 @@ make -f Makefile.crazyflie-2.1+ FLIGHT_PROFILE=3  # FULL_3D (requires Flow deck)
 | 2 (ALTITUDE) | Altitude changes: 0.5m -> 0.8m -> 1.2m -> 0.8m | 40s |
 | 3 (FULL_3D) | 3D waypoints, max 1.2m (requires Flow deck) | 60s |
 
-**Note** - All profiles keep altitude ≤1.2m to stay within flow deck range (VL53L1x: 1.3m max).
+**Note** - All profiles keep altitude <=1.2m to stay within flow deck range (VL53L1x: 1.3m max).
 
 ## Flashing Notes
 
