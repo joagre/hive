@@ -237,43 +237,38 @@ This runtime provides primitives for predictable embedded performance with full 
 
 ## Architecture
 
-```
-┌──────────────────────────────────────────────────────────────┐
-│              Actor Runtime (single-threaded)             │
-│  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐         │
-│  │ Actor 1 │ │ Actor 2 │ │ Actor 3 │ │   ...   │         │
-│  └────┬────┘ └────┬────┘ └────┬────┘ └────┬────┘         │
-│       │           │           │           │              │
-│       └───────────┴─────┬─────┴───────────┘              │
-│                         │                                │
-│              ┌──────────▼──────────┐                     │
-│              │     Scheduler       │                     │
-│              │  (event loop with   │                     │
-│              │       epoll)        │                     │
-│              └──────────┬──────────┘                     │
-│                         │                                │
-│       ┌─────────────────┼─────────────────┐              │
-│       │                 │                 │              │
-│       ▼                 ▼                 ▼              │
-│   ┌──────┐          ┌──────┐          ┌──────┐           │
-│   │ IPC  │          │ Bus  │          │Timers│           │
-│   │      │          │      │          │(tfd) │           │
-│   └──────┘          └──────┘          └──┬───┘           │
-│                                          │               │
-│                    ┌─────────────────────┼──────┐        │
-│                    │                     │      │        │
-│                    ▼                     ▼      ▼        │
-│               ┌─────────┐         ┌──────────────────┐   │
-│               │ Network │         │   File I/O       │   │
-│               │(sockets)│         │ (synchronous)    │   │
-│               └────┬────┘         └──────────────────┘   │
-│                    │                                     │
-└────────────────────┼─────────────────────────────────────┘
-                     │
-            ┌────────▼─────────┐
-            │  epoll (Linux)   │
-            │  WFI (STM32)     │
-            └──────────────────┘
+```mermaid
+graph TB
+    subgraph RUNTIME["Actor Runtime (single-threaded)"]
+        subgraph ACTORS["Actors"]
+            A1[Actor 1]
+            A2[Actor 2]
+            A3[Actor 3]
+            AN[...]
+        end
+
+        SCHED[Scheduler<br/>event loop]
+
+        A1 & A2 & A3 & AN --> SCHED
+
+        subgraph SUBSYSTEMS["Subsystems"]
+            IPC[IPC]
+            BUS[Bus]
+            TIMERS[Timers]
+        end
+
+        SCHED --> IPC & BUS & TIMERS
+
+        subgraph IO["I/O"]
+            NET[Network<br/>sockets]
+            FILE[File I/O<br/>synchronous]
+        end
+
+        TIMERS --> NET & FILE
+    end
+
+    PLATFORM[epoll - Linux<br/>WFI - STM32]
+    NET --> PLATFORM
 ```
 
 ## Scheduling
