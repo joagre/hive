@@ -107,7 +107,7 @@ Actors run until they **yield** - there is no preemption. Operations that yield:
 | `hive_net_*()` | |
 | `hive_exit()` | |
 
-**File I/O** (`hive_file_*`) is different - it stalls the entire scheduler (no actors run). See [SPEC.md](SPEC.md#scheduler-stalling-calls) for details.
+**File I/O** (`hive_file_*`) is synchronous and briefly stalls the scheduler. This is fine for short, bursty operations—use LOW priority actors for file work. See [SPEC.md](SPEC.md#scheduler-stalling-calls) for details.
 
 ## Performance
 
