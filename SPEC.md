@@ -1,5 +1,51 @@
 # Actor Runtime Specification
 
+## Table of Contents
+
+**Introduction**
+- [Overview](#overview)
+- [Target Platforms](#target-platforms)
+- [Guarantees and Non-Guarantees](#guarantees-and-non-guarantees)
+- [Failure Modes Summary](#failure-modes-summary)
+- [Design Trade-offs and Sharp Edges](#design-trade-offs-and-sharp-edges)
+
+**System Architecture**
+- [Architecture](#architecture)
+- [Scheduling](#scheduling)
+- [Thread Safety](#thread-safety)
+
+**Memory & Resources**
+- [Memory Model](#memory-model)
+- [Memory Allocation Architecture](#memory-allocation-architecture)
+- [Architectural Limits](#architectural-limits)
+- [Stack Overflow](#stack-overflow)
+
+**Error Handling**
+- [Error Handling](#error-handling)
+
+**API Reference**
+- [Core Types](#core-types)
+- [Actor API](#actor-api)
+- [Actor Death Handling](#actor-death-handling)
+- [IPC API](#ipc-api)
+- [Timer API](#timer-api)
+- [Bus API](#bus-api)
+- [Unified Event Waiting API](#unified-event-waiting-api)
+- [Supervisor API](#supervisor-api)
+- [Network API](#network-api)
+- [File API](#file-api)
+- [Logging API](#logging-api)
+
+**Implementation Details**
+- [Scheduler Main Loop](#scheduler-main-loop)
+- [Event Loop Architecture](#event-loop-architecture)
+- [Platform Abstraction](#platform-abstraction)
+
+**Appendix**
+- [Future Extensions](#future-extensions)
+
+---
+
 ## Overview
 
 A minimalistic actor-based runtime designed for **embedded and safety-critical systems**. The runtime implements cooperative multitasking with priority-based scheduling and message passing using the actor model.
@@ -137,6 +183,99 @@ Quick reference for resource exhaustion and failure handling. See IPC and Bus se
 | `HIVE_ERR_INVALID` | Bad arguments | Fix caller (programming error) |
 
 **See:** "IPC API → Pool Exhaustion Behavior" and "Bus API → Pool Exhaustion and Buffer Full Behavior" for detailed documentation.
+
+## Design Trade-offs and Sharp Edges
+
+This runtime makes deliberate design choices that favor **predictability, performance, and simplicity** over **ergonomics and safety**. These are not bugs - they are conscious trade-offs suitable for embedded/safety-critical systems with trusted code.
+
+**Accept these consciously before using this runtime:**
+
+### 1. Message Lifetime Rule is Sharp and Error-Prone
+
+**Trade-off:** Message payload pointer valid only until next `hive_ipc_recv()` call.
+
+**Why this design:**
+- Pool reuse: Bounded O(1) allocation, no fragmentation
+- Performance: Single pool slot per actor, no reference counting
+- Simplicity: No hidden malloc, no garbage collection
+
+**Consequence:** Easy to misuse - storing `msg.data` across recv iterations causes use-after-free.
+
+**This is not beginner-friendly.** Code must copy data immediately if needed beyond current iteration.
+
+**Mitigation:** Documented with WARNING box and correct/incorrect examples in IPC section. But developers will still make mistakes.
+
+**Acceptable if:** You optimize for predictability over ergonomics, and code reviews catch pointer misuse.
+
+---
+
+### 2. No Per-Actor Mailbox Quota (Global Starvation Possible)
+
+**Trade-off:** One slow/malicious actor can consume all mailbox entries, starving the system.
+
+**Why this design:**
+- Simplicity: No per-actor accounting, no quota enforcement
+- Flexibility: Bursty actors can use available pool space
+- Performance: No quota checks on send path
+
+**Consequence:** A single bad actor can cause global `HIVE_ERR_NOMEM` failures for all IPC sends.
+
+**Mitigation:** Application-level quotas, monitoring, backpressure patterns. Runtime provides primitives, not policies.
+
+**Acceptable if:** You deploy trusted code in embedded systems, not untrusted actors in general-purpose systems.
+
+---
+
+### 3. Selective Receive is O(n) per Mailbox Scan
+
+**Trade-off:** Selective receive scans mailbox linearly, which is O(n) where n = mailbox depth.
+
+**Why this design:**
+- Battle-tested: Proven pattern for building complex protocols
+- Simplicity: No index structures, no additional memory overhead
+- Flexibility: Any filter criteria supported without pre-registration
+
+**Consequence:** Deep mailboxes slow down selective receive. If 100 messages are queued and you're waiting for a specific tag, each wake scans all 100.
+
+**No save queue optimization:** Unlike Erlang, repeated selective receives with the same filter rescan from the mailbox head each time. There is no "save queue" to track previously scanned messages. If non-matching messages accumulate and are never consumed, this creates O(n) scans on each receive. For embedded systems with small mailboxes, this is acceptable. If this ever becomes a bottleneck, a `scan_start` pointer could be added.
+
+**Keep mailboxes shallow.** The request/reply pattern naturally does this (block waiting for reply).
+
+**Mitigation:** Process messages promptly. Don't let mailbox grow deep. Use `hive_ipc_request()` which blocks until reply.
+
+**Acceptable if:** Typical mailbox depth is small (< 20 messages) and request/reply pattern is followed.
+
+---
+
+### 4. Bus and IPC Share Message Pool (Resource Contention)
+
+**Trade-off:** High-rate bus publishing can starve IPC globally.
+
+**Why this design:**
+- Simplicity: Single message pool, no subsystem isolation
+- Flexibility: Pool space shared dynamically based on actual usage
+- Memory efficiency: No wasted dedicated pools
+
+**Consequence:** Misconfigured bus can cause all IPC sends to fail with `HIVE_ERR_NOMEM`.
+
+**Mitigation:** WARNING box in Bus section, size pool for combined load, monitor exhaustion.
+
+**Acceptable if:** You size pools correctly and monitor resource usage in production.
+
+---
+
+### Summary: This Runtime is a Sharp Tool
+
+These design choices make the runtime:
+- **Predictable:** Bounded memory, bounded latency, no hidden allocations
+- **Fast:** O(1) hot paths, minimal overhead, zero-copy options
+- **Simple:** Minimal code, easy to audit, no complex features
+- **Not beginner-friendly:** Sharp edges require careful use
+- **Not fault-tolerant:** No automatic isolation, quotas, or recovery
+
+**This is intentional.** The runtime provides primitives for building robust systems, not a complete safe environment.
+
+This runtime provides primitives for predictable embedded performance with full control.
 
 ## Architecture
 
@@ -594,99 +733,6 @@ void my_actor(void *args, const hive_spawn_info *siblings, size_t count) {
 - Apply backpressure (slow down, drop work)
 - Escalate to supervisor (if transient issue)
 - Shut down gracefully (if persistent)
-
-## Design Trade-offs and Sharp Edges
-
-This runtime makes deliberate design choices that favor **predictability, performance, and simplicity** over **ergonomics and safety**. These are not bugs - they are conscious trade-offs suitable for embedded/safety-critical systems with trusted code.
-
-**Accept these consciously before using this runtime:**
-
-### 1. Message Lifetime Rule is Sharp and Error-Prone
-
-**Trade-off:** Message payload pointer valid only until next `hive_ipc_recv()` call.
-
-**Why this design:**
-- Pool reuse: Bounded O(1) allocation, no fragmentation
-- Performance: Single pool slot per actor, no reference counting
-- Simplicity: No hidden malloc, no garbage collection
-
-**Consequence:** Easy to misuse - storing `msg.data` across recv iterations causes use-after-free.
-
-**This is not beginner-friendly.** Code must copy data immediately if needed beyond current iteration.
-
-**Mitigation:** Documented with WARNING box and correct/incorrect examples in IPC section. But developers will still make mistakes.
-
-**Acceptable if:** You optimize for predictability over ergonomics, and code reviews catch pointer misuse.
-
----
-
-### 2. No Per-Actor Mailbox Quota (Global Starvation Possible)
-
-**Trade-off:** One slow/malicious actor can consume all mailbox entries, starving the system.
-
-**Why this design:**
-- Simplicity: No per-actor accounting, no quota enforcement
-- Flexibility: Bursty actors can use available pool space
-- Performance: No quota checks on send path
-
-**Consequence:** A single bad actor can cause global `HIVE_ERR_NOMEM` failures for all IPC sends.
-
-**Mitigation:** Application-level quotas, monitoring, backpressure patterns. Runtime provides primitives, not policies.
-
-**Acceptable if:** You deploy trusted code in embedded systems, not untrusted actors in general-purpose systems.
-
----
-
-### 3. Selective Receive is O(n) per Mailbox Scan
-
-**Trade-off:** Selective receive scans mailbox linearly, which is O(n) where n = mailbox depth.
-
-**Why this design:**
-- Battle-tested: Proven pattern for building complex protocols
-- Simplicity: No index structures, no additional memory overhead
-- Flexibility: Any filter criteria supported without pre-registration
-
-**Consequence:** Deep mailboxes slow down selective receive. If 100 messages are queued and you're waiting for a specific tag, each wake scans all 100.
-
-**No save queue optimization:** Unlike Erlang, repeated selective receives with the same filter rescan from the mailbox head each time. There is no "save queue" to track previously scanned messages. If non-matching messages accumulate and are never consumed, this creates O(n) scans on each receive. For embedded systems with small mailboxes, this is acceptable. If this ever becomes a bottleneck, a `scan_start` pointer could be added.
-
-**Keep mailboxes shallow.** The request/reply pattern naturally does this (block waiting for reply).
-
-**Mitigation:** Process messages promptly. Don't let mailbox grow deep. Use `hive_ipc_request()` which blocks until reply.
-
-**Acceptable if:** Typical mailbox depth is small (< 20 messages) and request/reply pattern is followed.
-
----
-
-### 4. Bus and IPC Share Message Pool (Resource Contention)
-
-**Trade-off:** High-rate bus publishing can starve IPC globally.
-
-**Why this design:**
-- Simplicity: Single message pool, no subsystem isolation
-- Flexibility: Pool space shared dynamically based on actual usage
-- Memory efficiency: No wasted dedicated pools
-
-**Consequence:** Misconfigured bus can cause all IPC sends to fail with `HIVE_ERR_NOMEM`.
-
-**Mitigation:** WARNING box in Bus section, size pool for combined load, monitor exhaustion.
-
-**Acceptable if:** You size pools correctly and monitor resource usage in production.
-
----
-
-### Summary: This Runtime is a Sharp Tool
-
-These design choices make the runtime:
-- **Predictable:** Bounded memory, bounded latency, no hidden allocations
-- **Fast:** O(1) hot paths, minimal overhead, zero-copy options
-- **Simple:** Minimal code, easy to audit, no complex features
-- **Not beginner-friendly:** Sharp edges require careful use
-- **Not fault-tolerant:** No automatic isolation, quotas, or recovery
-
-**This is intentional.** The runtime provides primitives for building robust systems, not a complete safe environment.
-
-This runtime provides primitives for predictable embedded performance with full control.
 
 ## Core Types
 
