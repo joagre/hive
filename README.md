@@ -6,7 +6,7 @@
 
 **No shared state** - Each actor owns its data. No locks, no races. A bug in one actor can't corrupt another actor's state.
 
-**Predictable scheduling** - Cooperative multitasking means you know exactly when context switches happen--only at explicit yield points (blocking receives, waits, exit). No preemption surprises, no priority inversion, no mysterious timing bugs.
+**Predictable scheduling** - Cooperative multitasking means you know exactly when context switches happen--only at explicit yield points (blocking receives, waits). No preemption surprises, no priority inversion, no mysterious timing bugs.
 
 **Bounded memory** - All memory comes from static pools. No heap allocation. Memory footprint is known at link time.
 
