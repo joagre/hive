@@ -2,6 +2,41 @@
 
 > **Erlang-style actors in C for embedded systems. Deterministic memory, cooperative scheduling, no GC.**
 
+## Table of Contents
+
+**Overview**
+- [Features](#features)
+- [Hive vs QP/C](#hive-vs-qpc)
+
+**Core Concepts**
+- [Cooperative Scheduling](#cooperative-scheduling)
+- [Memory Model](#memory-model)
+- [Performance](#performance)
+
+**Getting Started**
+- [Quick Start](#quick-start)
+- [Running Examples](#running-examples)
+
+**API Reference**
+- [API Overview](#api-overview)
+
+**Development**
+- [Building](#building)
+- [Testing](#testing)
+- [QEMU Testing](#qemu-testing)
+- [Code Style](#code-style)
+
+**Internals**
+- [Implementation Details](#implementation-details)
+
+**Resources**
+- [Quick Links](#quick-links)
+- [Man Pages](#man-pages)
+- [License](#license)
+- [Future Work](#future-work)
+
+---
+
 A complete actor-based runtime designed for **embedded and safety-critical systems**. Features cooperative multitasking with priority-based scheduling and message passing using the actor model.
 
 **Platforms:** x86-64 Linux (fully implemented), STM32/ARM Cortex-M bare metal (core runtime implemented)
@@ -21,39 +56,6 @@ The runtime uses **statically bounded memory** for predictable behavior—no hea
 - A statechart or FSM framework
 
 **Hive favors boundedness and inspectability over fairness and throughput.**
-
-## Quick Links
-
-- **[Full Specification](SPEC.md)** - Complete design and implementation details
-- **[Examples Directory](examples/)** - Working examples (pingpong, bus, echo server, etc.)
-- **[Static Configuration](include/hive_static_config.h)** - Compile-time memory limits and pool sizes
-- **[Man Pages](man/man3/)** - API reference documentation
-
-## Man Pages
-
-Comprehensive API documentation is available as Unix man pages:
-
-```bash
-# Install man pages
-sudo make install-man                    # Install to /usr/local/share/man/man3/
-make install-man PREFIX=~/.local         # Install to custom prefix
-
-# View man pages (after install)
-man hive_init      # Runtime initialization
-man hive_spawn     # Actor lifecycle
-man hive_ipc       # Message passing
-man hive_link      # Linking and monitoring
-man hive_timer     # Timers
-man hive_bus       # Pub-sub bus
-man hive_select    # Unified event waiting
-man hive_net       # Network I/O
-man hive_file       # File I/O
-man hive_supervisor # Supervision
-man hive_types      # Types and compile-time configuration
-
-# View without installing
-man man/man3/hive_ipc.3
-```
 
 ## Features
 
@@ -149,55 +151,6 @@ See [`include/hive_static_config.h`](include/hive_static_config.h) for all compi
 All structures are statically allocated. Actor stacks use a static arena allocator by default (configurable size), with optional malloc via `actor_config.malloc_stack = true`. Stack sizes are configurable per actor, allowing different actors to use different stack sizes. Arena memory is automatically reclaimed and reused when actors exit. No malloc in hot paths. Memory footprint calculable at link time when using arena allocator (default); optional malloc'd stacks add runtime-dependent heap usage.
 
 **Embedded footprint:** The defaults above are generous for Linux development. See the [Pilot Example](#pilot-example-quadcopter-flight-controller) for a minimal embedded configuration (~60KB flash, ~58KB RAM on STM32F4).
-
-## Running Examples
-
-```bash
-# Basic IPC example
-./build/pingpong
-
-# Actor linking example (bidirectional links)
-./build/link_demo
-
-# Supervisor (auto-restart workers)
-./build/supervisor
-
-# Manual supervisor (link/monitor pattern without hive_supervisor)
-./build/supervisor_manual
-
-# File I/O example
-./build/fileio
-
-# Network echo server (listens on port 8080)
-./build/echo
-
-# Timer example (one-shot and periodic)
-./build/timer
-
-# Bus pub-sub example
-./build/bus
-
-# Request/reply example (with hive_ipc_request)
-./build/request_reply
-
-# Unified event waiting (hive_select)
-./build/select
-
-# Priority scheduling example (4 levels, starvation demo)
-./build/priority
-
-# Logging example (HIVE_LOG_* macros, binary log file)
-./build/logging
-
-# Name registry example (service discovery pattern)
-./build/registry
-```
-
-### Pilot Example (Quadcopter Flight Controller)
-
-The `examples/pilot/` directory contains a complete quadcopter autopilot targeting real hardware (Crazyflie 2.1+). Not a toy demo—11 actors, cascaded PID control, sensor fusion, and fail-safe supervision. Compiles to ~60KB flash and ~58KB RAM with a 52KB stack arena.
-
-See [examples/pilot/README.md](examples/pilot/README.md) for build instructions and architecture details.
 
 ## Quick Start
 
@@ -505,6 +458,55 @@ hive_supervisor_stop(supervisor);
 //   HIVE_CHILD_TEMPORARY - Never restart
 ```
 
+## Running Examples
+
+```bash
+# Basic IPC example
+./build/pingpong
+
+# Actor linking example (bidirectional links)
+./build/link_demo
+
+# Supervisor (auto-restart workers)
+./build/supervisor
+
+# Manual supervisor (link/monitor pattern without hive_supervisor)
+./build/supervisor_manual
+
+# File I/O example
+./build/fileio
+
+# Network echo server (listens on port 8080)
+./build/echo
+
+# Timer example (one-shot and periodic)
+./build/timer
+
+# Bus pub-sub example
+./build/bus
+
+# Request/reply example (with hive_ipc_request)
+./build/request_reply
+
+# Unified event waiting (hive_select)
+./build/select
+
+# Priority scheduling example (4 levels, starvation demo)
+./build/priority
+
+# Logging example (HIVE_LOG_* macros, binary log file)
+./build/logging
+
+# Name registry example (service discovery pattern)
+./build/registry
+```
+
+### Pilot Example (Quadcopter Flight Controller)
+
+The `examples/pilot/` directory contains a complete quadcopter autopilot targeting real hardware (Crazyflie 2.1+). Not a toy demo—11 actors, cascaded PID control, sensor fusion, and fail-safe supervision. Compiles to ~60KB flash and ~58KB RAM with a 52KB stack arena.
+
+See [examples/pilot/README.md](examples/pilot/README.md) for build instructions and architecture details.
+
 ## API Overview
 
 ### Runtime Initialization
@@ -720,21 +722,6 @@ src/hal/
 
 See `src/hal/template/README.md` for the complete porting guide.
 
-## Testing
-
-```bash
-# Build and run all tests
-make test
-
-# Run with valgrind (memory error detection)
-valgrind --leak-check=full ./build/actor_test
-valgrind --leak-check=full ./build/ipc_test
-# ... etc for each test
-
-```
-
-The test suite includes 22 test programs covering actors, IPC, timers, bus, networking, file I/O, linking, monitoring, supervision, logging, name registry, and edge cases like pool exhaustion.
-
 ## Building
 
 ```bash
@@ -749,6 +736,21 @@ make ENABLE_NET=0 ENABLE_FILE=0
 
 # STM32 defaults to ENABLE_NET=0 ENABLE_FILE=1
 ```
+
+## Testing
+
+```bash
+# Build and run all tests
+make test
+
+# Run with valgrind (memory error detection)
+valgrind --leak-check=full ./build/actor_test
+valgrind --leak-check=full ./build/ipc_test
+# ... etc for each test
+
+```
+
+The test suite includes 22 test programs covering actors, IPC, timers, bus, networking, file I/O, linking, monitoring, supervision, logging, name registry, and edge cases like pool exhaustion.
 
 ## Code Style
 
@@ -817,6 +819,39 @@ make qemu-example-pingpong     # Run specific example
 
 Compatible tests exclude `net_test`, `file_test`, and `logging_test` (require ENABLE_NET/ENABLE_FILE).
 Compatible examples exclude `echo`, `fileio`, and `logging` (same reason).
+
+## Quick Links
+
+- **[Full Specification](SPEC.md)** - Complete design and implementation details
+- **[Examples Directory](examples/)** - Working examples (pingpong, bus, echo server, etc.)
+- **[Static Configuration](include/hive_static_config.h)** - Compile-time memory limits and pool sizes
+- **[Man Pages](man/man3/)** - API reference documentation
+
+## Man Pages
+
+Comprehensive API documentation is available as Unix man pages:
+
+```bash
+# Install man pages
+sudo make install-man                    # Install to /usr/local/share/man/man3/
+make install-man PREFIX=~/.local         # Install to custom prefix
+
+# View man pages (after install)
+man hive_init      # Runtime initialization
+man hive_spawn     # Actor lifecycle
+man hive_ipc       # Message passing
+man hive_link      # Linking and monitoring
+man hive_timer     # Timers
+man hive_bus       # Pub-sub bus
+man hive_select    # Unified event waiting
+man hive_net       # Network I/O
+man hive_file       # File I/O
+man hive_supervisor # Supervision
+man hive_types      # Types and compile-time configuration
+
+# View without installing
+man man/man3/hive_ipc.3
+```
 
 ## License
 
