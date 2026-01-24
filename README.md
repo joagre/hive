@@ -96,8 +96,8 @@ man man/man3/hive_ipc.3
 
 Actors run until they **yield** - there is no preemption. Operations that yield:
 
-| Yields (other actors run) | Never yields |
-|---------------------------|--------------|
+| Yields (other actors run) | Returns immediately (no yield) |
+|---------------------------|-------------------------------|
 | `hive_yield()` | `hive_ipc_recv(..., 0)` (timeout=0) |
 | `hive_ipc_recv()` (timeout ≠ 0) | `hive_bus_read()` |
 | `hive_ipc_recv_match()` | `hive_ipc_notify()` |
