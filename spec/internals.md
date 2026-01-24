@@ -508,7 +508,7 @@ include/hal/
 | File | `init`, `cleanup`, `open`, `close`, `read`, `pread`, `write`, `pwrite`, `sync` | Optional |
 | Network | `init`, `cleanup`, `socket`, `bind`, `listen`, `accept`, `connect`, `connect_check`, `close`, `recv`, `send` | Optional |
 
-**Minimum port**: ~15 C functions + 1 assembly function + 1 struct definition
+**Minimum port** - ~15 C functions + 1 assembly function + 1 struct definition
 
 ### Platform-Specific Source Files
 

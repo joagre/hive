@@ -726,7 +726,7 @@ src/hal/
 - `hive_file.c` - File I/O wrapper (calls HAL file functions)
 - `hive_net.c` - Network I/O wrapper (calls HAL network functions)
 
-**Minimum port**: ~15 C functions + 1 assembly function + 1 struct definition
+**Minimum port** - ~15 C functions + 1 assembly function + 1 struct definition
 
 See `src/hal/template/README.md` for the complete porting guide.
 

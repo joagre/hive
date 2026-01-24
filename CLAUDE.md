@@ -413,7 +413,7 @@ src/hal/
   template/            - Documented templates for new ports
 ```
 
-**Minimum port**: ~15 C functions + 1 assembly function + 1 struct definition
+**Minimum port** - ~15 C functions + 1 assembly function + 1 struct definition
 
 **Platform-specific files:**
 | Category | Linux | STM32 |

@@ -18,7 +18,7 @@ The Hardware Abstraction Layer (HAL) isolates platform-specific code so that por
 | File I/O | (in hal or separate) | 8 functions | Optional |
 | Network | (in hal or separate) | 10 functions | Optional |
 
-**Minimum port**: ~15 functions + 1 assembly function + 1 struct definition
+**Minimum port** - ~15 functions + 1 assembly function + 1 struct definition
 
 ## Quick Start
 

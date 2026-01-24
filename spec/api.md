@@ -1553,7 +1553,7 @@ The supervisor tracks restart attempts within a sliding time window. If `max_res
 2. Count entries where `now - timestamp <= restart_period_ms`
 3. If `count >= max_restarts`, intensity exceeded -> supervisor shuts down
 
-**Rationale**: Prevents infinite restart loops when a child has a persistent bug (e.g., crashes immediately on startup).
+**Rationale** - Prevents infinite restart loops when a child has a persistent bug (e.g., crashes immediately on startup).
 
 ### Functions
 
@@ -1596,15 +1596,15 @@ Returns:
 
 ### Implementation Notes
 
-**Architecture**: The supervisor is a regular actor using `hive_monitor()` to watch children. When a monitored child dies, the supervisor receives an EXIT message and applies the restart strategy.
+**Architecture** - The supervisor is a regular actor using `hive_monitor()` to watch children. When a monitored child dies, the supervisor receives an EXIT message and applies the restart strategy.
 
-**Memory**: Supervisor state allocated from static pool (no malloc). Child arguments copied to fixed-size storage within supervisor state.
+**Memory** - Supervisor state allocated from static pool (no malloc). Child arguments copied to fixed-size storage within supervisor state.
 
-**Monitor pool usage**: Each child consumes one entry from `HIVE_MONITOR_ENTRY_POOL_SIZE`. Plan pool sizes accordingly.
+**Monitor pool usage** - Each child consumes one entry from `HIVE_MONITOR_ENTRY_POOL_SIZE`. Plan pool sizes accordingly.
 
-**Shutdown callback**: Called from supervisor actor context just before exit. All children already stopped when callback runs.
+**Shutdown callback** - Called from supervisor actor context just before exit. All children already stopped when callback runs.
 
-**hive_kill()**: Supervisors use `hive_kill(target)` to terminate children during shutdown or when applying `one_for_all`/`rest_for_one` strategies.
+**hive_kill()** - Supervisors use `hive_kill(target)` to terminate children during shutdown or when applying `one_for_all`/`rest_for_one` strategies.
 
 ### Restart Semantics
 

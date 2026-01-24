@@ -50,7 +50,7 @@ A minimalistic actor-based runtime designed for **embedded and safety-critical s
 
 **Implementation detail** (may change): Stack allocation (spawn/exit) currently uses arena allocator with O(n) first-fit search bounded by number of free blocks, with coalescing on free.
 
-**Linux verification**: Assert no malloc/free after `hive_init()` returns, except stack allocations/frees performed by spawn/exit when `malloc_stack = true`. Use `LD_PRELOAD` malloc wrapper to enforce.
+**Linux verification** - Assert no malloc/free after `hive_init()` returns, except stack allocations/frees performed by spawn/exit when `malloc_stack = true`. Use `LD_PRELOAD` malloc wrapper to enforce.
 
 ## Target Platforms
 
@@ -403,7 +403,7 @@ The runtime provides **bounded, predictable behavior**, not full reproducibility
   - Reproducible ordering when multiple timers/sockets fire in the same epoll_wait call
   - Same event dispatch order across kernel versions or system load conditions
 
-**Design choice**: Sorting epoll events by fd/source-id before dispatch would provide reproducibility but adds O(n log n) overhead per epoll_wait. For embedded systems prioritizing latency over reproducibility, this overhead is not justified. Applications requiring reproducible replay should use external event logging.
+**Design choice** - Sorting epoll events by fd/source-id before dispatch would provide reproducibility but adds O(n log n) overhead per epoll_wait. For embedded systems prioritizing latency over reproducibility, this overhead is not justified. Applications requiring reproducible replay should use external event logging.
 
 ### Scheduler-Stalling Calls
 
