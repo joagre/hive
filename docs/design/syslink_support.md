@@ -102,8 +102,8 @@ The Crazyradio 2.0 firmware:
 2. Passes them to the PC via USB
 3. cflib reads them and gives you the raw bytes
 
-You send whatever data you want via: **syslink → nRF51 → ESB → Crazyradio 2.0 → USB → cflib**.
-The radio layer doesn't care about packet contents—it just moves bytes.
+You send whatever data you want via: **syslink -> nRF51 -> ESB -> Crazyradio 2.0 -> USB -> cflib**.
+The radio layer doesn't care about packet contents; it just moves bytes.
 
 ---
 
@@ -115,14 +115,14 @@ Syslink is the packet-based protocol between STM32 and nRF51 over UART.
 
 - **Baud rate:** 1,000,000 (1 Mbaud)
 - **Format:** 8N1 (8 data bits, no parity, 1 stop bit)
-- **Flow control:** Hardware flow via TXEN pin (nRF51 → STM32)
+- **Flow control:** Hardware flow via TXEN pin (nRF51 -> STM32)
 
 ### UART Pins (Crazyflie 2.1)
 
 | Function | STM32 Pin | Notes |
 |----------|-----------|-------|
-| TX (STM32 → nRF51) | PA2 (USART2_TX) | |
-| RX (nRF51 → STM32) | PA3 (USART2_RX) | |
+| TX (STM32 -> nRF51) | PA2 (USART2_TX) | |
+| RX (nRF51 -> STM32) | PA3 (USART2_RX) | |
 | TXEN (flow control) | PC4 | High = nRF51 ready to receive |
 
 ### Packet Format
@@ -147,13 +147,13 @@ Syslink is the packet-based protocol between STM32 and nRF51 over UART.
 | Type | Name | Direction | Description |
 |------|------|-----------|-------------|
 | 0x00 | RADIO_RAW | Both | Raw radio packet data |
-| 0x01 | RADIO_CHANNEL | STM32→nRF | Set radio channel (0-125) |
-| 0x02 | RADIO_DATARATE | STM32→nRF | Set data rate (0=250K, 1=1M, 2=2M) |
-| 0x03 | RADIO_CONTWAVE | STM32→nRF | Continuous wave test mode |
-| 0x04 | RADIO_RSSI | nRF→STM32 | Received signal strength |
-| 0x10 | RADIO_ADDRESS | STM32→nRF | Set radio address (5 bytes) |
-| 0x11 | PM_SWITCHOFF | STM32→nRF | Power down system |
-| 0x13 | PM_BATTERY | nRF→STM32 | Battery voltage and state |
+| 0x01 | RADIO_CHANNEL | STM32->nRF | Set radio channel (0-125) |
+| 0x02 | RADIO_DATARATE | STM32->nRF | Set data rate (0=250K, 1=1M, 2=2M) |
+| 0x03 | RADIO_CONTWAVE | STM32->nRF | Continuous wave test mode |
+| 0x04 | RADIO_RSSI | nRF->STM32 | Received signal strength |
+| 0x10 | RADIO_ADDRESS | STM32->nRF | Set radio address (5 bytes) |
+| 0x11 | PM_SWITCHOFF | STM32->nRF | Power down system |
+| 0x13 | PM_BATTERY | nRF->STM32 | Battery voltage and state |
 
 ### Flow Control (Critical!)
 

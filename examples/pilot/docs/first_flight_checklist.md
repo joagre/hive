@@ -61,12 +61,12 @@ make -f Makefile.crazyflie-2.1+ flash
 Power on and let it calibrate (keep still and level during calibration).
 
 - [ ] LED indicates armed state (solid on)
-- [ ] Hold drone in hand, tilt forward → rear motors speed up
-- [ ] Tilt backward → front motors speed up
-- [ ] Tilt left → right motors speed up
-- [ ] Tilt right → left motors speed up
-- [ ] Rotate CW → CCW motors (M1, M3) speed up
-- [ ] Rotate CCW → CW motors (M2, M4) speed up
+- [ ] Hold drone in hand, tilt forward -> rear motors speed up
+- [ ] Tilt backward -> front motors speed up
+- [ ] Tilt left -> right motors speed up
+- [ ] Tilt right -> left motors speed up
+- [ ] Rotate CW -> CCW motors (M1, M3) speed up
+- [ ] Rotate CCW -> CW motors (M2, M4) speed up
 
 If motor response is **inverted**, check:
 - Motor wiring (swap wires to reverse direction)
@@ -92,7 +92,7 @@ First powered test with propellers installed.
 
 - [ ] Place drone on level surface
 - [ ] Power on
-- [ ] Wait for calibration (LED blinking → solid)
+- [ ] Wait for calibration (LED blinking -> solid)
 - [ ] Stand clear (2m minimum)
 
 ### Flight Test (FLIGHT_PROFILE=1: 10s hover at 0.5m)
@@ -141,7 +141,7 @@ Only proceed if tethered flight was stable.
 make -f Makefile.crazyflie-2.1+ FLIGHT_PROFILE=1  # 10s at 0.5m
 
 # Altitude changes (max 1.2m, within flow deck range)
-make -f Makefile.crazyflie-2.1+ FLIGHT_PROFILE=2  # 0.5m → 0.8m → 1.2m → 0.8m
+make -f Makefile.crazyflie-2.1+ FLIGHT_PROFILE=2  # 0.5m -> 0.8m -> 1.2m -> 0.8m
 
 # Full 3D (requires Flow deck, max 1.2m)
 make -f Makefile.crazyflie-2.1+ FLIGHT_PROFILE=3  # Waypoint navigation

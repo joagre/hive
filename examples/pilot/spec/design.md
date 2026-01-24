@@ -87,7 +87,7 @@ All buses use `max_entries=1` (single entry, latest value only):
 
 All flight-critical workers are spawned by the supervisor in dependency order (see [Actor Counts](README.md#actor-counts)):
 
-1. **Sensor → Estimator** - Estimator subscribes to sensor bus
+1. **Sensor -> Estimator** - Estimator subscribes to sensor bus
 2. **Controllers** - Subscribe to state bus (created by estimator)
 3. **Motor** - Subscribes to torque bus (created by rate actor)
 4. **Flight manager** - Spawns last so all siblings are available
@@ -147,7 +147,7 @@ same instant.
 **Timing characteristics (250 Hz, 4ms tick):**
 - Sensor reads hardware, publishes to sensor bus
 - Estimator processes sensor data, publishes state estimate
-- Controllers cascade: altitude → position → attitude → rate
+- Controllers cascade: altitude -> position -> attitude -> rate
 - Motor receives torque commands, outputs to hardware
 
 **Typical latency:** Under nominal conditions, pipeline latency is within one tick (~4ms) from sensor read to motor output. Worst-case latency is bounded by the control period plus any additional delay from missed publishes, timeouts, or supervisor restarts.
@@ -340,8 +340,8 @@ This table documents the scheduling design for audit and latency analysis.
 
 **Why CRITICAL for flight actors?** Flight-critical actors share the same priority so execution
 order follows spawn order (round-robin within priority level). This ensures the data pipeline
-executes correctly: sensor → estimator → waypoint → altitude → position → attitude → rate →
-motor → flight_manager. Differentiated priorities would break this—higher priority actors run
+executes correctly: sensor -> estimator -> waypoint -> altitude -> position -> attitude -> rate ->
+motor -> flight_manager. Differentiated priorities would break this; higher priority actors run
 first regardless of spawn order, causing motor to output before controllers have computed new
 values. Telemetry runs at LOW priority since it's not flight-critical and shouldn't delay
 control loops.

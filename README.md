@@ -6,7 +6,7 @@
 
 **No shared state** - Each actor owns its data. No locks, no races. A bug in one actor can't corrupt another actor's state.
 
-**Predictable scheduling** - Cooperative multitasking means you know exactly when context switches happen—only when actors yield. No preemption surprises, no priority inversion, no mysterious timing bugs.
+**Predictable scheduling** - Cooperative multitasking means you know exactly when context switches happen--only when actors yield. No preemption surprises, no priority inversion, no mysterious timing bugs.
 
 **Bounded memory** - All memory comes from static pools. No heap allocation. Memory footprint is known at link time.
 
@@ -16,7 +16,7 @@
 
 **No RTOS dependency** - Hive is the runtime. No FreeRTOS, no Zephyr, no vendor SDK lock-in.
 
-**Real-world example** - The [pilot example](examples/pilot/) is a quadcopter flight controller running on a Crazyflie 2.1—11 actors, sensor fusion, cascaded PID, 60KB flash.
+**Real-world example** - The [pilot example](examples/pilot/) is a quadcopter flight controller running on a Crazyflie 2.1: 11 actors, sensor fusion, cascaded PID, 60KB flash.
 
 See [spec/](spec/) for design details.
 
@@ -57,7 +57,7 @@ See [spec/](spec/) for design details.
 
 ## What Hive Is (and Isn't)
 
-**Hive is** a single-threaded, cooperative actor runtime with Erlang-inspired semantics—mailboxes, selective receive, links, monitors, and supervisors. It's designed for MCUs and safety-conscious embedded systems, emphasizing bounded memory, explicit failure handling, and predictable scheduling.
+**Hive is** a single-threaded, cooperative actor runtime with Erlang-inspired semantics: mailboxes, selective receive, links, monitors, and supervisors. It's designed for MCUs and safety-conscious embedded systems, emphasizing bounded memory, explicit failure handling, and predictable scheduling.
 
 **Hive is not** an RTOS (no preemption), a hard real-time engine (no deadline enforcement), a distributed framework (single process only), or a statechart library.
 
@@ -117,7 +117,7 @@ Actors run until they **yield** - there is no preemption. Operations that yield:
 | `hive_net_*()` | |
 | `hive_exit()` | |
 
-**File I/O** (`hive_file_*`) is synchronous and briefly stalls the scheduler. This is fine for short, bursty operations—use LOW priority actors for file work. See [spec/design.md](spec/design.md#scheduler-stalling-calls) for details.
+**File I/O** (`hive_file_*`) is synchronous and briefly stalls the scheduler. This is fine for short, bursty operations; use LOW priority actors for file work. See [spec/design.md](spec/design.md#scheduler-stalling-calls) for details.
 
 ## Performance
 
@@ -511,7 +511,7 @@ hive_supervisor_stop(supervisor);
 
 ### Pilot Example (Quadcopter Flight Controller)
 
-The `examples/pilot/` directory contains a complete quadcopter autopilot targeting real hardware (Crazyflie 2.1+). Not a toy demo—11 actors, cascaded PID control, sensor fusion, and fail-safe supervision. Compiles to ~60KB flash and ~58KB RAM with a 52KB stack arena.
+The `examples/pilot/` directory contains a complete quadcopter autopilot targeting real hardware (Crazyflie 2.1+). Not a toy demo: 11 actors, cascaded PID control, sensor fusion, and fail-safe supervision. Compiles to ~60KB flash and ~58KB RAM with a 52KB stack arena.
 
 See [examples/pilot/README.md](examples/pilot/README.md) for build instructions and architecture details.
 
@@ -802,8 +802,8 @@ Use `// clang-format off` / `// clang-format on` around ASCII art:
 
 ```c
 // clang-format off
-//   Sensor → Bus → Motor
-//      ↓
+//   Sensor -> Bus -> Motor
+//      |
 //   Logger
 // clang-format on
 ```

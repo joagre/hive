@@ -243,10 +243,10 @@ size_t select_source_count;
 
 ### Error Handling
 
-- `num_sources == 0` → `HIVE_ERR_INVALID` ("no sources")
-- `sources == NULL` → `HIVE_ERR_INVALID` ("null sources")
-- `result == NULL` → `HIVE_ERR_INVALID` ("null result")
-- Bus source with invalid/unsubscribed bus → `HIVE_ERR_INVALID` ("not subscribed")
+- `num_sources == 0` -> `HIVE_ERR_INVALID` ("no sources")
+- `sources == NULL` -> `HIVE_ERR_INVALID` ("null sources")
+- `result == NULL` -> `HIVE_ERR_INVALID` ("null result")
+- Bus source with invalid/unsubscribed bus -> `HIVE_ERR_INVALID` ("not subscribed")
 - No auto-subscribe - explicit subscription required before using bus in select
 
 ## Efficiency
@@ -448,10 +448,10 @@ This keeps network complexity isolated and lets `hive_select()` remain simple an
 
 **Include hierarchy:**
 ```
-hive_types.h      ← hive_recv_filter, hive_message, constants
-    ↑
-hive_ipc.h        ← uses hive_recv_filter
-hive_select.h     ← uses hive_recv_filter
+hive_types.h      <- hive_recv_filter, hive_message, constants
+    ^
+hive_ipc.h        <- uses hive_recv_filter
+hive_select.h     <- uses hive_recv_filter
 ```
 
 ## Implementation Checklist

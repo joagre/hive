@@ -69,7 +69,7 @@ Install: `make install-man` (or `sudo make install-man`)
 ### Unicode in Comments
 
 - **Allowed**: Unicode box-drawing characters (`┌─┐│└┘├┤┬┴┼`) for diagrams (state machines, memory layouts, protocol formats)
-- **Forbidden**: Unicode in regular prose comments — use ASCII only
+- **Forbidden**: Unicode in regular prose comments; use ASCII only
 
 ## Architecture
 
@@ -87,7 +87,7 @@ The runtime consists of:
    - Linux: Synchronous POSIX I/O (briefly pauses scheduler)
    - STM32: Flash-backed virtual files (`/log`, `/config`) with ring buffer for fast writes (blocks when buffer full)
    - Use `HIVE_O_*` flags for cross-platform compatibility
-   - Fine for short, bursty operations—use `LOW` priority actors for file work
+   - Fine for short, bursty operations; use `LOW` priority actors for file work
 8. **Logging**: Structured logging with compile-time filtering
    - Log levels: TRACE, DEBUG, INFO, WARN, ERROR, NONE
    - Dual output: console (stderr) + binary file

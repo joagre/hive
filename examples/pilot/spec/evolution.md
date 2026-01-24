@@ -80,7 +80,7 @@ The following instrumentation should be added for production flight software:
 - `bus_publish_fail_count` - incremented when `hive_bus_publish()` returns error
 - Counters exposed via telemetry or debug interface
 
-**Motor Deadman Watchdog:** ✓ Implemented
+**Motor Deadman Watchdog:** Implemented
 - Motor actor uses `hive_select()` with `MOTOR_DEADMAN_TIMEOUT_MS` timeout (50ms)
 - If no torque command received within timeout, all motors are zeroed
 - Protects against controller actor crash leaving motors at last commanded value
@@ -91,10 +91,10 @@ The following instrumentation should be added for production flight software:
 
 Features intentionally omitted from this demonstration:
 
-- Unified EKF (single filter for position/velocity/attitude) — separate estimators used instead: altitude Kalman filter + complementary filter for attitude
-- Failsafe handling (return-to-home, auto-land) — requires GPS and mission planning
-- Parameter tuning UI — gains are hardcoded per platform
-- Multiple vehicle types — single X-configuration quadcopter
+- Unified EKF (single filter for position/velocity/attitude) -- separate estimators used instead: altitude Kalman filter + complementary filter for attitude
+- Failsafe handling (return-to-home, auto-land) -- requires GPS and mission planning
+- Parameter tuning UI -- gains are hardcoded per platform
+- Multiple vehicle types -- single X-configuration quadcopter
 
 ---
 
@@ -137,8 +137,7 @@ graph LR
     StateBus -.-> Comms
 ```
 
-### Step 1: Motor Actor ✓
-
+### Step 1: Motor Actor
 Separate motor output into dedicated actor.
 
 ```
@@ -150,8 +149,7 @@ Rate Actor ──► Torque Bus ──► Motor Actor ──► HAL ──► Ha
 
 > **Motor authority:** The motor actor is the sole writer to motor outputs. STOP notifications from flight manager override all torque commands and force outputs to zero. This single point of control prevents conflicting motor commands.
 
-### Step 2: Separate Altitude Actor ✓
-
+### Step 2: Separate Altitude Actor
 Split altitude control from rate control.
 
 ```
@@ -161,8 +159,7 @@ Sensor Bus ──► Altitude Actor ──► Thrust Bus ──► Rate Actor �
 
 **Benefits:** Clear separation, different rates possible, easier tuning.
 
-### Step 3: Sensor Actor ✓
-
+### Step 3: Sensor Actor
 Move sensor reading from main loop into actor.
 
 ```
@@ -172,8 +169,7 @@ Sensor Actor: timer ──► hal_read_sensors() ──► Sensor Bus
 
 **Benefits:** Main loop is minimal, all logic in timer-driven actors.
 
-### Step 4: Attitude Actor ✓
-
+### Step 4: Attitude Actor
 Add attitude angle control between altitude and rate control.
 
 **Before:**
@@ -193,8 +189,7 @@ Sensor Bus ──► Attitude Actor ──► Rate Setpoint Bus ──► Rate A
 - Rate controller tracks those setpoints
 - Easier to tune each layer independently
 
-### Step 5: Estimator Actor ✓
-
+### Step 5: Estimator Actor
 Add sensor fusion between raw sensors and controllers.
 
 **Before:**
@@ -221,8 +216,7 @@ Sensor Actor ──► Sensor Bus ──► Estimator Actor ──► State Bus 
 - Fusion algorithm is portable (same code on all platforms)
 - HALs are simpler (just raw sensor reads)
 
-### Step 6: Position Actor ✓
-
+### Step 6: Position Actor
 Add horizontal position hold and heading hold.
 
 **Before:**
@@ -237,7 +231,7 @@ State Bus ──► Position Actor ──► Attitude Setpoint Bus ──► Att
 ```
 
 **Implementation:**
-- Simple PD controller: position error → attitude command
+- Simple PD controller: position error -> attitude command
 - Velocity damping: reduces overshoot
 - Max tilt limit: 0.35 rad (~20°) for safety
 - Sign conventions match Bitcraze Webots controller
@@ -250,8 +244,7 @@ State Bus ──► Position Actor ──► Attitude Setpoint Bus ──► Att
 - Returns to target when displaced or rotated
 - Takes shortest rotation path (never rotates >180°)
 
-### Step 7: Waypoint Actor ✓
-
+### Step 7: Waypoint Actor
 Add waypoint navigation with platform-specific routes.
 
 **Before:**
@@ -289,8 +282,7 @@ State Bus ──► Waypoint Actor ──► Position Target Bus
 - World-to-body frame transformation handles arbitrary headings
 - Easy to extend with mission planning
 
-### Step 8: Flight Manager Actor ✓
-
+### Step 8: Flight Manager Actor
 Add centralized startup coordination and safety cutoff.
 
 **Before:**
@@ -303,14 +295,14 @@ Waypoint actor starts immediately
 ```
 Flight Manager ──► START ──► Waypoint Actor
                               │
-                              ↓ (flight begins)
+                              v (flight begins)
                ──► LANDING ──► Altitude Actor
                               │
                ◄── LANDED ◄───┘ (touchdown detected)
                               │
                ──► STOP ────► Motor Actor
                               │
-                              ↓ (motors zeroed)
+                              v (motors zeroed)
 ```
 
 **Implementation:**
@@ -330,8 +322,7 @@ Flight Manager ──► START ──► Waypoint Actor
 - Waypoint actor blocks until flight manager authorizes flight
 - Easy to add pre-flight checks in one place
 
-### Step 9: Comms Actor ✓
-
+### Step 9: Comms Actor
 Add radio telemetry for ground station logging (Crazyflie only).
 
 **Before:**
@@ -352,7 +343,7 @@ Thrust Bus ─┘
 
 **Constraint:** ESB payload limit is 31 bytes per packet.
 
-**Design choice:** Prioritize attitude, rates, and thrust in telemetry packets. Position targets are omitted due to packet size limit—use Webots CSV telemetry for position control tuning. A future revision could add a third packet type for targets if needed.
+**Design choice:** Prioritize attitude, rates, and thrust in telemetry packets. Position targets are omitted due to packet size limit--use Webots CSV telemetry for position control tuning. A future revision could add a third packet type for targets if needed.
 - Two operating modes:
   - Flight mode: Sends telemetry packets at 100Hz
   - Download mode: Transfers flash log file to ground station on request
@@ -381,8 +372,7 @@ pip install cflib
 - Separate from flash logging (higher rate, no flash wear)
 - Non-intrusive (LOW priority doesn't affect control loops)
 
-### Step 10: Telemetry Logger Actor ✓
-
+### Step 10: Telemetry Logger Actor
 Add CSV logging for PID tuning and flight analysis (Webots only).
 
 **Before:**
@@ -453,9 +443,9 @@ python3 tools/plot_flight.py /tmp/pilot_telemetry.csv
 ## Future Extensions
 
 1. **Mission planning** - Load waypoints from file, complex routes
-2. **Sensor fusion** - ✓ Altitude Kalman filter + attitude complementary filter (estimator actor)
+2. **Sensor fusion** - [DONE] Altitude Kalman filter + attitude complementary filter (estimator actor)
 3. **Failsafe** - Motor failure detection, emergency landing
-4. **Telemetry** - ✓ Radio telemetry implemented (Crazyflie only)
+4. **Telemetry** - [DONE] Radio telemetry implemented (Crazyflie only)
 5. **RC input** - Manual control override
 6. **Setpoint actor** - Altitude command generation, mode switching
 7. **Bus retention on subscribe** - Late subscribers immediately receive most recent value (useful after supervisor restart). Current behavior: wait for next publish cycle, acceptable for high-frequency buses (< 4ms delay at 250Hz)

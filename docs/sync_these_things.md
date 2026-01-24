@@ -153,8 +153,8 @@ grep -rn "hal_" examples/pilot/README.md | grep -v "\.c:"
 - Documentation reorganization:
   - Split former top-level SPEC.md into `spec/` directory (design.md, api.md, internals.md)
   - Split former pilot SPEC.md into `examples/pilot/spec/` (design.md, implementation.md, evolution.md)
-  - Organized `docs/` → `design/` and `reviews/` subdirectories
-  - Moved `first_flight_checklist.md` → `examples/pilot/docs/`
+  - Organized `docs/` -> `design/` and `reviews/` subdirectories
+  - Moved `first_flight_checklist.md` -> `examples/pilot/docs/`
 - Converted ASCII diagram to mermaid in `spec/design.md`
 - Updated README.md with "Why Hive?" section
 - Updated all cross-references to new paths

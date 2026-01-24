@@ -315,8 +315,8 @@ When an actor calls a blocking API, the following contract applies:
 | `hive_exit()` | Never returns (actor terminates) |
 
 **Non-blocking variants** (return immediately, never yield):
-- `hive_ipc_recv()` with timeout = 0 → returns `HIVE_ERR_WOULDBLOCK` if empty
-- `hive_bus_read()` → returns `HIVE_ERR_WOULDBLOCK` if no data
+- `hive_ipc_recv()` with timeout = 0 -> returns `HIVE_ERR_WOULDBLOCK` if empty
+- `hive_bus_read()` -> returns `HIVE_ERR_WOULDBLOCK` if no data
 
 **Note:** File I/O (`hive_file_*`) is NOT in this list. See "Scheduler-Stalling Calls" below.
 
@@ -357,7 +357,7 @@ For each event:
 
 **Timeout vs I/O readiness - request state machine:**
 
-Each blocking network request has an implicit state: `PENDING` → `COMPLETED` or `TIMED_OUT`.
+Each blocking network request has an implicit state: `PENDING` -> `COMPLETED` or `TIMED_OUT`.
 
 **State transitions:**
 - Request starts in `PENDING` when actor blocks on network I/O with timeout
@@ -397,7 +397,7 @@ The runtime provides **bounded, predictable behavior**, not full reproducibility
   - Bounded memory usage (calculable at link time)
   - Bounded latency (O(1) pool allocation in hot paths)
   - No phantom wakeups (actor only unblocks on specified conditions)
-  - Consistent policy (same event order → same scheduling decisions)
+  - Consistent policy (same event order -> same scheduling decisions)
   - **Concrete wake ordering rule**: When processing I/O events from a single `epoll_wait` call, actors made ready are appended to their priority run queues in event processing order. Within a priority level, the run queue is FIFO.
 - **What we do NOT guarantee**:
   - Reproducible ordering when multiple timers/sockets fire in the same epoll_wait call
@@ -407,7 +407,7 @@ The runtime provides **bounded, predictable behavior**, not full reproducibility
 
 ### Scheduler-Stalling Calls
 
-File I/O operations (`hive_file_read()`, `hive_file_write()`, `hive_file_sync()`) are **synchronous** and briefly pause the scheduler. This is fine for short, bursty operations—typical embedded file writes complete in under 1ms.
+File I/O operations (`hive_file_read()`, `hive_file_write()`, `hive_file_sync()`) are **synchronous** and briefly pause the scheduler. This is fine for short, bursty operations; typical embedded file writes complete in under 1ms.
 
 **Behavior:**
 - Calling actor does NOT transition to `ACTOR_STATE_WAITING`

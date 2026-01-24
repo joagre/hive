@@ -44,10 +44,10 @@ and fail-safe supervision. Supports Webots simulation (default) and STM32 hardwa
 
 | Term | Definition |
 |------|------------|
-| **Control period** | 4ms (250 Hz) — the interval between control loop iterations |
+| **Control period** | 4ms (250 Hz), the interval between control loop iterations |
 | **Tick** | One control period |
-| **Simulation step** | `HAL_TIME_STEP_US` — equals control period in Webots |
+| **Simulation step** | `HAL_TIME_STEP_US`, equals control period in Webots |
 
-**Clock source:** The sensor_actor runs a 4ms periodic timer and is the only actor with a timer. All other actors are event-driven—they block on bus reads and wake when new data arrives. This creates a natural data-flow pipeline: sensor publishes → estimator reacts → controllers react → motor reacts, all within one tick.
+**Clock source:** The sensor_actor runs a 4ms periodic timer and is the only actor with a timer. All other actors are event-driven; they block on bus reads and wake when new data arrives. This creates a natural data-flow pipeline: sensor publishes -> estimator reacts -> controllers react -> motor reacts, all within one tick.
 
 > **Disclaimer:** This is a demonstration autopilot, not production-ready flight software. See [Production Gaps](evolution.md#production-gaps) for what a real flight controller would need.

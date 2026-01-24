@@ -1,6 +1,6 @@
 # Pilot Example
 
-A complete quadcopter autopilot—not a toy demo, but a flight controller targeting real hardware. Demonstrates Hive in a safety-critical embedded context with 11 actors, cascaded PID control, sensor fusion, pub-sub data flow, and fail-safe supervision.
+A complete quadcopter autopilot. Not a toy demo, but a flight controller targeting real hardware. Demonstrates Hive in a safety-critical embedded context with 11 actors, cascaded PID control, sensor fusion, pub-sub data flow, and fail-safe supervision.
 
 ## Table of Contents
 
@@ -35,9 +35,9 @@ A complete quadcopter autopilot—not a toy demo, but a flight controller target
 - **Webots simulation** (default) - Crazyflie quadcopter in Webots simulator
 - **Crazyflie 2.1+** - Bitcraze nano quadcopter (~63 KB flash, ~120 KB RAM)
 
-**Philosophy:** The pilot is a stress test for the runtime. If it reveals weaknesses (latency, scheduling, memory), the runtime is fixed—not the pilot. The pilot code should be clean and idiomatic, not full of workarounds.
+**Philosophy:** The pilot is a stress test for the runtime. If it reveals weaknesses (latency, scheduling, memory), the runtime is fixed, not the pilot. The pilot code should be clean and idiomatic, not full of workarounds.
 
-**Full specification:** [spec/](spec/) — design rationale, supervision semantics, error handling patterns, and architecture details.
+**Full specification:** [spec/](spec/) -- design rationale, supervision semantics, error handling patterns, and architecture details.
 
 ## What it does
 
@@ -178,7 +178,7 @@ Workers use `hive_find_sibling()` to look up sibling actor IDs for IPC coordinat
 ### PID Controllers
 
 Gains are tuned per platform in `hal/<platform>/hal_config.h`. The control
-cascade is: altitude → position → attitude → rate → motors.
+cascade is: altitude -> position -> attitude -> rate -> motors.
 
 - **Altitude:** PI with velocity damping (tracks target altitude)
 - **Position:** PD with velocity damping (tracks target XY, max tilt limited)
@@ -254,9 +254,9 @@ Note: Comms actor (Crazyflie only) not included in Webots measurements.
 Actors use explicit error checking instead of `assert()`, enabling the supervisor to
 detect and restart failed actors:
 
-- **Cold path (init):** Log error and return → supervisor sees CRASH, attempts restart
-- **Hot path blocking:** Log error and return → fundamental runtime problem
-- **Hot path non-blocking:** Log warning and continue → next iteration proceeds
+- **Cold path (init):** Log error and return -> supervisor sees CRASH, attempts restart
+- **Hot path blocking:** Log error and return -> fundamental runtime problem
+- **Hot path non-blocking:** Log warning and continue -> next iteration proceeds
 
 See [spec/design.md](spec/design.md#error-handling-pattern) for detailed examples and rationale.
 
@@ -355,14 +355,14 @@ doesn't affect flight-critical control loops and won't trigger restarts if it fa
 | File | Description |
 |------|-------------|
 | `pilot.c` | Main entry point, bus setup, supervisor config |
-| `sensor_actor.c` | Reads sensors via HAL → sensor bus |
-| `estimator_actor.c` | Sensor fusion → state bus |
-| `altitude_actor.c` | Altitude PID → thrust |
-| `waypoint_actor.c` | Waypoint manager → position target bus |
-| `position_actor.c` | Position PD → attitude setpoints |
-| `attitude_actor.c` | Attitude PIDs → rate setpoints |
-| `rate_actor.c` | Rate PIDs → torque commands |
-| `motor_actor.c` | Output: torque → HAL → motors |
+| `sensor_actor.c` | Reads sensors via HAL -> sensor bus |
+| `estimator_actor.c` | Sensor fusion -> state bus |
+| `altitude_actor.c` | Altitude PID -> thrust |
+| `waypoint_actor.c` | Waypoint manager -> position target bus |
+| `position_actor.c` | Position PD -> attitude setpoints |
+| `attitude_actor.c` | Attitude PIDs -> rate setpoints |
+| `rate_actor.c` | Rate PIDs -> torque commands |
+| `motor_actor.c` | Output: torque -> HAL -> motors |
 | `flight_manager_actor.c` | Startup delay, flight window cutoff |
 | `comms_actor.c` | Radio telemetry (Crazyflie only) |
 | `telemetry_logger_actor.c` | CSV logging for PID tuning (Webots only) |

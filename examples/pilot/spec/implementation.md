@@ -24,13 +24,13 @@ Code is split into focused modules:
 |------|---------|
 | `pilot.c` | Main loop, bus setup, actor spawn |
 | `sensor_actor.c/h` | Reads sensors via HAL, publishes to sensor bus |
-| `estimator_actor.c/h` | Sensor fusion → state bus |
-| `altitude_actor.c/h` | Altitude PID → thrust |
-| `waypoint_actor.c/h` | Waypoint navigation → position target bus |
-| `position_actor.c/h` | Position PD → attitude setpoints |
-| `attitude_actor.c/h` | Attitude PIDs → rate setpoints |
-| `rate_actor.c/h` | Rate PIDs → torque commands |
-| `motor_actor.c/h` | Output: torque → HAL → motors |
+| `estimator_actor.c/h` | Sensor fusion -> state bus |
+| `altitude_actor.c/h` | Altitude PID -> thrust |
+| `waypoint_actor.c/h` | Waypoint navigation -> position target bus |
+| `position_actor.c/h` | Position PD -> attitude setpoints |
+| `attitude_actor.c/h` | Attitude PIDs -> rate setpoints |
+| `rate_actor.c/h` | Rate PIDs -> torque commands |
+| `motor_actor.c/h` | Output: torque -> HAL -> motors |
 | `flight_manager_actor.c/h` | Startup delay, flight window cutoff |
 | `comms_actor.c/h` | Radio telemetry (Crazyflie only) |
 | `telemetry_logger_actor.c/h` | CSV logging for PID tuning (Webots only) |
@@ -98,7 +98,7 @@ hive_run();
 ```
 
 Control rate is 250 Hz (4ms time step). Each step triggers the control chain:
-sensor → estimator → altitude/waypoint/position → attitude → rate → motor.
+sensor -> estimator -> altitude/waypoint/position -> attitude -> rate -> motor.
 
 ---
 
@@ -209,14 +209,14 @@ All actor code is platform-independent. Actors use:
 ```
 examples/pilot/
     pilot.c              # Main loop, bus setup, supervisor config
-    sensor_actor.c       # Reads sensors via HAL → sensor bus
-    estimator_actor.c    # Sensor fusion → state bus
-    altitude_actor.c     # Altitude PID → thrust
-    waypoint_actor.c     # Waypoint navigation → position target bus
-    position_actor.c     # Position PD → attitude setpoints
-    attitude_actor.c     # Attitude PIDs → rate setpoints
-    rate_actor.c         # Rate PIDs → torque commands
-    motor_actor.c        # Output: torque → HAL → motors
+    sensor_actor.c       # Reads sensors via HAL -> sensor bus
+    estimator_actor.c    # Sensor fusion -> state bus
+    altitude_actor.c     # Altitude PID -> thrust
+    waypoint_actor.c     # Waypoint navigation -> position target bus
+    position_actor.c     # Position PD -> attitude setpoints
+    attitude_actor.c     # Attitude PIDs -> rate setpoints
+    rate_actor.c         # Rate PIDs -> torque commands
+    motor_actor.c        # Output: torque -> HAL -> motors
     flight_manager_actor.c # Startup delay, flight window cutoff
     comms_actor.c        # Radio telemetry (Crazyflie only)
     telemetry_logger_actor.c # CSV logging (Webots only)
