@@ -242,6 +242,7 @@ examples/pilot/
     Makefile                 # Webots simulation build
     Makefile.crazyflie-2.1+  # Crazyflie 2.1+ build
     hive_config.mk           # Shared Hive memory config
+    README.md            # Usage instructions
     spec/                # This specification
         README.md        # Specification overview
         design.md        # Design decisions
@@ -249,7 +250,6 @@ examples/pilot/
         evolution.md     # Architecture evolution
     docs/
         first_flight_checklist.md  # Hardware bring-up and flight checklist
-    README.md            # Usage instructions
     worlds/
         hover_test.wbt   # Webots world file
     controllers/
