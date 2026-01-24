@@ -84,10 +84,10 @@ The runtime consists of:
 5. **Timers**: timerfd registered in epoll (Linux), hardware timers on STM32 (SysTick/TIM)
 6. **Network**: Non-blocking sockets registered in epoll (Linux only; STM32 not yet implemented)
 7. **File**: Platform-specific implementation
-   - Linux: Synchronous POSIX I/O (stalls scheduler briefly)
+   - Linux: Synchronous POSIX I/O (briefly pauses scheduler)
    - STM32: Flash-backed virtual files (`/log`, `/config`) with ring buffer for fast writes (blocks when buffer full)
    - Use `HIVE_O_*` flags for cross-platform compatibility
-   - **Safety-critical caveat:** Restrict file I/O to initialization, shutdown, or non–time-critical phases
+   - Fine for short, bursty operations—use `LOW` priority actors for file work
 8. **Logging**: Structured logging with compile-time filtering
    - Log levels: TRACE, DEBUG, INFO, WARN, ERROR, NONE
    - Dual output: console (stderr) + binary file
