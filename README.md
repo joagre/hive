@@ -8,7 +8,7 @@
 
 **Supervision.** Supervisors can restart crashed actors with clean state. Fault isolation without taking down the system.
 
-**Bounded memory.** All memory is allocated at init from static pools. No heap allocation after startup. Memory footprint is known at link time.
+**Bounded memory.** All memory comes from static pools. No heap allocation. Memory footprint is known at link time.
 
 **Real hardware.** The [pilot example](examples/pilot/) is a quadcopter flight controller running on a Crazyflie 2.1—11 actors, sensor fusion, cascaded PID, 60KB flash.
 
