@@ -88,7 +88,7 @@ man man/man3/hive_ipc.3
 | **API Style** | Minimalist C functions | Object-oriented C macros |
 | **Learning Curve** | Lower (if familiar with actors) | Steeper (requires statechart knowledge) |
 
-**Choose Hive if:** You prefer sequential actor code with blocking receive over event-driven state machines, want fault-tolerant supervision, or find explicit statecharts overkill for your use case.
+**Choose Hive if:** You prefer sequential actor code with blocking operations (IPC, bus, timers, I/O) over event-driven state machines, want fault-tolerant supervision, or find explicit statecharts overkill for your use case.
 
 **Choose QP/C if:** You need formal state machine modeling, want UML tooling integration, or require safety certification with established track record.
 
