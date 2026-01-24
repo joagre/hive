@@ -79,7 +79,7 @@ See [spec/](spec/) for design details.
 - Exit notifications with exit reasons (normal, crash, stack overflow, killed)
 - Timers (one-shot and periodic with timerfd/epoll)
 - Network I/O (non-blocking TCP via event loop)
-- File I/O (synchronous, stalls scheduler)
+- File I/O (POSIX on Linux, flash-backed on STM32)
 - Logging (compile-time filtering, dual output: console + binary file)
 - Bus (pub-sub with retention policies)
 
