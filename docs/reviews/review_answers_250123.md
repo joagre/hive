@@ -16,7 +16,7 @@ Each item is categorized as:
 
 ### 1.1 Mailboxes and Selective Receive
 
-**Status: DONE**
+**Status** - DONE
 
 The O(n) selective receive behavior is already documented in spec/design.md section "3. Selective Receive is O(n) per Mailbox Scan" (commit `d6e0aed`).
 
@@ -25,13 +25,13 @@ Clarifications:
 - This is a global pool, not per-actor limit
 - The "no save queue" optimization is documented as acceptable for embedded use
 
-**Action:** Add clarification that pool size bounds total mailbox entries system-wide.
+**Action** - Add clarification that pool size bounds total mailbox entries system-wide.
 
 ---
 
 ### 1.2 Guaranteed EXIT / Monitor Delivery
 
-**Status: FUTURE**
+**Status** - FUTURE
 
 Valid concern. Under pool exhaustion, EXIT messages compete with normal IPC.
 
@@ -42,13 +42,13 @@ Current mitigation:
 
 Future option: Reserved EXIT slot per actor (adds ~8 bytes per actor).
 
-**Action:** Add to Future Extensions in spec/internals.md. Document current behavior and risk.
+**Action** - Add to Future Extensions in spec/internals.md. Document current behavior and risk.
 
 ---
 
 ### 1.3 I/O Dispatch Starvation
 
-**Status: FUTURE**
+**Status** - FUTURE
 
 Valid concern. If run queue never empties, `epoll_wait` is never called.
 
@@ -58,30 +58,30 @@ Current mitigation:
 
 Future option: Bounded dispatch (poll I/O every N actor runs).
 
-**Action:** Add to Future Extensions in spec/internals.md. Document as known limitation.
+**Action** - Add to Future Extensions in spec/internals.md. Document as known limitation.
 
 ---
 
 ### 1.4 Priority Starvation Guardrail
 
-**Status: FUTURE**
+**Status** - FUTURE
 
 Already acknowledged in spec/design.md as a trade-off. Strict priority is intentional for determinism.
 
 Future option: Opt-in fairness mode (compile-time).
 
-**Action:** Already documented. Add fairness option to Future Extensions.
+**Action** - Already documented. Add fairness option to Future Extensions.
 
 ---
 
 ### 1.5 File I/O Semantics
 
-**Status: DONE**
+**Status** - DONE
 
 Already documented in CLAUDE.md and spec/api.md:
 > "Safety-critical caveat: Restrict file I/O to initialization, shutdown, or non-time-critical phases"
 
-**Action:** Verify documentation is prominent. No code changes needed.
+**Action** - Verify documentation is prominent. No code changes needed.
 
 ---
 
@@ -89,7 +89,7 @@ Already documented in CLAUDE.md and spec/api.md:
 
 ### 2.1 Motor Deadman Watchdog
 
-**Status: DONE**
+**Status** - DONE
 Implemented in `motor_actor.c` using `hive_select()` with timeout.
 
 Implementation:
@@ -97,13 +97,13 @@ Implementation:
 - On timeout: zero all motors, log warning
 - Documented in examples/pilot/spec/
 
-**Commits:** `0b3326f`
+**Commits** - `0b3326f`
 
 ---
 
 ### 2.2 Bus Retention on Subscribe
 
-**Status: FUTURE**
+**Status** - FUTURE
 
 Current behavior: Late subscribers see no data until next publish.
 
@@ -114,41 +114,41 @@ This is acceptable for the pilot because:
 
 Future option: "retain latest" flag for buses with `max_entries=1`.
 
-**Action:** Document current behavior explicitly. Add to Future Extensions.
+**Action** - Document current behavior explicitly. Add to Future Extensions.
 
 ---
 
 ### 2.3 Supervision Semantics Clarification
 
-**Status: DONE**
+**Status** - DONE
 Documented in examples/pilot/spec/design.md "Supervision Semantics" section:
 - ONE_FOR_ALL restart resets all state (integrators, filters)
 - Why ONE_FOR_ALL is correct for flight controller
 - Comms actor isolation via TEMPORARY restart type
 
-**Commits:** (this batch)
+**Commits** - (this batch)
 
 ---
 
 ### 2.4 Error Handling Rules
 
-**Status: DONE**
+**Status** - DONE
 Documented in spec/api.md "Actor Exit Semantics" section:
 - Returning from actor function = `hive_exit(CRASH)`
 - `HIVE_ERR_TIMEOUT` is not a crash (normal control flow)
 - `HIVE_ERR_NOMEM` is systemic error (should be surfaced)
 
-**Commits:** `11a267a`
+**Commits** - `11a267a`
 
 ---
 
 ### 2.5 Priority and Blocking Table
 
-**Status: DONE**
+**Status** - DONE
 Added "Actor Priority and Blocking Table" to examples/pilot/spec/design.md showing:
 - Actor name, priority, primary blocking point, yield behavior
 
-**Commits:** `11a267a`
+**Commits** - `11a267a`
 
 ---
 
@@ -156,31 +156,31 @@ Added "Actor Priority and Blocking Table" to examples/pilot/spec/design.md showi
 
 ### 3.1 Guarantees vs Non-Guarantees Page
 
-**Status: DONE**
+**Status** - DONE
 Added "Guarantees and Non-Guarantees" section to spec/design.md with:
 - Table of guaranteed properties
 - Table of NOT guaranteed properties
 - "Honest Positioning" subsection (Hive is / is not)
 
-**Commits:** `11a267a`
+**Commits** - `11a267a`
 
 ---
 
 ### 3.2 Failure Modes and Backpressure Patterns
 
-**Status: DONE**
+**Status** - DONE
 Added "Failure Modes Summary" section to spec/design.md with:
 - Pool exhaustion behavior table (IPC vs bus differences)
 - Recommended patterns table (check and retry, backpressure, drop, escalate)
 - Error code classification table
 
-**Commits:** (this batch)
+**Commits** - (this batch)
 
 ---
 
 ### 3.3 Memory Sizing Guide
 
-**Status: DONE**
+**Status** - DONE
 Added "Memory Sizing Guide" section to spec/internals.md with:
 - Fixed overhead calculations
 - Pool memory calculations
@@ -188,29 +188,29 @@ Added "Memory Sizing Guide" section to spec/internals.md with:
 - Flight controller example config
 - Server application example config
 
-**Commits:** (this batch)
+**Commits** - (this batch)
 
 ---
 
 ### 3.4 Simulation Invariant
 
-**Status: DONE**
+**Status** - DONE
 Added "Simulation Invariant" section to spec/design.md with:
 - Contract that actors MUST block
 - Correct and incorrect code patterns
 - Why this matters (simulation vs production difference)
 - Diagnosis guidance
 
-**Commits:** (this batch)
+**Commits** - (this batch)
 
 ---
 
 ## 4. Positioning Summary
 
-**Status: DONE**
+**Status** - DONE
 Added "Hive is / Hive is not" positioning to README.md introduction.
 
-**Commits:** `11a267a`
+**Commits** - `11a267a`
 
 ---
 

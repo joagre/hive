@@ -50,7 +50,7 @@ All runtime structures are **statically allocated** based on these limits. Actor
 
 Use these formulae to calculate memory requirements for your application.
 
-**Fixed overhead:**
+**Fixed overhead**
 ```
 Runtime base          ~12 KB   (scheduler, pools metadata, context data)
 Actor table           HIVE_MAX_ACTORS x 72 bytes
@@ -59,7 +59,7 @@ Supervisor table      HIVE_MAX_SUPERVISORS x (80 + HIVE_MAX_SUPERVISOR_CHILDREN 
 Name registry         HIVE_MAX_REGISTERED_NAMES x 40 bytes
 ```
 
-**Pool memory:**
+**Pool memory**
 ```
 Mailbox entries       HIVE_MAILBOX_ENTRY_POOL_SIZE x 24 bytes
 Message data          HIVE_MESSAGE_DATA_POOL_SIZE x (HIVE_MAX_MESSAGE_SIZE + 8) bytes
@@ -68,14 +68,14 @@ Monitor entries       HIVE_MONITOR_ENTRY_POOL_SIZE x 20 bytes
 Timer entries         HIVE_TIMER_ENTRY_POOL_SIZE x 24 bytes
 ```
 
-**Stack memory:**
+**Stack memory**
 ```
 Stack arena           HIVE_STACK_ARENA_SIZE (default 1 MB)
   - or -
 Per-actor stacks      Sum of all actor stack_size values (if malloc_stack=true)
 ```
 
-**Sizing formulae:**
+**Sizing formulae**
 
 | Parameter | Formula | Notes |
 |-----------|---------|-------|
@@ -134,51 +134,51 @@ void hive_cleanup(void);
 
 When an actor dies (via `hive_exit()`, crash, or external kill):
 
-**Note:** Stack overflow results in undefined behavior since there is no runtime detection. The cleanup below assumes normal actor death. If stack overflow corrupts runtime metadata, the system may crash before cleanup completes.
+**Note** - Stack overflow results in undefined behavior since there is no runtime detection. The cleanup below assumes normal actor death. If stack overflow corrupts runtime metadata, the system may crash before cleanup completes.
 
-**Normal death cleanup:**
+**Normal death cleanup**
 
-1. **Mailbox cleared:** All pending messages are discarded.
+1. **Mailbox cleared** - All pending messages are discarded.
 
-2. **Links notified:** All linked actors receive an exit message (class=`HIVE_MSG_EXIT`, sender=dying actor).
+2. **Links notified** - All linked actors receive an exit message (class=`HIVE_MSG_EXIT`, sender=dying actor).
 
-3. **Monitors notified:** All monitoring actors receive an exit message (class=`HIVE_MSG_EXIT`).
+3. **Monitors notified** - All monitoring actors receive an exit message (class=`HIVE_MSG_EXIT`).
 
-4. **Bus subscriptions removed:** Actor is unsubscribed from all buses.
+4. **Bus subscriptions removed** - Actor is unsubscribed from all buses.
 
-5. **Timers cancelled:** All timers owned by the actor are cancelled.
+5. **Timers cancelled** - All timers owned by the actor are cancelled.
 
-6. **Resources freed:** Stack and actor table entry are released.
+6. **Resources freed** - Stack and actor table entry are released.
 
 ### Exit Notification Ordering
 
-**When exit notifications are sent:**
+**When exit notifications are sent**
 
 Exit notifications (steps 2-3 above) are enqueued in recipient mailboxes **during death processing**, following standard FIFO mailbox semantics.
 
-**Ordering guarantees:**
+**Ordering guarantees**
 
-1. **Tail-append semantics:**
+1. **Tail-append semantics**
    - Exit notifications are enqueued at the **tail** of recipient mailboxes at the moment death processing occurs
    - Any messages already in that mailbox before that point remain ahead of the exit notification
    - Example: If B's mailbox contains [M1, M2] when A's death is processed, B receives: M1 -> M2 -> EXIT(A)
 
-2. **No global ordering guarantee:**
+2. **No global ordering guarantee**
    - The runtime does NOT guarantee ordering relative to concurrent events (timers, network I/O)
    - If death processing and other enqueues occur in the same scheduling phase, ordering depends on processing order
    - Example: If A dies and a timer fires for B in the same phase, the order of EXIT(A) vs timer tick in B's mailbox depends on event dispatch order
 
-3. **Messages in dying actor's mailbox:**
+3. **Messages in dying actor's mailbox**
    - Dying actor's mailbox is **cleared** (step 1)
    - All pending messages are **discarded**
    - Senders are **not** notified of message loss
 
-4. **Multiple recipients:**
+4. **Multiple recipients**
    - Each recipient's exit notification is enqueued independently
    - No ordering guarantee across different recipients
    - Example: A linked to B and C, dies. B and C both receive EXIT(A), but no guarantee which processes it first.
 
-**Consequences:**
+**Consequences**
 
 ```c
 // Dying actor sends messages before death
@@ -200,13 +200,13 @@ void actor_A(void *arg) {
 }
 ```
 
-**Design rationale:**
+**Design rationale**
 - FIFO enqueuing = predictable, testable behavior
 - Messages before death delivered before exit = "happens-before" relationship
 - Mailbox clearing = simple cleanup, no orphaned messages
 - No sender notification = simpler implementation, sender must handle recipient death via links/monitors
 
-**Design choice:** Exit notifications follow standard FIFO mailbox ordering, enqueued at tail when death is processed. This provides simpler, more predictable semantics.
+**Design choice** - Exit notifications follow standard FIFO mailbox ordering, enqueued at tail when death is processed. This provides simpler, more predictable semantics.
 
 ## Scheduler Main Loop
 
@@ -282,7 +282,7 @@ procedure hive_run_until_blocked():
     return HIVE_OK
 ```
 
-**Use case:** Simulation integration where an external loop controls time:
+**Use case** - Simulation integration where an external loop controls time:
 ```c
 // All actors use timers (same code as production)
 void sensor_actor(void *arg) {
@@ -303,7 +303,7 @@ while (wb_robot_step(TIME_STEP_MS) != -1) {
 }
 ```
 
-**Benefits of simulation time mode:**
+**Benefits of simulation time mode**
 - Same actor code runs in simulation and production
 - Deterministic, reproducible behavior
 - Timer granularity matches simulation time step
@@ -313,12 +313,12 @@ while (wb_robot_step(TIME_STEP_MS) != -1) {
 
 **`hive_run_until_blocked()` REQUIRES actors to eventually block.** If any actor runs without blocking, the function loops forever.
 
-**The contract:**
+**The contract**
 - Every actor MUST either block (recv, select, bus_read_wait) or exit within finite computation
 - Actors MUST NOT spin-poll without yielding
 - This is a correctness requirement, not a suggestion
 
-**Correct pattern:**
+**Correct pattern**
 ```c
 void sensor_actor(void *arg) {
     timer_id timer;
@@ -332,7 +332,7 @@ void sensor_actor(void *arg) {
 }
 ```
 
-**INCORRECT pattern (will hang simulation):**
+**INCORRECT pattern (will hang simulation)**
 ```c
 void bad_actor(void *arg) {
     while (1) {
@@ -342,14 +342,13 @@ void bad_actor(void *arg) {
 }
 ```
 
-**Why this matters:**
+**Why this matters**
 - Simulation requires lockstep coordination: advance time, run until blocked, repeat
 - Actors that don't block break this contract
 - In production (`hive_run()`), non-blocking actors would starve others, but the system keeps running
 - In simulation (`hive_run_until_blocked()`), the system hangs
 
-**Diagnosis:**
-If simulation appears to hang, check that all actors have a blocking call in their main loop. Common fixes:
+**Diagnosis** - If simulation appears to hang, check that all actors have a blocking call in their main loop. Common fixes:
 - Add timer-driven loop (most actors should use this)
 - Add bus_read_wait for bus consumers
 - Add recv/recv_match for IPC consumers
@@ -360,7 +359,7 @@ When all actors are blocked on I/O, the scheduler waits efficiently for I/O even
 
 ### Implementation
 
-**Linux (epoll):**
+**Linux (epoll)**
 ```c
 // Scheduler event loop
 int epoll_fd = epoll_create1(0);
@@ -396,7 +395,7 @@ if (no_runnable_actors) {
 }
 ```
 
-**STM32 (bare metal with WFI):**
+**STM32 (bare metal with WFI)**
 ```c
 // Interrupt handlers set flags
 volatile uint32_t pending_events = 0;
@@ -440,24 +439,24 @@ if (no_runnable_actors) {
 
 ### Event Loop Guarantees
 
-**Event processing order:**
+**Event processing order**
 - epoll returns events in **kernel order** (arrival-dependent, not guaranteed FIFO)
 - All returned events are processed before next epoll_wait
 - No I/O events are lost
 
-**epoll_wait return handling:**
+**epoll_wait return handling**
 - Returns > 0: Events ready, process them
 - Returns 0: Timeout expired (10ms), no events - scheduler retries (defensive wakeup)
 - Returns -1 with `errno=EINTR`: Signal interrupted syscall - scheduler retries
 - Note: Runtime APIs are not reentrant - signal handlers must not call runtime APIs
 
-**Lost event prevention:**
+**Lost event prevention**
 - Timerfds are level-triggered (epoll reports ready until `read()` clears the event)
 - Scheduler **must** read timerfd to clear level-triggered state (otherwise epoll spins)
 - Sockets are level-triggered by default (readable until data consumed)
 - epoll guarantees: if I/O is ready, epoll_wait will return it
 
-**File I/O stalling:**
+**File I/O stalling**
 - File operations (read, write, fsync) are **synchronous** and stall the entire scheduler
 - See [Scheduler-Stalling Calls](design.md#scheduler-stalling-calls) section for detailed semantics and consequences
 - On embedded systems: FATFS/littlefs operations are fast (< 1ms typical)
@@ -563,7 +562,7 @@ Platform selection sets `HIVE_PLATFORM_LINUX` or `HIVE_PLATFORM_STM32` preproces
 
 The runtime does **not** perform stack overflow detection. Stack overflow results in **undefined behavior**.
 
-**Rationale:** Pattern-based guard detection (checking magic values on context switch) was removed because:
+**Rationale** - Pattern-based guard detection (checking magic values on context switch) was removed because:
 1. Detection occurred too late - after memory corruption had already happened
 2. Severe overflows corrupt memory beyond the guard, causing crashes before detection
 3. The mechanism gave a false sense of security while not providing reliable protection
@@ -592,15 +591,15 @@ Stack overflow prevention is the **application's responsibility**:
 ### System-Level Protection
 
 For production systems:
-- **Watchdog timer:** Detect hung system, trigger reboot/failsafe
-- **Actor monitoring:** Use links/monitors to detect failures, restart actors as needed
-- **Memory isolation:** Hardware MPU (ARM Cortex-M) can provide hardware-guaranteed protection
+- **Watchdog timer** - Detect hung system, trigger reboot/failsafe
+- **Actor monitoring** - Use links/monitors to detect failures, restart actors as needed
+- **Memory isolation** - Hardware MPU (ARM Cortex-M) can provide hardware-guaranteed protection
 
 ### Future Extensions (Stack)
 
 Hardware-based protection may be added in future versions:
-- **Linux:** `mprotect()` guard pages (immediate SIGSEGV on overflow)
-- **ARM Cortex-M:** MPU guard regions (immediate HardFault on overflow)
+- **Linux** - `mprotect()` guard pages (immediate SIGSEGV on overflow)
+- **ARM Cortex-M** - MPU guard regions (immediate HardFault on overflow)
 
 These would provide immediate, hardware-guaranteed detection with zero runtime overhead.
 
@@ -612,43 +611,43 @@ This section documents potential improvements that have been considered but are 
 
 ### Guaranteed EXIT/Monitor Delivery
 
-**Current behavior:** EXIT and monitor notifications use the same message pool as normal IPC. Under pool exhaustion, supervisors may miss actor death notifications.
+**Current behavior** - EXIT and monitor notifications use the same message pool as normal IPC. Under pool exhaustion, supervisors may miss actor death notifications.
 
-**Potential improvement:** Reserve a dedicated EXIT slot per actor (adds ~8 bytes per actor) to guarantee delivery regardless of pool state.
+**Potential improvement** - Reserve a dedicated EXIT slot per actor (adds ~8 bytes per actor) to guarantee delivery regardless of pool state.
 
-**Rationale for deferral:** Pool exhaustion is a systemic error that should trigger shutdown. In well-sized systems, this is not a practical concern. The complexity of maintaining a separate delivery mechanism is not justified for embedded systems with correctly sized pools.
+**Rationale for deferral** - Pool exhaustion is a systemic error that should trigger shutdown. In well-sized systems, this is not a practical concern. The complexity of maintaining a separate delivery mechanism is not justified for embedded systems with correctly sized pools.
 
 ### Bounded I/O Dispatch
 
-**Current behavior:** `epoll_wait()` is only called when the run queue is empty. If an actor never yields, I/O events can be starved indefinitely.
+**Current behavior** - `epoll_wait()` is only called when the run queue is empty. If an actor never yields, I/O events can be starved indefinitely.
 
-**Potential improvement:** Poll I/O every N actor dispatches (compile-time configurable). This bounds worst-case I/O latency to N x max-actor-run-time.
+**Potential improvement** - Poll I/O every N actor dispatches (compile-time configurable). This bounds worst-case I/O latency to N x max-actor-run-time.
 
-**Rationale for deferral:** Well-behaved actors yield regularly via `recv`, `select`, or explicit `yield`. Flight-critical code follows this pattern. Adding periodic polling adds complexity and may interfere with deterministic scheduling in time-critical applications.
+**Rationale for deferral** - Well-behaved actors yield regularly via `recv`, `select`, or explicit `yield`. Flight-critical code follows this pattern. Adding periodic polling adds complexity and may interfere with deterministic scheduling in time-critical applications.
 
 ### Priority Fairness Mode
 
-**Current behavior:** Strict priority scheduling. Higher-priority actors always preempt lower-priority actors. A misbehaving CRITICAL actor can starve all others.
+**Current behavior** - Strict priority scheduling. Higher-priority actors always preempt lower-priority actors. A misbehaving CRITICAL actor can starve all others.
 
-**Potential improvement:** Opt-in fairness mode (compile-time flag) that enforces:
+**Potential improvement** - Opt-in fairness mode (compile-time flag) that enforces:
 - Per-priority quota (must schedule lower priority after N runs)
 - Priority aging for waiting actors
 - Per-actor time budget with forced yield
 
-**Rationale for deferral:** Strict priority is intentional for deterministic real-time behavior. Applications requiring fairness can implement it at the actor level. Adding scheduler-level fairness significantly complicates timing analysis.
+**Rationale for deferral** - Strict priority is intentional for deterministic real-time behavior. Applications requiring fairness can implement it at the actor level. Adding scheduler-level fairness significantly complicates timing analysis.
 
 ### Selective Receive Save Queue
 
-**Current behavior:** Each selective receive scans the mailbox from the head. Repeated receives with the same filter rescan previously-checked messages.
+**Current behavior** - Each selective receive scans the mailbox from the head. Repeated receives with the same filter rescan previously-checked messages.
 
-**Potential improvement:** Track scan position per filter pattern (Erlang's "save queue" optimization). Only scan new messages on repeated receives.
+**Potential improvement** - Track scan position per filter pattern (Erlang's "save queue" optimization). Only scan new messages on repeated receives.
 
-**Rationale for deferral:** For embedded systems with small mailboxes (< 20 messages), the O(n) scan is acceptable. The optimization adds state tracking complexity. If this becomes a bottleneck, a `scan_start` pointer could be added to the mailbox struct.
+**Rationale for deferral** - For embedded systems with small mailboxes (< 20 messages), the O(n) scan is acceptable. The optimization adds state tracking complexity. If this becomes a bottleneck, a `scan_start` pointer could be added to the mailbox struct.
 
 ### Bus Retention on Subscribe
 
-**Current behavior:** Late subscribers see no data until the next publish. After supervisor restart, downstream actors wait for the next publish cycle.
+**Current behavior** - Late subscribers see no data until the next publish. After supervisor restart, downstream actors wait for the next publish cycle.
 
-**Potential improvement:** Optional "retain latest" flag for buses with `max_entries=1`. New subscribers immediately receive the most recent value.
+**Potential improvement** - Optional "retain latest" flag for buses with `max_entries=1`. New subscribers immediately receive the most recent value.
 
-**Rationale for deferral:** For high-frequency buses (e.g., sensor data at 250Hz), the wait is negligible (< 4ms). The current behavior is predictable and avoids complexity around stale data semantics.
+**Rationale for deferral** - For high-frequency buses (e.g., sensor data at 250Hz), the wait is negligible (< 4ms). The current behavior is predictable and avoids complexity around stale data semantics.

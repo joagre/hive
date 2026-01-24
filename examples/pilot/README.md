@@ -31,13 +31,13 @@ A complete quadcopter autopilot. Not a toy demo, but a flight controller targeti
 
 ---
 
-**Platforms:**
+**Platforms**
 - **Webots simulation** (default) - Crazyflie quadcopter in Webots simulator
 - **Crazyflie 2.1+** - Bitcraze nano quadcopter (~63 KB flash, ~120 KB RAM)
 
-**Philosophy:** The pilot is a stress test for the runtime. If it reveals weaknesses (latency, scheduling, memory), the runtime is fixed, not the pilot. The pilot code should be clean and idiomatic, not full of workarounds.
+**Philosophy** - The pilot is a stress test for the runtime. If it reveals weaknesses (latency, scheduling, memory), the runtime is fixed, not the pilot. The pilot code should be clean and idiomatic, not full of workarounds.
 
-**Full specification:** [spec/](spec/) -- design rationale, supervision semantics, error handling patterns, and architecture details.
+**Full specification** - [spec/](spec/) -- design rationale, supervision semantics, error handling patterns, and architecture details.
 
 ## What it does
 
@@ -59,23 +59,23 @@ Demonstrates waypoint navigation with a quadcopter using 10-11 actors (8 flight-
 Workers use `hive_find_sibling()` for IPC coordination via sibling info passed
 by the supervisor at spawn time.
 
-**Webots:** Flies a square pattern with altitude changes at each waypoint (full 3D navigation with GPS).
+**Webots** - Flies a square pattern with altitude changes at each waypoint (full 3D navigation with GPS).
 
-**Crazyflie 2.1+:** With Flow deck v2, uses optical flow for XY positioning and ToF for altitude.
+**Crazyflie 2.1+** - With Flow deck v2, uses optical flow for XY positioning and ToF for altitude.
 Without Flow deck, hovers and changes altitude only. 60-second startup delay before flight.
 Radio telemetry enabled via Crazyradio 2.0 for real-time ground station logging.
 
-**Safety features (all platforms):** Emergency cutoff on excessive tilt (>45°), excessive
+**Safety features (all platforms)** - Emergency cutoff on excessive tilt (>45°), excessive
 altitude (>2m), or touchdown. Motor deadman watchdog zeros motors if no command received
 within 50ms (protects against controller crash). Flight duration limited by flight manager
 (10s/40s/60s per profile).
 
 ## Prerequisites
 
-**For Webots simulation:**
+**For Webots simulation**
 - Webots installed (https://cyberbotics.com/)
 
-**For Crazyflie 2.1+:**
+**For Crazyflie 2.1+**
 - ARM GCC: `apt install gcc-arm-none-eabi`
 - ST-Link: `apt install stlink-tools`
 - Debug adapter (Bitcraze debug adapter)
@@ -180,10 +180,10 @@ Workers use `hive_find_sibling()` to look up sibling actor IDs for IPC coordinat
 Gains are tuned per platform in `hal/<platform>/hal_config.h`. The control
 cascade is: altitude -> position -> attitude -> rate -> motors.
 
-- **Altitude:** PI with velocity damping (tracks target altitude)
-- **Position:** PD with velocity damping (tracks target XY, max tilt limited)
-- **Attitude:** P controller for roll/pitch/yaw angles
-- **Rate:** PD controller for angular rates
+- **Altitude** - PI with velocity damping (tracks target altitude)
+- **Position** - PD with velocity damping (tracks target XY, max tilt limited)
+- **Attitude** - P controller for roll/pitch/yaw angles
+- **Rate** - PD controller for angular rates
 
 ### Waypoint Navigation
 
@@ -193,7 +193,7 @@ to the position target bus. Both altitude and position actors read from this bus
 Routes depend on flight profile (`FLIGHT_PROFILE=N` at build time) and platform
 capabilities. See `hal/<platform>/README.md` for available flight profiles.
 
-**Arrival detection:** Position within 0.15m, heading within 0.1 rad, velocity below 0.05 m/s.
+**Arrival detection** - Position within 0.15m, heading within 0.1 rad, velocity below 0.05 m/s.
 After completing the route, the drone loops back to the first waypoint.
 
 ### Motor Mixer
@@ -254,13 +254,13 @@ Note: Comms actor (Crazyflie only) not included in Webots measurements.
 Actors use explicit error checking instead of `assert()`, enabling the supervisor to
 detect and restart failed actors:
 
-- **Cold path (init):** Log error and return -> supervisor sees CRASH, attempts restart
-- **Hot path blocking:** Log error and return -> fundamental runtime problem
-- **Hot path non-blocking:** Log warning and continue -> next iteration proceeds
+- **Cold path (init)** - Log error and return -> supervisor sees CRASH, attempts restart
+- **Hot path blocking** - Log error and return -> fundamental runtime problem
+- **Hot path non-blocking** - Log warning and continue -> next iteration proceeds
 
 See [spec/design.md](spec/design.md#error-handling-pattern) for detailed examples and rationale.
 
-**Logging (Crazyflie):** INFO/WARN/ERROR captured to flash, TRACE/DEBUG compiled out.
+**Logging (Crazyflie)** - INFO/WARN/ERROR captured to flash, TRACE/DEBUG compiled out.
 Logs downloadable over radio after flight (see Log Download section).
 
 ## Radio Telemetry (Crazyflie 2.1+ only)
@@ -273,12 +273,12 @@ to the nRF51822 radio chip, which transmits via ESB to a Crazyradio 2.0 on the g
 - Type 0x01: Attitude/rates (gyro XYZ, roll/pitch/yaw)
 - Type 0x02: Position (altitude, velocities, thrust)
 
-**Note:** Position targets (waypoints) are not included in radio telemetry due to the
+**Note** - Position targets (waypoints) are not included in radio telemetry due to the
 31-byte packet size limit. This means radio telemetry is suitable for tuning altitude,
 attitude, and rate control loops, but not position control. For position control tuning,
 use Webots CSV telemetry which includes full position targets.
 
-**Ground station receiver:**
+**Ground station receiver**
 ```bash
 pip install cflib
 ./tools/ground_station.py -o flight.csv
@@ -294,12 +294,12 @@ After flight, the binary log file stored in flash can be downloaded over radio.
 The ground station sends a CMD_REQUEST_LOG command, and the drone responds with
 LOG_CHUNK packets (28 bytes each) until the entire file is transferred.
 
-**Download log file:**
+**Download log file**
 ```bash
 ./tools/ground_station.py --download-log flight.bin
 ```
 
-**Decode binary log:**
+**Decode binary log**
 ```bash
 ../../tools/decode_log.py flight.bin > flight.txt
 ```
@@ -316,7 +316,7 @@ Unlike radio telemetry, CSV logging includes position targets (waypoints), makin
 the right tool for tuning position control. Use Webots to tune position gains, then
 transfer to hardware with conservative adjustments (see hal_config.h).
 
-**CSV columns:**
+**CSV columns**
 - `time_ms`: Timestamp since flight start
 - `roll,pitch,yaw`: Attitude angles (rad)
 - `roll_rate,pitch_rate,yaw_rate`: Angular rates (rad/s)
@@ -327,7 +327,7 @@ transfer to hardware with conservative adjustments (see hal_config.h).
 - `gyro_x,gyro_y,gyro_z`: Raw gyro (rad/s)
 - `accel_x,accel_y,accel_z`: Raw accel (m/s²)
 
-**Usage:**
+**Usage**
 ```bash
 # Run simulation
 make

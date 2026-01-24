@@ -8,9 +8,9 @@ This document covers the design philosophy, architecture, and guarantees of the 
 
 A minimalistic actor-based runtime designed for **embedded and safety-critical systems**. The runtime implements cooperative multitasking with priority-based scheduling and message passing using the actor model.
 
-**Target use cases:** Drone autopilots, industrial sensor networks, robotics control systems, and other resource-constrained embedded applications requiring structured concurrency.
+**Target use cases** - Drone autopilots, industrial sensor networks, robotics control systems, and other resource-constrained embedded applications requiring structured concurrency.
 
-**Design principles:**
+**Design principles**
 
 1. **Minimalistic**: Only essential features, no bloat
 2. **Predictable**: Cooperative scheduling, no surprises
@@ -21,19 +21,19 @@ A minimalistic actor-based runtime designed for **embedded and safety-critical s
 
 **Hive favors boundedness and inspectability over fairness and throughput.**
 
-**Note on "bounded":** Throughout this document, "bounded" refers to **bounded algorithmic complexity and allocation behavior**, not bounded end-to-end response time across actors. Cooperative scheduling means worst-case latency depends on actor behavior.
+**Note on "bounded"** - Throughout this document, "bounded" refers to **bounded algorithmic complexity and allocation behavior**, not bounded end-to-end response time across actors. Cooperative scheduling means worst-case latency depends on actor behavior.
 
 ### Heap Usage Policy
 
-**Definition - Hot path**: Any operation callable while the scheduler is running, including all API calls from actor context, event dispatch, and wakeup processing.
+**Definition - Hot path** - Any operation callable while the scheduler is running, including all API calls from actor context, event dispatch, and wakeup processing.
 
-**Allowed heap use** (malloc/free):
+**Allowed heap use** (malloc/free)
 - Actor stack allocation during `hive_spawn()` **only if** `actor_config.malloc_stack = true`
 - Corresponding free on actor exit for malloc'd stacks
 
 **All other heap use is forbidden after `hive_init()` returns.**
 
-**Forbidden heap use** (by subsystem):
+**Forbidden heap use** (by subsystem)
 - Scheduler and context switching
 - All IPC send/receive/select paths
 - All timer creation and delivery paths
@@ -42,7 +42,7 @@ A minimalistic actor-based runtime designed for **embedded and safety-critical s
 - All link/monitor operations
 - All I/O event dispatch paths (network, file)
 
-**Consequences**:
+**Consequences**
 - Hot path operations use **static pools** with **O(1) allocation** and return `HIVE_ERR_NOMEM` on pool exhaustion
 - No heap allocation, no fragmentation
 - Predictable allocation latency
@@ -54,9 +54,9 @@ A minimalistic actor-based runtime designed for **embedded and safety-critical s
 
 ## Target Platforms
 
-**Development:** Linux x86-64
+**Development** - Linux x86-64
 
-**Production:** STM32 (ARM Cortex-M) bare metal
+**Production** - STM32 (ARM Cortex-M) bare metal
 
 On both platforms, the actor runtime is **single-threaded** with an event loop architecture. All actors run cooperatively in a single scheduler thread. I/O operations use platform-specific non-blocking mechanisms integrated directly into the scheduler's event loop.
 
@@ -102,7 +102,7 @@ Hive is **not**:
 - A distributed actor framework (single process only)
 - A statechart or FSM framework
 
-**Tagline:** *"Erlang-style actors in C for embedded systems. Deterministic memory, cooperative scheduling, no GC."*
+**Tagline** - *"Erlang-style actors in C for embedded systems. Deterministic memory, cooperative scheduling, no GC."*
 
 ## Failure Modes Summary
 
@@ -119,7 +119,7 @@ Quick reference for resource exhaustion and failure handling. See IPC and Bus se
 | Bus subscriber table | `HIVE_ERR_NOMEM` returned | No | No |
 | Timer pool | `HIVE_ERR_NOMEM` returned | No | No |
 
-**Key insight:** IPC never auto-drops (caller must handle). Bus ring buffer auto-drops oldest entry.
+**Key insight** - IPC never auto-drops (caller must handle). Bus ring buffer auto-drops oldest entry.
 
 ### Recommended Patterns
 
@@ -140,96 +140,96 @@ Quick reference for resource exhaustion and failure handling. See IPC and Bus se
 | `HIVE_ERR_CLOSED` | Target died | Re-resolve via `hive_whereis()` |
 | `HIVE_ERR_INVALID` | Bad arguments | Fix caller (programming error) |
 
-**See:** [IPC API](api.md#ipc-api) and [Bus API](api.md#bus-api) for detailed documentation.
+**See** - [IPC API](api.md#ipc-api) and [Bus API](api.md#bus-api) for detailed documentation.
 
 ## Design Trade-offs and Sharp Edges
 
 This runtime makes deliberate design choices that favor **predictability, performance, and simplicity** over **ergonomics and safety**. These are not bugs - they are conscious trade-offs suitable for embedded/safety-critical systems with trusted code.
 
-**Accept these consciously before using this runtime:**
+**Accept these consciously before using this runtime**
 
 ### 1. Message Lifetime Rule is Sharp and Error-Prone
 
-**Trade-off:** Message payload pointer valid only until next `hive_ipc_recv()` call.
+**Trade-off** - Message payload pointer valid only until next `hive_ipc_recv()` call.
 
-**Why this design:**
+**Why this design**
 - Pool reuse: Bounded O(1) allocation, no fragmentation
 - Performance: Single pool slot per actor, no reference counting
 - Simplicity: No hidden malloc, no garbage collection
 
-**Consequence:** Easy to misuse - storing `msg.data` across recv iterations causes use-after-free.
+**Consequence** - Easy to misuse - storing `msg.data` across recv iterations causes use-after-free.
 
 **This is not beginner-friendly.** Code must copy data immediately if needed beyond current iteration.
 
-**Mitigation:** Documented with WARNING box and correct/incorrect examples in IPC section. But developers will still make mistakes.
+**Mitigation** - Documented with WARNING box and correct/incorrect examples in IPC section. But developers will still make mistakes.
 
-**Acceptable if:** You optimize for predictability over ergonomics, and code reviews catch pointer misuse.
+**Acceptable if** - You optimize for predictability over ergonomics, and code reviews catch pointer misuse.
 
 ---
 
 ### 2. No Per-Actor Mailbox Quota (Global Starvation Possible)
 
-**Trade-off:** One slow/malicious actor can consume all mailbox entries, starving the system.
+**Trade-off** - One slow/malicious actor can consume all mailbox entries, starving the system.
 
-**Why this design:**
+**Why this design**
 - Simplicity: No per-actor accounting, no quota enforcement
 - Flexibility: Bursty actors can use available pool space
 - Performance: No quota checks on send path
 
-**Consequence:** A single bad actor can cause global `HIVE_ERR_NOMEM` failures for all IPC sends.
+**Consequence** - A single bad actor can cause global `HIVE_ERR_NOMEM` failures for all IPC sends.
 
-**Mitigation:** Application-level quotas, monitoring, backpressure patterns. Runtime provides primitives, not policies.
+**Mitigation** - Application-level quotas, monitoring, backpressure patterns. Runtime provides primitives, not policies.
 
-**Acceptable if:** You deploy trusted code in embedded systems, not untrusted actors in general-purpose systems.
+**Acceptable if** - You deploy trusted code in embedded systems, not untrusted actors in general-purpose systems.
 
 ---
 
 ### 3. Selective Receive is O(n) per Mailbox Scan
 
-**Trade-off:** Selective receive scans mailbox linearly, which is O(n) where n = mailbox depth.
+**Trade-off** - Selective receive scans mailbox linearly, which is O(n) where n = mailbox depth.
 
-**Why this design:**
+**Why this design**
 - Battle-tested: Proven pattern for building complex protocols
 - Simplicity: No index structures, no additional memory overhead
 - Flexibility: Any filter criteria supported without pre-registration
 
-**Consequence:** Deep mailboxes slow down selective receive. If 100 messages are queued and you're waiting for a specific tag, each wake scans all 100.
+**Consequence** - Deep mailboxes slow down selective receive. If 100 messages are queued and you're waiting for a specific tag, each wake scans all 100.
 
-**No save queue optimization:** Unlike Erlang, repeated selective receives with the same filter rescan from the mailbox head each time. There is no "save queue" to track previously scanned messages. If non-matching messages accumulate and are never consumed, this creates O(n) scans on each receive. For embedded systems with small mailboxes, this is acceptable. If this ever becomes a bottleneck, a `scan_start` pointer could be added.
+**No save queue optimization** - Unlike Erlang, repeated selective receives with the same filter rescan from the mailbox head each time. There is no "save queue" to track previously scanned messages. If non-matching messages accumulate and are never consumed, this creates O(n) scans on each receive. For embedded systems with small mailboxes, this is acceptable. If this ever becomes a bottleneck, a `scan_start` pointer could be added.
 
 **Keep mailboxes shallow.** The request/reply pattern naturally does this (block waiting for reply).
 
-**Mitigation:** Process messages promptly. Don't let mailbox grow deep. Use `hive_ipc_request()` which blocks until reply.
+**Mitigation** - Process messages promptly. Don't let mailbox grow deep. Use `hive_ipc_request()` which blocks until reply.
 
-**Acceptable if:** Typical mailbox depth is small (< 20 messages) and request/reply pattern is followed.
+**Acceptable if** - Typical mailbox depth is small (< 20 messages) and request/reply pattern is followed.
 
 ---
 
 ### 4. Bus and IPC Share Message Pool (Resource Contention)
 
-**Trade-off:** High-rate bus publishing can starve IPC globally.
+**Trade-off** - High-rate bus publishing can starve IPC globally.
 
-**Why this design:**
+**Why this design**
 - Simplicity: Single message pool, no subsystem isolation
 - Flexibility: Pool space shared dynamically based on actual usage
 - Memory efficiency: No wasted dedicated pools
 
-**Consequence:** Misconfigured bus can cause all IPC sends to fail with `HIVE_ERR_NOMEM`.
+**Consequence** - Misconfigured bus can cause all IPC sends to fail with `HIVE_ERR_NOMEM`.
 
-**Mitigation:** WARNING box in Bus section, size pool for combined load, monitor exhaustion.
+**Mitigation** - WARNING box in Bus section, size pool for combined load, monitor exhaustion.
 
-**Acceptable if:** You size pools correctly and monitor resource usage in production.
+**Acceptable if** - You size pools correctly and monitor resource usage in production.
 
 ---
 
 ### Summary: This Runtime is a Sharp Tool
 
 These design choices make the runtime:
-- **Predictable:** Bounded memory, bounded latency, no hidden allocations
-- **Fast:** O(1) hot paths, minimal overhead, zero-copy options
-- **Simple:** Minimal code, easy to audit, no complex features
-- **Not beginner-friendly:** Sharp edges require careful use
-- **Not fault-tolerant:** No automatic isolation, quotas, or recovery
+- **Predictable** - Bounded memory, bounded latency, no hidden allocations
+- **Fast** - O(1) hot paths, minimal overhead, zero-copy options
+- **Simple** - Minimal code, easy to audit, no complex features
+- **Not beginner-friendly** - Sharp edges require careful use
+- **Not fault-tolerant** - No automatic isolation, quotas, or recovery
 
 **This is intentional.** The runtime provides primitives for building robust systems, not a complete safe environment.
 
@@ -283,7 +283,7 @@ Actors run until they explicitly yield control. The scheduler reschedules an act
 
 There is no preemptive scheduling or time slicing within the actor runtime.
 
-**Reentrancy constraint:**
+**Reentrancy constraint**
 - Runtime APIs are **not reentrant**
 - Actors **must not** call runtime APIs from signal handlers or interrupt service routines (ISRs)
 - All runtime API calls must occur from actor context (the scheduler thread)
@@ -293,12 +293,12 @@ There is no preemptive scheduling or time slicing within the actor runtime.
 
 When an actor calls a blocking API, the following contract applies:
 
-**State transition:**
+**State transition**
 - Actor transitions to `ACTOR_STATE_WAITING` and yields to scheduler
 - Actor is removed from run queue (not schedulable until unblocked)
 - Scheduler saves actor context and switches to next runnable actor
 
-**Operations that yield (actor gives up CPU, other actors run):**
+**Operations that yield (actor gives up CPU, other actors run)**
 
 | Function | Blocks until |
 |----------|--------------|
@@ -318,21 +318,21 @@ When an actor calls a blocking API, the following contract applies:
 - `hive_ipc_recv()` with timeout = 0 -> returns `HIVE_ERR_WOULDBLOCK` if empty
 - `hive_bus_read()` -> returns `HIVE_ERR_WOULDBLOCK` if no data
 
-**Note:** File I/O (`hive_file_*`) is NOT in this list. See "Scheduler-Stalling Calls" below.
+**Note** - File I/O (`hive_file_*`) is NOT in this list. See "Scheduler-Stalling Calls" below.
 
-**Mailbox availability while blocked:**
+**Mailbox availability while blocked**
 - Blocked actors **can** receive mailbox messages
 - Message enqueues are scheduler-owned operations (do not require actor to be runnable)
 - Enqueued messages are available when actor unblocks
 
-**Unblock conditions:**
+**Unblock conditions**
 - I/O readiness signaled (network socket becomes readable/writable)
 - Timer expires (for APIs with timeout)
 - Message arrives in mailbox (for `hive_ipc_recv()`, `hive_ipc_recv_match()`, `hive_ipc_recv_matches()`, `hive_ipc_request()`)
 - Bus data published (for `hive_bus_read_wait()`)
 - **Important**: Mailbox arrival only unblocks actors blocked in IPC receive operations, not actors blocked on network I/O or bus read
 
-**Scheduling phase definition:**
+**Scheduling phase definition**
 
 A scheduling phase consists of one iteration of the scheduler loop:
 
@@ -341,7 +341,7 @@ A scheduling phase consists of one iteration of the scheduler loop:
 3. **If no runnable actors**: Call `epoll_wait()` to block until I/O events arrive
 4. **Drain epoll events**: Process all returned events before returning to step 1
 
-**Event drain order within a phase:**
+**Event drain order within a phase**
 
 When `epoll_wait()` returns multiple ready events (timers and network I/O), they are processed in **array index order** as returned by the kernel. This order is deterministic for a given set of ready file descriptors but is not controllable by the runtime.
 
@@ -349,44 +349,44 @@ For each event:
 - **Timer event (timerfd)**: Read timerfd, send timer tick message to actor's mailbox, wake actor
 - **Network event (socket)**: Perform I/O operation, store result in actor's `io_status`, wake actor
 
-**Event drain timing:**
+**Event drain timing**
 - If runnable actors exist, they run immediately (no `epoll_wait` call)
 - `epoll_wait` is only called when the run queue is empty
 - All events from a single `epoll_wait` call are drained before selecting the next actor
 - This minimizes latency for already-runnable actors at the cost of potentially delayed I/O event processing
 
-**Timeout vs I/O readiness - request state machine:**
+**Timeout vs I/O readiness - request state machine**
 
 Each blocking network request has an implicit state: `PENDING` -> `COMPLETED` or `TIMED_OUT`.
 
-**State transitions:**
+**State transitions**
 - Request starts in `PENDING` when actor blocks on network I/O with timeout
 - First event processed transitions state out of `PENDING`; subsequent events for same request are **ignored without side effects**
 
-**Tie-break rule (deadline check at wake time):**
+**Tie-break rule (deadline check at wake time)**
 - When actor wakes, check: `now >= deadline`?
 - If yes: state = `TIMED_OUT`, return `HIVE_ERR_TIMEOUT`, **do not perform I/O even if socket is ready**
 - If no: state = `COMPLETED`, perform I/O operation, return result
 
-**Rationale:** This avoids the "read data then discard" oddity. The deadline check is deterministic and independent of epoll event ordering.
+**Rationale** - This avoids the "read data then discard" oddity. The deadline check is deterministic and independent of epoll event ordering.
 
-**Concrete behavior:**
+**Concrete behavior**
 - If I/O ready **before** timeout: Actor wakes, deadline not reached, I/O performed, success
 - If timeout **before** I/O ready: Actor wakes, deadline reached, return timeout (no I/O attempted)
 - If both fire in **same** `epoll_wait()`: Actor wakes, deadline check determines outcome (I/O not performed if timed out)
 
-**Request serialization (network I/O only):**
+**Request serialization (network I/O only)**
 - Applies to: `hive_net_accept()`, `hive_net_connect()`, `hive_net_recv()`, `hive_net_send()` with timeouts
 - Constraint: **One outstanding network request per actor** (enforced by actor blocking)
 - When timeout occurs: epoll registration cleaned up, any late readiness signal is ignored
 - New request from same actor gets fresh epoll state
 
-**Note:** This serialization model does NOT apply to:
+**Note** - This serialization model does NOT apply to:
 - **File I/O**: Stalls scheduler synchronously (no event loop involvement)
 
-**Predictability guarantee:**
+**Predictability guarantee**
 
-> **Summary:** The runtime has predictable scheduling policy but not reproducible execution order. Given the same epoll event order, scheduling is reproducible; but epoll event order itself is kernel-dependent.
+> **Summary** - The runtime has predictable scheduling policy but not reproducible execution order. Given the same epoll event order, scheduling is reproducible; but epoll event order itself is kernel-dependent.
 
 The runtime provides **bounded, predictable behavior**, not full reproducibility:
 
@@ -409,7 +409,7 @@ The runtime provides **bounded, predictable behavior**, not full reproducibility
 
 File I/O operations (`hive_file_read()`, `hive_file_write()`, `hive_file_sync()`) are **synchronous** and briefly pause the scheduler. This is fine for short, bursty operations; typical embedded file writes complete in under 1ms.
 
-**Behavior:**
+**Behavior**
 - Calling actor does NOT transition to `ACTOR_STATE_WAITING`
 - The scheduler event loop is paused during the syscall
 - Other actors wait briefly (no actor runs during file I/O)
@@ -422,15 +422,15 @@ File I/O operations (`hive_file_read()`, `hive_file_write()`, `hive_file_sync()`
 - For embedded (STM32): FATFS/littlefs operations are typically fast (<1ms)
 - Simplicity: no additional complexity for a rarely-needed feature
 
-**Best practices:**
+**Best practices**
 - Use `HIVE_PRIORITY_LOW` actors for file work
 - Keep operations short (small buffers, brief writes)
 - For logging: batch writes or use ring buffers
 - Initialization/shutdown: file I/O is fine at any priority (no real-time constraints yet)
 
-**Avoid:** File I/O from `HIVE_PRIORITY_CRITICAL` actors in tight control loops.
+**Avoid** - File I/O from `HIVE_PRIORITY_CRITICAL` actors in tight control loops.
 
-**Design alternatives not implemented:**
+**Design alternatives not implemented**
 - `io_uring`: Would add Linux 5.1+ dependency and significant complexity
 - Thread pool: Contradicts single-threaded design; removed in event loop migration
 - DMA with completion interrupt (STM32): Could be added for specific flash/SD drivers
@@ -448,7 +448,7 @@ Four priority levels, lower value means higher priority:
 
 The scheduler always picks the highest-priority runnable actor. Within the same priority level, actors are scheduled round-robin.
 
-**Fairness guarantees:**
+**Fairness guarantees**
 - Round-robin scheduling within a priority level ensures fairness among actors of equal priority
 - The scheduler does **not** guarantee starvation freedom across priority levels
 - A continuously runnable high-priority actor can starve lower-priority actors indefinitely
@@ -458,8 +458,8 @@ The scheduler always picks the highest-priority runnable actor. Within the same 
 
 Context switching is implemented via manual assembly for performance:
 
-- **x86-64 (Linux):** Save/restore callee-saved registers (rbx, rbp, r12-r15) and stack pointer
-- **ARM Cortex-M (STM32):** Save/restore callee-saved registers (r4-r11) and stack pointer. On Cortex-M4F and similar with hardware FPU, also saves/restores FPU registers (s16-s31) when `__ARM_FP` is defined.
+- **x86-64 (Linux)** - Save/restore callee-saved registers (rbx, rbp, r12-r15) and stack pointer
+- **ARM Cortex-M (STM32)** - Save/restore callee-saved registers (r4-r11) and stack pointer. On Cortex-M4F and similar with hardware FPU, also saves/restores FPU registers (s16-s31) when `__ARM_FP` is defined.
 
 No use of setjmp/longjmp or ucontext for performance reasons.
 
@@ -469,11 +469,11 @@ No use of setjmp/longjmp or ucontext for performance reasons.
 
 The runtime is **completely single-threaded**. All runtime operations execute in a single scheduler thread with an event loop architecture. There are **no I/O worker threads** - all I/O operations are integrated into the scheduler's event loop using platform-specific non-blocking mechanisms.
 
-**Key architectural invariant:** Only one actor executes at any given time. Actors run cooperatively until they explicitly yield (via `hive_yield()`, blocking I/O, or `hive_exit()`). The scheduler then switches to the next runnable actor or waits for I/O events.
+**Key architectural invariant** - Only one actor executes at any given time. Actors run cooperatively until they explicitly yield (via `hive_yield()`, blocking I/O, or `hive_exit()`). The scheduler then switches to the next runnable actor or waits for I/O events.
 
 ### Runtime API Thread Safety Contract
 
-**All runtime APIs must be called from actor context (the scheduler thread):**
+**All runtime APIs must be called from actor context (the scheduler thread)**
 
 | API Category | Thread Safety | Enforcement |
 |-------------|---------------|-------------|
@@ -484,16 +484,16 @@ The runtime is **completely single-threaded**. All runtime operations execute in
 | **File APIs** (`hive_file_read`, `hive_file_write`) | Single-threaded only | Must call from actor context; stalls scheduler |
 | **Network APIs** (`hive_net_recv`, `hive_net_send`) | Single-threaded only | Must call from actor context |
 
-**Forbidden from:**
+**Forbidden from**
 - Signal handlers (not reentrant)
 - Interrupt service routines (ISRs on embedded systems)
 - External threads (no locking/atomics implemented)
 
 ### External Thread Communication Pattern
 
-**Problem:** External threads cannot call runtime APIs directly (no thread safety layer).
+**Problem** - External threads cannot call runtime APIs directly (no thread safety layer).
 
-**Solution:** Use platform-specific IPC mechanisms with a dedicated reader actor:
+**Solution** - Use platform-specific IPC mechanisms with a dedicated reader actor:
 
 ```c
 // External thread writes to socket/pipe
@@ -528,42 +528,42 @@ The runtime uses **zero synchronization primitives** in the core event loop:
 - **No condition variables** - event loop uses epoll for waiting
 - **No locks** - mailboxes, actor state, bus state accessed only by scheduler thread
 
-**STM32 exception:** ISR-to-scheduler communication uses `volatile bool` flags with interrupt disable/enable for safe flag clearing. This is a synchronization protocol but not C11 atomics or lock-based synchronization.
+**STM32 exception** - ISR-to-scheduler communication uses `volatile bool` flags with interrupt disable/enable for safe flag clearing. This is a synchronization protocol but not C11 atomics or lock-based synchronization.
 
 **Optional synchronization** (not part of hot path):
-- **Logging:** No synchronization needed (single-threaded)
+- **Logging** - No synchronization needed (single-threaded)
 
 ### Rationale
 
 This pure single-threaded model provides:
 
-- **Maximum simplicity:** No lock ordering, no deadlock, trivial to reason about
-- **No threading nondeterminism:** No lock contention, no priority inversion, no data races
-- **Maximum performance:** Zero lock overhead, no cache line bouncing, no atomic operations
-- **Safety-critical friendly:** No threading edge cases (event dispatch order is kernel-dependent, see "Determinism guarantee")
-- **Portability:** Works on platforms without pthread support
+- **Maximum simplicity** - No lock ordering, no deadlock, trivial to reason about
+- **No threading nondeterminism** - No lock contention, no priority inversion, no data races
+- **Maximum performance** - Zero lock overhead, no cache line bouncing, no atomic operations
+- **Safety-critical friendly** - No threading edge cases (event dispatch order is kernel-dependent, see "Determinism guarantee")
+- **Portability** - Works on platforms without pthread support
 
-**Trade-off:** Cannot leverage multiple CPU cores for I/O parallelism. This is acceptable for embedded systems (typically single-core) and simplifies the implementation dramatically.
+**Trade-off** - Cannot leverage multiple CPU cores for I/O parallelism. This is acceptable for embedded systems (typically single-core) and simplifies the implementation dramatically.
 
 ### Event Loop Architecture
 
 *Terminology: "Event loop" and "scheduler loop" refer to the same construct - the main loop that dispatches I/O events and schedules actors. This document uses "event loop" as the canonical term.*
 
-**Linux:**
+**Linux**
 - Timers: `timerfd` registered in `epoll`
 - Network: Non-blocking sockets registered in `epoll`
 - File: Direct synchronous I/O (regular files don't work with epoll anyway)
 - Event loop: `epoll_wait()` with bounded timeout (10ms) for defensive wakeup
 
-**Defensive timeout rationale:** The 10ms bounded timeout guards against lost wakeups, misconfigured epoll registrations, or unexpected platform behavior. It is not required for correctness under ideal conditions but provides a safety net against programming errors or kernel edge cases.
+**Defensive timeout rationale** - The 10ms bounded timeout guards against lost wakeups, misconfigured epoll registrations, or unexpected platform behavior. It is not required for correctness under ideal conditions but provides a safety net against programming errors or kernel edge cases.
 
-**STM32 (bare metal):**
+**STM32 (bare metal)**
 - Timers: Hardware timers (SysTick or TIM peripherals)
 - Network: Not yet implemented (planned: lwIP in NO_SYS mode)
 - File: Flash-backed virtual files with ring buffer (see [File API](api.md#file-api))
 - Event loop: WFI (Wait For Interrupt) when no actors runnable
 
-**Key insight:** Modern OSes provide non-blocking I/O mechanisms (epoll, kqueue, IOCP). On bare metal, hardware interrupts and WFI provide equivalent functionality. The event loop pattern is standard in async runtimes (Node.js, Tokio, libuv, asyncio).
+**Key insight** - Modern OSes provide non-blocking I/O mechanisms (epoll, kqueue, IOCP). On bare metal, hardware interrupts and WFI provide equivalent functionality. The event loop pattern is standard in async runtimes (Node.js, Tokio, libuv, asyncio).
 
 See [Event Loop Architecture (Implementation)](internals.md#event-loop-architecture) for detailed implementation with code examples.
 
@@ -579,7 +579,7 @@ Stack growth/reallocation is not supported. Stack overflow results in undefined 
 
 The runtime uses static allocation for predictable behavior and suitability for MCU deployment. All memory regions are statically reserved at compile time; allocation within those regions occurs at runtime via bounded algorithms.
 
-**Key characteristics:**
+**Key characteristics**
 - No heap allocation after `hive_init()` except optional malloc for actor stacks
 - O(1) pool allocation for hot paths (IPC, timers, bus)
 - O(n) bounded arena allocation for cold paths (spawn/exit)
@@ -599,7 +599,7 @@ The following limits are **hardcoded** and cannot be changed without modifying t
 | Tag values | 27 bits | 134M unique values before wrap; bit 27 marks generated tags | `hive_ipc.c` |
 | Message classes | 6 | NOTIFY, REQUEST, REPLY, TIMER, EXIT, ANY (4-bit field) | `hive_types.h` |
 
-**Bus subscriber limit (32):** Each bus entry has a `uint32_t readers_mask` bitmask where bit N indicates subscriber N has read the entry. This enables O(1) read tracking per entry. Enforced by `_Static_assert` in `hive_bus.c`.
+**Bus subscriber limit (32)** - Each bus entry has a `uint32_t readers_mask` bitmask where bit N indicates subscriber N has read the entry. This enables O(1) read tracking per entry. Enforced by `_Static_assert` in `hive_bus.c`.
 
 **Configurable limits** (via `hive_static_config.h`, recompile required):
 - `HIVE_MAX_ACTORS` (64) - maximum concurrent actors

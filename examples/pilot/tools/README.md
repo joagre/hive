@@ -166,11 +166,11 @@ python3 ground_station.py --download-log log.bin
 python3 ground_station.py --uri radio://0/80/2M
 ```
 
-**Telemetry packet types:**
+**Telemetry packet types**
 - Attitude (0x01): timestamp, gyro XYZ, roll/pitch/yaw
 - Position (0x02): timestamp, altitude, vz, vx, vy, thrust
 
-**Log download:** Sends CMD_REQUEST_LOG command to drone, receives binary log chunks, and saves to file. Use with `tools/decode_log.py` (in hive root) to decode the binary log format.
+**Log download** - Sends CMD_REQUEST_LOG command to drone, receives binary log chunks, and saves to file. Use with `tools/decode_log.py` (in hive root) to decode the binary log format.
 
 ## PID Tuning Workflow
 

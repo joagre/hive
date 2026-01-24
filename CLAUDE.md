@@ -6,9 +6,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This is an actor-based runtime for embedded systems, targeting STM32 (ARM Cortex-M) autopilot applications. The runtime implements cooperative multitasking with message passing using the actor model.
 
-**Language:** Modern C (C11 or later)
+**Language** - Modern C (C11 or later)
 
-**Target Platforms:**
+**Target Platforms**
 - Development: Linux x86-64
 - Production: STM32 (ARM Cortex-M) bare metal
 
@@ -49,15 +49,15 @@ Install: `make install-man` (or `sudo make install-man`)
 
 ### Heap Usage Policy
 
-**Definition - Hot path**: Any operation callable while the scheduler is running, including all API calls from actor context, event dispatch, and wakeup processing.
+**Definition - Hot path** - Any operation callable while the scheduler is running, including all API calls from actor context, event dispatch, and wakeup processing.
 
-**Allowed malloc**:
+**Allowed malloc**
 - Actor stack allocation during `hive_spawn()` only if `actor_config.malloc_stack = true`
 - Corresponding free on actor exit for malloc'd stacks
 
 **All other heap use is forbidden after `hive_init()` returns.**
 
-**Forbidden malloc** (by subsystem):
+**Forbidden malloc** (by subsystem)
 - Scheduler and context switching
 - All IPC send/receive/select paths
 - All timer creation and delivery paths
@@ -68,8 +68,8 @@ Install: `make install-man` (or `sudo make install-man`)
 
 ### Unicode in Comments
 
-- **Allowed**: Unicode box-drawing characters (`┌─┐│└┘├┤┬┴┼`) for diagrams (state machines, memory layouts, protocol formats)
-- **Forbidden**: Unicode in regular prose comments; use ASCII only
+- **Allowed** - Unicode box-drawing characters (`┌─┐│└┘├┤┬┴┼`) for diagrams (state machines, memory layouts, protocol formats)
+- **Forbidden** - Unicode in regular prose comments; use ASCII only
 
 ## Architecture
 
@@ -104,7 +104,7 @@ The runtime consists of:
 
 ### Restart Contract Checklist
 
-**On child restart, always reset:**
+**On child restart, always reset**
 - Mailbox empty
 - Bus subscriptions gone, cursors reset (fresh subscribe required)
 - Timers cancelled
@@ -113,17 +113,17 @@ The runtime consists of:
 - Name registration removed (must re-register)
 - External handles invalid (must reacquire: fds, sockets, HAL handles)
 
-**Supervisor guarantees:**
+**Supervisor guarantees**
 - Restart order is deterministic: child spec order
 - Restart strategy applied exactly as defined (no hidden backoff)
 - Intensity limit deterministic: when exceeded, supervisor shuts down
 - No heap in hot paths; child-arg copies bounded and static
 
-**Failure visibility:**
+**Failure visibility**
 - Every restart attempt observable (log)
 - Every give-up observable (log + shutdown callback)
 
-**Client rule:** MUST NOT cache `actor_id` across awaits/timeouts. Re-resolve via `hive_whereis()` on each interaction.
+**Client rule** - MUST NOT cache `actor_id` across awaits/timeouts. Re-resolve via `hive_whereis()` on each interaction.
 
 ## Key Concepts
 
@@ -139,8 +139,8 @@ The runtime consists of:
 - Violating this constraint results in undefined behavior (data corruption, crashes)
 
 ### Context Switching
-- **x86-64**: Save/restore rbx, rbp, r12-r15, and stack pointer
-- **ARM Cortex-M**: Save/restore r4-r11 and stack pointer; on Cortex-M4F with FPU, also saves s16-s31 (conditional on `__ARM_FP`)
+- **x86-64** - Save/restore rbx, rbp, r12-r15, and stack pointer
+- **ARM Cortex-M** - Save/restore r4-r11 and stack pointer; on Cortex-M4F with FPU, also saves s16-s31 (conditional on `__ARM_FP`)
 - Implemented in manual assembly for performance
 
 ### Memory Management
@@ -220,7 +220,7 @@ All messages have a 4-byte header prepended to payload:
 - **`hive_ipc_request(to, req, len, reply, timeout)`**: Blocking request/reply (monitors target, waits for REPLY or death)
 - **`hive_ipc_reply(request, data, len)`**: Reply to a REQUEST message
 
-**`hive_ipc_request()` errors**: Returns `HIVE_ERR_CLOSED` if target died during request (detected immediately via internal monitor), `HIVE_ERR_TIMEOUT` if no reply within timeout, `HIVE_ERR_NOMEM` if pool exhausted, `HIVE_ERR_INVALID` for bad arguments.
+**`hive_ipc_request()` errors** - Returns `HIVE_ERR_CLOSED` if target died during request (detected immediately via internal monitor), `HIVE_ERR_TIMEOUT` if no reply within timeout, `HIVE_ERR_NOMEM` if pool exhausted, `HIVE_ERR_INVALID` for bad arguments.
 
 ### Message Structure
 The `hive_message` struct provides direct access to all fields:
@@ -242,23 +242,23 @@ if (msg.class == HIVE_MSG_REQUEST) { ... }
 
 ### IPC Pool Exhaustion
 IPC uses global pools shared by all actors:
-- **Mailbox entry pool**: `HIVE_MAILBOX_ENTRY_POOL_SIZE` (256 default)
-- **Message data pool**: `HIVE_MESSAGE_DATA_POOL_SIZE` (256 default)
+- **Mailbox entry pool** - `HIVE_MAILBOX_ENTRY_POOL_SIZE` (256 default)
+- **Message data pool** - `HIVE_MESSAGE_DATA_POOL_SIZE` (256 default)
 
-**When pools are exhausted:**
+**When pools are exhausted**
 - `hive_ipc_notify()` and `hive_ipc_notify_ex()` return `HIVE_ERR_NOMEM` immediately
 - Send operation **does NOT block** waiting for space
 - Send operation **does NOT drop** messages automatically
 - Caller **must check** return value and handle failure (retry, backoff, or discard)
 
-**Notes:**
+**Notes**
 - No per-actor mailbox limit - pools are shared globally
 - Use `hive_ipc_request()` for natural backpressure (sender waits for reply)
 - Pool exhaustion indicates system overload - increase pool sizes or add backpressure
 
 ### Bus Retention
-- **consume_after_reads**: Remove entry after N actors read it (0 = persist until aged out or buffer wraps)
-- **max_age_ms**: Remove entry after time expires (0 = no time-based expiry)
+- **consume_after_reads** - Remove entry after N actors read it (0 = persist until aged out or buffer wraps)
+- **max_age_ms** - Remove entry after time expires (0 = no time-based expiry)
 - Buffer full: Oldest entry evicted on publish
 
 ### Bus Subscriber Limit
@@ -267,25 +267,25 @@ Maximum 32 subscribers per bus. This is a **hard architectural limit** enforced 
 ### Bus Pool Exhaustion
 Bus shares the message data pool with IPC and has per-bus buffer limits:
 
-**Message Pool Exhaustion** (shared with IPC):
+**Message Pool Exhaustion** (shared with IPC)
 - Bus uses the global `HIVE_MESSAGE_DATA_POOL_SIZE` pool (same as IPC)
 - When pool is exhausted, `hive_bus_publish()` returns `HIVE_ERR_NOMEM` immediately
 - Does NOT block waiting for space
 - Does NOT drop messages automatically in this case
 - Caller must check return value and handle failure
 
-**Bus Ring Buffer Full** (per-bus limit):
+**Bus Ring Buffer Full** (per-bus limit)
 - Each bus has its own ring buffer sized via `max_entries` config
 - When ring buffer is full, `hive_bus_publish()` **automatically evicts oldest entry**
 - This is different from IPC - bus has automatic message dropping
 - Publish succeeds (unless message pool also exhausted)
 - Slow readers may miss messages if buffer wraps
 
-**Subscriber Table Full**:
+**Subscriber Table Full**
 - Each bus has subscriber limit via `max_subscribers` config (up to `HIVE_MAX_BUS_SUBSCRIBERS`)
 - When full, `hive_bus_subscribe()` returns `HIVE_ERR_NOMEM`
 
-**Key Differences from IPC:**
+**Key Differences from IPC**
 - IPC never drops messages automatically (returns error instead)
 - Bus automatically drops oldest entry when ring buffer is full
 - Both share the same message data pool (`HIVE_MESSAGE_DATA_POOL_SIZE`)
@@ -294,14 +294,14 @@ Bus shares the message data pool with IPC and has per-bus buffer limits:
 
 `hive_select()` provides a unified primitive for waiting on multiple event sources (IPC messages + bus data). The existing blocking APIs are thin wrappers around this primitive.
 
-**API:**
-- **`hive_select(sources, num_sources, result, timeout)`**: Wait on multiple sources simultaneously
+**API**
+- **`hive_select(sources, num_sources, result, timeout)`** - Wait on multiple sources simultaneously
 
-**Priority semantics:**
+**Priority semantics**
 - Sources are checked in strict array order (first ready source wins)
 - No type-based priority - bus and IPC sources are treated equally
 
-**Example:**
+**Example**
 ```c
 hive_select_source sources[] = {
     {HIVE_SEL_BUS, .bus = sensor_bus},
@@ -315,7 +315,7 @@ hive_select(sources, 3, &result, -1);
 // result.ipc or result.bus contains the data
 ```
 
-**Wrapper relationship:** `hive_ipc_recv()`, `hive_ipc_recv_match()`, `hive_ipc_recv_matches()`, and `hive_bus_read_wait()` are all implemented as thin wrappers around `hive_select()`.
+**Wrapper relationship** - `hive_ipc_recv()`, `hive_ipc_recv_match()`, `hive_ipc_recv_matches()`, and `hive_bus_read_wait()` are all implemented as thin wrappers around `hive_select()`.
 
 ## Important Implementation Details
 
@@ -323,7 +323,7 @@ hive_select(sources, 3, &result, -1);
 
 The runtime uses **compile-time configuration** for bounded, predictable memory allocation:
 
-**Compile-Time Limits (`hive_static_config.h`)** - All resource limits defined at compile time:
+**Compile-Time Limits (`hive_static_config.h`)** - All resource limits defined at compile time
 - `HIVE_MAX_ACTORS`: Maximum concurrent actors (64)
 - `HIVE_MAX_BUSES`: Maximum concurrent buses (32)
 - `HIVE_MAILBOX_ENTRY_POOL_SIZE`: Mailbox entry pool (256)
@@ -338,18 +338,18 @@ The runtime uses **compile-time configuration** for bounded, predictable memory 
 - `HIVE_MAX_SUPERVISOR_CHILDREN`: Maximum children per supervisor (16)
 - `HIVE_MAX_REGISTERED_NAMES`: Maximum registered actor names (32)
 
-**Stack Watermarking** (also in `hive_static_config.h`):
+**Stack Watermarking** (also in `hive_static_config.h`)
 - `HIVE_STACK_WATERMARK`: Enable stack usage measurement (default: 0 = disabled)
 - `HIVE_STACK_WATERMARK_PATTERN`: Fill pattern for watermarking (default: 0xDEADBEEF)
 
-**Logging Configuration** (also in `hive_static_config.h`):
+**Logging Configuration** (also in `hive_static_config.h`)
 - `HIVE_LOG_LEVEL`: Minimum log level to compile (default: INFO on Linux, NONE on STM32)
 - `HIVE_LOG_TO_STDOUT`: Enable console output (default: 1 on Linux, 0 on STM32)
 - `HIVE_LOG_TO_FILE`: Enable file logging code (default: 1 on both)
 - `HIVE_LOG_FILE_PATH`: Log file path (default: `/var/tmp/hive.log` on Linux, `/log` on STM32)
 - `HIVE_LOG_MAX_ENTRY_SIZE`: Maximum log message size (128)
 
-**STM32 File I/O Configuration** (via -D flags in board Makefile):
+**STM32 File I/O Configuration** (via -D flags in board Makefile)
 - `HIVE_VFILE_LOG_BASE`: Flash base address for `/log`
 - `HIVE_VFILE_LOG_SIZE`: Flash size for `/log`
 - `HIVE_VFILE_LOG_SECTOR`: Flash sector number for `/log`
@@ -358,7 +358,7 @@ The runtime uses **compile-time configuration** for bounded, predictable memory 
 
 To change these limits, edit `hive_static_config.h` or pass -D flags and recompile.
 
-**Memory characteristics:**
+**Memory characteristics**
 - All runtime structures are **statically allocated** based on compile-time limits
 - Actor stacks use static arena by default, with optional malloc via `actor_config.malloc_stack`
 - No malloc in hot paths (see Heap Usage Policy above)
@@ -370,8 +370,8 @@ After `hive_run()` completes, call `hive_cleanup()` to free actor stacks.
 
 ### Event Loop
 When all actors are blocked on I/O, the scheduler efficiently waits for I/O events using platform-specific mechanisms:
-- **Linux**: `epoll_wait()` blocks until timer fires or socket becomes ready
-- **STM32**: `WFI` (Wait For Interrupt) until hardware interrupt occurs
+- **Linux** - `epoll_wait()` blocks until timer fires or socket becomes ready
+- **STM32** - `WFI` (Wait For Interrupt) until hardware interrupt occurs
 
 This eliminates busy-polling and CPU waste while providing immediate response to I/O events.
 
@@ -379,15 +379,15 @@ This eliminates busy-polling and CPU waste while providing immediate response to
 
 The runtime is **completely single-threaded**. All runtime APIs must be called from actor context (the scheduler thread).
 
-**Zero synchronization primitives** in the core event loop:
+**Zero synchronization primitives** in the core event loop
 - No mutexes (single thread, no contention)
 - No C11 atomics (single writer/reader per data structure)
 - No condition variables (event loop uses epoll/select for waiting)
 - No locks (mailboxes, actor state, bus state accessed only by scheduler thread)
 
-**STM32 exception:** ISR-to-scheduler communication uses `volatile bool` flags with interrupt disable/enable. This is a synchronization protocol but not C11 atomics or lock-based synchronization.
+**STM32 exception** - ISR-to-scheduler communication uses `volatile bool` flags with interrupt disable/enable. This is a synchronization protocol but not C11 atomics or lock-based synchronization.
 
-**External threads (forbidden):**
+**External threads (forbidden)**
 - CANNOT call runtime APIs (hive_ipc_notify NOT THREAD-SAFE - no locking/atomics)
 - Must use platform-specific IPC (sockets, pipes) with dedicated reader actors
 
@@ -397,7 +397,7 @@ See spec/design.md "Thread Safety" section for full details.
 
 The runtime uses a HAL to isolate platform-specific code. Porters implement HAL functions without needing to understand scheduler or timer internals.
 
-**HAL Structure:**
+**HAL Structure**
 ```
 include/hal/
   hive_hal_time.h      - Time + critical sections (3 functions)
@@ -415,7 +415,7 @@ src/hal/
 
 **Minimum port** - ~15 C functions + 1 assembly function + 1 struct definition
 
-**Platform-specific files:**
+**Platform-specific files**
 | Category | Linux | STM32 |
 |----------|-------|-------|
 | Main HAL | `hal/linux/hive_hal_linux.c` | `hal/stm32/hive_hal_stm32.c` |
@@ -425,13 +425,13 @@ src/hal/
 | Context struct | `hal/linux/hive_hal_context_defs.h` | `hal/stm32/hive_hal_context_defs.h` |
 | File HAL | (in main HAL) | `hal/stm32/hive_hal_file_stm32.c` |
 
-**Platform-independent files:**
+**Platform-independent files**
 - `hive_scheduler.c` - Unified scheduler (calls HAL event functions)
 - `hive_timer.c` - Thin wrapper around HAL timer functions
 - `hive_file.c` - Thin wrapper around HAL file functions
 - `hive_net.c` - Thin wrapper around HAL network functions
 
-**HAL Functions Summary:**
+**HAL Functions Summary**
 | Category | Functions | Notes |
 |----------|-----------|-------|
 | Time | `get_time_us`, `critical_enter`, `critical_exit` | Required |
@@ -452,7 +452,7 @@ Different implementations for Linux (dev) vs STM32 bare metal (prod):
 - Network: Non-blocking BSD sockets + epoll (Linux); stubs on STM32 (future lwIP)
 - File: Synchronous POSIX vs flash-backed ring buffer
 
-**STM32 File I/O Differences:**
+**STM32 File I/O Differences**
 
 The STM32 implementation uses flash-backed virtual files with a ring buffer for efficiency.
 Most writes complete immediately (fast path). When the buffer fills up, `write()` blocks
@@ -499,7 +499,7 @@ Do NOT use `HIVE_TAG_ANY` for timer messages - always use the timer_id to avoid 
 
 Structured logging with compile-time level filtering and dual output (console + binary file).
 
-**Log Macros** (compile out based on `HIVE_LOG_LEVEL`):
+**Log Macros** (compile out based on `HIVE_LOG_LEVEL`)
 ```c
 HIVE_LOG_TRACE(fmt, ...)  // Level 0 - verbose tracing
 HIVE_LOG_DEBUG(fmt, ...)  // Level 1 - debug info
@@ -509,19 +509,19 @@ HIVE_LOG_ERROR(fmt, ...)  // Level 4 - errors
 // HIVE_LOG_LEVEL_NONE (5) disables all logging
 ```
 
-**File Logging API** (lifecycle managed by application):
+**File Logging API** (lifecycle managed by application)
 ```c
 hive_log_file_open(path);   // Open log file (on STM32, erases flash sector)
 hive_log_file_sync();       // Flush to storage (call periodically)
 hive_log_file_close();      // Close log file
 ```
 
-**Binary Log Format** (12-byte header + text payload):
+**Binary Log Format** (12-byte header + text payload)
 - Magic: `0x4C47` ("LG" little-endian)
 - Sequence number, timestamp (µs), length, level
 - Use `tools/decode_log.py` to decode
 
-**Platform Defaults:**
+**Platform Defaults**
 | Config | Linux | STM32 |
 |--------|-------|-------|
 | `HIVE_LOG_TO_STDOUT` | 1 (enabled) | 0 (disabled) |

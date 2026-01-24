@@ -82,7 +82,7 @@ Verifies basic system initialization:
 - SystemCoreClock value confirms PLL setup (expect 168 MHz)
 - SysTick operational
 
-**Expected output:**
+**Expected output**
 ```
 === Crazyflie 2.1+ Bring-Up Test ===
 [BOOT] LED blink test... OK
@@ -100,7 +100,7 @@ Scans I2C3 bus for all connected devices:
 | 0x77 | BMP388 Barometer | Yes |
 | 0x29 | VL53L1x ToF (Flow deck) | No |
 
-**Expected output:**
+**Expected output**
 ```
 [I2C] Scanning I2C3 bus...
 [I2C] Found device at 0x18 (BMI088 Accel)
@@ -122,7 +122,7 @@ Reads and verifies chip identification registers:
 | VL53L1x | Model ID | 0xEACC |
 | PMW3901 | Product ID | 0x49 |
 
-**Expected output:**
+**Expected output**
 ```
 [SENSOR] BMI088 Accel chip ID = 0x1E... OK
 [SENSOR] BMI088 Gyro chip ID = 0x0F... OK
@@ -143,7 +143,7 @@ Reads actual sensor data and checks for sane values:
 | Barometer | Temperature | 15-35 C (room temp) |
 | ToF | Range | 0-2000 mm (depends on surface) |
 
-**Expected output:**
+**Expected output**
 ```
 [DATA] Accelerometer: X=-0.02g Y=0.01g Z=1.01g... OK
 [DATA] Gyroscope: X=0.5 Y=-0.3 Z=0.1 deg/s... OK
@@ -166,7 +166,7 @@ Spins each motor individually at low power (10%) for 1 second:
 
 The test requires user confirmation before starting motors.
 
-**Expected output:**
+**Expected output**
 ```
 [MOTOR] !!! REMOVE PROPELLERS !!!
 [MOTOR] Press ENTER to continue or 's' to skip...
@@ -182,7 +182,7 @@ The test requires user confirmation before starting motors.
 Tests communication with the nRF51822 via USART6 syslink protocol.
 Waits for battery voltage packet from nRF51.
 
-**Expected output:**
+**Expected output**
 ```
 [RADIO] Initializing syslink (USART6)... OK
 [RADIO] Waiting for battery packet...

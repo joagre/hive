@@ -1,6 +1,6 @@
 # Unified hive_select() API Design Sketch
 
-**Status:** Implemented (2026-01-17)
+**Status** - Implemented (2026-01-17)
 
 ## Motivation
 
@@ -16,7 +16,7 @@ The current `altitude_actor.c` shows the problem. It needs to:
 1. Process state updates from the state bus (100 Hz)
 2. Respond to LANDING commands immediately
 
-**Current code (problematic):**
+**Current code (problematic)**
 ```c
 while (1) {
     // Block until state available - LANDING command delayed while blocked!
@@ -32,9 +32,9 @@ while (1) {
 }
 ```
 
-**Problem:** If LANDING command arrives while blocked on bus, response is delayed until next state update (up to 10ms at 100 Hz).
+**Problem** - If LANDING command arrives while blocked on bus, response is delayed until next state update (up to 10ms at 100 Hz).
 
-**With `hive_select()`:**
+**With `hive_select()`**
 ```c
 enum { SEL_STATE, SEL_LANDING };
 hive_select_source sources[] = {
@@ -57,7 +57,7 @@ while (1) {
 }
 ```
 
-**Benefits:**
+**Benefits**
 - Immediate response to LANDING command (no 10ms delay)
 - Clean event loop structure
 - No non-blocking polling
@@ -202,7 +202,7 @@ const hive_select_source *select_sources;  // NULL = not in select
 size_t select_source_count;
 ```
 
-**Modified wake paths:**
+**Modified wake paths**
 
 1. **`hive_mailbox_add_entry()`** - also check `select_sources`:
    ```c
@@ -236,7 +236,7 @@ size_t select_source_count;
    }
    ```
 
-**Key design decisions:**
+**Key design decisions**
 - Existing `recv_filters` stays for `hive_ipc_recv_matches()` - no breaking changes
 - `select_sources` is separate, used only by `hive_select()`
 - Bus still uses `sub->blocked` flag for quick filtering before checking `select_sources`
@@ -251,7 +251,7 @@ size_t select_source_count;
 
 ## Efficiency
 
-**Complexity by operation:**
+**Complexity by operation**
 
 | API | Complexity |
 |-----|------------|
@@ -261,12 +261,12 @@ size_t select_source_count;
 | `hive_select()` with 1 source | O(1) if wildcards, O(depth) if specific |
 | `hive_select()` with N sources | O(N × sources_depth) |
 
-**Why this is acceptable:**
+**Why this is acceptable**
 - Source counts are tiny (2-5 typical)
 - Depths bounded by pool sizes (256 default)
 - Same O(n) pattern as existing `hive_ipc_recv_matches()`
 
-**The real win** - avoiding busy-polling:
+**The real win** - avoiding busy-polling
 ```c
 // WITHOUT hive_select - must busy-poll:
 while (1) {
@@ -281,7 +281,7 @@ hive_select(sources, 2, &result, -1);  // Zero CPU while waiting
 
 ## Relationship to Existing APIs
 
-**Decision: All blocking receive/read APIs become thin wrappers around `hive_select()`.**
+**Decision** - All blocking receive/read APIs become thin wrappers around `hive_select()`.
 
 This is the official approach - no separate implementations.
 
@@ -387,12 +387,12 @@ if (result.type == HIVE_SEL_BUS) {
 
 When multiple sources have data simultaneously, sources are checked in **strict array order**. The first ready source wins. There is no type-based priority - bus and IPC sources are treated equally.
 
-**Rationale:**
+**Rationale**
 - **Explicit control** - User decides priority via array ordering
 - **Predictable** - No hidden rules about which source type wins
 - **Simple** - First ready source in array wins
 
-**Example:**
+**Example**
 ```c
 enum { SEL_STATE, SEL_SENSOR, SEL_COMMAND, SEL_TIMER };
 hive_select_source sources[] = {
@@ -416,12 +416,12 @@ Intentionally excluded for now. Reasons:
 - Linux-only (STM32 has no network support)
 - Different buffer management requirements
 
-**May be added in future** - the API is extensible:
+**May be added in future** - the API is extensible
 - Tagged union allows adding `HIVE_SEL_NET` enum value and union member
 - No breaking changes to existing code
 - Priority follows array order (user controls via source placement)
 
-**Current workaround** - idiomatic actor model pattern:
+**Current workaround** - idiomatic actor model pattern
 ```c
 // Dedicated network reader actor - separation of concerns
 void net_reader(void *arg) {
@@ -439,14 +439,14 @@ This keeps network complexity isolated and lets `hive_select()` remain simple an
 
 ### `hive_recv_filter` Location
 
-**Decision: Move `hive_recv_filter` from `hive_ipc.h` to `hive_types.h`.**
+**Decision** - Move `hive_recv_filter` from `hive_ipc.h` to `hive_types.h`.
 
-**Rationale:**
+**Rationale**
 - **Follows existing pattern** - `hive_message` is in `hive_types.h`, and `hive_recv_filter` is a filter pattern for messages. They belong together.
 - **Cross-subsystem type** - Used by both IPC (`hive_ipc_recv_matches`) and select (`hive_select_source`). Shared types belong in `hive_types.h`.
 - **Conceptual grouping** - Filter constants (`HIVE_SENDER_ANY`, `HIVE_MSG_ANY`, `HIVE_TAG_ANY`) are already in `hive_types.h`. The struct that uses them should be there too.
 
-**Include hierarchy:**
+**Include hierarchy**
 ```
 hive_types.h      <- hive_recv_filter, hive_message, constants
     ^

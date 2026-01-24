@@ -14,7 +14,7 @@ Goals, design decisions, and architecture overview for the pilot autopilot.
 
 ## Status
 
-**Implemented:**
+**Implemented**
 - Altitude-hold hover with attitude stabilization
 - Horizontal position hold (simulated GPS in Webots; optical flow on Crazyflie)
 - Heading hold (yaw control with angle wrap-around)
@@ -64,7 +64,7 @@ Traditional RTOS designs use tasks with shared memory and locks. Actors use mess
 - **IPC notify** queues every message - slow consumers would process stale data
 - For control loops, you always want the *latest* sensor reading, not a backlog
 
-> **Bus semantics:** All buses use `max_entries=1` (latest-value only). Subscriptions do not receive retained values; subscribers only observe publishes that occur after subscription.
+> **Bus semantics** - All buses use `max_entries=1` (latest-value only). Subscriptions do not receive retained values; subscribers only observe publishes that occur after subscription.
 
 ### Why max_entries=1?
 
@@ -92,11 +92,11 @@ All flight-critical workers are spawned by the supervisor in dependency order (s
 3. **Motor** - Subscribes to torque bus (created by rate actor)
 4. **Flight manager** - Spawns last so all siblings are available
 
-**Sibling Info:** Actors use `hive_find_sibling()` to look up sibling actor IDs
+**Sibling Info** - Actors use `hive_find_sibling()` to look up sibling actor IDs
 for IPC coordination. The supervisor passes sibling info at spawn time, making
 the spawn order deterministic. After restart, siblings are re-resolved automatically.
 
-**Important:** Bus subscriptions see nothing until first publish *after* subscription.
+**Important** - Bus subscriptions see nothing until first publish *after* subscription.
 A subscriber spawned before the first publish will get valid data on first read.
 A subscriber spawned *after* a publish sees nothing until the next publish.
 
@@ -106,7 +106,7 @@ The spawn order in `pilot.c` ensures:
 
 ### Supervision Semantics
 
-**Restart strategy:** ONE_FOR_ALL - if any flight-critical actor crashes, all actors restart.
+**Restart strategy** - ONE_FOR_ALL - if any flight-critical actor crashes, all actors restart.
 
 **Why ONE_FOR_ALL?** The control pipeline has tight inter-actor dependencies:
 - Estimator depends on sensor data format
@@ -116,7 +116,7 @@ The spawn order in `pilot.c` ensures:
 If one actor crashes and restarts with fresh state while others continue with stale state,
 the pipeline produces incorrect output. Restarting all actors ensures consistent state.
 
-**State reset on restart:**
+**State reset on restart**
 When ONE_FOR_ALL triggers, all actors restart from scratch:
 - PID integrators reset to zero (no windup from previous flight)
 - Kalman filter covariances reset to initial values
@@ -127,7 +127,7 @@ When ONE_FOR_ALL triggers, all actors restart from scratch:
 This is correct behavior for a flight controller - inconsistent state is more dangerous than
 a brief control gap during restart.
 
-**Comms actor isolation:**
+**Comms actor isolation**
 The comms actor uses TEMPORARY restart type:
 - Does NOT trigger ONE_FOR_ALL restart of flight-critical actors if it crashes
 - Simply stops sending telemetry (acceptable for non-critical actor)
@@ -135,7 +135,7 @@ The comms actor uses TEMPORARY restart type:
 
 This isolation prevents a telemetry bug from crashing the entire flight.
 
-**Telemetry logger isolation:**
+**Telemetry logger isolation**
 Same as comms - TEMPORARY restart, outside the critical path.
 
 ### Pipeline Model
@@ -144,15 +144,15 @@ The control system is a pipeline, not a synchronous snapshot. Each actor process
 the most recent data available when it runs, not a coordinated snapshot from the
 same instant.
 
-**Timing characteristics (250 Hz, 4ms tick):**
+**Timing characteristics (250 Hz, 4ms tick)**
 - Sensor reads hardware, publishes to sensor bus
 - Estimator processes sensor data, publishes state estimate
 - Controllers cascade: altitude -> position -> attitude -> rate
 - Motor receives torque commands, outputs to hardware
 
-**Typical latency:** Under nominal conditions, pipeline latency is within one tick (~4ms) from sensor read to motor output. Worst-case latency is bounded by the control period plus any additional delay from missed publishes, timeouts, or supervisor restarts.
+**Typical latency** - Under nominal conditions, pipeline latency is within one tick (~4ms) from sensor read to motor output. Worst-case latency is bounded by the control period plus any additional delay from missed publishes, timeouts, or supervisor restarts.
 
-**Why this is acceptable:**
+**Why this is acceptable**
 - This pipelined approach is standard practice in flight controllers (PX4, ArduPilot)
 - At 250 Hz, typical latency of 4ms is well within control loop requirements
 - Synchronous snapshotting would add complexity with minimal benefit
@@ -160,12 +160,12 @@ same instant.
 
 ### Error Handling Pattern
 
-> **Actor return semantics:** In Hive, returning from an actor entry function is treated as abnormal termination (CRASH) unless the actor explicitly calls `hive_exit()`. This enables supervision and restart.
+> **Actor return semantics** - In Hive, returning from an actor entry function is treated as abnormal termination (CRASH) unless the actor explicitly calls `hive_exit()`. This enables supervision and restart.
 
 Actors use explicit error checking instead of `assert()`. This enables the supervisor
 to detect and recover from failed actors.
 
-**Cold path (initialization):** Log error and return without calling `hive_exit()`.
+**Cold path (initialization)** - Log error and return without calling `hive_exit()`.
 The supervisor sees this as a CRASH and can attempt restart per the restart strategy.
 
 ```c
@@ -199,16 +199,16 @@ if (HIVE_FAILED(hive_bus_publish(state->sensor_bus, &sensors, sizeof(sensors))))
 }
 ```
 
-**Why no `assert()`:**
+**Why no `assert()`**
 - `assert()` terminates the entire process - supervisor cannot recover
 - On STM32, `assert()` behavior is platform-dependent (hang, reset, undefined)
 - Log + return gives consistent behavior across platforms
 - Supervisor sees CRASH and applies restart strategy (ONE_FOR_ALL in pilot)
 
-**Exception:** `_Static_assert` is used for compile-time checks (e.g., packet sizes
+**Exception** - `_Static_assert` is used for compile-time checks (e.g., packet sizes
 in comms_actor.c) since these fail at build time, not runtime.
 
-**Logging configuration (Crazyflie):**
+**Logging configuration (Crazyflie)**
 
 The Crazyflie build uses `HIVE_LOG_LEVEL=INFO`:
 
@@ -225,11 +225,11 @@ complete flight record for debugging without the overhead of TRACE/DEBUG message
 
 10-11 actors depending on platform (see [Actor Counts](README.md#actor-counts)): flight-critical workers connected via buses, supervisor, flight manager, and one optional telemetry actor:
 
-**Supervision:** All actors are supervised with ONE_FOR_ALL strategy. Flight-critical
+**Supervision** - All actors are supervised with ONE_FOR_ALL strategy. Flight-critical
 actors use PERMANENT restart (crash triggers restart of all). Comms uses
 TEMPORARY restart (crash/exit doesn't trigger restarts, just stops comms).
 
-**Sibling Info:** Workers use `hive_find_sibling()` to look up sibling actor IDs
+**Sibling Info** - Workers use `hive_find_sibling()` to look up sibling actor IDs
 for IPC communication. The supervisor passes sibling info at spawn time.
 
 ```mermaid
@@ -314,7 +314,7 @@ This table documents the scheduling design for audit and latency analysis.
 | comms | LOW | Bus read (3 buses) | Non-critical, may be starved |
 | telemetry_logger | LOW | Timer + bus read (4 buses) | Non-critical, may be starved |
 
-**Scheduling characteristics:**
+**Scheduling characteristics**
 - All flight-critical actors run at CRITICAL priority
 - Each actor blocks on its upstream bus, creating natural pipeline synchronization
 - No actor performs unbounded computation between yields
@@ -346,4 +346,4 @@ first regardless of spawn order, causing motor to output before controllers have
 values. Telemetry runs at LOW priority since it's not flight-critical and shouldn't delay
 control loops.
 
-> **Runtime assumption:** This design relies on deterministic round-robin scheduling within a priority level, as guaranteed by the Hive runtime. Changing actor priorities requires re-validating pipeline execution order.
+> **Runtime assumption** - This design relies on deterministic round-robin scheduling within a priority level, as guaranteed by the Hive runtime. Changing actor priorities requires re-validating pipeline execution order.

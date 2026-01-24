@@ -75,12 +75,12 @@ For a production system, each actor should:
 
 The following instrumentation should be added for production flight software:
 
-**Error Counters (per actor):**
+**Error Counters (per actor)**
 - `bus_read_fail_count` - incremented when `hive_bus_read()` returns error
 - `bus_publish_fail_count` - incremented when `hive_bus_publish()` returns error
 - Counters exposed via telemetry or debug interface
 
-**Motor Deadman Watchdog:** Implemented
+**Motor Deadman Watchdog** - Implemented
 - Motor actor uses `hive_select()` with `MOTOR_DEADMAN_TIMEOUT_MS` timeout (50ms)
 - If no torque command received within timeout, all motors are zeroed
 - Protects against controller actor crash leaving motors at last commanded value
@@ -145,9 +145,9 @@ Rate Actor ──► Torque Bus ──► Motor Actor ──► HAL ──► Ha
                                (output)         (mixer)
 ```
 
-**Features:** Subscribe to torque bus, call HAL for motor output. Mixer is in HAL.
+**Features** - Subscribe to torque bus, call HAL for motor output. Mixer is in HAL.
 
-> **Motor authority:** The motor actor is the sole writer to motor outputs. STOP notifications from flight manager override all torque commands and force outputs to zero. This single point of control prevents conflicting motor commands.
+> **Motor authority** - The motor actor is the sole writer to motor outputs. STOP notifications from flight manager override all torque commands and force outputs to zero. This single point of control prevents conflicting motor commands.
 
 ### Step 2: Separate Altitude Actor
 Split altitude control from rate control.
@@ -157,7 +157,7 @@ Sensor Bus ──► Altitude Actor ──► Thrust Bus ──► Rate Actor �
             (altitude PID)                    (rate PIDs only)
 ```
 
-**Benefits:** Clear separation, different rates possible, easier tuning.
+**Benefits** Clear separation, different rates possible, easier tuning.
 
 ### Step 3: Sensor Actor
 Move sensor reading from main loop into actor.
@@ -167,23 +167,23 @@ Main Loop: hal_step() + hive_advance_time() + hive_run_until_blocked()
 Sensor Actor: timer ──► hal_read_sensors() ──► Sensor Bus
 ```
 
-**Benefits:** Main loop is minimal, all logic in timer-driven actors.
+**Benefits** Main loop is minimal, all logic in timer-driven actors.
 
 ### Step 4: Attitude Actor
 Add attitude angle control between altitude and rate control.
 
-**Before:**
+**Before**
 ```
 Sensor Bus ──► Rate Actor (rate PIDs with hardcoded 0.0 setpoints)
 ```
 
-**After:**
+**After**
 ```
 Sensor Bus ──► Attitude Actor ──► Rate Setpoint Bus ──► Rate Actor
             (attitude PIDs)                          (rate PIDs)
 ```
 
-**Benefits:**
+**Benefits**
 - Cascaded control (proper drone architecture)
 - Attitude controller generates rate setpoints
 - Rate controller tracks those setpoints
@@ -192,25 +192,25 @@ Sensor Bus ──► Attitude Actor ──► Rate Setpoint Bus ──► Rate A
 ### Step 5: Estimator Actor
 Add sensor fusion between raw sensors and controllers.
 
-**Before:**
+**Before**
 ```
 Sensor Actor ──► Sensor Bus ──► Controllers
 ```
 
-**After:**
+**After**
 ```
 Sensor Actor ──► Sensor Bus ──► Estimator Actor ──► State Bus ──► Controllers
                              (Kalman + complementary)
 ```
 
-**Implementation:**
+**Implementation**
 - Altitude Kalman filter (`fusion/altitude_kf.c`) for altitude/velocity estimation
 - Complementary filter (`fusion/complementary_filter.c`) for attitude estimation
 - Fuses accelerometer and gyroscope for roll/pitch estimation
 - Fuses magnetometer for yaw (when available)
 - Webots: synthesizes accelerometer from gravity + inertial_unit angles
 
-**Benefits:**
+**Benefits**
 - Controllers use state estimate, not raw sensors
 - Derived values (velocities) computed in one place
 - Fusion algorithm is portable (same code on all platforms)
@@ -219,18 +219,18 @@ Sensor Actor ──► Sensor Bus ──► Estimator Actor ──► State Bus 
 ### Step 6: Position Actor
 Add horizontal position hold and heading hold.
 
-**Before:**
+**Before**
 ```
 Attitude Actor uses hardcoded 0.0 attitude setpoints
 ```
 
-**After:**
+**After**
 ```
 State Bus ──► Position Actor ──► Attitude Setpoint Bus ──► Attitude Actor
               (position PD)       (roll, pitch, yaw)    (attitude PIDs)
 ```
 
-**Implementation:**
+**Implementation**
 - Simple PD controller: position error -> attitude command
 - Velocity damping: reduces overshoot
 - Max tilt limit: 0.35 rad (~20°) for safety
@@ -239,7 +239,7 @@ State Bus ──► Position Actor ──► Attitude Setpoint Bus ──► Att
 - Angle wrap-around: `pid_update_angle()` handles ±π discontinuity
 - World-to-body frame transformation based on current yaw
 
-**Benefits:**
+**Benefits**
 - Drone holds XY position and heading
 - Returns to target when displaced or rotated
 - Takes shortest rotation path (never rotates >180°)
@@ -247,13 +247,13 @@ State Bus ──► Position Actor ──► Attitude Setpoint Bus ──► Att
 ### Step 7: Waypoint Actor
 Add waypoint navigation with platform-specific routes.
 
-**Before:**
+**Before**
 ```
 Altitude Actor uses hardcoded TARGET_ALTITUDE
 Position Actor uses hardcoded TARGET_X, TARGET_Y, TARGET_YAW
 ```
 
-**After:**
+**After**
 ```
                               ┌──► Altitude Actor (reads z)
 State Bus ──► Waypoint Actor ──► Position Target Bus
@@ -261,7 +261,7 @@ State Bus ──► Waypoint Actor ──► Position Target Bus
                               └──► Position Actor (reads x, y, yaw)
 ```
 
-**Implementation:**
+**Implementation**
 - Manages list of waypoints (platform-specific)
 - Publishes current target to position target bus
 - Altitude actor reads target altitude from position target bus
@@ -271,12 +271,12 @@ State Bus ──► Waypoint Actor ──► Position Target Bus
 - Hovers briefly at each waypoint before advancing
 - Loops forever: returns to first waypoint after completing route
 
-**Platform-specific routes:**
-- **Webots:** 3D waypoints with square pattern and altitude changes
-- **STM32 hardware:** Platform-dependent (see flight profiles in README.md)
-- **First flight test:** Hover at 0.5m briefly, then land (safe tethered test)
+**Platform-specific routes**
+- **Webots** - 3D waypoints with square pattern and altitude changes
+- **STM32 hardware** - Platform-dependent (see flight profiles in README.md)
+- **First flight test** - Hover at 0.5m briefly, then land (safe tethered test)
 
-**Benefits:**
+**Benefits**
 - Decouples waypoint logic from both position and altitude control
 - Both actors read targets from bus (no hardcoded values)
 - World-to-body frame transformation handles arbitrary headings
@@ -285,13 +285,13 @@ State Bus ──► Waypoint Actor ──► Position Target Bus
 ### Step 8: Flight Manager Actor
 Add centralized startup coordination and safety cutoff.
 
-**Before:**
+**Before**
 ```
 Startup delay and flight window in motor_actor
 Waypoint actor starts immediately
 ```
 
-**After:**
+**After**
 ```
 Flight Manager ──► START ──► Waypoint Actor
                               │
@@ -305,7 +305,7 @@ Flight Manager ──► START ──► Waypoint Actor
                               v (motors zeroed)
 ```
 
-**Implementation:**
+**Implementation**
 - Handles 60-second startup delay (hardware only)
 - Opens log file (erases flash sector on STM32)
 - Sends START notification to waypoint actor to begin flight
@@ -316,7 +316,7 @@ Flight Manager ──► START ──► Waypoint Actor
 - Sends STOP notification to motor actor
 - Closes log file
 
-**Benefits:**
+**Benefits**
 - Centralized safety timing (not scattered across actors)
 - Clear flight authorization flow
 - Waypoint actor blocks until flight manager authorizes flight
@@ -325,25 +325,25 @@ Flight Manager ──► START ──► Waypoint Actor
 ### Step 9: Comms Actor
 Add radio telemetry for ground station logging (Crazyflie only).
 
-**Before:**
+**Before**
 ```
 No real-time flight data logging during flight
 ```
 
-**After:**
+**After**
 ```
 State Bus ──┬──► Comms Actor ──► HAL Radio ──► Crazyradio 2.0 ──► Ground Station
 Sensor Bus ─┤      (100Hz)
 Thrust Bus ─┘
 ```
 
-**Implementation:**
+**Implementation**
 - Subscribes to sensor, state, and thrust buses (not position target bus)
 - Sends binary packets at 100Hz over syslink protocol
 
-**Constraint:** ESB payload limit is 31 bytes per packet.
+**Constraint** - ESB payload limit is 31 bytes per packet.
 
-**Design choice:** Prioritize attitude, rates, and thrust in telemetry packets. Position targets are omitted due to packet size limit--use Webots CSV telemetry for position control tuning. A future revision could add a third packet type for targets if needed.
+**Design choice** - Prioritize attitude, rates, and thrust in telemetry packets. Position targets are omitted due to packet size limit--use Webots CSV telemetry for position control tuning. A future revision could add a third packet type for targets if needed.
 - Two operating modes:
   - Flight mode: Sends telemetry packets at 100Hz
   - Download mode: Transfers flash log file to ground station on request
@@ -358,7 +358,7 @@ Thrust Bus ─┘
 - Radio send blocks ~370us (37 bytes * 10 bits/byte / 1Mbaud)
 - Uses TEMPORARY restart (crash/exit doesn't trigger restarts of flight-critical actors)
 
-**Ground station commands (from examples/pilot directory):**
+**Ground station commands (from examples/pilot directory)**
 ```bash
 pip install cflib
 ./tools/ground_station.py -o flight.csv        # Receive telemetry
@@ -366,7 +366,7 @@ pip install cflib
 ../../tools/decode_log.py log.bin > log.txt    # Decode binary log
 ```
 
-**Benefits:**
+**Benefits**
 - Real-time flight data for debugging and analysis
 - Post-flight log download (no physical access required)
 - Separate from flash logging (higher rate, no flash wear)
@@ -375,12 +375,12 @@ pip install cflib
 ### Step 10: Telemetry Logger Actor
 Add CSV logging for PID tuning and flight analysis (Webots only).
 
-**Before:**
+**Before**
 ```
 No structured data export for analysis
 ```
 
-**After:**
+**After**
 ```
 State Bus ──┬──► Telemetry Logger ──► /tmp/pilot_telemetry.csv
 Sensor Bus ─┤      (25Hz)
@@ -388,7 +388,7 @@ Thrust Bus ─┤
 Position Target Bus ─┘
 ```
 
-**Implementation:**
+**Implementation**
 - Subscribes to sensor, state, thrust, and position target buses
 - Writes CSV at 25Hz with all flight data
 - Enabled by default for Webots (`SIMULATED_TIME`), disabled for Crazyflie
@@ -396,7 +396,7 @@ Position Target Bus ─┘
 - Runs at LOW priority, TEMPORARY restart (not flight-critical)
 - Flushes to disk every second (25 samples)
 
-**CSV columns:**
+**CSV columns**
 - `time_ms`: Timestamp since flight start
 - `roll,pitch,yaw`: Attitude angles (rad)
 - `roll_rate,pitch_rate,yaw_rate`: Angular rates (rad/s)
@@ -407,7 +407,7 @@ Position Target Bus ─┘
 - `gyro_x,gyro_y,gyro_z`: Raw gyro (rad/s)
 - `accel_x,accel_y,accel_z`: Raw accel (m/s²)
 
-**Usage:**
+**Usage**
 ```bash
 # Run simulation (make now auto-installs to Webots)
 make
@@ -423,7 +423,7 @@ python3 tools/plot_telemetry.py /tmp/pilot_telemetry.csv
 python3 tools/plot_flight.py /tmp/pilot_telemetry.csv
 ```
 
-**Benefits:**
+**Benefits**
 - Data-driven PID tuning (vs blind iteration)
 - Visualize oscillations, overshoot, settling time
 - Quantitative metrics: rise time, settling time, RMS error
@@ -432,7 +432,7 @@ python3 tools/plot_flight.py /tmp/pilot_telemetry.csv
 
 ### Step 11 (Future): RC Input / Mode Switching
 
-**Future extensions:**
+**Future extensions**
 - RC input handling (manual override)
 - Takeoff/landing sequences
 - Mode switching (hover, land, follow-me, etc.)

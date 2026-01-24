@@ -42,27 +42,27 @@ make -f Makefile.crazyflie-2.1+
 
 ## Specifications
 
-**Flight Controller (Crazyflie 2.1+):**
+**Flight Controller (Crazyflie 2.1+)**
 - STM32F405RG @ 168 MHz (Cortex-M4F)
 - 1 MB Flash, 192 KB RAM + 64 KB CCM
 - Hardware FPU for fast sensor fusion
 - 8 MHz HSE crystal
 
-**Sensors:**
+**Sensors**
 - BMI088: 16-bit accel (+/-24g) + 16-bit gyro (+/-2000 dps) on I2C3 (addr: 0x18/0x68)
 - BMP388: 24-bit barometer on I2C3 (addr: 0x77)
 
-**Optional Flow Deck v2:**
+**Optional Flow Deck v2**
 - PMW3901: Optical flow sensor (80x80 pixels)
 - VL53L1x: Time-of-Flight ranging (up to 4m)
 
-**Motors:**
+**Motors**
 - Type: Brushed coreless, 7x16mm
 - Voltage: 3.0V nominal (single-cell LiPo)
 - 2x CCW (M1, M3), 2x CW (M2, M4)
 - Propellers: 45mm
 
-**Battery:**
+**Battery**
 - LiPo 3.7V / 250mAh
 - Weight: ~27g (without Flow deck)
 
@@ -83,13 +83,13 @@ The STM32F405RG has 1 MB flash organized in sectors of varying sizes:
 | **8** | **128 KB** | **0x08080000** | **Flight log (`/log`)** |
 | 9-11 | 384 KB | 0x080A0000 | Reserved |
 
-**Firmware region:** Sectors 0-7 (512 KB) - Limited by linker script
-**Data region:** Sector 8 (128 KB) - Flight log written during flight
+**Firmware region** - Sectors 0-7 (512 KB) - Limited by linker script
+**Data region** - Sector 8 (128 KB) - Flight log written during flight
 
 The linker script (`stm32f405_flash.ld`) limits firmware to 512 KB to prevent
 accidentally overwriting the log sector. Current firmware is ~63 KB.
 
-**Log file lifecycle:**
+**Log file lifecycle**
 1. `hive_log_file_open("/log")` erases sector 8 (takes ~1 second)
 2. Writes go to an 8 KB ring buffer, flushed to flash periodically
 3. `hive_log_file_close()` flushes remaining data
@@ -319,7 +319,7 @@ X-configuration quadcopter with brushed coreless motors:
              Rear
 ```
 
-**Motor to pin mapping:**
+**Motor to pin mapping**
 
 | Motor | Position | Rotation | Pin |
 |-------|----------|----------|-----|
@@ -328,7 +328,7 @@ X-configuration quadcopter with brushed coreless motors:
 | M3 | rear-right | CCW | PA2 (TIM2_CH3) |
 | M4 | rear-left | CW | PA3 (TIM2_CH4) |
 
-**Motor mixing (in hal_crazyflie.c):**
+**Motor mixing (in hal_crazyflie.c)**
 ```
 M1 = thrust - roll + pitch + yaw
 M2 = thrust + roll + pitch - yaw
@@ -336,14 +336,14 @@ M3 = thrust + roll - pitch + yaw
 M4 = thrust - roll - pitch - yaw
 ```
 
-**To reverse motor direction:** Swap the two motor wires at the connector.
+**To reverse motor direction** - Swap the two motor wires at the connector.
 
 ## Self-Test
 
 After initialization, `hal_self_test()` verifies all sensors respond:
 
-1. **Required:** BMI088 (gyro/accel), BMP388 (barometer)
-2. **Optional:** Flow deck sensors (PMW3901, VL53L1x) - only tested if deck was detected
+1. **Required** - BMI088 (gyro/accel), BMP388 (barometer)
+2. **Optional** - Flow deck sensors (PMW3901, VL53L1x) - only tested if deck was detected
 
 Returns `true` if all required sensors pass, `false` otherwise.
 
@@ -356,7 +356,7 @@ Before flight, `hal_calibrate()` performs:
 3. **Barometer reference** - Average 50 samples for ground level
 4. **Height offset** (Flow deck only) - Measure ground clearance for accurate height
 
-**Important:** Keep the drone still and level on a flat surface during calibration!
+**Important** - Keep the drone still and level on a flat surface during calibration!
 
 ## LED Feedback
 
@@ -397,7 +397,7 @@ make -f Makefile.crazyflie-2.1+ FLIGHT_PROFILE=3  # FULL_3D (requires Flow deck)
 | 2 (ALTITUDE) | Altitude changes: 0.5m -> 0.8m -> 1.2m -> 0.8m | 40s |
 | 3 (FULL_3D) | 3D waypoints, max 1.2m (requires Flow deck) | 60s |
 
-**Note:** All profiles keep altitude ≤1.2m to stay within flow deck range (VL53L1x: 1.3m max).
+**Note** - All profiles keep altitude ≤1.2m to stay within flow deck range (VL53L1x: 1.3m max).
 
 ## Flashing Notes
 

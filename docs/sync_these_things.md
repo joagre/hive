@@ -37,9 +37,9 @@ man/man3/                       # API man pages
 
 ## Top-Level Runtime Documentation
 
-**Source of truth:** `spec/` directory
+**Source of truth** - `spec/` directory
 
-**Must stay in sync with spec/:**
+**Must stay in sync with spec/**
 
 | Document | What to sync |
 |----------|--------------|
@@ -47,7 +47,7 @@ man/man3/                       # API man pages
 | `CLAUDE.md` | Key concepts, memory limits, HAL functions, error handling |
 | `man/man3/*.3` | API signatures, return values, error codes |
 
-**Common drift points:**
+**Common drift points**
 - [ ] Memory pool sizes (`HIVE_*_POOL_SIZE`, `HIVE_MAX_*`)
 - [ ] Default stack sizes and arena size
 - [ ] Error codes and status values
@@ -60,16 +60,16 @@ man/man3/                       # API man pages
 
 ## Pilot Example Documentation
 
-**Source of truth:** `examples/pilot/spec/` + code
+**Source of truth** - `examples/pilot/spec/` + code
 
-**Must stay in sync:**
+**Must stay in sync**
 
 | Document | What to sync |
 |----------|--------------|
 | `examples/pilot/README.md` | Actor list, bus diagram, HAL functions, stack measurements |
 | `examples/pilot/spec/` | Architecture diagrams, actor tables, stack measurements |
 
-**Common drift points:**
+**Common drift points**
 - [ ] Actor count (currently 10-11 depending on platform)
 - [ ] Bus subscriptions in diagrams (must match code)
 - [ ] Stack measurements (run with `STACK_PROFILE=1` after changes)
@@ -78,12 +78,12 @@ man/man3/                       # API man pages
 - [ ] Memory footprint (flash/RAM sizes)
 - [ ] Spawn order table
 
-**Diagrams to verify against code:**
+**Diagrams to verify against code**
 - [ ] `README.md` mermaid diagram - all bus connections
 - [ ] `spec/design.md` Architecture Overview diagram - all bus connections
 - [ ] `spec/evolution.md` Future Architecture diagram - intentionally simplified
 
-**Code files to check for bus subscriptions:**
+**Code files to check for bus subscriptions**
 ```
 sensor_actor.c      - publishes to sensor_bus
 estimator_actor.c   - subscribes sensor_bus, publishes state_bus
@@ -147,9 +147,9 @@ grep -rn "hal_" examples/pilot/README.md | grep -v "\.c:"
 
 ## Last Sync
 
-**Date:** 2026-01-24
+**Date** - 2026-01-24
 
-**What was synced:**
+**What was synced**
 - Documentation reorganization:
   - Split former top-level SPEC.md into `spec/` directory (design.md, api.md, internals.md)
   - Split former pilot SPEC.md into `examples/pilot/spec/` (design.md, implementation.md, evolution.md)
@@ -160,7 +160,7 @@ grep -rn "hal_" examples/pilot/README.md | grep -v "\.c:"
 - Updated all cross-references to new paths
 - Verified no broken links
 
-**Previous sync (2026-01-23):**
+**Previous sync (2026-01-23)**
 - Stack measurements updated after fixing STACK_PROFILE build
 - Kalman filter mentions added
 - Diagrams verified (StateBus-->Rate, TLog actor)

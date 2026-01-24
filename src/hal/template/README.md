@@ -53,7 +53,7 @@ uint32_t hive_hal_critical_enter(void);
 void hive_hal_critical_exit(uint32_t state);
 ```
 
-**Implementation notes:**
+**Implementation notes**
 - `get_time_us`: Must be monotonic, microsecond resolution preferred
 - Critical sections: Disable interrupts, support nesting
 
@@ -68,7 +68,7 @@ hive_status hive_hal_event_register(int fd, uint32_t events, io_source *source);
 void hive_hal_event_unregister(int fd);
 ```
 
-**Implementation notes:**
+**Implementation notes**
 - `event_poll`: Check and process ready I/O events without blocking
 - `event_wait`: Sleep until event or timeout; process events on wake
 - `event_register/unregister`: Add/remove file descriptors from watch list
@@ -87,13 +87,13 @@ uint64_t hive_hal_timer_get_time(void);
 void hive_hal_timer_advance_time(uint64_t delta_us);
 ```
 
-**Implementation notes:**
+**Implementation notes**
 - `timer_create`: Create a one-shot or periodic timer that sends `HIVE_MSG_TIMER` to owner
 - `timer_cancel`: Cancel an active timer by ID
 - `timer_get_time`: Return current time in microseconds (for simulation mode)
 - `timer_advance_time`: Advance simulation time and fire due timers (for testing/simulation)
 
-**Platform approaches:**
+**Platform approaches**
 - **Linux**: Use `timerfd` + epoll for real-time mode; software timers for simulation mode
 - **STM32**: Software timer wheel driven by SysTick interrupt (`hive_timer_tick_isr()`)
 - **Simulation**: Store expiry times, fire timers when `advance_time` is called
@@ -120,7 +120,7 @@ typedef struct {
 } hive_context;
 ```
 
-**Implementation notes:**
+**Implementation notes**
 - `context_init`: Set up stack so `context_switch` starts execution at `fn`
 - `context_switch`: Save/restore callee-saved registers and stack pointer
 - See your architecture's ABI for which registers are callee-saved
@@ -157,7 +157,7 @@ hive_status hive_hal_net_recv(int fd, void *buf, size_t len, size_t *received);
 hive_status hive_hal_net_send(int fd, const void *buf, size_t len, size_t *sent);
 ```
 
-**Implementation notes:**
+**Implementation notes**
 - All network operations must be **non-blocking**
 - Return `HIVE_ERR_WOULDBLOCK` when operation would block
 - Return `HIVE_ERR_INPROGRESS` for async connect in progress

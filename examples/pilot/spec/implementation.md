@@ -70,10 +70,10 @@ float pid_update(pid_state_t *pid, float setpoint, float measurement, float dt) 
 PID gains are platform-specific, defined in each `hal/<platform>/hal_config.h`.
 The control cascade uses:
 
-- **Altitude:** PI + velocity damping (Kv) for smooth response
-- **Position:** PD with velocity damping, max tilt limited
-- **Attitude:** P controller for roll/pitch/yaw angles
-- **Rate:** PD controller for angular rates
+- **Altitude** - PI + velocity damping (Kv) for smooth response
+- **Position** - PD with velocity damping, max tilt limited
+- **Attitude** - P controller for roll/pitch/yaw angles
+- **Rate** - PD controller for angular rates
 
 ### Mixer
 

@@ -3,7 +3,7 @@
 This document describes how to implement radio communication for the Hive runtime
 on Crazyflie 2.1, enabling real-time telemetry logging over the radio link.
 
-**Use case:** High-frequency logging (100Hz+) during flight for PID tuning and
+**Use case** - High-frequency logging (100Hz+) during flight for PID tuning and
 control analysis as described in [stabilization.md](stabilization.md).
 
 ---
@@ -40,7 +40,7 @@ The Crazyflie has two MCUs that handle radio communication:
                                     └──────────────────────┘
 ```
 
-**Key insight:** The nRF51 firmware stays intact when you flash custom STM32
+**Key insight** - The nRF51 firmware stays intact when you flash custom STM32
 firmware. You only need to implement the syslink protocol on the STM32 side.
 
 ---
@@ -113,9 +113,9 @@ Syslink is the packet-based protocol between STM32 and nRF51 over UART.
 
 ### Physical Layer
 
-- **Baud rate:** 1,000,000 (1 Mbaud)
-- **Format:** 8N1 (8 data bits, no parity, 1 stop bit)
-- **Flow control:** Hardware flow via TXEN pin (nRF51 -> STM32)
+- **Baud rate** - 1,000,000 (1 Mbaud)
+- **Format** - 8N1 (8 data bits, no parity, 1 stop bit)
+- **Flow control** - Hardware flow via TXEN pin (nRF51 -> STM32)
 
 ### UART Pins (Crazyflie 2.1)
 
@@ -776,10 +776,10 @@ keeps flight phase simple (telemetry only) while enabling full log retrieval.
 
 ### Design Principles
 
-- **Flight phase:** Only telemetry packets (attitude, position) at 100Hz
-- **Post-flight:** Ground station requests log, drone sends in chunks
-- **Complete file:** All log entries, not filtered by level
-- **Simple protocol:** Request/response, ESB handles flow control
+- **Flight phase** - Only telemetry packets (attitude, position) at 100Hz
+- **Post-flight** - Ground station requests log, drone sends in chunks
+- **Complete file** - All log entries, not filtered by level
+- **Simple protocol** - Request/response, ESB handles flow control
 
 ### Protocol
 
@@ -908,7 +908,7 @@ The nRF51822 supports BLE, but it's not recommended for this use case:
 - **More protocol complexity** - BLE requires GATT services. ESB/syslink is just
   raw packets.
 
-**Bottom line:** ESB + Crazyradio 2.0 (~$30) lets you keep stock nRF51 firmware
+**Bottom line** - ESB + Crazyradio 2.0 (~$30) lets you keep stock nRF51 firmware
 and only write STM32 code. Much simpler.
 
 ---

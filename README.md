@@ -63,7 +63,7 @@ See [spec/](spec/) for design details.
 
 **Hive favors boundedness and inspectability over fairness and throughput.**
 
-**Platforms:** x86-64 Linux (fully implemented), STM32/ARM Cortex-M bare metal (core runtime implemented)
+**Platforms** - x86-64 Linux (fully implemented), STM32/ARM Cortex-M bare metal (core runtime implemented)
 
 ## Features
 
@@ -98,9 +98,9 @@ See [spec/](spec/) for design details.
 | **API Style** | Minimalist C functions | Object-oriented C macros |
 | **Learning Curve** | Lower (if familiar with actors) | Steeper (requires statechart knowledge) |
 
-**Choose Hive if:** You prefer sequential actor code with blocking operations (IPC, bus, timers, I/O) over event-driven state machines, want fault-tolerant supervision, or find explicit statecharts overkill for your use case.
+**Choose Hive if** - You prefer sequential actor code with blocking operations (IPC, bus, timers, I/O) over event-driven state machines, want fault-tolerant supervision, or find explicit statecharts overkill for your use case.
 
-**Choose QP/C if:** You need formal state machine modeling, want UML tooling integration, or require safety certification with established track record.
+**Choose QP/C if** - You need formal state machine modeling, want UML tooling integration, or require safety certification with established track record.
 
 ## Cooperative Scheduling
 
@@ -158,7 +158,7 @@ See [`include/hive_static_config.h`](include/hive_static_config.h) for all compi
 
 All structures are statically allocated. Actor stacks use a static arena allocator by default (configurable size), with optional malloc via `actor_config.malloc_stack = true`. Stack sizes are configurable per actor, allowing different actors to use different stack sizes. Arena memory is automatically reclaimed and reused when actors exit. No malloc in hot paths. Memory footprint calculable at link time when using arena allocator (default); optional malloc'd stacks add runtime-dependent heap usage.
 
-**Embedded footprint:** The defaults above are generous for Linux development. See the [Pilot Example](#pilot-example-quadcopter-flight-controller) for a minimal embedded configuration (~60KB flash, ~58KB RAM on STM32F4).
+**Embedded footprint** - The defaults above are generous for Linux development. See the [Pilot Example](#pilot-example-quadcopter-flight-controller) for a minimal embedded configuration (~60KB flash, ~58KB RAM on STM32F4).
 
 ## Quick Start
 
@@ -599,9 +599,9 @@ See [examples/pilot/README.md](examples/pilot/README.md) for build instructions 
 - `HIVE_O_RDONLY`, `HIVE_O_WRONLY`, `HIVE_O_RDWR`
 - `HIVE_O_CREAT`, `HIVE_O_TRUNC`, `HIVE_O_APPEND`
 
-**Linux:** File operations block until complete. No timeout parameter.
+**Linux** - File operations block until complete. No timeout parameter.
 
-**STM32:** Uses flash-backed virtual files with a ring buffer for efficiency.
+**STM32** - Uses flash-backed virtual files with a ring buffer for efficiency.
 Most writes complete immediately. When the buffer fills up, `write()` blocks to flush data to
 flash before continuing. Virtual file paths are hardcoded (`/log`, `/config`), enabled by defining their flash layout:
 ```c
@@ -634,7 +634,7 @@ See `examples/pilot/Makefile.crazyflie-2.1+` for a complete example and [spec/ap
 - `HIVE_LOG_TO_FILE` - File logging (default: 1 on both)
 - `HIVE_LOG_FILE_PATH` - Log file path (default: `/var/tmp/hive.log` on Linux, `/log` on STM32)
 
-**Binary log format:** 12-byte header + text payload. Use `tools/decode_log.py` to decode.
+**Binary log format** - 12-byte header + text payload. Use `tools/decode_log.py` to decode.
 
 ### Network I/O
 
@@ -687,7 +687,7 @@ case 2:
 }
 ```
 
-**Priority:** Strict array order. When multiple sources are ready, the first one in the array wins.
+**Priority** - Strict array order. When multiple sources are ready, the first one in the array wins.
 
 ## Implementation Details
 
@@ -695,8 +695,8 @@ case 2:
 
 The runtime is **completely single-threaded**. All actors run cooperatively in a single scheduler thread with zero synchronization primitives (no mutexes, atomics, or locks).
 
-- **Linux:** `epoll` for timers and network; synchronous file I/O
-- **STM32:** Hardware timers, WFI for idle, flash-backed virtual files
+- **Linux** - `epoll` for timers and network; synchronous file I/O
+- **STM32** - Hardware timers, WFI for idle, flash-backed virtual files
 
 All runtime APIs must be called from actor context. External threads must use platform IPC (sockets/pipes) with dedicated reader actors.
 

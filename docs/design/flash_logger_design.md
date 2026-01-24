@@ -40,16 +40,16 @@ Designed to be non-intrusive to flight-critical control loops.
 | 4 | 0x0801_0000 | 64 KB | Firmware |
 | 5 | 0x0802_0000 | 128 KB | **LOG REGION** |
 
-**Decision:** Use Sector 5 (128 KB) for logging. This provides ~2 minutes of
+**Decision** - Use Sector 5 (128 KB) for logging. This provides ~2 minutes of
 dense logging at 1 KB/s, or ~10+ minutes at typical rates.
 
 ### Flash Programming Constraints
 
-- **Erase time:** 1-4 seconds per 128KB sector (blocking!)
-- **Program granularity:** Byte/half-word/word (we'll use word = 32-bit)
-- **Program time:** ~16 µs per word typical
-- **Read stall:** CPU stalls on flash read while BSY=1 (same bank)
-- **Endurance:** 10K erase cycles (not a concern for flight logging)
+- **Erase time** - 1-4 seconds per 128KB sector (blocking!)
+- **Program granularity** - Byte/half-word/word (we'll use word = 32-bit)
+- **Program time** - ~16 µs per word typical
+- **Read stall** - CPU stalls on flash read while BSY=1 (same bank)
+- **Endurance** - 10K erase cycles (not a concern for flight logging)
 
 ### Critical Constraint: Flash Read Stall
 
@@ -196,7 +196,7 @@ typedef struct {
 └──────────────────────────────────────────────────┘
 ```
 
-**Block size:** 256 bytes (240 payload + 16 header + 4 footer = 260, round to 256)
+**Block size** - 256 bytes (240 payload + 16 header + 4 footer = 260, round to 256)
 
 Adjusted: 256 - 16 - 4 = 236 bytes payload per block.
 
@@ -206,10 +206,10 @@ Adjusted: 256 - 16 - 4 = 236 bytes payload per block.
 
 ### Design
 
-- **Size:** 8192 bytes (8 KB) - fits ~80-200 records
-- **Type:** Single-producer-multi-consumer not needed; SPSC sufficient
-- **Lock-free:** Yes, for O(1) push from flight actors
-- **Overflow policy:** Drop newest, increment counter
+- **Size** - 8192 bytes (8 KB) - fits ~80-200 records
+- **Type** - Single-producer-multi-consumer not needed; SPSC sufficient
+- **Lock-free** - Yes, for O(1) push from flight actors
+- **Overflow policy** - Drop newest, increment counter
 
 ### Implementation
 
@@ -279,9 +279,9 @@ bool log_pop(log_record_header_t *hdr, void *payload, uint16_t max_len);
 
 ### Timing Budget
 
-- **DRAIN phase:** Process up to 10 records per cycle, then yield
-- **WRITE phase:** Write one 256B block, then yield
-- **Yield frequency:** Every 1-2 ms max between yields
+- **DRAIN phase** - Process up to 10 records per cycle, then yield
+- **WRITE phase** - Write one 256B block, then yield
+- **Yield frequency** - Every 1-2 ms max between yields
 
 ### Pseudo-code
 
@@ -533,17 +533,17 @@ void log_dump_uart(void);
 
 ## Open Questions
 
-1. **Block size:** 256B chosen for ~1ms write time. Should we go smaller (128B)
+1. **Block size** - 256B chosen for ~1ms write time. Should we go smaller (128B)
    for lower latency, or larger (512B) for efficiency?
 
-2. **Ring buffer size:** 8KB allows ~100-200 records. Is this enough buffer
+2. **Ring buffer size** - 8KB allows ~100-200 records. Is this enough buffer
    for worst-case flash write delays?
 
-3. **What to log:** Which actors log what? Every state update? Every N updates?
+3. **What to log** - Which actors log what? Every state update? Every N updates?
    Need to balance detail vs. flash space.
 
-4. **Timestamp source:** Use `HAL_GetTick()` (ms) or implement µs timer?
+4. **Timestamp source** - Use `HAL_GetTick()` (ms) or implement µs timer?
    Flight events may need µs resolution.
 
-5. **Compression:** Simple RLE or delta encoding could 2-3x the log capacity.
+5. **Compression** - Simple RLE or delta encoding could 2-3x the log capacity.
    Worth the complexity?

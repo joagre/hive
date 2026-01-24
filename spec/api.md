@@ -81,7 +81,7 @@ const hive_spawn_info *hive_find_sibling(const hive_spawn_info *siblings,
                                           size_t count, const char *name);
 ```
 
-**Spawn behavior:**
+**Spawn behavior**
 - `init` (if provided) is called in spawner context before actor starts
 - `init` return value is passed to actor as `args`
 - Actor receives sibling info at startup:
@@ -89,13 +89,13 @@ const hive_spawn_info *hive_find_sibling(const hive_spawn_info *siblings,
   - Supervised actors: siblings = all sibling children
 - If `cfg->auto_register` is true and `cfg->name` is set, actor is auto-registered in name registry
 
-**Sibling array lifetime:**
+**Sibling array lifetime**
 The sibling array is a **startup-time snapshot**. If a sibling restarts (getting a new `actor_id`), any cached IDs become stale. For scenarios where siblings may restart:
 - Use `hive_whereis()` for dynamic lookups
 - Sibling array is best for stable peer references in ONE_FOR_ALL supervision (all restart together)
 - Registry is best for service discovery patterns where restarts are expected
 
-**Actor function return behavior:**
+**Actor function return behavior**
 
 Actors **must** call `hive_exit()` to terminate cleanly. If an actor function returns without calling `hive_exit()`, the runtime detects this as a crash:
 
@@ -141,7 +141,7 @@ typedef void (*stack_usage_callback)(actor_id id, const char *name,
 void hive_actor_stack_usage_all(stack_usage_callback cb);
 ```
 
-**Usage example:**
+**Usage example**
 
 ```c
 void print_stack(actor_id id, const char *name, size_t stack_size, size_t used) {
@@ -154,7 +154,7 @@ void print_stack(actor_id id, const char *name, size_t stack_size, size_t used) 
 hive_actor_stack_usage_all(print_stack);
 ```
 
-**Notes:**
+**Notes**
 - Adds overhead at spawn time (stack fill) and query time (pattern scan)
 - Disabled by default (`HIVE_STACK_WATERMARK=0`)
 - Enable via compile flag: `make CFLAGS+='-DHIVE_STACK_WATERMARK=1'`
@@ -204,7 +204,7 @@ const char *hive_exit_reason_str(hive_exit_reason reason);
 - `monitor_id == 0`: notification came from a bidirectional link
 - `monitor_id != 0`: notification came from a monitor; value matches the ID returned by `hive_monitor()`
 
-**Handling exit messages:**
+**Handling exit messages**
 
 Exit messages should be decoded using `hive_decode_exit()`:
 
@@ -240,7 +240,7 @@ hive_status hive_whereis(const char *name, actor_id *out);
 hive_status hive_unregister(const char *name);
 ```
 
-**Behavior:**
+**Behavior**
 
 - `hive_register(name)`: Associates the calling actor with `name`. The name must be unique. The name string must remain valid for the lifetime of the registration (typically a string literal). Returns `HIVE_ERR_INVALID` if name is NULL or already registered. Returns `HIVE_ERR_NOMEM` if registry is full (`HIVE_MAX_REGISTERED_NAMES`).
 
@@ -248,14 +248,14 @@ hive_status hive_unregister(const char *name);
 
 - `hive_unregister(name)`: Removes a name registration. Only the owning actor can unregister its own names. Returns `HIVE_ERR_INVALID` if name is NULL, not found, or not owned by caller. Rarely needed since names are automatically unregistered on actor exit.
 
-**Implementation:**
+**Implementation**
 
 - Static table of `(name, actor_id)` pairs (`HIVE_MAX_REGISTERED_NAMES` = 32 default)
 - Linear scan for lookups (O(n), suitable for small registries)
 - Names are pointers to user-provided strings (not copied)
 - Auto-cleanup in `hive_actor_free()` removes all entries for the exiting actor
 
-**Use with supervisors:**
+**Use with supervisors**
 
 When actors are restarted by a supervisor, they should call `hive_register()` with the same name. Actors that need to communicate with them should call `hive_whereis()` each time they need to send a message, rather than caching the actor ID at startup. This ensures they get the current actor ID even after restarts.
 
@@ -289,20 +289,20 @@ void send_query(const char *query) {
 | Tight peer coupling | Best | Overkill |
 | Cross-supervisor communication | No | Required |
 
-**Heuristics:**
+**Heuristics**
 
-1. **Use siblings when:**
+1. **Use siblings when**
    - All communicating actors restart together (ONE_FOR_ALL strategy)
    - Actors are tightly coupled and always start/stop as a group
    - You want zero-overhead lookup (sibling array is passed at startup)
 
-2. **Use registry when:**
+2. **Use registry when**
    - Actors may restart independently (ONE_FOR_ONE or separate supervisors)
    - You need late binding (sender doesn't know receiver at compile time)
    - Cross-supervisor or cross-subsystem communication
    - Service discovery pattern (many clients, one named service)
 
-3. **Avoid caching IDs from either:**
+3. **Avoid caching IDs from either**
    - Both sibling IDs and registry IDs become stale after target restarts
    - Always lookup fresh when the target may have restarted
    - Exception: ONE_FOR_ALL where you restart together anyway
@@ -326,7 +326,7 @@ All messages have a 4-byte header prepended to the payload:
 - **tag**: Correlation identifier (27 bits, 134M unique values)
 - **payload**: Application data (up to `HIVE_MAX_MESSAGE_SIZE - 4` = 252 bytes)
 
-**Header overhead:** 4 bytes per message.
+**Header overhead** - 4 bytes per message.
 
 ### Message Classes
 
@@ -352,14 +352,14 @@ typedef enum {
 // details and not part of the public API
 ```
 
-**Tag semantics:**
+**Tag semantics**
 - **HIVE_TAG_NONE**: Used for simple NOTIFY messages where no correlation is needed
 - **HIVE_TAG_ANY**: Used in `hive_ipc_recv_match()` to match any tag
 - **Generated tags**: Created automatically by `hive_ipc_request()` for request/reply correlation
 
-**Tag generation:** Internal to `hive_ipc_request()`. Global counter increments on each call. Generated tags have `HIVE_TAG_GEN_BIT` set. Wraps at 2^27 (134M values).
+**Tag generation** - Internal to `hive_ipc_request()`. Global counter increments on each call. Generated tags have `HIVE_TAG_GEN_BIT` set. Wraps at 2^27 (134M values).
 
-**Namespace separation:** Generated tags (gen=1) and user tags (gen=0) can never collide.
+**Namespace separation** - Generated tags (gen=1) and user tags (gen=0) can never collide.
 
 ### Message Structure
 
@@ -386,7 +386,7 @@ if (msg.class == HIVE_MSG_REQUEST) {
 }
 ```
 
-**Lifetime rule:** Data is valid until the next successful `hive_ipc_recv()`, `hive_ipc_recv_match()`, or `hive_ipc_recv_matches()` call. Copy immediately if needed beyond current iteration.
+**Lifetime rule** - Data is valid until the next successful `hive_ipc_recv()`, `hive_ipc_recv_match()`, or `hive_ipc_recv_matches()` call. Copy immediately if needed beyond current iteration.
 
 ### Functions
 
@@ -418,13 +418,13 @@ hive_status hive_ipc_recv_match(actor_id from, hive_msg_class class,
                             uint32_t tag, hive_message *msg, int32_t timeout_ms);
 ```
 
-**Filter semantics:**
+**Filter semantics**
 - `from == HIVE_SENDER_ANY` -> match any sender
 - `class == HIVE_MSG_ANY` -> match any class
 - `tag == HIVE_TAG_ANY` -> match any tag
 - Non-wildcard values must match exactly
 
-**Usage examples:**
+**Usage examples**
 ```c
 // Match any message (equivalent to hive_ipc_recv)
 hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_ANY, HIVE_TAG_ANY, &msg, -1);
@@ -456,12 +456,12 @@ hive_status hive_ipc_recv_matches(const hive_recv_filter *filters,
                             int32_t timeout_ms, size_t *matched_index);
 ```
 
-**Use cases:**
+**Use cases**
 - Waiting for REPLY or EXIT (used internally by `hive_ipc_request()`)
 - Waiting for multiple timer types (sync timer OR flight timer)
 - State machines waiting for multiple event types
 
-**Usage example:**
+**Usage example**
 ```c
 // Wait for either a sync timer or a landed notification
 enum { FILTER_SYNC_TIMER, FILTER_LANDED };
@@ -490,7 +490,7 @@ hive_status hive_ipc_request(actor_id to, const void *request, size_t req_len,
 hive_status hive_ipc_reply(const hive_message *request, const void *data, size_t len);
 ```
 
-**Request/reply implementation:**
+**Request/reply implementation**
 ```c
 // hive_ipc_request internally does:
 // 1. Set up temporary monitor on target (to detect death)
@@ -504,13 +504,13 @@ hive_status hive_ipc_reply(const hive_message *request, const void *data, size_t
 // 2. Send message with class=REPLY and same tag
 ```
 
-**Error conditions for `hive_ipc_request()`:**
+**Error conditions for `hive_ipc_request()`**
 - `HIVE_ERR_CLOSED`: Target actor died before sending a reply (detected via internal monitor)
 - `HIVE_ERR_TIMEOUT`: No reply received within timeout period
 - `HIVE_ERR_NOMEM`: Pool exhausted when sending request
 - `HIVE_ERR_INVALID`: Invalid target actor ID or NULL request with non-zero length
 
-**Target death detection:** `hive_ipc_request()` internally monitors the target actor for the duration of the request. If the target dies before replying, the function returns `HIVE_ERR_CLOSED` immediately without waiting for timeout:
+**Target death detection** - `hive_ipc_request()` internally monitors the target actor for the duration of the request. If the target dies before replying, the function returns `HIVE_ERR_CLOSED` immediately without waiting for timeout:
 
 ```c
 hive_message reply;
@@ -526,29 +526,29 @@ if (status.code == HIVE_ERR_CLOSED) {
 
 This eliminates the "timeout but actually dead" ambiguity from previous versions.
 
-**Concurrency constraint:** An actor can only have **one outstanding request at a time**. Since `hive_ipc_request()` blocks the caller until a reply arrives (or timeout), the actor cannot issue concurrent requests. To implement scatter/gather patterns, spawn multiple worker actors that each make one request.
+**Concurrency constraint** - An actor can only have **one outstanding request at a time**. Since `hive_ipc_request()` blocks the caller until a reply arrives (or timeout), the actor cannot issue concurrent requests. To implement scatter/gather patterns, spawn multiple worker actors that each make one request.
 
 ### API Contract: hive_ipc_notify()
 
-**Parameter validation:**
+**Parameter validation**
 - If `data == NULL && len > 0`: Returns `HIVE_ERR_INVALID`
 - If `len > HIVE_MAX_MESSAGE_SIZE - 4` (252 bytes payload): Returns `HIVE_ERR_INVALID`
 - Oversized messages are rejected immediately, not truncated
 
-**Behavior when pools are exhausted:**
+**Behavior when pools are exhausted**
 
 `hive_ipc_notify()` uses two global pools:
 1. **Mailbox entry pool** (`HIVE_MAILBOX_ENTRY_POOL_SIZE` = 256)
 2. **Message data pool** (`HIVE_MESSAGE_DATA_POOL_SIZE` = 256)
 
-**Fail-fast semantics:**
+**Fail-fast semantics**
 
 - **Returns `HIVE_ERR_NOMEM` immediately** if either pool is exhausted
 - **Does NOT block** waiting for pool space
 - **Does NOT drop** messages silently
-- **Atomic operation:** Either succeeds completely or fails
+- **Atomic operation** - Either succeeds completely or fails
 
-**Caller responsibilities:**
+**Caller responsibilities**
 - **MUST** check return value and handle `HIVE_ERR_NOMEM`
 - **MUST** implement backpressure/retry logic if needed
 - **MUST NOT** assume message was delivered if `HIVE_FAILED(status)`
@@ -575,17 +575,17 @@ if (status.code == HIVE_ERR_NOMEM) {
 
 ### Message Data Lifetime
 
-**CRITICAL LIFETIME RULE:**
+**CRITICAL LIFETIME RULE**
 - **Data is ONLY valid until the next successful `hive_ipc_recv()`, `hive_ipc_recv_match()`, or `hive_ipc_recv_matches()` call**
 - **Per actor: only ONE message payload pointer is valid at a time**
 - **Storing `msg.data` across receive iterations causes use-after-free**
 - **If you need the data later, COPY IT IMMEDIATELY**
 
-**Failed recv does NOT invalidate:**
+**Failed recv does NOT invalidate**
 - If recv returns `HIVE_ERR_TIMEOUT` or `HIVE_ERR_WOULDBLOCK`, previous buffer remains valid
 - Only a successful recv invalidates the previous pointer
 
-**Correct pattern:**
+**Correct pattern**
 ```c
 hive_message msg;
 hive_ipc_recv(&msg, -1);
@@ -603,7 +603,7 @@ hive_ipc_recv(&msg, -1);       // ptr now INVALID
 
 ### Mailbox Semantics
 
-**Capacity model:**
+**Capacity model**
 
 Per-actor mailbox limits: **No per-actor quota** - capacity is constrained by global pools
 
@@ -611,15 +611,15 @@ Global pool limits: **Yes** - all actors share:
 - `HIVE_MAILBOX_ENTRY_POOL_SIZE` (256 default) - mailbox entries
 - `HIVE_MESSAGE_DATA_POOL_SIZE` (256 default) - message data
 
-**Important:** One slow receiver can consume all mailbox entries, starving other actors.
+**Important** - One slow receiver can consume all mailbox entries, starving other actors.
 
-**Fairness guarantees:** The runtime does not provide per-actor fairness guarantees; resource exhaustion caused by a misbehaving actor is considered an application-level fault. Applications requiring protection against resource starvation can implement application-level quotas or monitoring.
+**Fairness guarantees** - The runtime does not provide per-actor fairness guarantees; resource exhaustion caused by a misbehaving actor is considered an application-level fault. Applications requiring protection against resource starvation can implement application-level quotas or monitoring.
 
 ### Selective Receive Semantics
 
 `hive_ipc_recv_match()` and `hive_ipc_recv_matches()` implement selective receive. This is the key mechanism for building complex protocols like request/reply.
 
-**Blocking behavior:**
+**Blocking behavior**
 
 1. Scan mailbox from head for message matching all filter criteria
 2. If found -> remove from mailbox, return immediately
@@ -629,7 +629,7 @@ Global pool limits: **Yes** - all actors share:
 6. If no match -> go back to sleep
 7. Repeat until match or timeout
 
-**Key properties:**
+**Key properties**
 
 - **Non-matching messages are NOT dropped** - they stay in mailbox
 - **Order preserved** - messages remain in FIFO order
@@ -657,40 +657,40 @@ hive_ipc_recv_match(server, HIVE_MSG_REPLY, expected_tag, &reply, 5000);
 hive_ipc_recv(&msg, 0);  // Gets first skipped message
 ```
 
-**When selective receive is efficient:**
+**When selective receive is efficient**
 
 - Typical request/reply: mailbox is empty or near-empty while waiting for reply
 - Shallow mailbox: O(n) scan is fast when n is small
 
-**When selective receive is less efficient:**
+**When selective receive is less efficient**
 
 - Deep mailbox with many non-matching messages
 - Example: 100 pending NOTIFYs while waiting for specific REPLY -> scans 100 messages
 
-**Mitigation:** Process messages promptly. Don't let mailbox grow deep. The request/reply pattern naturally keeps mailbox shallow because you block waiting for reply.
+**Mitigation** - Process messages promptly. Don't let mailbox grow deep. The request/reply pattern naturally keeps mailbox shallow because you block waiting for reply.
 
 ### Message Ordering
 
-**Mailbox implementation:** FIFO linked list (enqueue at tail, dequeue from head)
+**Mailbox implementation** - FIFO linked list (enqueue at tail, dequeue from head)
 
-**Ordering guarantees:**
+**Ordering guarantees**
 
-**Single sender to single receiver:**
+**Single sender to single receiver**
 - Messages are received in the order they were sent
 - **FIFO guaranteed**
 - Example: If actor A sends M1, M2, M3 to actor B, B receives them in order M1 -> M2 -> M3
 
-**Multiple senders to single receiver:**
+**Multiple senders to single receiver**
 - Message order depends on scheduling (which sender runs first)
 - **Arrival order is scheduling-dependent**
 - Example: If actor A sends M1 and actor B sends M2, receiver may get M1->M2 or M2->M1
 
-**Selective receive and ordering:**
+**Selective receive and ordering**
 - Selective receive can retrieve messages out of FIFO order
 - Non-matching messages are skipped but not reordered
 - Example: Mailbox has [NOTIFY, TIMER, REPLY]. Filtering for REPLY returns REPLY first.
 
-**Consequences:**
+**Consequences**
 
 ```c
 // Single sender - FIFO guaranteed
@@ -730,19 +730,19 @@ void request_reply_actor(void *arg) {
 
 Timer and system messages use the same mailbox and message format as IPC.
 
-**Timer messages:**
+**Timer messages**
 - Class: `HIVE_MSG_TIMER`
 - Sender: Actor that owns the timer
 - Tag: `timer_id`
 - Payload: Empty (len = 0 after decoding header)
 
-**System messages (exit notifications):**
+**System messages (exit notifications)**
 - Class: `HIVE_MSG_EXIT`
 - Sender: Actor that died
 - Tag: `HIVE_TAG_NONE`
 - Payload: `hive_exit_msg` struct
 
-**Checking message type:**
+**Checking message type**
 
 ```c
 hive_message msg;
@@ -766,7 +766,7 @@ switch (msg.class) {
 }
 ```
 
-**Convenience function for timer checking:**
+**Convenience function for timer checking**
 
 ```c
 // Returns true if message is a timer tick
@@ -783,7 +783,7 @@ bool hive_ipc_pending(void);
 size_t hive_ipc_count(void);
 ```
 
-**Semantics:**
+**Semantics**
 - Query the **current actor's** mailbox only
 - Cannot query another actor's mailbox
 - Return `false` / `0` if called outside actor context
@@ -794,7 +794,7 @@ IPC uses two global pools shared by all actors:
 - **Mailbox entry pool**: `HIVE_MAILBOX_ENTRY_POOL_SIZE` (256 default)
 - **Message data pool**: `HIVE_MESSAGE_DATA_POOL_SIZE` (256 default)
 
-**When pools are exhausted:**
+**When pools are exhausted**
 - `hive_ipc_notify()` returns `HIVE_ERR_NOMEM` immediately
 - Send operation **does NOT block** waiting for space
 - Send operation **does NOT drop** messages automatically
@@ -802,13 +802,13 @@ IPC uses two global pools shared by all actors:
 
 **No per-actor mailbox limit**: All actors share the global pools. A single actor can consume all available entries if receivers don't process messages.
 
-**Mitigation strategies:**
+**Mitigation strategies**
 - Size pools appropriately: `1.5x peak concurrent messages`
 - Check return values and implement retry logic or backpressure
 - Use `hive_ipc_request()` for natural backpressure (sender waits for reply)
 - Ensure receivers process messages promptly
 
-**Backoff-retry example:**
+**Backoff-retry example**
 ```c
 hive_status status = hive_ipc_notify(target, HIVE_TAG_NONE, data, len);
 if (status.code == HIVE_ERR_NOMEM) {
@@ -840,7 +840,7 @@ typedef struct {
 } hive_bus_config;
 ```
 
-**Configuration constraints (normative):**
+**Configuration constraints (normative)**
 - `max_subscribers`: **Architectural limit of 32 subscribers** (enforced by 32-bit `readers_mask`)
   - Valid range: 1..32
   - `HIVE_MAX_BUS_SUBSCRIBERS = 32` is a hard architectural invariant, not a tunable parameter
@@ -876,7 +876,7 @@ hive_status hive_bus_read_wait(bus_id bus, void *buf, size_t max_len,
 size_t hive_bus_entry_count(bus_id bus);
 ```
 
-**Message size validation:**
+**Message size validation**
 
 `hive_bus_create()`:
 - If `cfg->max_entry_size > HIVE_MAX_MESSAGE_SIZE` (256 bytes): Returns `HIVE_ERR_INVALID`
@@ -902,20 +902,20 @@ The bus implements **per-subscriber read cursors** with the following **three co
 
 #### **RULE 1: Subscription Start Position**
 
-**Contract:** `hive_bus_subscribe()` initializes the subscriber's read cursor to **"next publish"** (current `bus->head` write position).
+**Contract** - `hive_bus_subscribe()` initializes the subscriber's read cursor to **"next publish"** (current `bus->head` write position).
 
-**Guaranteed semantics:**
+**Guaranteed semantics**
 - Subscriber **CANNOT** read retained entries published before subscription
 - Subscriber **ONLY** sees entries published **after** `hive_bus_subscribe()` returns
 - First `hive_bus_read()` call returns `HIVE_ERR_WOULDBLOCK` if no new entries published since subscription
 - Implementation: `subscriber.next_read_idx = bus->head`
 
-**Implications:**
+**Implications**
 - New subscribers do NOT see history
 - If you need to read retained entries, subscribe **before** publishing starts
 - Late subscribers will miss all prior messages
 
-**Example:**
+**Example**
 ```c
 // Bus has retained entries [E1, E2, E3] with head=3
 hive_bus_subscribe(bus);
@@ -934,20 +934,20 @@ hive_bus_read(bus, buf, len, &bytes_read);
 
 #### **RULE 2: Per-Subscriber Cursor Storage and Eviction Behavior**
 
-**Contract:** Each subscriber has an independent read cursor. Slow subscribers may miss entries due to buffer wraparound; no error or notification is generated. The bus implementation supports a maximum of 32 concurrent subscribers per bus, enforced by the 32-bit `readers_mask`.
+**Contract** - Each subscriber has an independent read cursor. Slow subscribers may miss entries due to buffer wraparound; no error or notification is generated. The bus implementation supports a maximum of 32 concurrent subscribers per bus, enforced by the 32-bit `readers_mask`.
 
-**Guaranteed semantics:**
-1. **Storage per subscriber:**
+**Guaranteed semantics**
+1. **Storage per subscriber**
    - `bus_subscriber` struct with `next_read_idx` field (tracks next entry to read)
    - Each subscriber reads at their own pace independently
    - Storage cost: **O(max_subscribers)** fixed overhead
 
-2. **Storage per entry:**
+2. **Storage per entry**
    - 32-bit `readers_mask` bitmask (max 32 subscribers per bus)
    - Bit N set -> subscriber N has read this entry
    - Storage cost: **O(1)** per entry (4 bytes bitmask + 1 byte read_count)
 
-3. **Eviction behavior (buffer full):**
+3. **Eviction behavior (buffer full)**
    - When `hive_bus_publish()` finds buffer full (`count >= max_entries`):
      - Oldest entry at `bus->tail` is **evicted immediately** (freed from message pool)
      - Tail advances: `bus->tail = (bus->tail + 1) % max_entries`
@@ -958,13 +958,13 @@ hive_bus_read(bus, buf, len, &bytes_read);
      - **No error** returned (appears as normal read)
      - **No signal** of data loss (by design)
 
-**Implications:**
+**Implications**
 - Slow subscribers lose data without notification
 - Fast subscribers never lose data (assuming buffer sized for publish rate)
 - No backpressure mechanism (unlike `hive_ipc_request()` request/reply pattern)
 - Real-time principle: Prefer fresh data over old data
 
-**Example (data loss):**
+**Example (data loss)**
 ```c
 // Bus: max_entries=3, entries=[E1, E2, E3] (full), tail=0, head=0
 // Fast subscriber: next_read_idx=0 (read all, awaiting E4)
@@ -981,7 +981,7 @@ hive_bus_publish(bus, &E4, sizeof(E4));
 //   -> E1 is LOST (no error, silent skip)
 ```
 
-**Eviction does NOT notify slow subscribers:**
+**Eviction does NOT notify slow subscribers**
 - No `HIVE_ERR_OVERFLOW` or similar
 - No special message indicating data loss
 - Application must detect via message sequence numbers if needed
@@ -990,9 +990,9 @@ hive_bus_publish(bus, &E4, sizeof(E4));
 
 #### **RULE 3: consume_after_reads Counting Semantics**
 
-**Contract:** `consume_after_reads` counts **unique subscribers** who have read an entry, **NOT** total reads.
+**Contract** - `consume_after_reads` counts **unique subscribers** who have read an entry, **NOT** total reads.
 
-**Guaranteed semantics:**
+**Guaranteed semantics**
 - Each entry has a `readers_mask` bitmask (32 bits, max 32 subscribers per bus)
 - When subscriber N reads an entry:
   1. Check if bit N is set in `readers_mask` -> if yes, skip (already read)
@@ -1000,7 +1000,7 @@ hive_bus_publish(bus, &E4, sizeof(E4));
 - Entry is removed when `read_count >= consume_after_reads` (N unique subscribers have read)
 - Same subscriber CANNOT read the same entry twice (deduplication)
 
-**Implementation mechanism:**
+**Implementation mechanism**
 ```c
 // Check if already read
 if (entry->readers_mask & (1u << subscriber_idx)) {
@@ -1017,13 +1017,13 @@ if (config.consume_after_reads > 0 && entry->read_count >= config.consume_after_
 }
 ```
 
-**Implications:**
+**Implications**
 - `consume_after_reads=3` means "remove after 3 **different** subscribers read it"
 - If subscriber A reads entry twice (e.g., re-subscribes), that's still 1 read
 - If 3 subscribers each read entry once, that's 3 reads -> entry removed
 - Set `consume_after_reads=0` to disable (entry persists until aged out or evicted)
 
-**Example (unique counting):**
+**Example (unique counting)**
 ```c
 // Bus with consume_after_reads=2
 // Subscribers: A, B, C
@@ -1062,22 +1062,22 @@ hive_bus_read(bus, ...);
 
 Entries can be removed by **three mechanisms** (whichever occurs first):
 
-1. **consume_after_reads (unique subscriber counting):**
+1. **consume_after_reads (unique subscriber counting)**
    - Entry removed when `read_count >= consume_after_reads` (N unique subscribers have read it)
    - Value `0` = disabled (entry persists until aged out or evicted)
    - See **RULE 3** above for exact counting semantics
 
-2. **max_age_ms (time-based expiry):**
+2. **max_age_ms (time-based expiry)**
    - Entry removed when `(current_time_ms - entry.timestamp_ms) >= max_age_ms`
    - Value `0` = disabled (no time-based expiry)
    - Checked on every `hive_bus_read()` and `hive_bus_publish()` call
 
-3. **Buffer full (forced eviction):**
+3. **Buffer full (forced eviction)**
    - Oldest entry at `bus->tail` evicted when `count >= max_entries` on publish
    - ALWAYS enabled (cannot be disabled)
    - See **RULE 2** above for eviction semantics
 
-**Typical configurations:**
+**Typical configurations**
 
 | Use Case | consume_after_reads | max_age_ms | Behavior |
 |----------|-------------|------------|----------|
@@ -1086,7 +1086,7 @@ Entries can be removed by **three mechanisms** (whichever occurs first):
 | **Events** | `N` | `0` | Consumed after N subscribers read, no timeout |
 | **Recent history** | `0` | `5000` | Keep 5 seconds of history, multiple readers |
 
-**Interaction of mechanisms:**
+**Interaction of mechanisms**
 - Entry is removed when **FIRST** condition is met (OR, not AND)
 - Example: `consume_after_reads=3, max_age_ms=1000`
   - Entry removed after 3 subscribers read it, **OR**
@@ -1099,13 +1099,13 @@ Entries can be removed by **three mechanisms** (whichever occurs first):
 
 Bus publishing consumes the same message data pool as IPC (`HIVE_MESSAGE_DATA_POOL_SIZE`). A misconfigured or high-rate bus can exhaust the message pool and cause **all** IPC sends to fail with `HIVE_ERR_NOMEM`, potentially starving critical actor communication.
 
-**Architectural consequences:**
+**Architectural consequences**
 - Bus auto-evicts oldest entries when its ring buffer fills (graceful degradation)
 - IPC never auto-drops (fails immediately with `HIVE_ERR_NOMEM`)
 - A single high-rate bus publisher can starve IPC globally
 - No per-subsystem quotas or fairness guarantees
 
-**Design implications:**
+**Design implications**
 - Size `HIVE_MESSAGE_DATA_POOL_SIZE` for combined IPC + bus peak load
 - Use bus retention policies to limit memory consumption
 - Monitor pool exhaustion in critical systems
@@ -1133,12 +1133,12 @@ The bus can encounter two types of resource limits:
 - Each bus has subscriber limit via `max_subscribers` config (up to `HIVE_MAX_BUS_SUBSCRIBERS`)
 - When full, `hive_bus_subscribe()` returns `HIVE_ERR_NOMEM`
 
-**Key Differences from IPC:**
+**Key Differences from IPC**
 - IPC never drops messages automatically (returns error instead)
 - Bus automatically drops oldest entry when ring buffer is full
 - Both share the same message data pool (`HIVE_MESSAGE_DATA_POOL_SIZE`)
 
-**Mitigation strategies:**
+**Mitigation strategies**
 - Size message pool appropriately for combined IPC + bus load
 - Configure per-bus `max_entries` based on publish rate vs read rate
 - Use retention policies (`consume_after_reads`, `max_age_ms`) to prevent accumulation
@@ -1272,8 +1272,8 @@ This architectural design ensures consistent blocking behavior and wake-up logic
 
 ### Implementation Notes
 
-- **Data lifetime:** All data in `result` (both `result.ipc` and `result.bus.data`) is valid until the next blocking call: `hive_select()`, `hive_ipc_recv*()`, or `hive_bus_read*()`. Copy immediately if needed longer.
-- **Wake mechanism:** When blocked, the actor is woken by bus publishers (via `blocked` flag) or IPC senders (via `select_sources` check in mailbox wake logic).
+- **Data lifetime** - All data in `result` (both `result.ipc` and `result.bus.data`) is valid until the next blocking call: `hive_select()`, `hive_ipc_recv*()`, or `hive_bus_read*()`. Copy immediately if needed longer.
+- **Wake mechanism** - When blocked, the actor is woken by bus publishers (via `blocked` flag) or IPC senders (via `select_sources` check in mailbox wake logic).
 
 ## Timer API
 
@@ -1304,7 +1304,7 @@ bool hive_msg_is_timer(const hive_message *msg);
 
 Timer wake-ups are delivered as messages with `class == HIVE_MSG_TIMER`. The tag contains the `timer_id`. The actor receives these in its normal `hive_ipc_recv()` loop and can use `hive_msg_is_timer()` to identify timer messages.
 
-**Important:** When waiting for a specific timer, use selective receive with the timer_id as the tag filter:
+**Important** - When waiting for a specific timer, use selective receive with the timer_id as the tag filter:
 ```c
 timer_id my_timer;
 hive_timer_after(500000, &my_timer);
@@ -1314,19 +1314,19 @@ Do **not** use `HIVE_TAG_ANY` for timer messages - this could consume the wrong 
 
 ### Timer Tick Coalescing (Periodic Timers)
 
-**Behavior:** When the scheduler reads a timerfd, it obtains an expiration count (how many intervals elapsed since last read). The runtime sends **exactly one tick message** regardless of the expiration count.
+**Behavior** When the scheduler reads a timerfd, it obtains an expiration count (how many intervals elapsed since last read). The runtime sends **exactly one tick message** regardless of the expiration count.
 
-**Rationale:**
+**Rationale**
 - Simplicity: Actor receives predictable single-message notification
 - Real-time principle: Current state matters more than history
 - Memory efficiency: No risk of mailbox flooding from fast timers
 
-**Implications:**
+**Implications**
 - If scheduler is delayed (file I/O stall, long actor computation), periodic timer ticks are **coalesced**
 - Actor cannot determine how many intervals actually elapsed
 - For precise tick counting, use `hive_get_time()` to measure elapsed time
 
-**Example:**
+**Example**
 ```c
 // 10ms periodic timer, but actor takes 35ms to process
 hive_timer_every(10000, &timer);  // 10ms = 10000us
@@ -1341,19 +1341,19 @@ while (1) {
 }
 ```
 
-**Alternative not implemented:** Enqueuing N tick messages for N expirations was rejected because:
+**Alternative not implemented** - Enqueuing N tick messages for N expirations was rejected because:
 - Risk of mailbox overflow for fast timers
 - Most embedded use cases don't need tick counting
 - Actors needing precise counts can use `hive_get_time()` to measure elapsed time
 
 ### Timer Precision and Monotonicity
 
-**Unit mismatch by design:**
+**Unit mismatch by design**
 - Timer API uses **microseconds** (`uint32_t delay_us`, `uint32_t interval_us`)
 - Rest of system (IPC, file, network) uses **milliseconds** (`int32_t timeout_ms`)
 - Rationale: Timers often need sub-millisecond precision; I/O timeouts rarely do
 
-**Resolution and precision:**
+**Resolution and precision**
 
 Platform | Clock Source | API Precision | Actual Precision | Notes
 ---------|-------------|---------------|------------------|------
@@ -1364,7 +1364,7 @@ Platform | Clock Source | API Precision | Actual Precision | Notes
 - On Linux, requests < 1ms may still fire with ~1ms precision due to kernel scheduling
 - On STM32, hardware timers provide microsecond-level precision
 
-**Monotonic clock guarantee:**
+**Monotonic clock guarantee**
 - Uses **monotonic clock** on both platforms (CLOCK_MONOTONIC on Linux, hardware timer on STM32)
 - **NOT affected by**:
   - System time changes (NTP adjustments, user setting clock)
@@ -1375,7 +1375,7 @@ Platform | Clock Source | API Precision | Actual Precision | Notes
   - Count elapsed time accurately (subject to clock drift, typically <100 ppm)
 - **Use case**: Timers measure **elapsed time**, not wall-clock time
 
-**hive_get_time() precision:**
+**hive_get_time() precision**
 
 `hive_get_time()` returns the current monotonic time in microseconds:
 
@@ -1389,12 +1389,12 @@ Platform | Implementation | Resolution | Notes
 - For sub-millisecond precision on STM32, reduce `HIVE_TIMER_TICK_US` or use DWT cycle counter
 - In simulation mode, returns simulated time (advanced by `hive_timer_advance_time()`)
 
-**Delivery guarantee:**
+**Delivery guarantee**
 - Timer callbacks are delivered **at or after** the requested time; early delivery never occurs
 - Delays may occur due to scheduling (higher priority actors, blocked scheduler)
 - In safety-critical systems, timers provide lower bounds on timing, not exact timing
 
-**Wraparound behavior:**
+**Wraparound behavior**
 
 1. **Timer interval wraparound** (`uint32_t interval_us`):
    - Type: 32-bit unsigned integer
@@ -1426,7 +1426,7 @@ hive_timer_every(tick_interval, &timer);
 // Count ticks in actor to reach 60 minutes
 ```
 
-**Comparison with rest of system:**
+**Comparison with rest of system**
 
 Feature | Timer API | IPC/File/Network API
 --------|-----------|---------------------
@@ -1435,7 +1435,7 @@ Feature | Timer API | IPC/File/Network API
 **Signed/Unsigned** | Unsigned (always positive) | Signed (negative = block forever)
 **Wraparound** | At ~71 minutes | At ~24.8 days (unlikely in practice)
 
-**Design rationale:**
+**Design rationale**
 - Microseconds for timers: Sub-millisecond intervals common in embedded systems (sensor sampling, PWM, etc.)
 - Milliseconds for I/O: Network/file timeouts rarely need microsecond precision
 - 32-bit limit: Embedded systems prefer fixed-size types; 64-bit would waste memory
@@ -1508,11 +1508,11 @@ typedef struct {
 } hive_child_spec;
 ```
 
-**Argument handling:**
+**Argument handling**
 - If `init_args_size > 0`: Argument is copied to supervisor-managed storage (max `HIVE_MAX_MESSAGE_SIZE` bytes). Safe for stack-allocated arguments.
 - If `init_args_size == 0`: Pointer is passed directly. Caller must ensure lifetime.
 
-**Two-phase child start:**
+**Two-phase child start**
 1. All children are allocated (actor structures created)
 2. Sibling info array is built with all child names and IDs
 3. All children are started, each receiving the complete sibling array
@@ -1548,7 +1548,7 @@ The supervisor tracks restart attempts within a sliding time window. If `max_res
 - `max_restarts = 0`: Unlimited restarts (never give up)
 - `max_restarts = 5, restart_period_ms = 10000`: Allow 5 restarts in 10 seconds
 
-**Algorithm:** The supervisor maintains a ring buffer of the last `HIVE_MAX_SUPERVISOR_CHILDREN` restart timestamps. On each restart attempt:
+**Algorithm** - The supervisor maintains a ring buffer of the last `HIVE_MAX_SUPERVISOR_CHILDREN` restart timestamps. On each restart attempt:
 1. Record current timestamp in ring buffer
 2. Count entries where `now - timestamp <= restart_period_ms`
 3. If `count >= max_restarts`, intensity exceeded -> supervisor shuts down
@@ -1618,7 +1618,7 @@ Returns:
 
 The only state preserved across restarts is the argument passed to the child function (copied by the supervisor at configuration time).
 
-**External Resources:** A restarted child MUST treat all external handles as invalid and reacquire them. This includes:
+**External Resources** - A restarted child MUST treat all external handles as invalid and reacquire them. This includes:
 
 - File descriptors
 - Sockets
@@ -1628,18 +1628,18 @@ The only state preserved across restarts is the argument passed to the child fun
 
 Failure to do so causes "works in simulation, dies on hardware" bugs because resource lifetime is not actor lifetime.
 
-**Name Registration:** A supervised child intended to be discoverable MUST:
+**Name Registration** - A supervised child intended to be discoverable MUST:
 
 - Register its name during startup (call `hive_register()` early)
 - Tolerate name lookup from other actors at any time
 
-**Client Rule:** Actors communicating with supervised children MUST NOT cache `actor_id` across awaits, timeouts, or receive calls. They MUST re-resolve by name (`hive_whereis()`) on each interaction or after any failure signal (timeout, EXIT message).
+**Client Rule** - Actors communicating with supervised children MUST NOT cache `actor_id` across awaits, timeouts, or receive calls. They MUST re-resolve by name (`hive_whereis()`) on each interaction or after any failure signal (timeout, EXIT message).
 
 This prevents the classic bug: client caches ID -> server restarts -> client sends to dead ID -> silent failure or mysterious behavior.
 
 ### Restart Contract Checklist
 
-**On child restart, these are always reset:**
+**On child restart, these are always reset**
 
 - [ ] Mailbox empty
 - [ ] Bus subscriptions gone
@@ -1650,14 +1650,14 @@ This prevents the classic bug: client caches ID -> server restarts -> client sen
 - [ ] Name registration removed (must re-register)
 - [ ] External handles invalid (must reacquire)
 
-**Supervisor guarantees:**
+**Supervisor guarantees**
 
 - [ ] Restart order is deterministic: child spec order
 - [ ] Restart strategy applied exactly as defined (no hidden backoff)
 - [ ] Intensity limit is deterministic: when exceeded, supervisor shuts down, no further restarts
 - [ ] Supervisor never uses heap in hot paths; child-arg copies are bounded and static
 
-**Failure visibility:**
+**Failure visibility**
 
 - [ ] Every restart attempt is observable (log)
 - [ ] Every give-up is observable (log + shutdown callback)
@@ -1756,13 +1756,13 @@ All functions with `timeout_ms` parameter support **timeout enforcement**:
 - `timeout_ms < 0`: Block forever until I/O completes
 - `timeout_ms > 0`: Block up to timeout, returns `HIVE_ERR_TIMEOUT` if exceeded
 
-**Timeout implementation:** Uses timer-based enforcement (consistent with `hive_ipc_recv`). When timeout expires, a timer message wakes the actor and `HIVE_ERR_TIMEOUT` is returned. This is essential for handling unreachable hosts, slow connections, and implementing application-level keepalives.
+**Timeout implementation** - Uses timer-based enforcement (consistent with `hive_ipc_recv`). When timeout expires, a timer message wakes the actor and `HIVE_ERR_TIMEOUT` is returned. This is essential for handling unreachable hosts, slow connections, and implementing application-level keepalives.
 
 On blocking calls, the actor yields to the scheduler. The scheduler's event loop registers the I/O operation with the platform's event notification mechanism (epoll on Linux, interrupt flags on STM32) and dispatches the operation when the socket becomes ready.
 
 ### Completion Semantics
 
-**`hive_net_recv()` - Partial completion:**
+**`hive_net_recv()` - Partial completion**
 - Returns successfully when **at least 1 byte** is read (or 0 for EOF/peer closed)
 - Does NOT loop until `len` bytes are received
 - `*received` contains actual bytes read (may be less than `len`)
@@ -1778,7 +1778,7 @@ while (total < expected_len) {
 }
 ```
 
-**`hive_net_send()` - Partial completion:**
+**`hive_net_send()` - Partial completion**
 - Returns successfully when **at least 1 byte** is written
 - Does NOT loop until `len` bytes are sent
 - `*sent` contains actual bytes written (may be less than `len`)
@@ -1793,19 +1793,19 @@ while (total < len) {
 }
 ```
 
-**`hive_net_connect()` - Async connect completion:**
+**`hive_net_connect()` - Async connect completion**
 - If `connect()` returns `EINPROGRESS`: registers for `EPOLLOUT`, actor yields
 - When socket becomes writable: checks `getsockopt(fd, SOL_SOCKET, SO_ERROR, ...)`
 - If `SO_ERROR == 0`: success, returns `HIVE_SUCCESS` with connected socket in `*fd_out`
 - If `SO_ERROR != 0`: returns `HIVE_ERR_IO` with error message, socket is closed
 - If timeout expires before writable: returns `HIVE_ERR_TIMEOUT`, socket is closed
 
-**`hive_net_accept()` - Connection ready:**
+**`hive_net_accept()` - Connection ready**
 - Waits for `EPOLLIN` on listen socket (incoming connection ready)
 - Calls `accept()` to obtain connected socket
 - Returns `HIVE_SUCCESS` with new socket in `*conn_fd_out`
 
-**Rationale for partial completion:**
+**Rationale for partial completion**
 - Matches POSIX socket semantics (recv/send may return partial)
 - Avoids hidden loops that could block indefinitely
 - Caller controls retry policy and timeout behavior
@@ -1815,7 +1815,7 @@ while (total < len) {
 
 File I/O operations.
 
-> **Note:** File I/O is synchronous and briefly pauses the scheduler. This is fine for short operations - use `LOW` priority actors for file work. See [Scheduler-Stalling Calls](design.md#scheduler-stalling-calls) for details.
+> **Note** - File I/O is synchronous and briefly pauses the scheduler. This is fine for short operations - use `LOW` priority actors for file work. See [Scheduler-Stalling Calls](design.md#scheduler-stalling-calls) for details.
 
 ```c
 hive_status hive_file_open(const char *path, int flags, int mode, int *fd_out);
@@ -1847,13 +1847,13 @@ On Linux, these map directly to POSIX equivalents. On STM32, they're interpreted
 
 ### Platform Differences
 
-**Linux:**
+**Linux**
 - Standard filesystem paths (e.g., `/tmp/log.bin`)
 - Uses POSIX `open()`, `read()`, `write()`, `fsync()`
 - Synchronous blocking I/O
 - All flags and functions fully supported
 
-**STM32:**
+**STM32**
 - Virtual file paths mapped to flash sectors (e.g., `/log`)
 - Board configuration via -D flags (each virtual file is optional):
   ```makefile
@@ -1871,7 +1871,7 @@ On Linux, these map directly to POSIX equivalents. On STM32, they're interpreted
 - `hive_file_sync()` drains ring buffer to flash (blocking)
 - No data loss - writes block when buffer is full to ensure delivery
 
-**STM32 Write Behavior:**
+**STM32 Write Behavior**
 
 The STM32 implementation uses a ring buffer for efficiency. Most writes complete
 immediately. When the buffer fills up, `write()` blocks to flush data to flash
@@ -1883,7 +1883,7 @@ still providing fast writes in the common case.
 | Linux | Blocking | Never (or error) |
 | STM32 | Fast (ring buffer), blocks when full | Never (or error) |
 
-**STM32 API Restrictions:**
+**STM32 API Restrictions**
 
 | Feature | Linux | STM32 |
 |---------|-------|-------|
@@ -1894,7 +1894,7 @@ still providing fast writes in the common case.
 | `hive_file_pwrite()` | Works | **Returns error** |
 | Multiple writers | Yes | No - single writer at a time |
 
-**STM32 Flag Restrictions:**
+**STM32 Flag Restrictions**
 
 | Flag | Linux | STM32 |
 |------|-------|-------|
@@ -1911,7 +1911,7 @@ still providing fast writes in the common case.
 #define HIVE_FILE_BLOCK_SIZE    256         // Flash write block size
 ```
 
-**STM32 Usage Example:**
+**STM32 Usage Example**
 ```c
 int log_fd;
 // Erase flash sector and open for writing

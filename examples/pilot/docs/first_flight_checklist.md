@@ -103,7 +103,7 @@ The drone will automatically:
 3. Attempt to hover at 0.5m for 10 seconds
 4. Land and disarm
 
-**Observe:**
+**Observe**
 
 - [ ] Drone lifts off
 - [ ] Attitude is stable (not oscillating wildly)
@@ -225,7 +225,7 @@ HAL_VVEL_DAMPING_GAIN 0.35
 HAL_BASE_THRUST     0.38
 ```
 
-**Note:** Only HAL_BASE_THRUST typically needs calibration on real hardware.
+**Note** - Only HAL_BASE_THRUST typically needs calibration on real hardware.
 Start at 0.38 and adjust until stable hover is achieved. Other gains were
 tuned in Webots with realistic motor lag simulation and should transfer well.
 

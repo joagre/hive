@@ -18,7 +18,7 @@ make clean test    # Clean build and run tests
 #### `actor_test.c`
 Tests actor lifecycle and management (spawn, exit, yield).
 
-**Tests (13 tests):**
+**Tests (13 tests)**
 - Basic spawn with default config
 - rt_self returns correct ID
 - Argument passing to actors
@@ -38,7 +38,7 @@ Tests actor lifecycle and management (spawn, exit, yield).
 #### `runtime_test.c`
 Tests runtime initialization and core APIs.
 
-**Tests (8 tests):**
+**Tests (8 tests)**
 - rt_init returns success
 - rt_self inside actor context
 - rt_yield returns control to scheduler
@@ -53,7 +53,7 @@ Tests runtime initialization and core APIs.
 #### `priority_test.c`
 Tests priority-based scheduling behavior.
 
-**Tests (5 tests):**
+**Tests (5 tests)**
 - Higher priority actors run before lower priority
 - Round-robin within same priority level
 - High priority preempts after yield
@@ -65,7 +65,7 @@ Tests priority-based scheduling behavior.
 #### `sibling_test.c`
 Tests sibling info array passed to actors at spawn time.
 
-**Tests (4 tests):**
+**Tests (4 tests)**
 - Standalone spawn gets sibling_count = 1 (self only)
 - Supervised children see all siblings
 - hive_find_sibling helper finds sibling by name
@@ -76,7 +76,7 @@ Tests sibling info array passed to actors at spawn time.
 #### `spawn_init_test.c`
 Tests spawn init function and auto-register features.
 
-**Tests (5 tests):**
+**Tests (5 tests)**
 - Init function transforms arguments before actor starts
 - Init returns NULL (valid case, actor gets NULL)
 - Auto-register with name (actor_config.auto_register)
@@ -92,7 +92,7 @@ Tests spawn init function and auto-register features.
 #### `ipc_test.c`
 Tests inter-process communication (IPC) with ASYNC and SYNC modes.
 
-**Tests (17 tests):**
+**Tests (17 tests)**
 - ASYNC send/recv basic
 - ASYNC send to invalid actor
 - Message ordering (FIFO)
@@ -116,7 +116,7 @@ Tests inter-process communication (IPC) with ASYNC and SYNC modes.
 #### `timeout_test.c`
 Tests the `rt_ipc_recv()` timeout functionality.
 
-**Tests:**
+**Tests**
 - Timeout when no message arrives (returns `RT_ERR_TIMEOUT`)
 - Message received before timeout (returns message)
 - Backoff-retry pattern with timeout
@@ -126,7 +126,7 @@ Tests the `rt_ipc_recv()` timeout functionality.
 #### `pool_exhaustion_test.c`
 Demonstrates IPC pool exhaustion and backoff-retry behavior.
 
-**Tests:**
+**Tests**
 - Fill mailbox entry pool to exhaustion
 - Verify `RT_ERR_NOMEM` is returned
 - Demonstrate backoff-retry pattern
@@ -136,7 +136,7 @@ Demonstrates IPC pool exhaustion and backoff-retry behavior.
 #### `backoff_retry_test.c`
 More complex test showing pool exhaustion with coordinated recovery.
 
-**Tests:**
+**Tests**
 - Sender fills pool to near capacity
 - Receiver processes messages to free pool space
 - Sender retries after backoff
@@ -146,7 +146,7 @@ More complex test showing pool exhaustion with coordinated recovery.
 #### `simple_backoff_test.c`
 Simplified backoff-retry test with aggressive sender and slow processor.
 
-**Tests:**
+**Tests**
 - Aggressive sender creates pool pressure
 - Slow processor drains messages gradually
 - Backoff-retry handles transient exhaustion
@@ -156,7 +156,7 @@ Simplified backoff-retry test with aggressive sender and slow processor.
 #### `congestion_demo.c`
 Realistic scenario demonstrating congestion handling.
 
-**Tests:**
+**Tests**
 - Coordinator distributes work to multiple workers
 - Handles burst traffic patterns
 - Backoff-retry pattern ready for real congestion
@@ -166,7 +166,7 @@ Realistic scenario demonstrating congestion handling.
 #### `select_test.c`
 Tests unified event waiting (hive_select) API.
 
-**Tests (10 tests):**
+**Tests (10 tests)**
 - Single IPC source (wildcard) - equivalent to hive_ipc_recv()
 - Single IPC source (filtered) - equivalent to hive_ipc_recv_match()
 - Single bus source - equivalent to hive_bus_read_wait()
@@ -187,7 +187,7 @@ Tests unified event waiting (hive_select) API.
 #### `link_test.c`
 Tests bidirectional actor linking (rt_link).
 
-**Tests (12 tests):**
+**Tests (12 tests)**
 - Basic link (both actors notified)
 - Link is bidirectional
 - Unlink prevents notification
@@ -206,7 +206,7 @@ Tests bidirectional actor linking (rt_link).
 #### `monitor_test.c`
 Tests unidirectional actor monitoring (rt_monitor).
 
-**Tests (8 tests):**
+**Tests (8 tests)**
 - Basic monitor (normal exit notification)
 - Multiple monitors from one actor
 - Demonitor cancels monitoring
@@ -225,7 +225,7 @@ Tests unidirectional actor monitoring (rt_monitor).
 #### `supervisor_test.c`
 Tests supervision (automatic child restart).
 
-**Tests (9 tests):**
+**Tests (9 tests)**
 - Basic lifecycle (start/stop supervisor)
 - one_for_one - crash one child, only that child restarts
 - one_for_all - crash one child, all children restart
@@ -245,7 +245,7 @@ Tests supervision (automatic child restart).
 #### `registry_test.c`
 Tests actor name registry (hive_register, hive_whereis, hive_unregister).
 
-**Tests (6 tests):**
+**Tests (6 tests)**
 - Basic register and whereis
 - Duplicate name registration fails
 - Auto-cleanup on actor exit
@@ -262,7 +262,7 @@ Tests actor name registry (hive_register, hive_whereis, hive_unregister).
 #### `timer_test.c`
 Tests one-shot and periodic timers.
 
-**Tests (12 tests):**
+**Tests (12 tests)**
 - One-shot timer (rt_timer_after)
 - Timer cancellation
 - Timer sender ID is RT_SENDER_TIMER
@@ -285,7 +285,7 @@ Tests one-shot and periodic timers.
 #### `file_test.c`
 Tests synchronous file I/O operations.
 
-**Tests (15 tests):**
+**Tests (15 tests)**
 - Open file for writing (create)
 - Write to file
 - Sync file to disk
@@ -307,7 +307,7 @@ Tests synchronous file I/O operations.
 #### `net_test.c`
 Tests non-blocking network I/O operations.
 
-**Tests (12 tests):**
+**Tests (12 tests)**
 - Listen and accept connection
 - Send and receive data
 - Accept timeout
@@ -326,7 +326,7 @@ Tests non-blocking network I/O operations.
 #### `logging_test.c`
 Tests structured logging API.
 
-**Tests (5 tests):**
+**Tests (5 tests)**
 - hive_log_file_open creates log file
 - HIVE_LOG_* macros write to file
 - hive_log_file_sync flushes to disk
@@ -342,7 +342,7 @@ Tests structured logging API.
 #### `bus_test.c`
 Tests pub-sub messaging (rt_bus).
 
-**Tests (12 tests):**
+**Tests (12 tests)**
 - Basic publish/subscribe
 - Multiple subscribers
 - consume_after_reads retention policy
@@ -365,7 +365,7 @@ Tests pub-sub messaging (rt_bus).
 #### `arena_test.c`
 Tests stack arena exhaustion and malloc fallback.
 
-**Tests:**
+**Tests**
 - Spawn actors until arena exhaustion
 - Verify arena allocation fails gracefully when full
 - Verify malloc_stack=true works independently

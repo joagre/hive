@@ -1,6 +1,6 @@
 # Enhanced Actor Spawn API
 
-**Status:** Implemented (January 2026)
+**Status** - Implemented (January 2026)
 
 ## Motivation
 
@@ -126,7 +126,7 @@ Note: Removed separate `id` field. The `name` field serves both purposes:
 ### Spawn Sequence (standalone hive_spawn)
 
 1. Allocate actor (stack, mailbox, etc.)
-2. **In spawner context:**
+2. **In spawner context**
    - If `init` is non-NULL: call `init(init_args)`, result becomes `args`
    - If `init` is NULL: `init_args` becomes `args` directly
    - If `auto_register` and `name` is non-NULL: call `hive_register(name)`
@@ -137,18 +137,18 @@ Note: Removed separate `id` field. The `name` field serves both purposes:
 
 ### Spawn Sequence (supervisor starting children)
 
-1. **Phase 1 - Allocate all children:**
+1. **Phase 1 - Allocate all children**
    For each child spec (in order):
    - Allocate actor
    - Run `init(init_args)` if provided
    - Register name if `auto_register` is true
    - If any fails: deallocate all previously allocated children, return error
 
-2. **Phase 2 - Build sibling array:**
+2. **Phase 2 - Build sibling array**
    - Create `hive_spawn_info` array with all children (in spec order)
    - Each entry contains: name, actor_id, registered status
 
-3. **Phase 3 - Start all children:**
+3. **Phase 3 - Start all children**
    - Schedule each actor with `fn(args, siblings, sibling_count)`
    - All children receive the same complete sibling array
 

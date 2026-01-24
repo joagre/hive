@@ -14,7 +14,7 @@ open-source license as documented below.
 | `st/vl53l1x/` | **C port** | BSD-3-Clause | ST Arduino library |
 | `bitcraze/pmw3901/` | **C port** | MIT | Bitcraze Arduino library |
 
-**C ports:** The VL53L1x and PMW3901 drivers are C ports of the original C++/Arduino
+**C ports** - The VL53L1x and PMW3901 drivers are C ports of the original C++/Arduino
 libraries. The original `.cpp` files are included for reference. The C ports implement
 the same register-level logic but use plain C with platform I2C/SPI callbacks instead
 of Arduino Wire/SPI classes.
@@ -23,9 +23,9 @@ of Arduino Wire/SPI classes.
 
 ## Bosch BMI08x (vendor/bosch/bmi08x/)
 
-**License:** BSD-3-Clause
-**Source:** https://github.com/boschsensortec/BMI08x_SensorAPI
-**Copyright:** (c) 2024 Bosch Sensortec GmbH
+**License** - BSD-3-Clause
+**Source** - https://github.com/boschsensortec/BMI08x_SensorAPI
+**Copyright** - (c) 2024 Bosch Sensortec GmbH
 
 The BMI08x sensor API provides accelerometer and gyroscope support for the
 BMI085/BMI088 6-axis inertial measurement unit.
@@ -63,9 +63,9 @@ POSSIBILITY OF SUCH DAMAGE.
 
 ## Bosch BMP3 (vendor/bosch/bmp3/)
 
-**License:** BSD-3-Clause
-**Source:** https://github.com/boschsensortec/BMP3_SensorAPI
-**Copyright:** (c) 2022 Bosch Sensortec GmbH
+**License** - BSD-3-Clause
+**Source** - https://github.com/boschsensortec/BMP3_SensorAPI
+**Copyright** - (c) 2022 Bosch Sensortec GmbH
 
 The BMP3 sensor API provides barometric pressure and temperature support for
 the BMP380/BMP388/BMP390 barometer.
@@ -78,10 +78,10 @@ BSD-3-Clause
 
 ## ST VL53L1x ULD (vendor/st/vl53l1x/)
 
-**License:** BSD-3-Clause
-**Source:** C port derived from https://github.com/VRaktion/mbed-VL53L1X-ULD
-**Original:** https://www.st.com/en/imaging-and-photonics-solutions/vl53l1x.html
-**Copyright:** (c) 2017 STMicroelectronics
+**License** - BSD-3-Clause
+**Source** - C port derived from https://github.com/VRaktion/mbed-VL53L1X-ULD
+**Original** - https://www.st.com/en/imaging-and-photonics-solutions/vl53l1x.html
+**Copyright** - (c) 2017 STMicroelectronics
 
 The VL53L1x Ultra Lite Driver provides time-of-flight distance measurement.
 This is a C port of the ST/mbed ULD library.
@@ -118,9 +118,9 @@ POSSIBILITY OF SUCH DAMAGE.
 
 ## Bitcraze PMW3901 (vendor/bitcraze/pmw3901/)
 
-**License:** MIT
-**Source:** C port derived from https://github.com/bitcraze/Bitcraze_PMW3901
-**Copyright:** (c) 2017 Bitcraze AB
+**License** - MIT
+**Source** - C port derived from https://github.com/bitcraze/Bitcraze_PMW3901
+**Copyright** - (c) 2017 Bitcraze AB
 
 The PMW3901 driver provides optical flow sensing. This is a C port of the
 Bitcraze Arduino library.
@@ -149,9 +149,9 @@ SOFTWARE.
 
 ## ARM CMSIS-Core (vendor/CMSIS/Include/)
 
-**License:** Apache-2.0
-**Source:** https://github.com/ARM-software/CMSIS_5
-**Copyright:** (c) 2009-2023 ARM Limited
+**License** - Apache-2.0
+**Source** - https://github.com/ARM-software/CMSIS_5
+**Copyright** - (c) 2009-2023 ARM Limited
 
 ARM Cortex Microcontroller Software Interface Standard (CMSIS) provides
 standardized access to processor and peripherals.
@@ -160,9 +160,9 @@ Files: `core_cm4.h`, `cmsis_gcc.h`, `cmsis_compiler.h`, `cmsis_version.h`, `mpu_
 
 ## STMicroelectronics CMSIS Device (vendor/CMSIS/Device/ST/)
 
-**License:** BSD-3-Clause
-**Source:** https://github.com/STMicroelectronics/cmsis_device_f4
-**Copyright:** (c) 2017 STMicroelectronics
+**License** - BSD-3-Clause
+**Source** - https://github.com/STMicroelectronics/cmsis_device_f4
+**Copyright** - (c) 2017 STMicroelectronics
 
 STM32F4 device-specific CMSIS headers providing register definitions.
 

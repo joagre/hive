@@ -14,7 +14,7 @@ For bare-metal hardware tests (direct register access), see
 
 Validates the complete HAL API stack used by the pilot application.
 
-**Test sequence:**
+**Test sequence**
 1. `hal_init()` - Initialize all hardware
 2. `hal_self_test()` - Verify sensors respond
 3. `hal_calibrate()` - Calibrate sensors (keep still and level!)
