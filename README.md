@@ -4,13 +4,13 @@
 
 ## Why Hive?
 
-**No shared state.** Each actor owns its data. No locks, no races. A bug in one actor can't corrupt another actor's state.
+**No shared state:** Each actor owns its data. No locks, no races. A bug in one actor can't corrupt another actor's state.
 
-**Supervision.** Supervisors can restart crashed actors with clean state. Fault isolation without taking down the system.
+**Supervision:** Supervisors can restart crashed actors with clean state. Fault isolation without taking down the system.
 
-**Bounded memory.** All memory comes from static pools. No heap allocation. Memory footprint is known at link time.
+**Bounded memory:** All memory comes from static pools. No heap allocation. Memory footprint is known at link time.
 
-**Real-world example.** The [pilot example](examples/pilot/) is a quadcopter flight controller running on a Crazyflie 2.1—11 actors, sensor fusion, cascaded PID, 60KB flash.
+**Real-world example:** The [pilot example](examples/pilot/) is a quadcopter flight controller running on a Crazyflie 2.1—11 actors, sensor fusion, cascaded PID, 60KB flash.
 
 See [spec/](spec/) for design details.
 
