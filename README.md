@@ -236,52 +236,63 @@ int main(void) {
 ### IPC and Configuration
 
 ```c
-// Configure actor
+// Configure and spawn an actor
 actor_config cfg = HIVE_ACTOR_CONFIG_DEFAULT;
-cfg.priority = 0;             // 0-3, lower is higher
-cfg.stack_size = 128 * 1024;
-cfg.malloc_stack = false;     // false=arena (default), true=malloc
-cfg.auto_register = false;    // true = auto-register name in registry
+cfg.priority = HIVE_PRIORITY_NORMAL;  // 0=CRITICAL, 1=HIGH, 2=NORMAL, 3=LOW
+cfg.stack_size = 32 * 1024;           // 32KB stack
+cfg.malloc_stack = false;             // false=arena (default), true=malloc
+cfg.auto_register = false;            // true = auto-register name in registry
+
+int worker_id = 1;
 actor_id worker;
-hive_status status = hive_spawn(worker_actor, NULL, &args, &cfg, &worker);
+hive_status status = hive_spawn(worker_actor, NULL, &worker_id, &cfg, &worker);
 if (HIVE_FAILED(status)) {
     // HIVE_ERR_NOMEM if actor table or stack arena full
 }
 
-// Notify (async message with tag for selective receive)
+// Send notification (fire-and-forget)
 int data = 42;
-status = hive_ipc_notify(target, HIVE_TAG_NONE, &data, sizeof(data));
+status = hive_ipc_notify(worker, HIVE_TAG_NONE, &data, sizeof(data));
 if (HIVE_FAILED(status)) {
-    // Pool exhausted: HIVE_MAILBOX_ENTRY_POOL_SIZE or HIVE_MESSAGE_DATA_POOL_SIZE
-    // Notify does NOT block or drop - caller must handle HIVE_ERR_NOMEM
+    // HIVE_ERR_NOMEM if pool exhausted
+    // Notify does NOT block or drop - caller must handle error
 
     // Backoff and retry pattern:
     hive_message msg;
-    hive_ipc_recv(&msg, 10);  // Backoff 10ms (returns timeout or message)
-    // Retry notify...
+    hive_ipc_recv(&msg, 10);  // Backoff 10ms
+    status = hive_ipc_notify(worker, HIVE_TAG_NONE, &data, sizeof(data));  // Retry
 }
 
-// Request/reply pattern: Send request and wait for reply
+// Request/reply pattern (blocks until reply or timeout)
 hive_message reply;
-status = hive_ipc_request(target, &data, sizeof(data), &reply, 5000);  // 5s timeout
-if (HIVE_FAILED(status)) {
-    // HIVE_ERR_TIMEOUT if no reply (or target died), HIVE_ERR_NOMEM if pool exhausted
-    // If linked/monitoring target, check for EXIT message to distinguish death from timeout
+status = hive_ipc_request(worker, &data, sizeof(data), &reply, 5000);  // 5s timeout
+if (status.code == HIVE_ERR_CLOSED) {
+    // Target died before replying (detected via internal monitor)
+} else if (status.code == HIVE_ERR_TIMEOUT) {
+    // No reply within timeout
 }
 
-// Reply to a REQUEST message (in receiver actor)
-hive_ipc_reply(&msg, &response, sizeof(response));
+// Reply to a REQUEST message (in the receiving actor)
+void worker_actor(void *args, const hive_spawn_info *siblings, size_t sibling_count) {
+    hive_message msg;
+    hive_ipc_recv(&msg, -1);
+    if (msg.class == HIVE_MSG_REQUEST) {
+        int result = *(int *)msg.data * 2;  // Process request
+        hive_ipc_reply(&msg, &result, sizeof(result));
+    }
+    hive_exit();
+}
 
-// Receive messages
+// Receive with different timeout behaviors
 hive_message msg;
-hive_ipc_recv(&msg, -1);   // -1=block forever
-hive_ipc_recv(&msg, 0);    // 0=non-blocking (returns HIVE_ERR_WOULDBLOCK if empty)
-hive_ipc_recv(&msg, 100);  // 100=timeout after 100ms (returns HIVE_ERR_TIMEOUT if no message)
+hive_ipc_recv(&msg, -1);   // Block forever until message arrives
+hive_ipc_recv(&msg, 0);    // Non-blocking: HIVE_ERR_WOULDBLOCK if empty
+hive_ipc_recv(&msg, 100);  // Wait up to 100ms: HIVE_ERR_TIMEOUT if no message
 
-// Direct field access
-my_data *data = (my_data *)msg.data;  // Direct payload access
-if (msg.class == HIVE_MSG_REQUEST) {
-    // Handle request...
+// Access message fields directly
+if (msg.class == HIVE_MSG_NOTIFY) {
+    int *value = (int *)msg.data;
+    printf("Received %d from actor %u\n", *value, msg.sender);
 }
 ```
 
@@ -317,109 +328,121 @@ hive_timer_cancel(periodic);
 ### File and Network I/O
 
 ```c
-// File operations (block until complete)
+// File I/O (blocks until complete - use LOW priority actors for file work)
 int fd;
-size_t bytes_written, bytes_read;
 hive_status status = hive_file_open("test.txt", HIVE_O_RDWR | HIVE_O_CREAT, 0644, &fd);
 if (HIVE_FAILED(status)) {
-    // HIVE_ERR_IO on open failure, HIVE_ERR_INVALID for bad flags
+    // HIVE_ERR_IO on open failure
 }
-status = hive_file_write(fd, data, len, &bytes_written);
-if (HIVE_FAILED(status)) {
-    // HIVE_ERR_IO on write failure
-}
-status = hive_file_read(fd, buffer, sizeof(buffer), &bytes_read);
+
+const char *message = "Hello, file!";
+size_t bytes_written;
+hive_file_write(fd, message, strlen(message), &bytes_written);
+
+char buffer[256];
+size_t bytes_read;
+hive_file_pread(fd, buffer, sizeof(buffer), 0, &bytes_read);  // Read from offset 0
 // bytes_read == 0 indicates EOF (not an error)
+
 hive_file_close(fd);
 
-// Network server
+// Network echo server (non-blocking via event loop)
 int listen_fd, client_fd;
 status = hive_net_listen(8080, &listen_fd);
 if (HIVE_FAILED(status)) {
-    // HIVE_ERR_IO if bind/listen fails (port in use, permission denied)
+    // HIVE_ERR_IO if port in use or permission denied
 }
-status = hive_net_accept(listen_fd, &client_fd, -1);
-if (HIVE_FAILED(status)) {
-    // HIVE_ERR_TIMEOUT if timeout expires
+
+status = hive_net_accept(listen_fd, &client_fd, -1);  // Block until connection
+if (HIVE_SUCCEEDED(status)) {
+    size_t received, sent;
+    char buf[1024];
+
+    // Echo loop
+    while (HIVE_SUCCEEDED(hive_net_recv(client_fd, buf, sizeof(buf), &received, -1))) {
+        if (received == 0) break;  // Client closed connection
+        hive_net_send(client_fd, buf, received, &sent, -1);
+    }
+    hive_net_close(client_fd);
 }
-size_t received, sent;
-status = hive_net_recv(client_fd, buffer, sizeof(buffer), &received, -1);
-if (HIVE_FAILED(status)) {
-    // HIVE_ERR_CLOSED if peer closed connection
-}
-hive_net_send(client_fd, buffer, received, &sent, -1);
-hive_net_close(client_fd);
 
 // Network client
 int server_fd;
-status = hive_net_connect("127.0.0.1", 8080, &server_fd, 5000);
-if (HIVE_FAILED(status)) {
-    // HIVE_ERR_TIMEOUT if connection times out
-    // HIVE_ERR_IO if connection refused
+status = hive_net_connect("127.0.0.1", 8080, &server_fd, 5000);  // 5s timeout
+if (status.code == HIVE_ERR_TIMEOUT) {
+    // Connection timed out
+} else if (status.code == HIVE_ERR_IO) {
+    // Connection refused
 }
 ```
 
 ### Bus (Pub-Sub)
 
 ```c
+// Define shared data type
+typedef struct {
+    float temperature;
+    float humidity;
+} sensor_reading;
+
+// Create bus with retention policy
 hive_bus_config cfg = HIVE_BUS_CONFIG_DEFAULT;
-cfg.consume_after_reads = 0;   // 0=persist, N=remove after N reads
-cfg.max_age_ms = 0;    // 0=no expiry, T=expire after T ms
+cfg.consume_after_reads = 0;  // 0 = persist until buffer wraps
+cfg.max_age_ms = 0;           // 0 = no time-based expiry
 // Note: Maximum 32 subscribers per bus (architectural limit)
 
-bus_id bus;
-hive_status status = hive_bus_create(&cfg, &bus);
-if (HIVE_FAILED(status)) {
-    // HIVE_ERR_NOMEM if bus table full (HIVE_MAX_BUSES)
-}
-status = hive_bus_subscribe(bus);
-if (HIVE_FAILED(status)) {
-    // HIVE_ERR_NOMEM if subscriber table full (HIVE_MAX_BUS_SUBSCRIBERS)
-}
+bus_id sensor_bus;
+hive_status status = hive_bus_create(&cfg, &sensor_bus);
 
-sensor_data data = {.temperature = 25.5f};
-status = hive_bus_publish(bus, &data, sizeof(data));
-if (HIVE_FAILED(status)) {
-    // HIVE_ERR_NOMEM if message pool exhausted (shares HIVE_MESSAGE_DATA_POOL_SIZE with IPC)
-    // Note: Ring buffer full automatically drops oldest entry (not an error)
-}
+// Subscribe to receive data (each actor must subscribe)
+hive_bus_subscribe(sensor_bus);
 
-sensor_data received;
-size_t bytes_read;
-status = hive_bus_read_wait(bus, &received, sizeof(received), &bytes_read, -1);
-if (HIVE_FAILED(status)) {
-    // HIVE_ERR_TIMEOUT if timeout expires, HIVE_ERR_WOULDBLOCK if no data (timeout=0)
+// Publisher: sensor actor publishes readings
+sensor_reading reading = {.temperature = 25.5f, .humidity = 60.0f};
+status = hive_bus_publish(sensor_bus, &reading, sizeof(reading));
+if (status.code == HIVE_ERR_NOMEM) {
+    // Message pool exhausted (shares with IPC)
+}
+// Note: If ring buffer is full, oldest entry is dropped automatically
+
+// Subscriber: consumer actor reads data
+sensor_reading received;
+size_t len;
+status = hive_bus_read_wait(sensor_bus, &received, sizeof(received), &len, -1);
+if (HIVE_SUCCEEDED(status)) {
+    printf("Temperature: %.1f\n", received.temperature);
 }
 ```
 
 ### Linking and Monitoring
 
 ```c
-actor_id other;
-hive_status status = hive_spawn(other_actor, NULL, NULL, NULL, &other);
-if (HIVE_FAILED(status)) {
-    // Handle spawn failure...
-}
-status = hive_link(other);
-if (HIVE_FAILED(status)) {
-    // HIVE_ERR_INVALID if target doesn't exist
-    // HIVE_ERR_NOMEM if link pool exhausted (HIVE_LINK_ENTRY_POOL_SIZE)
-}
-uint32_t mon_id;
-status = hive_monitor(other, &mon_id);
-if (HIVE_FAILED(status)) {
-    // HIVE_ERR_INVALID if target doesn't exist
-    // HIVE_ERR_NOMEM if monitor pool exhausted (HIVE_MONITOR_ENTRY_POOL_SIZE)
-}
+// Links are BIDIRECTIONAL: if either actor dies, the other gets an EXIT message
+actor_id worker;
+hive_spawn(worker_actor, NULL, NULL, NULL, &worker);
+hive_link(worker);  // Now linked both ways
 
+// Monitors are UNIDIRECTIONAL: only the monitoring actor gets notified
+uint32_t mon_id;
+hive_monitor(worker, &mon_id);  // We watch worker, but worker doesn't watch us
+
+// Wait for exit notification (from link or monitor)
 hive_message msg;
 hive_ipc_recv(&msg, -1);
 if (hive_is_exit_msg(&msg)) {
-    hive_exit_msg exit_info;
-    hive_decode_exit(&msg, &exit_info);
-    printf("Actor %u died: %s\n", exit_info.actor, hive_exit_reason_str(exit_info.reason));
-    // exit_info.reason: HIVE_EXIT_NORMAL, HIVE_EXIT_CRASH, HIVE_EXIT_CRASH_STACK, HIVE_EXIT_KILLED
+    hive_exit_msg info;
+    hive_decode_exit(&msg, &info);
+    printf("Actor %u died: %s\n", info.actor, hive_exit_reason_str(info.reason));
+
+    // Distinguish link from monitor notification
+    if (info.monitor_id == 0) {
+        // From link (bidirectional)
+    } else {
+        // From monitor (info.monitor_id matches mon_id)
+    }
 }
+
+// Exit reasons: HIVE_EXIT_NORMAL, HIVE_EXIT_CRASH, HIVE_EXIT_CRASH_STACK, HIVE_EXIT_KILLED
 ```
 
 ### Supervision
@@ -427,58 +450,46 @@ if (hive_is_exit_msg(&msg)) {
 ```c
 #include "hive_supervisor.h"
 
+// Worker actor that may crash
+void worker_actor(void *args, const hive_spawn_info *siblings, size_t sibling_count) {
+    int id = *(int *)args;
+    printf("Worker %d started\n", id);
+    // ... do work, may crash ...
+    hive_exit();
+}
+
 // Define child specifications
 static int worker_ids[2] = {1, 2};
 hive_child_spec children[] = {
     {
-        .start = worker_actor,            // Actor entry point
-        .init = NULL,                     // Init function (NULL = skip)
-        .init_args = &worker_ids[0],      // Arguments to actor
-        .init_args_size = sizeof(int),    // Copy arg (0 = pass pointer)
-        .name = "worker-1",               // For debugging + supervisor tracking
-        .auto_register = false,           // Auto-register in name registry
-        .restart = HIVE_CHILD_PERMANENT,  // Always restart
-        .actor_cfg = HIVE_ACTOR_CONFIG_DEFAULT,
+        .start = worker_actor,
+        .init_args = &worker_ids[0],
+        .init_args_size = sizeof(int),    // Copy arg (supervisor owns the data)
+        .name = "worker-1",
+        .restart = HIVE_CHILD_PERMANENT,  // Always restart on exit
     },
     {
         .start = worker_actor,
-        .init = NULL,
         .init_args = &worker_ids[1],
         .init_args_size = sizeof(int),
         .name = "worker-2",
-        .auto_register = false,
-        .restart = HIVE_CHILD_TRANSIENT,  // Restart only on crash
-        .actor_cfg = HIVE_ACTOR_CONFIG_DEFAULT,
+        .restart = HIVE_CHILD_TRANSIENT,  // Restart only on crash (not normal exit)
     },
 };
 
-// Configure supervisor
+// Configure and start supervisor
 hive_supervisor_config config = {
-    .strategy = HIVE_STRATEGY_ONE_FOR_ONE,  // Restart only failed child
+    .strategy = HIVE_STRATEGY_ONE_FOR_ONE,  // Restart only the failed child
     .max_restarts = 5,                      // Max 5 restarts...
     .restart_period_ms = 10000,             // ...within 10 seconds
     .children = children,
     .num_children = 2,
-    .on_shutdown = my_shutdown_callback,    // Optional callback
-    .shutdown_ctx = NULL,
 };
 
-// Start supervisor
 actor_id supervisor;
-hive_status status = hive_supervisor_start(&config, NULL, &supervisor);
-if (HIVE_FAILED(status)) {
-    // HIVE_ERR_NOMEM if supervisor table full (HIVE_MAX_SUPERVISORS)
-    // HIVE_ERR_INVALID if config is invalid
-}
+hive_supervisor_start(&config, NULL, &supervisor);
 
-// Monitor supervisor for shutdown (optional)
-uint32_t monitor_id;
-status = hive_monitor(supervisor, &monitor_id);
-if (HIVE_FAILED(status)) {
-    // Handle error...
-}
-
-// Stop supervisor gracefully
+// Supervisor runs until: intensity exceeded, all children exit, or hive_supervisor_stop()
 hive_supervisor_stop(supervisor);
 
 // Restart strategies:
