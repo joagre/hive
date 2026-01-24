@@ -6,7 +6,7 @@ A complete actor-based runtime designed for **embedded and safety-critical syste
 
 **Platforms:** x86-64 Linux (fully implemented), STM32/ARM Cortex-M bare metal (core runtime implemented)
 
-The runtime uses **statically bounded memory** for predictable behavior with no heap fragmentation in hot paths (heap allocation optional only for actor stacks). It features **priority-based scheduling** (4 levels: CRITICAL, HIGH, NORMAL, LOW) with fast context switching. Provides message passing (IPC with selective receive and request/reply), linking, monitoring, timers, pub-sub messaging (bus), network I/O, and file I/O.
+The runtime uses **statically bounded memory** for predictable behavior with no heap fragmentation in hot paths (heap allocation optional only for actor stacks). It features **priority-based scheduling** (4 levels: CRITICAL, HIGH, NORMAL, LOW) with fast context switching. Provides message passing (IPC with selective receive and request/reply), linking, monitoring, supervision (automatic restart strategies), timers, pub-sub messaging (bus), network I/O, and file I/O.
 
 **Hive is:**
 - A single-threaded, cooperative actor runtime
