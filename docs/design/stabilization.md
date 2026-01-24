@@ -46,7 +46,7 @@ Each step has:
 
 ---
 
-### Step 0: Baseline -- Stable Hardware Hover
+### Step 0: Baseline -Stable Hardware Hover
 
 **Goal** - Achieve stable hover on real Crazyflie hardware. This is the foundation.
 
@@ -58,7 +58,7 @@ making changes.
 - Verify sensor data looks reasonable (no excessive noise, correct signs)
 - Achieve hands-off hover for 30+ seconds
 
-**Test (Webots)** Already works -- waypoint navigation completes.
+**Test (Webots)** Already works -waypoint navigation completes.
 
 **Test (Hardware)**
 - Takeoff to 0.5m, release controls
@@ -103,7 +103,7 @@ to see loop timing, sensor noise, control errors, actuator commands.
 - Can measure RMS error for each controller
 - Can identify dominant noise frequencies
 
-**Regression check** Logging is passive -- hover behavior unchanged.
+**Regression check** Logging is passive -hover behavior unchanged.
 
 ---
 
@@ -149,7 +149,7 @@ controller makes attitude control slow, which makes position control slow.
 **Why now** - With a solid rate controller (Step 2), we can push attitude control harder.
 
 **Work**
-- Analyze attitude logs -- how fast do we track setpoint changes?
+- Analyze attitude logs -how fast do we track setpoint changes?
 - Increase attitude P gain
 - Verify rate setpoint limits are appropriate
 - Consider feedforward: attitude error -> expected rate
@@ -174,7 +174,7 @@ controller makes attitude control slow, which makes position control slow.
 
 ---
 
-### Step 4: Estimator Improvements -- Velocity
+### Step 4: Estimator Improvements -Velocity
 
 **Goal** - Better velocity estimation for tighter position control.
 
@@ -322,7 +322,7 @@ This removes the gimbal lock limitation.
 
 **Test (Webots)**
 - Command large attitude: 45° roll, hold, return to level
-- Command 90° pitch (pointing up) -- currently impossible with Euler
+- Command 90° pitch (pointing up) -currently impossible with Euler
 - Verify no singularity or weird behavior
 
 **Test (Hardware)**
@@ -377,7 +377,7 @@ knowledge of desired trajectory to command actuators proactively.
 **Goal** - Know what the motors can actually deliver; handle saturation gracefully.
 
 **Why now** - Aggressive maneuvers will saturate motors. Need to handle this
-correctly -- prioritize attitude over altitude, avoid integrator windup.
+correctly -prioritize attitude over altitude, avoid integrator windup.
 
 **Work**
 - Characterize motor response (thrust vs command, time constant)
@@ -562,16 +562,16 @@ limiting on the transition to avoid commanding maximum deflection instantly.
 | Acro Waypoint | Inactive | Publishes rate setpoints, monitors completion |
 
 **The rate actor doesn't know about modes.** It just tracks setpoints. This is
-the cleanest separation--mode logic lives in one place (acro waypoint actor).
+the cleanest separation - mode logic lives in one place (acro waypoint actor).
 
 ### Why This Architecture Works
 
-1. **Rate control never disabled** -- drone is always controllable
-2. **Clean separation** -- stabilization actors don't know about flips
-3. **Testable** -- can test maneuvers by injecting rate setpoints manually
-4. **Extensible** -- new maneuvers are just new state machines in acro waypoint
-5. **Safe** -- multiple layers of timeout protection
-6. **Standard practice** -- matches how Betaflight/PX4 handle acro mode
+1. **Rate control never disabled** - drone is always controllable
+2. **Clean separation** - stabilization actors don't know about flips
+3. **Testable** - can test maneuvers by injecting rate setpoints manually
+4. **Extensible** - new maneuvers are just new state machines in acro waypoint
+5. **Safe** - multiple layers of timeout protection
+6. **Standard practice** - matches how Betaflight/PX4 handle acro mode
 
 ---
 

@@ -37,7 +37,7 @@ A complete quadcopter autopilot. Not a toy demo, but a flight controller targeti
 
 **Philosophy** - The pilot is a stress test for the runtime. If it reveals weaknesses (latency, scheduling, memory), the runtime is fixed, not the pilot. The pilot code should be clean and idiomatic, not full of workarounds.
 
-**Full specification** - [spec/](spec/) -- design rationale, supervision semantics, error handling patterns, and architecture details.
+**Full specification** - [spec/](spec/) - design rationale, supervision semantics, error handling patterns, and architecture details.
 
 ## What it does
 
