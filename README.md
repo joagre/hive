@@ -82,7 +82,7 @@ man man/man3/hive_ipc.3
 | **Core Model** | Actors with mailboxes | Active Objects + Hierarchical State Machines |
 | **State Management** | Implicit (actor code) | Explicit UML statecharts |
 | **Message Handling** | Selective receive with pattern matching | Event dispatch to state handlers |
-| **Blocking** | Actors can block on receive with timeout | Run-to-completion (no blocking in handlers) |
+| **Blocking** | Actors block on receive, bus read, or unified select (with timeout) | Run-to-completion (no blocking in handlers) |
 | **Supervision** | Supervisors (restart strategies, intensity) | Less emphasis on fault supervision |
 | **Error Philosophy** | "Let it crash" + restart | Defensive, state machine guards |
 | **API Style** | Minimalist C functions | Object-oriented C macros |
