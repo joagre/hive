@@ -209,9 +209,6 @@ See [examples/pilot/README.md](examples/pilot/README.md) for build instructions 
 #include <stdio.h>
 
 void my_actor(void *args, const hive_spawn_info *siblings, size_t sibling_count) {
-    (void)args;
-    (void)siblings;
-    (void)sibling_count;
     printf("Hello from actor %u\n", hive_self());
     hive_exit();
 }
