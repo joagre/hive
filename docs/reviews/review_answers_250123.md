@@ -7,7 +7,7 @@ Response to reviewer comments in `review_250123.md`.
 Each item is categorized as:
 - **DONE** - Already implemented or documented
 - **FIX** - Will fix now (code or documentation)
-- **FUTURE** - Valid suggestion, added to Future Extensions in SPEC.md
+- **FUTURE** - Valid suggestion, added to Future Extensions in spec/internals.md
 - **WONTFIX** - Outside scope or conflicts with design philosophy
 
 ---
@@ -18,7 +18,7 @@ Each item is categorized as:
 
 **Status: DONE**
 
-The O(n) selective receive behavior is already documented in SPEC.md section "3. Selective Receive is O(n) per Mailbox Scan" (commit `d6e0aed`).
+The O(n) selective receive behavior is already documented in spec/design.md section "3. Selective Receive is O(n) per Mailbox Scan" (commit `d6e0aed`).
 
 Clarifications:
 - Mailbox bounds ARE compile-time via shared pool (`HIVE_MAILBOX_ENTRY_POOL_SIZE=256`)
@@ -42,7 +42,7 @@ Current mitigation:
 
 Future option: Reserved EXIT slot per actor (adds ~8 bytes per actor).
 
-**Action:** Add to Future Extensions in SPEC.md. Document current behavior and risk.
+**Action:** Add to Future Extensions in spec/internals.md. Document current behavior and risk.
 
 ---
 
@@ -58,7 +58,7 @@ Current mitigation:
 
 Future option: Bounded dispatch (poll I/O every N actor runs).
 
-**Action:** Add to Future Extensions in SPEC.md. Document as known limitation.
+**Action:** Add to Future Extensions in spec/internals.md. Document as known limitation.
 
 ---
 
@@ -66,7 +66,7 @@ Future option: Bounded dispatch (poll I/O every N actor runs).
 
 **Status: FUTURE**
 
-Already acknowledged in SPEC.md as a trade-off. Strict priority is intentional for determinism.
+Already acknowledged in spec/design.md as a trade-off. Strict priority is intentional for determinism.
 
 Future option: Opt-in fairness mode (compile-time).
 
@@ -78,7 +78,7 @@ Future option: Opt-in fairness mode (compile-time).
 
 **Status: DONE**
 
-Already documented in CLAUDE.md and SPEC.md:
+Already documented in CLAUDE.md and spec/api.md:
 > "Safety-critical caveat: Restrict file I/O to initialization, shutdown, or non-time-critical phases"
 
 **Action:** Verify documentation is prominent. No code changes needed.
@@ -96,7 +96,7 @@ Implemented in `motor_actor.c` using `hive_select()` with timeout.
 Implementation:
 - Motor actor uses `hive_select()` with `MOTOR_DEADMAN_TIMEOUT_MS` (50ms)
 - On timeout: zero all motors, log warning
-- Documented in pilot SPEC.md
+- Documented in examples/pilot/spec/
 
 **Commits:** `0b3326f`
 
@@ -123,7 +123,7 @@ Future option: "retain latest" flag for buses with `max_entries=1`.
 
 **Status: DONE** ✓
 
-Documented in pilot SPEC.md "Supervision Semantics" section:
+Documented in examples/pilot/spec/design.md "Supervision Semantics" section:
 - ONE_FOR_ALL restart resets all state (integrators, filters)
 - Why ONE_FOR_ALL is correct for flight controller
 - Comms actor isolation via TEMPORARY restart type
@@ -136,7 +136,7 @@ Documented in pilot SPEC.md "Supervision Semantics" section:
 
 **Status: DONE** ✓
 
-Documented in SPEC.md "Actor Exit Semantics" section:
+Documented in spec/api.md "Actor Exit Semantics" section:
 - Returning from actor function = `hive_exit(CRASH)`
 - `HIVE_ERR_TIMEOUT` is not a crash (normal control flow)
 - `HIVE_ERR_NOMEM` is systemic error (should be surfaced)
@@ -149,7 +149,7 @@ Documented in SPEC.md "Actor Exit Semantics" section:
 
 **Status: DONE** ✓
 
-Added "Actor Priority and Blocking Table" to pilot SPEC.md showing:
+Added "Actor Priority and Blocking Table" to examples/pilot/spec/design.md showing:
 - Actor name, priority, primary blocking point, yield behavior
 
 **Commits:** `11a267a`
@@ -162,7 +162,7 @@ Added "Actor Priority and Blocking Table" to pilot SPEC.md showing:
 
 **Status: DONE** ✓
 
-Added "Guarantees and Non-Guarantees" section to SPEC.md with:
+Added "Guarantees and Non-Guarantees" section to spec/design.md with:
 - Table of guaranteed properties
 - Table of NOT guaranteed properties
 - "Honest Positioning" subsection (Hive is / is not)
@@ -175,7 +175,7 @@ Added "Guarantees and Non-Guarantees" section to SPEC.md with:
 
 **Status: DONE** ✓
 
-Added "Failure Modes Summary" section to SPEC.md with:
+Added "Failure Modes Summary" section to spec/design.md with:
 - Pool exhaustion behavior table (IPC vs bus differences)
 - Recommended patterns table (check and retry, backpressure, drop, escalate)
 - Error code classification table
@@ -188,7 +188,7 @@ Added "Failure Modes Summary" section to SPEC.md with:
 
 **Status: DONE** ✓
 
-Added "Memory Sizing Guide" section to SPEC.md with:
+Added "Memory Sizing Guide" section to spec/internals.md with:
 - Fixed overhead calculations
 - Pool memory calculations
 - Sizing formulae table
@@ -203,7 +203,7 @@ Added "Memory Sizing Guide" section to SPEC.md with:
 
 **Status: DONE** ✓
 
-Added "Simulation Invariant" section to SPEC.md with:
+Added "Simulation Invariant" section to spec/design.md with:
 - Contract that actors MUST block
 - Correct and incorrect code patterns
 - Why this matters (simulation vs production difference)

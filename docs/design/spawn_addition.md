@@ -309,7 +309,7 @@ void my_actor(void *args, const hive_spawn_info *siblings, size_t count) {
 
 ### Documentation Updates
 - [x] `README.md` - Update spawn examples, API overview
-- [x] `SPEC.md` - Update actor lifecycle, spawn, supervisor sections
+- [x] `spec/` - Update actor lifecycle, spawn, supervisor sections
 - [x] `CLAUDE.md` - Update spawn documentation
 - [x] `man/man3/hive_spawn.3` - Rewrite for new signature
 - [x] `man/man3/hive_supervisor.3` - Update child spec documentation

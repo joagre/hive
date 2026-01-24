@@ -151,8 +151,8 @@ grep -rn "hal_" examples/pilot/README.md | grep -v "\.c:"
 
 **What was synced:**
 - Documentation reorganization:
-  - Split top-level SPEC.md → `spec/` directory (design.md, api.md, internals.md)
-  - Split pilot SPEC.md → `examples/pilot/spec/` (design.md, implementation.md, evolution.md)
+  - Split former top-level SPEC.md into `spec/` directory (design.md, api.md, internals.md)
+  - Split former pilot SPEC.md into `examples/pilot/spec/` (design.md, implementation.md, evolution.md)
   - Organized `docs/` → `design/` and `reviews/` subdirectories
   - Moved `first_flight_checklist.md` → `examples/pilot/docs/`
 - Converted ASCII diagram to mermaid in `spec/design.md`
