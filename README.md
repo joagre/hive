@@ -63,7 +63,7 @@ See [spec/](spec/) for design details.
 
 **Hive favors boundedness and inspectability over fairness and throughput** (single-threaded, fixed pools, no time-slicing).
 
-**Platforms** - x86-64 Linux (fully implemented), STM32/ARM Cortex-M bare metal (core runtime implemented)
+**Platforms** - x86-64 Linux (fully implemented), STM32/ARM Cortex-M bare metal (TCP/IP not yet supported)
 
 ## Features
 
