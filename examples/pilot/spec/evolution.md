@@ -91,7 +91,7 @@ The following instrumentation should be added for production flight software:
 
 Features intentionally omitted from this demonstration:
 
-- Full state estimation (unified EKF for position/velocity/attitude) — separate estimators used instead (altitude KF + complementary filter for attitude)
+- Unified EKF (single filter for position/velocity/attitude) — separate estimators used instead: altitude Kalman filter + complementary filter for attitude
 - Failsafe handling (return-to-home, auto-land) — requires GPS and mission planning
 - Parameter tuning UI — gains are hardcoded per platform
 - Multiple vehicle types — single X-configuration quadcopter
