@@ -4,15 +4,15 @@
 
 ## Why Hive?
 
-**Write concurrent embedded code without the usual pain.** No shared memory bugs. No lock ordering nightmares. No mysterious race conditions. Each actor owns its state—period.
+**No shared state.** Each actor owns its data. No locks, no races, no corruption from wild pointers in other threads.
 
-**Let it crash, then recover.** Hive brings Erlang's battle-tested supervision model to embedded C. When an actor fails, its supervisor restarts it with clean state. Your system keeps running. This isn't theoretical—it's how telecom systems achieve five-nines uptime.
+**Supervision.** When an actor crashes, its supervisor restarts it with clean state. The system keeps running.
 
-**Know exactly what you're getting.** Every byte of memory is accounted for at compile time. No heap allocation in hot paths. No GC pauses. No surprises. You can calculate your memory footprint before you flash.
+**Bounded memory.** All memory is allocated at init from static pools. No heap allocation after startup. Memory footprint is known at link time.
 
-**Proven on real hardware.** The included [pilot example](examples/pilot/) is a complete quadcopter flight controller—11 actors, cascaded PID control, sensor fusion, fail-safe supervision. It flies. On a Crazyflie. In 60KB of flash.
+**Real hardware.** The [pilot example](examples/pilot/) is a quadcopter flight controller running on a Crazyflie 2.1—11 actors, sensor fusion, cascaded PID, 60KB flash.
 
-For the complete design specification, see [spec/](spec/).
+See [spec/](spec/) for design details.
 
 ---
 
