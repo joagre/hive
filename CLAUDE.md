@@ -68,11 +68,14 @@ Install: `make install-man` (or `sudo make install-man`)
 - All link/monitor operations
 - All I/O event dispatch paths
 
-### Unicode
+### Unicode and Formatting
 
 - **Allowed** - Unicode box-drawing characters (`┌─┐│└┘├┤┬┴┼`) for diagrams in comments (state machines, memory layouts, protocol formats)
 - **Forbidden** - Unicode in prose (comments, markdown, documentation); use ASCII only
 - **Forbidden** - Unicode in source code (strings, identifiers)
+- **Forbidden** - Double hyphens (`--`); use a single hyphen with spaces (` - `) or an em-dash alternative
+- **Forbidden** - `**Label:** text` format; use `**Label** - text` instead
+- **Forbidden** - Colons in bold labels; use `**Label**` not `**Label:**`
 
 ## Architecture
 

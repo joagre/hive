@@ -6,7 +6,7 @@
 
 **No shared state** - Each actor owns its data. No locks, no races. Without shared mutable state, accidental cross-actor corruption is eliminated (though C still allows intentional pointer misuse).
 
-**Predictable scheduling** - Cooperative multitasking means you know exactly when context switches happen--only at blocking operations (IPC receive, bus read, select, yield). No preemption surprises, no priority inversion, no mysterious timing bugs.
+**Predictable scheduling** - Cooperative multitasking means you know exactly when context switches happen only at blocking operations (IPC receive, bus read, select, yield). No preemption surprises, no priority inversion, no mysterious timing bugs.
 
 **Bounded memory** - All memory comes from static pools. No heap allocation. Memory footprint is known at link time.
 
