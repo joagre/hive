@@ -95,7 +95,7 @@ int main(void) {
     // Test 1: Sensors and Motors
     // ========================================================================
 
-    HIVE_LOG_INFO("");
+    HIVE_LOG_INFO(" ");
     HIVE_LOG_INFO("--- Running: sensors_motors ---");
 
     result = test_sensors_motors_run(false);
@@ -114,7 +114,7 @@ int main(void) {
     // ========================================================================
 
 #ifdef HIVE_PLATFORM_STM32
-    HIVE_LOG_INFO("");
+    HIVE_LOG_INFO(" ");
     HIVE_LOG_INFO("--- Running: flash ---");
 
     result = test_flash_run(false);
@@ -128,7 +128,7 @@ int main(void) {
 
     hal_delay_ms(1000);
 #else
-    HIVE_LOG_INFO("");
+    HIVE_LOG_INFO(" ");
     HIVE_LOG_INFO("--- Skipping: flash (not available on this platform) ---");
     skipped++;
 #endif
@@ -138,7 +138,7 @@ int main(void) {
     // ========================================================================
 
 #ifdef HIVE_PLATFORM_STM32
-    HIVE_LOG_INFO("");
+    HIVE_LOG_INFO(" ");
     HIVE_LOG_INFO("--- Running: sd ---");
 
     result = test_sd_run(false);
@@ -155,7 +155,7 @@ int main(void) {
 
     hal_delay_ms(1000);
 #else
-    HIVE_LOG_INFO("");
+    HIVE_LOG_INFO(" ");
     HIVE_LOG_INFO("--- Skipping: sd (not available on this platform) ---");
     skipped++;
 #endif
@@ -164,7 +164,7 @@ int main(void) {
     // Summary
     // ========================================================================
 
-    HIVE_LOG_INFO("");
+    HIVE_LOG_INFO(" ");
     HIVE_LOG_INFO("========================================");
     HIVE_LOG_INFO("  TEST SUMMARY");
     HIVE_LOG_INFO("========================================");

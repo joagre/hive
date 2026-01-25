@@ -52,7 +52,7 @@ BUILD_DIR_WB = build_webots
 
 # Pilot directory (parent)
 PILOT_DIR = ..
-HIVE_ROOT = ../..
+HIVE_ROOT = ../../..
 HIVE_SRC_DIR = $(HIVE_ROOT)/src
 
 # Test selection
@@ -92,6 +92,7 @@ CFLAGS += -DSTM32F405xx
 CFLAGS += -DHIVE_PLATFORM_STM32
 CFLAGS += -MMD -MP
 CFLAGS += -I$(PILOT_DIR)
+CFLAGS += -I$(PILOT_DIR)/include
 CFLAGS += -I$(HAL_DIR)
 CFLAGS += -I$(HAL_DIR)/vendor/CMSIS/Include
 CFLAGS += -I$(HAL_DIR)/vendor/CMSIS/Device/ST/STM32F4xx/Include
@@ -248,6 +249,7 @@ CFLAGS += -DHIVE_PLATFORM_LINUX
 CFLAGS += -MMD -MP
 CFLAGS += -I$(WEBOTS_INCLUDE)
 CFLAGS += -I$(PILOT_DIR)
+CFLAGS += -I$(PILOT_DIR)/include
 CFLAGS += -I$(HAL_DIR)
 
 # Hive includes (for file tests)
@@ -363,13 +365,17 @@ CONTROLLERS_DIR = $(PILOT_DIR)/controllers
 
 .PHONY: install-webots
 
-install-webots:
-	@$(MAKE) PLATFORM=webots TEST=main
+install-webots: webots-main
 	@mkdir -p $(CONTROLLERS_DIR)/test_main
 	@cp $(BUILD_DIR_WB)/test_main $(CONTROLLERS_DIR)/test_main/
 	@echo ""
 	@echo "Installed: $(CONTROLLERS_DIR)/test_main/test_main"
 	@echo "Ready to use in Webots simulation"
+
+# Build test_main for webots (can be invoked without PLATFORM set)
+.PHONY: webots-main
+webots-main:
+	$(MAKE) PLATFORM=webots TEST=main webots
 
 # ==============================================================================
 # Clean
