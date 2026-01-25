@@ -361,6 +361,14 @@ The runtime uses **compile-time configuration** for bounded, predictable memory 
 
 To change these limits, edit `hive_static_config.h` or pass -D flags and recompile.
 
+**Configuration Hierarchy** - Compile-time parameters flow through layers where later levels override earlier ones:
+1. **Library defaults** (`include/hive_static_config.h`) - All `#ifndef` guarded defaults
+2. **Application config** (`hive_config.mk`) - App-specific overrides (actor count, pools)
+3. **Board config** (`hal/<board>/hive_board_config.mk`) - Hardware-specific (flash addresses, SD)
+4. **Command line** (`make CFLAGS+='-DHIVE_MAX_ACTORS=32'`) - Highest priority
+
+See `examples/pilot/` for a complete example of this hierarchy in use.
+
 **Memory characteristics**
 - All runtime structures are **statically allocated** based on compile-time limits
 - Actor stacks use static arena by default, with optional malloc via `actor_config_t.malloc_stack`
