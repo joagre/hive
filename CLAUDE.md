@@ -8,6 +8,8 @@ This is an actor-based runtime for embedded systems, targeting STM32 (ARM Cortex
 
 **Language** - Modern C (C11 or later)
 
+**Code Style** - 1TBS (One True Brace Style), 4-space indent, 80 columns. See [README.md Code Style](README.md#code-style).
+
 **Target Platforms**
 - Development: Linux x86-64
 - Production: STM32 (ARM Cortex-M) bare metal
