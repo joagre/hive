@@ -351,7 +351,7 @@ Returns `true` if all required sensors pass, `false` otherwise.
 
 Before flight, `hal_calibrate()` performs:
 
-1. **Level check** - Verify accelerometer reads approximately level (warns if tilted >6°)
+1. **Level check** - Verify accelerometer reads approximately level (warns if tilted >6 deg)
 2. **Gyro bias** - Average 500 samples while stationary
 3. **Barometer reference** - Average 50 samples for ground level
 4. **Height offset** (Flow deck only) - Measure ground clearance for accurate height

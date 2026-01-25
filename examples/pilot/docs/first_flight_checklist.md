@@ -32,7 +32,7 @@ st-trace -c 168
 - [ ] BMP388 chip ID: 0x50
 - [ ] Accelerometer data: X,Y near 0, Z near 1g (drone level)
 - [ ] Gyroscope data: All axes near 0 (drone stationary)
-- [ ] Barometer data: 95-106 kPa, 15-35°C
+- [ ] Barometer data: 95-106 kPa, 15-35 degC
 - [ ] Motor test: All 4 motors spin (props OFF!)
 - [ ] Radio: Battery voltage received
 
@@ -191,7 +191,7 @@ If flight is unstable, tune in this order:
 First flight is successful if:
 
 - [ ] Drone lifts off under control
-- [ ] Hovers within ±20cm of target altitude
+- [ ] Hovers within +/-20cm of target altitude
 - [ ] No violent oscillations
 - [ ] Lands without crashing
 - [ ] Repeatable (3 consecutive flights)

@@ -62,7 +62,7 @@ making changes.
 
 **Test (Hardware)**
 - Takeoff to 0.5m, release controls
-- Drone holds position ±20cm for 30 seconds
+- Drone holds position +/-20cm for 30 seconds
 - No oscillations visible
 
 **Success criteria**
@@ -122,7 +122,7 @@ controller makes attitude control slow, which makes position control slow.
 - Verify anti-windup is working
 
 **Test (Webots)**
-- Command step changes in angular rate (0 -> 90°/s -> 0)
+- Command step changes in angular rate (0 -> 90 deg/s -> 0)
 - Measure rise time, overshoot, settling time
 - Target: <100ms rise time, <10% overshoot
 
@@ -155,7 +155,7 @@ controller makes attitude control slow, which makes position control slow.
 - Consider feedforward: attitude error -> expected rate
 
 **Test (Webots)**
-- Command attitude step (0° -> 15° roll -> 0°)
+- Command attitude step (0 deg -> 15 deg roll -> 0 deg)
 - Measure response time
 - Target: <200ms to reach 90% of commanded angle
 
@@ -262,7 +262,7 @@ or after position work.
 
 **Success criteria**
 - Altitude step response < 1.5s
-- Altitude hold ±5cm during hover
+- Altitude hold +/-5cm during hover
 - No oscillation
 
 **Regression check**
@@ -321,17 +321,17 @@ This removes the gimbal lock limitation.
 - Test at large angles
 
 **Test (Webots)**
-- Command large attitude: 45° roll, hold, return to level
-- Command 90° pitch (pointing up) -currently impossible with Euler
+- Command large attitude: 45 deg roll, hold, return to level
+- Command 90 deg pitch (pointing up) -currently impossible with Euler
 - Verify no singularity or weird behavior
 
 **Test (Hardware)**
-- Conservative: 30° roll/pitch commands, verify tracking
+- Conservative: 30 deg roll/pitch commands, verify tracking
 - Only attempt larger angles with safety setup (tether/net)
 
 **Success criteria**
-- Stable control at 45° roll/pitch
-- No singularity at 90° pitch (in simulation)
+- Stable control at 45 deg roll/pitch
+- No singularity at 90 deg pitch (in simulation)
 - Hover stability unchanged
 
 **Regression check**
@@ -422,7 +422,7 @@ after falling X meters or timeout."
 
 1. **"Disable" is too coarse.** If you disable rate PIDs, you're in open-loop control--
    the drone becomes uncontrollable. For a flip, you still need rate control to execute
-   the rotation at a specific angular velocity (e.g., 720°/s).
+   the rotation at a specific angular velocity (e.g., 720 deg/s).
 
 2. **"Fallen X meters" doesn't generalize.**
    - Barrel roll is mostly horizontal (no altitude change)
@@ -451,7 +451,7 @@ It's what makes the drone controllable. What changes is:
 
 For a flip maneuver in Betaflight:
 1. Pilot switches to Acro mode (stick controls angular rate directly)
-2. Commands high roll rate (e.g., stick full deflection = 720°/s)
+2. Commands high roll rate (e.g., stick full deflection = 720 deg/s)
 3. Rate PIDs track this setpoint--drone rotates at commanded speed
 4. Pilot centers stick to stop rotation
 5. (Optional) Switch back to Angle mode for self-leveling
@@ -492,11 +492,11 @@ Acro Waypoint ──────────────────────
 // 1. Signal acro mode (attitude actor stops publishing)
 hive_bus_publish(mode_bus, ACRO_MODE);
 
-// 2. Command the flip: 720°/s roll rate
+// 2. Command the flip: 720 deg/s roll rate
 rate_setpoint_t sp = {.roll = 720.0f, .pitch = 0, .yaw = 0};
 hive_bus_publish(rate_setpoint_bus, &sp);
 
-// 3. Monitor: wait for 360° rotation or timeout
+// 3. Monitor: wait for 360 deg rotation or timeout
 while (rotation < 360.0f && elapsed < timeout) {
     // Rate actor is tracking our setpoint--drone is rotating
     rotation += gyro_roll * dt;
@@ -516,9 +516,9 @@ Different maneuvers need different completion criteria:
 
 | Maneuver | Primary Trigger | Fallback |
 |----------|-----------------|----------|
-| Flip (roll) | Roll angle crosses 360° | Timeout (1s) |
-| Flip (pitch) | Pitch angle crosses 360° | Timeout (1s) |
-| Half-roll | Roll angle crosses 180° | Timeout (0.5s) |
+| Flip (roll) | Roll angle crosses 360 deg | Timeout (1s) |
+| Flip (pitch) | Pitch angle crosses 360 deg | Timeout (1s) |
+| Half-roll | Roll angle crosses 180 deg | Timeout (0.5s) |
 | Inverted hang | Attitude near inverted | Timeout + max altitude loss |
 | Barrel roll | Combined rotation + position | Timeout |
 
@@ -548,7 +548,7 @@ for N milliseconds, the rate actor could zero its outputs or switch to a safe
 default. This catches bugs where the acro waypoint actor crashes mid-maneuver.
 
 **Attitude limits during transition** - When returning from acro to normal mode,
-the attitude actor may see a large error (e.g., 30° off level). Implement rate
+the attitude actor may see a large error (e.g., 30 deg off level). Implement rate
 limiting on the transition to avoid commanding maximum deflection instantly.
 
 ### Actor Responsibilities

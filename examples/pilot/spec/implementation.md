@@ -161,7 +161,7 @@ Real hardware platforms (Crazyflie) provide LED feedback during startup:
 | 1-3 slow blinks | init | Progress indicator (1=start, 2=IMU OK, 3=all OK) |
 | 3-5 fast blinks | init | Hardware init failed (count indicates component) |
 | 6-9 fast blinks | self-test | Sensor self-test failed (count indicates sensor) |
-| 10 fast blinks | calibrate | Level warning (drone tilted >6°) |
+| 10 fast blinks | calibrate | Level warning (drone tilted >6 deg) |
 | Slow blink | calibrate | Calibration in progress |
 | LED off | calibrate | Calibration complete |
 | LED on | armed | Ready to fly |
@@ -272,7 +272,7 @@ examples/pilot/
 2. Altitude PID commands increased thrust
 3. Drone rises with some initial oscillation
 4. Settles at 1.0m within ~3 seconds
-5. Maintains stable hover at 1.0m ± 0.05m
+5. Maintains stable hover at 1.0m +/- 0.05m
 
 ### Console Output
 

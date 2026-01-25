@@ -109,11 +109,11 @@ Actors run until they **yield** - there is no preemption. Operations that yield:
 | Yields (other actors run) | Returns immediately (no yield) |
 |---------------------------|-------------------------------|
 | `hive_yield()` | `hive_ipc_recv(..., 0)` (timeout=0) |
-| `hive_ipc_recv()` (timeout ≠ 0) | `hive_bus_read()` |
+| `hive_ipc_recv()` (timeout != 0) | `hive_bus_read()` |
 | `hive_ipc_recv_match()` | `hive_ipc_notify()` |
 | `hive_ipc_request()` | `hive_bus_publish()` |
 | `hive_bus_read_wait()` | `hive_select(..., 0)` (timeout=0) |
-| `hive_select()` (timeout ≠ 0) | |
+| `hive_select()` (timeout != 0) | |
 | `hive_net_*()` | |
 | `hive_exit()` | |
 

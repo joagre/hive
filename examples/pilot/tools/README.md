@@ -234,4 +234,4 @@ The telemetry logger produces CSV files with these columns:
 | thrust | Thrust command (0-1) |
 | target_x, target_y, target_z, target_yaw | Waypoint targets |
 | gyro_x, gyro_y, gyro_z | Raw gyroscope (rad/s) |
-| accel_x, accel_y, accel_z | Raw accelerometer (m/s²) |
+| accel_x, accel_y, accel_z | Raw accelerometer (m/s^2) |

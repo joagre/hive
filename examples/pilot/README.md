@@ -65,7 +65,7 @@ by the supervisor at spawn time.
 Without Flow deck, hovers and changes altitude only. 60-second startup delay before flight.
 Radio telemetry enabled via Crazyradio 2.0 for real-time ground station logging.
 
-**Safety features (all platforms)** - Emergency cutoff on excessive tilt (>45°), excessive
+**Safety features (all platforms)** - Emergency cutoff on excessive tilt (>45 deg), excessive
 altitude (>2m), or touchdown. Motor deadman watchdog zeros motors if no command received
 within 50ms (protects against controller crash). Flight duration limited by flight manager
 (10s/40s/60s per profile).
@@ -325,7 +325,7 @@ transfer to hardware with conservative adjustments (see hal_config.h).
 - `thrust`: Thrust command (normalized)
 - `target_x,target_y,target_z,target_yaw`: Position targets
 - `gyro_x,gyro_y,gyro_z`: Raw gyro (rad/s)
-- `accel_x,accel_y,accel_z`: Raw accel (m/s²)
+- `accel_x,accel_y,accel_z`: Raw accel (m/s^2)
 
 **Usage**
 ```bash

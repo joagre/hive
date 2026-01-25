@@ -31,7 +31,7 @@ The following safety features run on all platforms (Webots and STM32):
 
 | Feature | Location | Behavior |
 |---------|----------|----------|
-| Attitude cutoff | altitude_actor.c | Motors off if roll or pitch >45° |
+| Attitude cutoff | altitude_actor.c | Motors off if roll or pitch >45 deg |
 | Altitude cutoff | altitude_actor.c | Motors off if altitude >2m |
 | Landed detection | altitude_actor.c | Motors off when target <5cm and altitude <15cm |
 | Thrust ramp | altitude_actor.c | Gradual thrust increase over 0.5 seconds on takeoff |
@@ -48,7 +48,7 @@ The following safety features are STM32-only (disabled in Webots):
 
 The following may be added after initial flight testing:
 
-- **Rate cutoff**: Motors off if angular rate exceeds threshold (e.g., >300°/s) - catches violent oscillation while within tilt limits
+- **Rate cutoff**: Motors off if angular rate exceeds threshold (e.g., >300 deg/s) - catches violent oscillation while within tilt limits
 - **Accelerometer sanity check**: Motors off if acceleration readings are implausible
 - **Sensor timeout**: Motors off if no sensor updates within expected interval
 
@@ -233,16 +233,16 @@ State Bus ──► Position Actor ──► Attitude Setpoint Bus ──► Att
 **Implementation**
 - Simple PD controller: position error -> attitude command
 - Velocity damping: reduces overshoot
-- Max tilt limit: 0.35 rad (~20°) for safety
+- Max tilt limit: 0.35 rad (~20 deg) for safety
 - Sign conventions match Bitcraze Webots controller
 - Heading hold: publishes target yaw from waypoint actor
-- Angle wrap-around: `pid_update_angle()` handles ±π discontinuity
+- Angle wrap-around: `pid_update_angle()` handles +/-pi discontinuity
 - World-to-body frame transformation based on current yaw
 
 **Benefits**
 - Drone holds XY position and heading
 - Returns to target when displaced or rotated
-- Takes shortest rotation path (never rotates >180°)
+- Takes shortest rotation path (never rotates >180 deg)
 
 ### Step 7: Waypoint Actor
 Add waypoint navigation with platform-specific routes.
@@ -405,7 +405,7 @@ Position Target Bus ─┘
 - `thrust`: Thrust command (normalized)
 - `target_x,target_y,target_z,target_yaw`: Position targets
 - `gyro_x,gyro_y,gyro_z`: Raw gyro (rad/s)
-- `accel_x,accel_y,accel_z`: Raw accel (m/s²)
+- `accel_x,accel_y,accel_z`: Raw accel (m/s^2)
 
 **Usage**
 ```bash

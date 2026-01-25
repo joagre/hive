@@ -303,7 +303,7 @@ When an actor calls a blocking API, the following contract applies:
 | Function | Blocks until |
 |----------|--------------|
 | `hive_yield()` | Immediately reschedules (no wait condition) |
-| `hive_ipc_recv()` | Message arrives or timeout (if timeout ≠ 0) |
+| `hive_ipc_recv()` | Message arrives or timeout (if timeout != 0) |
 | `hive_ipc_recv_match()` | Matching message arrives or timeout |
 | `hive_ipc_recv_matches()` | Message matching any filter arrives or timeout |
 | `hive_ipc_request()` | Reply arrives or timeout |
