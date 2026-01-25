@@ -189,7 +189,7 @@ int test_sd_run(bool standalone) {
     }
 
     uint32_t open_time = hal_get_time_ms() - start_time;
-    HIVE_LOG_INFO("File opened (fd=%d, %u ms)", fd, open_time);
+    HIVE_LOG_INFO("File opened (fd=%d, %lu ms)", fd, (unsigned long)open_time);
 
     // Write test pattern in blocks
     HIVE_LOG_INFO("Writing %d bytes in %d-byte blocks...", TEST_PATTERN_SIZE,
@@ -222,7 +222,7 @@ int test_sd_run(bool standalone) {
     (void)total_written; // Suppress unused warning
 
     uint32_t write_time = hal_get_time_ms() - start_time;
-    HIVE_LOG_INFO("Write OK (%u ms)", write_time);
+    HIVE_LOG_INFO("Write OK (%lu ms)", (unsigned long)write_time);
 
     // Sync and close
     HIVE_LOG_INFO("Syncing to SD card...");
@@ -238,7 +238,7 @@ int test_sd_run(bool standalone) {
         }
         return -1;
     }
-    HIVE_LOG_INFO("Sync OK (%u ms)", sync_time);
+    HIVE_LOG_INFO("Sync OK (%lu ms)", (unsigned long)sync_time);
 
     status = hive_file_close(fd);
     if (HIVE_FAILED(status)) {
@@ -321,7 +321,7 @@ int test_sd_run(bool standalone) {
         }
         return -1;
     }
-    HIVE_LOG_INFO("Read and verify OK (%u ms)", read_time);
+    HIVE_LOG_INFO("Read and verify OK (%lu ms)", (unsigned long)read_time);
 
     hive_file_close(fd);
 
@@ -334,12 +334,17 @@ int test_sd_run(bool standalone) {
     HIVE_LOG_INFO("========================================");
     HIVE_LOG_INFO("  Path:       %s", TEST_FILE_PATH);
     HIVE_LOG_INFO("  Size:       %d bytes", TEST_PATTERN_SIZE);
-    HIVE_LOG_INFO("  Open time:  %u ms", open_time);
-    HIVE_LOG_INFO("  Write time: %u ms (%u bytes/sec)", write_time,
-                  write_time > 0 ? (TEST_PATTERN_SIZE * 1000) / write_time : 0);
-    HIVE_LOG_INFO("  Sync time:  %u ms", sync_time);
-    HIVE_LOG_INFO("  Read time:  %u ms (%u bytes/sec)", read_time,
-                  read_time > 0 ? (TEST_PATTERN_SIZE * 1000) / read_time : 0);
+    HIVE_LOG_INFO("  Open time:  %lu ms", (unsigned long)open_time);
+    HIVE_LOG_INFO("  Write time: %lu ms (%lu bytes/sec)",
+                  (unsigned long)write_time,
+                  write_time > 0
+                      ? (unsigned long)((TEST_PATTERN_SIZE * 1000) / write_time)
+                      : 0UL);
+    HIVE_LOG_INFO("  Sync time:  %lu ms", (unsigned long)sync_time);
+    HIVE_LOG_INFO(
+        "  Read time:  %lu ms (%lu bytes/sec)", (unsigned long)read_time,
+        read_time > 0 ? (unsigned long)((TEST_PATTERN_SIZE * 1000) / read_time)
+                      : 0UL);
 
     if (standalone) {
         hive_cleanup();

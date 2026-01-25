@@ -116,6 +116,13 @@ HIVE_CFLAGS += -DHIVE_VFILE_LOG_SIZE=131072
 HIVE_CFLAGS += -DHIVE_VFILE_LOG_SECTOR=8
 HIVE_CFLAGS += '-DHIVE_FILE_RING_SIZE=(8*1024)'
 
+# SD card support (optional - requires Micro SD Card Deck)
+ENABLE_SD ?= 0
+ifeq ($(ENABLE_SD),1)
+  HIVE_CFLAGS += -DHIVE_ENABLE_SD=1
+  HIVE_CFLAGS += -DHIVE_MAX_SD_FILES=4
+endif
+
 # Add Hive config to CFLAGS
 CFLAGS += $(HIVE_CFLAGS)
 
@@ -205,16 +212,20 @@ $(BUILD_DIR_CF):
 # Build pilot HAL library
 $(HAL_LIB):
 	@echo "Building pilot HAL library..."
-	@$(MAKE) -C $(HAL_DIR)
+	@$(MAKE) -C $(HAL_DIR) ENABLE_SD=$(ENABLE_SD)
+
+# Board-specific mount configuration
+BOARD_MOUNTS_SRC = $(abspath $(HAL_DIR)/hive_mounts.c)
 
 # Build Hive library for STM32
 $(HIVE_LIB): | $(BUILD_DIR_CF)
 	@echo "Building Hive library for STM32..."
-	@$(MAKE) -C $(HIVE_SRC_DIR) \
+	@$(MAKE) -C $(HIVE_SRC_DIR) -f Makefile.stm32 \
 		BUILD_DIR=$(abspath $(BUILD_DIR_CF)) \
-		PLATFORM=stm32 \
 		CC=$(CC) \
 		AR=$(AR) \
+		BOARD_MOUNTS_SRC=$(BOARD_MOUNTS_SRC) \
+		ENABLE_SD=$(ENABLE_SD) \
 		CFLAGS="$(MCU) -std=c11 -Os -g3 -ffunction-sections -fdata-sections -DSTM32F405xx -DHIVE_PLATFORM_STM32 $(HIVE_CFLAGS) -I$(abspath $(HAL_DIR))/vendor/CMSIS/Include -I$(abspath $(HAL_DIR))/vendor/CMSIS/Device/ST/STM32F4xx/Include"
 
 $(TARGET_BIN): $(TARGET_ELF)
