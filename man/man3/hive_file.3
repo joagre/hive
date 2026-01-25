@@ -1,7 +1,7 @@
 .\" Man page for file I/O functions
 .TH HIVE_FILE 3 "January 2026" "Hive 1.0" "Actor Runtime Manual"
 .SH NAME
-hive_file_open, hive_file_close, hive_file_read, hive_file_pread, hive_file_write, hive_file_pwrite, hive_file_sync \- synchronous file I/O
+hive_file_open, hive_file_close, hive_file_read, hive_file_pread, hive_file_write, hive_file_pwrite, hive_file_sync, hive_file_mount_available \- synchronous file I/O
 .SH SYNOPSIS
 .nf
 .B #include <hive_file.h>
@@ -13,6 +13,7 @@ hive_file_open, hive_file_close, hive_file_read, hive_file_pread, hive_file_writ
 .BI "hive_status_t hive_file_write(int " fd ", const void *" buf ", size_t " len ", size_t *" bytes_written ");"
 .BI "hive_status_t hive_file_pwrite(int " fd ", const void *" buf ", size_t " len ", size_t " offset ", size_t *" bytes_written ");"
 .BI "hive_status_t hive_file_sync(int " fd ");"
+.BI "hive_status_t hive_file_mount_available(const char *" path ");"
 .fi
 .SH DESCRIPTION
 These functions provide synchronous file I/O for actors.
@@ -92,6 +93,33 @@ without changing the file position (positional write).
 .BR hive_file_sync ()
 flushes the file's data and metadata to disk. This ensures durability after a
 crash but is slow (may take tens of milliseconds on flash media).
+.SS Checking Mount Availability
+.BR hive_file_mount_available ()
+checks if the mount point for
+.I path
+exists and is ready for I/O. This is useful for checking SD card presence
+before attempting to open files.
+.PP
+.B Returns:
+.IP \(bu 2
+.B HIVE_OK
+\- Mount exists and backend is ready
+.IP \(bu 2
+.B HIVE_ERR_INVALID
+\- No mount for path
+.IP \(bu 2
+.B HIVE_ERR_IO
+\- Mount exists but backend unavailable (e.g., SD card not inserted)
+.PP
+.B Example:
+.PP
+.nf
+if (HIVE_SUCCEEDED(hive_file_mount_available("/sd"))) {
+    hive_file_open("/sd/flight.bin", HIVE_O_WRONLY | HIVE_O_CREAT, 0, &fd);
+} else {
+    hive_file_open("/log", HIVE_O_WRONLY | HIVE_O_TRUNC, 0, &fd);
+}
+.fi
 .SH RETURN VALUE
 All functions return an
 .I hive_status_t
@@ -237,6 +265,26 @@ Each board must implement
 with board-specific SPI pin configuration. See
 .I src/hal/stm32/spi_ll.h
 for the required interface.
+.PP
+.B SD Card Limitations:
+.IP \(bu 2
+.B No hot-plug detection
+\- Card presence is checked at initialization only. If the card is removed
+during operation, subsequent I/O fails with
+.BR HIVE_ERR_IO .
+.IP \(bu 2
+.B No automatic directory creation
+\-
+.BR hive_file_open ()
+with
+.B HIVE_O_CREAT
+does not create parent directories. Use flat file paths like
+.IR /sd/flight_001.bin .
+.IP \(bu 2
+.B No file listing API
+\- There is no
+.BR readdir ()
+equivalent. Use sequential filenames for logging.
 .SS Partial Reads/Writes
 Read and write operations may transfer fewer bytes than requested. Always check
 the
