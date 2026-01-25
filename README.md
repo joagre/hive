@@ -160,6 +160,56 @@ All structures are statically allocated. Actor stacks use a static arena allocat
 
 **Embedded footprint** - The defaults above are generous for Linux development. See the [Pilot Example](#pilot-example-quadcopter-flight-controller) for a minimal embedded configuration (~60KB flash, ~58KB RAM on STM32F4).
 
+### Configuration Hierarchy
+
+Compile-time parameters flow through a hierarchy where later levels override earlier ones:
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│  Level 1: Library Defaults                                         │
+│  include/hive_static_config.h                                      │
+│  All #ifndef guarded - provides sensible defaults                  │
+│  Example: HIVE_MAX_ACTORS=64, HIVE_STACK_ARENA_SIZE=1MB            │
+├─────────────────────────────────────────────────────────────────────┤
+│  Level 2: Application Config                                       │
+│  Your app's hive_config.mk (included by Makefile)                  │
+│  Overrides for your specific application's needs                   │
+│  Example: -DHIVE_MAX_ACTORS=16 -DHIVE_DEFAULT_STACK_SIZE=4096      │
+├─────────────────────────────────────────────────────────────────────┤
+│  Level 3: Board Config                                             │
+│  hal/<board>/hive_board_config.mk                                  │
+│  Hardware-specific: flash addresses, SD pins, peripherals          │
+│  Example: -DHIVE_VFILE_LOG_BASE=0x08080000 -DHIVE_ENABLE_SD=1      │
+├─────────────────────────────────────────────────────────────────────┤
+│  Level 4: Command Line                                             │
+│  make CFLAGS+='-DHIVE_MAX_ACTORS=32'                               │
+│  Highest priority - overrides everything above                     │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+**How it works:**
+- `hive_static_config.h` uses `#ifndef` guards so any `-D` flag takes precedence
+- Application Makefiles `-include hive_config.mk` to inherit shared settings
+- Board config includes add hardware-specific settings
+- Command-line `-D` flags can override any level for testing
+
+**Example flow** (see `examples/pilot/`):
+```makefile
+# Makefile.crazyflie-2.1+
+include hive_config.mk                      # Level 2: app config
+include hal/crazyflie-2.1+/hive_board_config.mk  # Level 3: board config
+
+# hive_config.mk sets: HIVE_MAX_ACTORS=16, pools, stack sizes
+# hive_board_config.mk sets: flash addresses, SD config
+# Command line: make ENABLE_SD=1  (overrides Level 3 default)
+```
+
+This hierarchy ensures:
+- Library has sensible defaults (works out of the box)
+- Applications customize memory for their actor count
+- Boards customize hardware-specific addresses
+- Users can override anything from command line
+
 ## Quick Start
 
 ### Basic Actor Example

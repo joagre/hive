@@ -400,10 +400,78 @@ doesn't affect flight-critical control loops and won't trigger restarts if it fa
 | `Makefile` | Webots simulation build |
 | `Makefile.crazyflie-2.1+` | Crazyflie 2.1+ build (STM32F405, 168 MHz) |
 | `hive_config.mk` | Shared Hive memory config (included by all Makefiles) |
+| `hal/<platform>/hive_board_config.mk` | Board-specific Hive config (flash, SD) |
 | `hal/<platform>/hal_config.h` | Platform-specific PID gains and thrust |
 
-Hive memory settings (actors, buses, pool sizes) are shared across all platforms
-via `hive_config.mk`. Only stack sizes differ per platform based on available RAM.
+#### Configuration Hierarchy
+
+The pilot uses a layered configuration system where later levels override earlier ones:
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│  Level 1: Library Defaults                                         │
+│  ../../include/hive_static_config.h                                │
+│  Default: HIVE_MAX_ACTORS=64, HIVE_STACK_ARENA_SIZE=1MB, etc.      │
+├─────────────────────────────────────────────────────────────────────┤
+│  Level 2: Pilot Application Config                                 │
+│  hive_config.mk                                                    │
+│  Pilot needs: HIVE_MAX_ACTORS=16, smaller pools, 4KB stacks        │
+├─────────────────────────────────────────────────────────────────────┤
+│  Level 3: Board Config                                             │
+│  hal/crazyflie-2.1+/hive_board_config.mk                           │
+│  Flash addresses: VFILE_LOG_BASE, VFILE_LOG_SIZE, VFILE_LOG_SECTOR │
+│  SD card: ENABLE_SD, HIVE_ENABLE_SD, HIVE_MAX_SD_FILES             │
+├─────────────────────────────────────────────────────────────────────┤
+│  Level 4: Command Line                                             │
+│  make -f Makefile.crazyflie-2.1+ ENABLE_SD=1                       │
+│  Highest priority - for testing and one-off builds                 │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+**What each level controls:**
+
+| Level | File | Controls |
+|-------|------|----------|
+| 1 | `hive_static_config.h` | Library-wide defaults (generous for Linux dev) |
+| 2 | `hive_config.mk` | Actor count, pool sizes, stack arena, default stack size |
+| 3 | `hive_board_config.mk` | Flash layout, SD card pins, peripheral addresses |
+| 4 | Command line | Override anything (`ENABLE_SD=1`, `FLIGHT_PROFILE=2`) |
+
+**Example: Adding SD card logging**
+```bash
+# hive_board_config.mk has: ENABLE_SD ?= 0 (default off)
+# Override from command line:
+make -f Makefile.crazyflie-2.1+ ENABLE_SD=1
+```
+
+**Example: hive_config.mk contents**
+```makefile
+# Pilot requires fewer resources than library defaults
+HIVE_CFLAGS += -DHIVE_MAX_ACTORS=16
+HIVE_CFLAGS += -DHIVE_MAX_BUSES=8
+HIVE_CFLAGS += -DHIVE_MAILBOX_ENTRY_POOL_SIZE=32
+HIVE_CFLAGS += -DHIVE_DEFAULT_STACK_SIZE=4096
+HIVE_CFLAGS += '-DHIVE_STACK_ARENA_SIZE=(52*1024)'
+```
+
+**Example: hive_board_config.mk contents**
+```makefile
+# STM32F405 flash sector 8 for /log virtual file
+HIVE_CFLAGS += -DHIVE_VFILE_LOG_BASE=0x08080000
+HIVE_CFLAGS += -DHIVE_VFILE_LOG_SIZE=131072
+HIVE_CFLAGS += -DHIVE_VFILE_LOG_SECTOR=8
+
+# SD card support (off by default, enable with ENABLE_SD=1)
+ENABLE_SD ?= 0
+ifeq ($(ENABLE_SD),1)
+  HIVE_CFLAGS += -DHIVE_ENABLE_SD=1
+endif
+```
+
+This separation ensures:
+- **hive_config.mk** is portable across boards (same actor count everywhere)
+- **hive_board_config.mk** captures hardware specifics (different flash layouts per MCU)
+- **Command line** enables quick experiments without editing files
 
 ### Analysis Tools
 

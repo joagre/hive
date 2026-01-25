@@ -38,7 +38,7 @@ HIVE_CFLAGS += '-DHIVE_STACK_ARENA_SIZE=(16*1024)'
 HIVE_CFLAGS += -DHIVE_MAX_SUPERVISORS=2
 HIVE_CFLAGS += -DHIVE_MAX_SUPERVISOR_CHILDREN=4
 
-# CFLAGS to pass to src/Makefile.stm32
+# CFLAGS to pass to src/Makefile (PLATFORM=stm32)
 HIVE_CFLAGS_EXPORT := $(MCU)
 HIVE_CFLAGS_EXPORT += -I$(abspath ../include)
 HIVE_CFLAGS_EXPORT += -I$(abspath ../lib) -I$(abspath ../lib/printf)
@@ -66,7 +66,7 @@ ARM_LDFLAGS += $(MCU)
 ARM_LDFLAGS += -Wl,--gc-sections
 ARM_LDFLAGS += -nostartfiles -specs=nosys.specs
 
-# Hive library (built by delegating to src/Makefile.stm32)
+# Hive library (built by delegating to src/Makefile)
 HIVE_LIB := $(BUILD_DIR)/libhive.a
 
 # Local QEMU sources
@@ -100,9 +100,9 @@ all: $(QEMU_ELF)
 $(BUILD_DIR):
 	mkdir -p $@
 
-# Build hive library (delegate to src/Makefile.stm32)
+# Build hive library (delegate to src/Makefile)
 $(HIVE_LIB):
-	@$(MAKE) -C $(SRC_DIR) -f Makefile.stm32 \
+	@$(MAKE) -C $(SRC_DIR) PLATFORM=stm32 \
 		BUILD_DIR=$(abspath $(BUILD_DIR)) \
 		CC=$(ARM_CC) AR=$(ARM_AR) \
 		ENABLE_NET=0 ENABLE_FILE=0 \

@@ -110,18 +110,8 @@ HIVE_CFLAGS += -DHIVE_MESSAGE_DATA_POOL_SIZE=16
 HIVE_CFLAGS += -DHIVE_DEFAULT_STACK_SIZE=2048
 HIVE_CFLAGS += '-DHIVE_STACK_ARENA_SIZE=(16*1024)'
 
-# STM32 flash file configuration
-HIVE_CFLAGS += -DHIVE_VFILE_LOG_BASE=0x08080000
-HIVE_CFLAGS += -DHIVE_VFILE_LOG_SIZE=131072
-HIVE_CFLAGS += -DHIVE_VFILE_LOG_SECTOR=8
-HIVE_CFLAGS += '-DHIVE_FILE_RING_SIZE=(8*1024)'
-
-# SD card support (optional - requires Micro SD Card Deck)
-ENABLE_SD ?= 0
-ifeq ($(ENABLE_SD),1)
-  HIVE_CFLAGS += -DHIVE_ENABLE_SD=1
-  HIVE_CFLAGS += -DHIVE_MAX_SD_FILES=4
-endif
+# Board-specific configuration (flash, SD)
+include $(HAL_DIR)/hive_board_config.mk
 
 # Add Hive config to CFLAGS
 CFLAGS += $(HIVE_CFLAGS)
@@ -220,7 +210,7 @@ BOARD_MOUNTS_SRC = $(abspath $(HAL_DIR)/hive_mounts.c)
 # Build Hive library for STM32
 $(HIVE_LIB): | $(BUILD_DIR_CF)
 	@echo "Building Hive library for STM32..."
-	@$(MAKE) -C $(HIVE_SRC_DIR) -f Makefile.stm32 \
+	@$(MAKE) -C $(HIVE_SRC_DIR) PLATFORM=stm32 \
 		BUILD_DIR=$(abspath $(BUILD_DIR_CF)) \
 		CC=$(CC) \
 		AR=$(AR) \

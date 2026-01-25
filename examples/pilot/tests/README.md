@@ -93,26 +93,27 @@ to exercise the STM32 flash file backend.
 
 Tests the Hive file API with SD card storage (`/sd` path).
 
-**NOTE:** This is a placeholder test. The SD card backend (`HIVE_ENABLE_SD`)
-is not yet implemented in Hive. The test checks mount availability and
-gracefully reports when SD is not available.
-
-**Requirements (once implemented):**
+**Requirements:**
 - Micro SD Card Deck attached to expansion connector
 - FAT32-formatted SD card inserted
-- Hive built with `HIVE_ENABLE_SD=1`
+- Hive built with `ENABLE_SD=1`
+
+```bash
+make PLATFORM=crazyflie TEST=sd ENABLE_SD=1
+make flash-crazyflie TEST=sd
+```
 
 **Test sequence:**
 1. Initialize Hive runtime
 2. Check if `/sd` mount is available
-3. If not available: report status and exit gracefully
-4. If available: write test file, read back, verify
+3. If not available: report status (built without `ENABLE_SD=1` or card not present)
+4. If available: write 4KB test file, read back, verify
 
 **LED feedback:**
 | Pattern | Meaning |
 |---------|---------|
 | 2 blinks | Starting SD test |
-| 3 blinks | SD not available (expected until implemented) |
+| 3 blinks | SD not available (build without `ENABLE_SD=1` or no card) |
 | Fast blink | Writing/reading in progress |
 | LED on solid | All tests passed! |
 | Slow blink | Test failed (SD available but I/O error) |

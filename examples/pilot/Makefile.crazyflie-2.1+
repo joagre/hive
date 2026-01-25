@@ -44,24 +44,18 @@ CFLAGS += -DFLIGHT_PROFILE=$(FLIGHT_PROFILE)
 LOG_LEVEL ?= INFO
 CFLAGS += -DHIVE_LOG_LEVEL=HIVE_LOG_LEVEL_$(LOG_LEVEL)
 
-# Hive memory configuration
+# Hive memory configuration (pilot actor requirements)
 include hive_config.mk
+
+# Board-specific configuration (flash, SD)
+include $(HAL_DIR)/hive_board_config.mk
+
+# Stack configuration for pilot
+HIVE_CFLAGS += -DHIVE_DEFAULT_STACK_SIZE=6144
+HIVE_CFLAGS += '-DHIVE_STACK_ARENA_SIZE=(72*1024)'
+
+# Add all Hive config to CFLAGS
 CFLAGS += $(HIVE_CFLAGS)
-CFLAGS += -DHIVE_DEFAULT_STACK_SIZE=6144
-CFLAGS += '-DHIVE_STACK_ARENA_SIZE=(72*1024)'
-
-# STM32 flash file configuration
-CFLAGS += -DHIVE_VFILE_LOG_BASE=0x08080000
-CFLAGS += -DHIVE_VFILE_LOG_SIZE=131072
-CFLAGS += -DHIVE_VFILE_LOG_SECTOR=8
-CFLAGS += '-DHIVE_FILE_RING_SIZE=(8*1024)'
-
-# SD card support (optional - requires Micro SD Card Deck)
-ENABLE_SD ?= 0
-ifeq ($(ENABLE_SD),1)
-  CFLAGS += -DHIVE_ENABLE_SD=1
-  CFLAGS += -DHIVE_MAX_SD_FILES=4
-endif
 
 # Linker flags
 LDSCRIPT := $(HAL_DIR)/stm32f405_flash.ld
@@ -83,23 +77,13 @@ PILOT_DEPS := $(PILOT_OBJS:.o=.d)
 HIVE_LIB := $(BUILD_DIR)/libhive.a
 HAL_LIB := $(HAL_DIR)/build/libhal.a
 
-# CFLAGS to pass to hive build
+# CFLAGS to pass to hive build (include paths + all HIVE_CFLAGS)
 HIVE_CFLAGS_EXPORT := $(MCU)
 HIVE_CFLAGS_EXPORT += -I$(abspath $(HIVE_ROOT)/include)
 HIVE_CFLAGS_EXPORT += -I$(abspath $(HIVE_ROOT)/lib) -I$(abspath $(HIVE_ROOT)/lib/printf)
 HIVE_CFLAGS_EXPORT += -I$(abspath $(HAL_DIR))
 HIVE_CFLAGS_EXPORT += $(HIVE_CFLAGS)
-HIVE_CFLAGS_EXPORT += -DHIVE_DEFAULT_STACK_SIZE=6144
-HIVE_CFLAGS_EXPORT += '-DHIVE_STACK_ARENA_SIZE=(72*1024)'
 HIVE_CFLAGS_EXPORT += -DHIVE_LOG_LEVEL=HIVE_LOG_LEVEL_$(LOG_LEVEL)
-HIVE_CFLAGS_EXPORT += -DHIVE_VFILE_LOG_BASE=0x08080000
-HIVE_CFLAGS_EXPORT += -DHIVE_VFILE_LOG_SIZE=131072
-HIVE_CFLAGS_EXPORT += -DHIVE_VFILE_LOG_SECTOR=8
-HIVE_CFLAGS_EXPORT += '-DHIVE_FILE_RING_SIZE=(8*1024)'
-ifeq ($(ENABLE_SD),1)
-  HIVE_CFLAGS_EXPORT += -DHIVE_ENABLE_SD=1
-  HIVE_CFLAGS_EXPORT += -DHIVE_MAX_SD_FILES=4
-endif
 
 # Targets
 .PHONY: all clean flash size
@@ -109,9 +93,9 @@ all: $(BUILD_DIR)/$(TARGET).elf $(BUILD_DIR)/$(TARGET).hex $(BUILD_DIR)/$(TARGET
 # Board-specific mount configuration
 BOARD_MOUNTS_SRC := $(abspath $(HAL_DIR)/hive_mounts.c)
 
-# Build hive library (delegate to src/Makefile.stm32)
+# Build hive library (delegate to src/Makefile)
 $(HIVE_LIB):
-	@$(MAKE) -C $(HIVE_SRC_DIR) -f Makefile.stm32 \
+	@$(MAKE) -C $(HIVE_SRC_DIR) PLATFORM=stm32 \
 		BUILD_DIR=$(abspath $(BUILD_DIR)) \
 		CC=$(CC) AR=$(AR) \
 		BOARD_MOUNTS_SRC=$(BOARD_MOUNTS_SRC) \

@@ -558,7 +558,7 @@ make PLATFORM=stm32 CC=arm-none-eabi-gcc
 # Feature toggles (disable network and file I/O)
 make ENABLE_NET=0 ENABLE_FILE=0
 
-# STM32 defaults to ENABLE_NET=0 ENABLE_FILE=0
+# STM32 defaults to ENABLE_NET=0 ENABLE_FILE=1 ENABLE_SD=0
 ```
 
 Platform selection sets `HIVE_PLATFORM_LINUX` or `HIVE_PLATFORM_STM32` preprocessor defines.
