@@ -10,7 +10,7 @@ These tests are organized by what they validate:
 |------|----------|-------------|
 | `sensors_motors` | Pilot HAL | HAL API validation (sensors, motors, calibration) |
 | `flash` | Hive File API | Tests flash-backed `/log` via `hive_file_*()` |
-| `sd` | Hive File API | Tests SD-backed `/sd` via `hive_file_*()` (placeholder) |
+| `sd` | Hive File API | Tests SD-backed `/sd` via `hive_file_*()` |
 | `main` | Combined | Runs all applicable tests (Webots dummy pilot) |
 
 **Key distinction:**
