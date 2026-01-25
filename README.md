@@ -4,7 +4,7 @@
 
 ## Why Hive?
 
-**No shared state** - Each actor owns its data. No locks, no races. A bug in one actor can't corrupt another actor's state.
+**No shared state** - Each actor owns its data. No locks, no races. Without shared mutable state, accidental cross-actor corruption is eliminated (though C still allows intentional pointer misuse).
 
 **Predictable scheduling** - Cooperative multitasking means you know exactly when context switches happen--only at blocking operations (IPC receive, bus read, select, yield). No preemption surprises, no priority inversion, no mysterious timing bugs.
 
@@ -79,7 +79,7 @@ See [spec/](spec/) for design details.
 - Exit notifications with exit reasons (normal, crash, stack overflow, killed)
 - Timers (one-shot and periodic with timerfd/epoll)
 - Network I/O (non-blocking TCP via event loop)
-- File I/O (POSIX on Linux, flash-backed on STM32)
+- File I/O (POSIX on Linux, flash-backed on STM32 with optional SD card)
 - Logging (compile-time filtering, dual output: console + binary file)
 - Bus (pub-sub with retention policies)
 
@@ -156,7 +156,7 @@ All resource limits are defined at compile time. Edit and recompile to change:
 
 See [`include/hive_static_config.h`](include/hive_static_config.h) for all compile-time configuration options.
 
-All structures are statically allocated. Actor stacks use a static arena allocator by default (configurable size), with optional malloc via `actor_config_t.malloc_stack = true`. Stack sizes are configurable per actor, allowing different actors to use different stack sizes. Arena memory is automatically reclaimed and reused when actors exit. No malloc in hot paths. Memory footprint calculable at link time when using arena allocator (default); optional malloc'd stacks add runtime-dependent heap usage.
+All structures are statically allocated. Actor stacks use a static arena allocator by default (configurable size), with optional malloc via `actor_config_t.malloc_stack = true`. Stack sizes are configurable per actor, allowing different actors to use different stack sizes. Arena memory is automatically reclaimed when actors exit, with adjacent free blocks coalesced to prevent fragmentation. No malloc in hot paths. Memory footprint calculable at link time when using arena allocator (default); optional malloc'd stacks add runtime-dependent heap usage.
 
 **Embedded footprint** - The defaults above are generous for Linux development. See the [Pilot Example](#pilot-example-quadcopter-flight-controller) for a minimal embedded configuration (~60KB flash, ~58KB RAM on STM32F4).
 
@@ -168,7 +168,7 @@ Compile-time parameters flow through a hierarchy where later levels override ear
 ┌─────────────────────────────────────────────────────────────────────┐
 │  Level 1: Library Defaults                                         │
 │  include/hive_static_config.h                                      │
-│  All #ifndef guarded - provides sensible defaults                  │
+│  All #ifndef guarded - generous defaults for Linux development     │
 │  Example: HIVE_MAX_ACTORS=64, HIVE_STACK_ARENA_SIZE=1MB            │
 ├─────────────────────────────────────────────────────────────────────┤
 │  Level 2: Application Config                                       │
@@ -205,7 +205,7 @@ include hal/crazyflie-2.1+/hive_board_config.mk  # Level 3: board config
 ```
 
 This hierarchy ensures:
-- Library has sensible defaults (works out of the box)
+- Library has generous defaults for Linux development (works out of the box)
 - Applications customize memory for their actor count
 - Boards customize hardware-specific addresses
 - Users can override anything from command line
@@ -652,7 +652,7 @@ See [examples/pilot/README.md](examples/pilot/README.md) for build instructions 
 
 **Linux** - File operations block until complete. No timeout parameter.
 
-**STM32** - Uses flash-backed virtual files with a ring buffer for efficiency.
+**STM32** - Uses flash-backed virtual files with a ring buffer for efficiency. Optional SD card support via SPI.
 Most writes complete immediately. When the buffer fills up, `write()` blocks to flush data to
 flash before continuing. Virtual file paths are hardcoded (`/log`, `/config`), enabled by defining their flash layout:
 ```c
@@ -754,7 +754,7 @@ case SEL_SHUTDOWN:
 The runtime is **completely single-threaded**. All actors run cooperatively in a single scheduler thread with zero synchronization primitives (no mutexes, atomics, or locks).
 
 - **Linux** - `epoll` for timers and network; synchronous file I/O
-- **STM32** - Hardware timers, WFI for idle, flash-backed virtual files
+- **STM32** - Hardware timers, WFI for idle, flash-backed virtual files, optional SD card
 
 All runtime APIs must be called from actor context. External threads must use platform IPC (sockets/pipes) with dedicated reader actors.
 
