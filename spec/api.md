@@ -180,7 +180,7 @@ Exit message structure:
 typedef enum {
     HIVE_EXIT_NORMAL,       // Actor called hive_exit()
     HIVE_EXIT_CRASH,        // Actor function returned without calling hive_exit()
-    HIVE_EXIT_CRASH_STACK,  // Stack overflow detected
+    HIVE_EXIT_CRASH_STACK,  // Reserved for future MPU-based detection
     HIVE_EXIT_KILLED,       // Actor was killed externally
 } hive_exit_reason_t;
 

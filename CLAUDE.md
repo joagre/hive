@@ -204,8 +204,8 @@ if (hive_is_exit_msg(&msg)) {
 ```
 - `hive_is_exit_msg(msg)` checks if message is an exit notification
 - `hive_decode_exit(msg, out)` decodes exit message into `hive_exit_msg_t` struct
-- `hive_exit_reason_str(reason)` returns "NORMAL", "CRASH", "STACK_OVERFLOW", or "KILLED"
-- Exit reasons: `HIVE_EXIT_NORMAL`, `HIVE_EXIT_CRASH`, `HIVE_EXIT_CRASH_STACK`, `HIVE_EXIT_KILLED`
+- `hive_exit_reason_str(reason)` returns "NORMAL", "CRASH", or "KILLED"
+- Exit reasons: `HIVE_EXIT_NORMAL`, `HIVE_EXIT_CRASH`, `HIVE_EXIT_KILLED`
 - `exit_info.monitor_id`: 0 = from link, non-zero = from monitor (matches `hive_monitor()` return value)
 
 ### IPC Message Format

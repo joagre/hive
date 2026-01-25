@@ -76,7 +76,7 @@ See [spec/](spec/) for design details.
 - Message classes: NOTIFY (async), REQUEST/REPLY, TIMER, EXIT
 - Actor linking and monitoring (bidirectional links, unidirectional monitors)
 - Supervision (restart strategies, intensity limiting, child specs)
-- Exit notifications with exit reasons (normal, crash, stack overflow, killed)
+- Exit notifications with exit reasons (normal, crash, killed)
 - Timers (one-shot and periodic with timerfd/epoll)
 - Network I/O (non-blocking TCP via event loop)
 - File I/O (POSIX on Linux, flash-backed on STM32 with optional SD card)
@@ -455,7 +455,7 @@ if (hive_is_exit_msg(&msg)) {
     }
 }
 
-// Exit reasons: HIVE_EXIT_NORMAL, HIVE_EXIT_CRASH, HIVE_EXIT_CRASH_STACK, HIVE_EXIT_KILLED
+// Exit reasons: HIVE_EXIT_NORMAL, HIVE_EXIT_CRASH, HIVE_EXIT_KILLED
 ```
 
 ### Supervision
