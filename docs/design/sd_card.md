@@ -1,6 +1,6 @@
 # SD Card Support Design
 
-Investigation into adding SD card support for STM32 alongside existing flash storage.
+Adding SD card support for STM32 alongside existing flash storage via a unified mount table.
 
 ## Current Architecture
 
@@ -29,119 +29,340 @@ hive_file_open("/log", ...)
 +------------------+     +------------------+
 ```
 
-The STM32 HAL maps virtual paths to flash sectors:
-- `/log` -> Flash sector for logging
-- `/config` -> Flash sector for configuration
+**Current limitations:**
+- STM32: Paths hardcoded (`/log`, `/config`) via `HIVE_VFILE_*` defines
+- No unified way to add new backends (SD card, EEPROM, etc.)
+- Linux and STM32 use completely different path handling
 
-## Proposed Design: Path-Based Routing
+---
 
-Route file operations based on path prefix:
+## Proposed Design: Mount Table
 
-| Path prefix | Backend | Notes |
-|-------------|---------|-------|
-| `/log`, `/config` | Internal flash | Existing behavior |
-| `/sd/...` | SD card (FatFS) | New capability |
+A mount table maps path prefixes to storage backends. Same `hive_file_*` API, paths work across platforms.
 
-Example usage:
+### Core Types
+
 ```c
-// Existing flash-backed files (unchanged)
-hive_file_open("/log", HIVE_O_WRONLY | HIVE_O_TRUNC, 0, &fd);
+typedef enum {
+    HIVE_BACKEND_POSIX,   // Linux: direct POSIX I/O
+    HIVE_BACKEND_FLASH,   // STM32: internal flash sector
+    HIVE_BACKEND_SD,      // STM32: SD card via FatFS
+} hive_file_backend_t;
 
-// New SD card files
-hive_file_open("/sd/flight_001.bin", HIVE_O_WRONLY | HIVE_O_CREAT, 0, &fd);
-hive_file_open("/sd/telemetry.csv", HIVE_O_WRONLY | HIVE_O_CREAT, 0, &fd);
+typedef struct {
+    uint32_t base;        // Flash base address
+    uint32_t size;        // Flash region size
+    uint8_t sector;       // Flash sector number
+} hive_flash_config_t;
+
+typedef struct {
+    SPI_TypeDef *spi;     // SPI peripheral (SPI2, SPI3)
+    uint16_t cs_pin;      // Chip select GPIO pin
+} hive_sd_config_t;
+
+typedef struct {
+    const char *root;     // Filesystem root (e.g., "/tmp/hive")
+} hive_posix_config_t;
+
+typedef struct {
+    const char *prefix;               // Path prefix to match
+    hive_file_backend_t backend;      // Which backend handles this
+    union {
+        hive_posix_config_t posix;    // Linux config
+        hive_flash_config_t flash;    // STM32 flash config
+        hive_sd_config_t sd;          // SD card config
+    };
+} hive_mount_t;
 ```
 
-## API Changes
+### Platform Configurations
 
-**No changes to public API.** The `hive_file_*` functions remain identical.
-
-Internal HAL changes:
-1. `hive_hal_file_open()` detects `/sd/` prefix and routes to SD backend
-2. File descriptors encode backend type (e.g., fd 0-15 = flash, 16+ = SD)
-3. All other HAL functions dispatch based on fd
-
-## Implementation Components
-
-### 1. SPI Driver
-
-The Micro SD Card Deck uses SPI:
-- Default CS: IO4 (configurable via solder bridges)
-- Clock: Up to 25 MHz for SD card
-- STM32F405 SPI2 or SPI3
+**Linux** - Single catch-all mount, POSIX passthrough:
 
 ```c
-// New file: hal/crazyflie-2.1+/spi_sd.c
-void spi_sd_init(void);
-uint8_t spi_sd_transfer(uint8_t tx);
-void spi_sd_cs_low(void);
-void spi_sd_cs_high(void);
+// src/hal/linux/hive_mounts.c
+static const hive_mount_t g_mounts[] = {
+    {
+        .prefix = "/",
+        .backend = HIVE_BACKEND_POSIX,
+        .posix = { .root = "/tmp/hive" }
+    },
+};
+#define HIVE_MOUNT_COUNT 1
 ```
 
-### 2. FatFS Integration
+Usage:
+- `hive_file_open("/log", ...)` -> opens `/tmp/hive/log`
+- `hive_file_open("/mydata.bin", ...)` -> opens `/tmp/hive/mydata.bin`
 
-Use ChaN's FatFS library (standard for embedded):
-- FAT32 support (required by SD Card Deck)
-- Minimal footprint (~10KB flash)
-- Already battle-tested
+**STM32 Crazyflie** - Flash + optional SD card:
 
 ```c
-// FatFS disk I/O glue: hal/crazyflie-2.1+/diskio.c
-DSTATUS disk_initialize(BYTE pdrv);
-DRESULT disk_read(BYTE pdrv, BYTE *buff, LBA_t sector, UINT count);
-DRESULT disk_write(BYTE pdrv, const BYTE *buff, LBA_t sector, UINT count);
+// examples/pilot/hal/crazyflie-2.1+/hive_mounts.c
+
+// Flash addresses still come from Makefile -D flags
+// -DHIVE_VFILE_LOG_BASE=0x080E0000 -DHIVE_VFILE_LOG_SIZE=131072 ...
+
+static const hive_mount_t g_mounts[] = {
+    {
+        .prefix = "/log",
+        .backend = HIVE_BACKEND_FLASH,
+        .flash = {
+            .base = HIVE_VFILE_LOG_BASE,
+            .size = HIVE_VFILE_LOG_SIZE,
+            .sector = HIVE_VFILE_LOG_SECTOR
+        }
+    },
+    {
+        .prefix = "/config",
+        .backend = HIVE_BACKEND_FLASH,
+        .flash = {
+            .base = HIVE_VFILE_CONFIG_BASE,
+            .size = HIVE_VFILE_CONFIG_SIZE,
+            .sector = HIVE_VFILE_CONFIG_SECTOR
+        }
+    },
+    {
+        .prefix = "/sd",
+        .backend = HIVE_BACKEND_SD,
+        .sd = {
+            .spi = SPI2,
+            .cs_pin = GPIO_PIN_4   // IO4 default on SD deck
+        }
+    },
+};
+#define HIVE_MOUNT_COUNT 3
 ```
 
-### 3. HAL Modifications
+Usage:
+- `hive_file_open("/log", ...)` -> internal flash
+- `hive_file_open("/config", ...)` -> internal flash
+- `hive_file_open("/sd/flight.bin", ...)` -> SD card
+
+### Path Resolution
 
 ```c
-// In hive_hal_file_stm32.c
+// Find mount for path (longest prefix match)
+static const hive_mount_t *find_mount(const char *path) {
+    const hive_mount_t *best = NULL;
+    size_t best_len = 0;
 
-// Backend type encoded in fd
-#define FD_FLASH_BASE  0
-#define FD_FLASH_MAX   15
-#define FD_SD_BASE     16
-#define FD_SD_MAX      23
-
-static bool is_sd_path(const char *path) {
-    return strncmp(path, "/sd/", 4) == 0;
+    for (size_t i = 0; i < HIVE_MOUNT_COUNT; i++) {
+        size_t len = strlen(g_mounts[i].prefix);
+        if (strncmp(path, g_mounts[i].prefix, len) == 0) {
+            if (len > best_len) {
+                best = &g_mounts[i];
+                best_len = len;
+            }
+        }
+    }
+    return best;
 }
 
+// In hive_hal_file_open:
 hive_status_t hive_hal_file_open(const char *path, int flags, int mode,
                                  int *fd_out) {
-    if (is_sd_path(path)) {
-        return sd_file_open(path + 3, flags, mode, fd_out);  // Skip "/sd"
-    } else {
-        return flash_file_open(path, flags, mode, fd_out);   // Existing code
+    const hive_mount_t *mount = find_mount(path);
+    if (!mount) {
+        return HIVE_ERROR(HIVE_ERR_INVALID, "no mount for path");
+    }
+
+    const char *subpath = path + strlen(mount->prefix);
+
+    switch (mount->backend) {
+    case HIVE_BACKEND_POSIX:
+        return posix_file_open(mount, subpath, flags, mode, fd_out);
+    case HIVE_BACKEND_FLASH:
+        return flash_file_open(mount, subpath, flags, mode, fd_out);
+    case HIVE_BACKEND_SD:
+        return sd_file_open(mount, subpath, flags, mode, fd_out);
+    default:
+        return HIVE_ERROR(HIVE_ERR_INVALID, "unknown backend");
     }
 }
 ```
 
-### 4. Deck Detection
+### File Descriptor Encoding
 
-Crazyflie decks have 1-wire memory for auto-detection:
-- Check for SD deck presence at init
-- Fail gracefully if deck not present
+Encode backend type in fd for dispatch:
 
 ```c
-bool sd_deck_present(void);  // Check 1-wire memory
+// fd layout: [backend:4][index:12]
+#define FD_BACKEND_SHIFT  12
+#define FD_INDEX_MASK     0x0FFF
+
+#define FD_MAKE(backend, index)  (((backend) << FD_BACKEND_SHIFT) | (index))
+#define FD_BACKEND(fd)           ((fd) >> FD_BACKEND_SHIFT)
+#define FD_INDEX(fd)             ((fd) & FD_INDEX_MASK)
+
+// Example:
+// fd = 0x0002 -> POSIX backend, index 2
+// fd = 0x1003 -> Flash backend, index 3
+// fd = 0x2000 -> SD backend, index 0
 ```
+
+---
+
+## Portable Code
+
+Same code works on Linux and STM32:
+
+```c
+void telemetry_logger_actor(void *args, ...) {
+    int fd;
+
+    // Try SD card first (high capacity)
+    hive_status_t status = hive_file_open("/sd/flight.bin",
+                                          HIVE_O_WRONLY | HIVE_O_CREAT, 0, &fd);
+
+    if (HIVE_FAILED(status)) {
+        // Fall back to flash (limited capacity)
+        status = hive_file_open("/log", HIVE_O_WRONLY | HIVE_O_TRUNC, 0, &fd);
+    }
+
+    // Same write code regardless of backend
+    while (running) {
+        hive_file_write(fd, data, len, &written);
+        hive_file_sync(fd);  // Flush to storage
+    }
+
+    hive_file_close(fd);
+}
+```
+
+On Linux: `/sd/flight.bin` -> `/tmp/hive/sd/flight.bin`
+On STM32: `/sd/flight.bin` -> SD card via FatFS
+
+---
+
+## Configuration Summary
+
+| Item | Where Defined | Notes |
+|------|---------------|-------|
+| Flash addresses | Makefile `-D` flags | Board-specific, compile-time |
+| Flash sectors | Makefile `-D` flags | Board-specific, compile-time |
+| SD SPI pins | Mount table | Board-specific, compile-time |
+| Mount prefixes | Mount table | Platform-specific |
+| POSIX root | Mount table | Linux only |
+
+Flash defines (unchanged from current):
+```makefile
+# Board Makefile
+CFLAGS += -DHIVE_VFILE_LOG_BASE=0x080E0000
+CFLAGS += -DHIVE_VFILE_LOG_SIZE=131072
+CFLAGS += -DHIVE_VFILE_LOG_SECTOR=11
+```
+
+---
+
+## Backend Implementations
+
+### POSIX Backend (Linux)
+
+Thin wrapper around standard POSIX calls:
+
+```c
+static hive_status_t posix_file_open(const hive_mount_t *mount,
+                                     const char *subpath, int flags,
+                                     int mode, int *fd_out) {
+    char fullpath[256];
+    snprintf(fullpath, sizeof(fullpath), "%s%s", mount->posix.root, subpath);
+
+    int posix_flags = hive_flags_to_posix(flags);
+    int fd = open(fullpath, posix_flags, mode);
+    if (fd < 0) {
+        return HIVE_ERROR(HIVE_ERR_IO, strerror(errno));
+    }
+
+    *fd_out = FD_MAKE(HIVE_BACKEND_POSIX, fd);
+    return HIVE_SUCCESS;
+}
+```
+
+### Flash Backend (STM32)
+
+Existing implementation, refactored to use mount config:
+
+```c
+static hive_status_t flash_file_open(const hive_mount_t *mount,
+                                     const char *subpath, int flags,
+                                     int mode, int *fd_out) {
+    // subpath is empty for flash (whole mount = one file)
+    // Use mount->flash.base, mount->flash.size, mount->flash.sector
+    // ... existing flash_file_open logic ...
+}
+```
+
+### SD Backend (STM32)
+
+FatFS wrapper:
+
+```c
+static FIL s_sd_files[HIVE_MAX_SD_FILES];
+static bool s_sd_initialized = false;
+
+static hive_status_t sd_file_open(const hive_mount_t *mount,
+                                  const char *subpath, int flags,
+                                  int mode, int *fd_out) {
+    if (!s_sd_initialized) {
+        // Initialize SPI and mount FatFS
+        spi_sd_init(mount->sd.spi, mount->sd.cs_pin);
+        FRESULT res = f_mount(&s_fatfs, "", 1);
+        if (res != FR_OK) {
+            return HIVE_ERROR(HIVE_ERR_IO, "SD mount failed");
+        }
+        s_sd_initialized = true;
+    }
+
+    // Find free slot
+    int index = find_free_sd_slot();
+    if (index < 0) {
+        return HIVE_ERROR(HIVE_ERR_NOMEM, "no free SD file slots");
+    }
+
+    // Convert flags and open via FatFS
+    BYTE fatfs_mode = hive_flags_to_fatfs(flags);
+    FRESULT res = f_open(&s_sd_files[index], subpath, fatfs_mode);
+    if (res != FR_OK) {
+        return HIVE_ERROR(HIVE_ERR_IO, "f_open failed");
+    }
+
+    *fd_out = FD_MAKE(HIVE_BACKEND_SD, index);
+    return HIVE_SUCCESS;
+}
+```
+
+---
 
 ## File Structure
 
 ```
-src/hal/crazyflie-2.1+/
-    hive_hal_file_stm32.c    # Modified: add path routing
-    spi_sd.c                 # New: SPI driver for SD card
-    spi_sd.h
-    diskio.c                 # New: FatFS disk I/O glue
+include/
+    hive_file.h              # Public API (unchanged)
+    hal/
+        hive_hal_file.h      # HAL interface (unchanged)
+        hive_mount.h         # NEW: mount table types
+
+src/
+    hive_file.c              # Unified wrapper (unchanged)
+    hal/
+        linux/
+            hive_hal_file_linux.c   # Refactored: use mount table
+            hive_mounts.c           # NEW: Linux mount config
+        stm32/
+            hive_hal_file_stm32.c   # Refactored: multi-backend dispatch
+            hive_file_flash.c       # Extracted: flash backend
+            hive_file_sd.c          # NEW: SD backend
+            hive_mounts.c           # NEW: default STM32 mounts
+
+examples/pilot/hal/crazyflie-2.1+/
+    hive_mounts.c            # Crazyflie-specific mount config
 
 lib/fatfs/                   # Third-party FatFS library
-    ff.c
-    ff.h
-    ffconf.h                 # FatFS configuration
-    diskio.h
+    ff.c, ff.h, ffconf.h, diskio.h
 ```
+
+---
 
 ## Differences: Flash vs SD Card
 
@@ -153,42 +374,47 @@ lib/fatfs/                   # Third-party FatFS library
 | Random write | No (ring buffer) | Yes |
 | `hive_file_read()` | Not supported | Supported |
 | `hive_file_pwrite()` | Not supported | Supported |
-| File creation | Fixed paths only | Any path under `/sd/` |
+| File creation | One file per mount | Any path under mount |
 | FAT32 | No | Yes |
 
-## SD Card Advantages for Telemetry
-
-1. **Capacity** - Log entire flights (hours of data vs seconds)
-2. **No wear leveling** - SD card handles internally
-3. **Easy extraction** - Remove card, read on PC
-4. **Multiple files** - Separate files per flight
-5. **Standard format** - FAT32, readable anywhere
-
-## Implementation Steps
-
-1. **Add FatFS library** - Copy ChaN's FatFS to `lib/fatfs/`
-2. **Implement SPI driver** - Low-level SPI for SD card
-3. **Implement diskio.c** - FatFS disk I/O glue
-4. **Modify HAL** - Add path routing in `hive_hal_file_stm32.c`
-5. **Add deck detection** - Check for SD deck at init
-6. **Test** - Verify read/write/sync operations
-7. **Update telemetry_logger_actor.c** - Use `/sd/` path when deck present
+---
 
 ## Memory Impact
 
 | Component | Flash | RAM |
 |-----------|-------|-----|
+| Mount table dispatch | ~0.5 KB | ~0.1 KB |
 | FatFS library | ~10 KB | ~1 KB |
 | SPI driver | ~1 KB | ~0.1 KB |
-| Disk I/O glue | ~0.5 KB | ~0.5 KB |
-| **Total** | ~12 KB | ~1.6 KB |
+| SD file slots (4) | ~0.1 KB | ~2 KB |
+| **Total (with SD)** | ~12 KB | ~3.2 KB |
+
+Without SD card enabled: negligible overhead (~0.5 KB flash).
+
+---
+
+## Implementation Steps
+
+1. **Add mount table types** - `include/hal/hive_mount.h`
+2. **Refactor Linux HAL** - Use mount table, POSIX backend
+3. **Refactor STM32 HAL** - Multi-backend dispatch
+4. **Extract flash backend** - Move existing flash code to `hive_file_flash.c`
+5. **Add FatFS library** - Copy to `lib/fatfs/`
+6. **Implement SD backend** - SPI driver + FatFS wrapper
+7. **Add Crazyflie mounts** - Board-specific mount config
+8. **Test** - Verify all backends work
+9. **Update pilot** - Use SD card when available
+
+---
 
 ## Open Questions
 
-1. **Hot-plug support?** - Detect SD card insertion/removal at runtime?
-2. **File naming convention?** - Auto-increment flight numbers? Timestamps?
-3. **Sync frequency?** - How often to flush to SD? (Currently: on hive_file_sync)
-4. **Fallback behavior?** - If SD card missing, fall back to flash? Or error?
+1. **Runtime mount?** - Allow mounting/unmounting at runtime? (Probably no - keep it simple)
+2. **Hot-plug SD?** - Detect card insertion/removal? (Nice to have, not critical)
+3. **File naming?** - Auto-increment flight numbers? Timestamps? (Application decides)
+4. **Fallback policy?** - Configurable per-application
+
+---
 
 ## References
 
