@@ -233,6 +233,11 @@ const hive_mount_t *hive_mount_find(const char *path, size_t *prefix_len) {
 // - SD:    fd = 0x2000 + index
 // - Dispatch on read/write/close based on high bits
 
+// STM32 fd encoding macros
+#define FD_MAKE(backend, index)  (((backend) << 12) | (index))
+#define FD_BACKEND(fd)           ((fd) >> 12)
+#define FD_INDEX(fd)             ((fd) & 0xFFF)
+
 #ifdef __linux__
     // Linux: fd is just the POSIX fd
     *fd_out = posix_fd;
@@ -266,8 +271,8 @@ if (HIVE_SUCCEEDED(hive_file_mount_available("/sd"))) {
 ```
 
 For SD card, this checks:
-1. SD deck detected (1-wire memory check)
-2. Card inserted and initialized
+1. SPI peripheral initialized
+2. Card inserted and responds to commands
 3. FatFS mounted successfully
 
 ---
@@ -562,18 +567,18 @@ hive_file_open(log_path, HIVE_O_WRONLY | HIVE_O_CREAT | HIVE_O_TRUNC, 0, &fd);
 4. **Add mount availability API** - `hive_file_mount_available()`
 5. **Add FatFS library** - Copy to `lib/fatfs/`, conditional compile
 6. **Implement SD backend** - SPI driver + FatFS wrapper
-7. **Add Crazyflie mounts** - Board-specific config with SD deck pins
+7. **Add board-specific mounts** - Override mount table with board-specific SPI/GPIO config
 8. **Test** - Linux passthrough, STM32 flash, STM32 SD
 
 ---
 
-## Open Questions
+## Design Decisions
 
-1. **Directory creation?** - Should `hive_file_open()` with `HIVE_O_CREAT` create parent directories on SD? (FatFS requires them to exist)
+1. **No automatic directory creation** - `hive_file_open()` with `HIVE_O_CREAT` does not create parent directories. If the directory doesn't exist, return `HIVE_ERR_IO`. Use flat file structures like `/sd/flight_001.bin` for logging. Add `hive_file_mkdir()` later if needed.
 
-2. **File listing?** - Add `hive_file_readdir()` for SD card? (Not needed for logging, but useful for file management)
+2. **No file listing API** - Not needed for telemetry logging. Add `hive_file_readdir()` later if ground station file browsing is required.
 
-3. **Deck hot-plug?** - Worth detecting SD card insertion/removal at runtime? (Probably no - check at init, fail if removed mid-flight)
+3. **No hot-plug detection** - Check SD card presence at init only. If card is removed mid-flight, writes fail with `HIVE_ERR_IO`. Hot-plug adds complexity and creates dangerous edge cases.
 
 ---
 
