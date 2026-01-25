@@ -676,9 +676,15 @@ if (HIVE_FAILED(status)) {
 }
 
 switch (result.index) {
-case SEL_SENSOR:   process_sensor(result.bus.data, result.bus.len); break;
-case SEL_TIMER:    handle_timer(); break;
-case SEL_SHUTDOWN: handle_shutdown(&result.ipc); break;
+case SEL_SENSOR:
+    process_sensor(result.bus.data, result.bus.len);
+    break;
+case SEL_TIMER:
+    handle_timer();
+    break;
+case SEL_SHUTDOWN:
+    handle_shutdown(&result.ipc);
+    break;
 }
 ```
 

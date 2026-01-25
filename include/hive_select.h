@@ -26,9 +26,15 @@
 //   hive_select(sources, 3, &result, -1);
 //
 //   switch (result.index) {
-//       case SEL_STATE: process_state(result.bus.data, result.bus.len); break;
-//       case SEL_TIMER: handle_timer(); break;
-//       case SEL_CMD:   handle_command(&result.ipc); break;
+//   case SEL_STATE:
+//       process_state(result.bus.data, result.bus.len);
+//       break;
+//   case SEL_TIMER:
+//       handle_timer();
+//       break;
+//   case SEL_CMD:
+//       handle_command(&result.ipc);
+//       break;
 //   }
 //
 // Returns:
