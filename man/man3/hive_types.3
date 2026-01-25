@@ -330,9 +330,14 @@ Enable network I/O subsystem. Set to 0 to disable.
 .TP
 .B HIVE_ENABLE_FILE (1)
 Enable file I/O subsystem. Set to 0 to disable.
+.TP
+.B HIVE_ENABLE_SD (0)
+Enable SD card support via SPI (STM32 only). Requires FatFS library.
 .PP
 Can also be set via Makefile:
 .I make ENABLE_NET=0 ENABLE_FILE=0
+or
+.I make -f Makefile.crazyflie-2.1+ ENABLE_SD=1
 .SS Actor Configuration
 .TP
 .B HIVE_MAX_ACTORS (64)
@@ -406,6 +411,19 @@ Epoll poll timeout in milliseconds (defensive wakeup interval).
 .TP
 .B HIVE_NET_LISTEN_BACKLOG (5)
 TCP listen backlog (queued connections).
+.SS SD Card Configuration (STM32 only)
+.TP
+.B HIVE_MAX_SD_FILES (4)
+Maximum simultaneously open files on SD card.
+.TP
+.B HIVE_SD_SPI_ID
+SPI peripheral ID (1, 2, or 3). Board-specific.
+.TP
+.B HIVE_SD_CS_PORT
+GPIO port for chip select (0=GPIOA, 1=GPIOB, etc.). Board-specific.
+.TP
+.B HIVE_SD_CS_PIN
+GPIO pin for chip select (0-15). Board-specific.
 .SH MEMORY FOOTPRINT
 With default configuration, static memory footprint is approximately:
 .PP

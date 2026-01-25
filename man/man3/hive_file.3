@@ -198,6 +198,62 @@ Ring buffer defaults (hive_static_config.h):
 HIVE_FILE_RING_SIZE   = 8 KB
 HIVE_FILE_BLOCK_SIZE  = 256 bytes
 .fi
+.SS STM32 SD Card Support (Optional)
+When built with
+.BR ENABLE_SD=1 ,
+the runtime supports SD cards via SPI using the FatFS library. SD card files
+are accessed through the
+.B /sd
+mount point.
+.PP
+.B Build Configuration:
+.PP
+.nf
+make -f Makefile.crazyflie-2.1+ ENABLE_SD=1
+.fi
+.PP
+.B SD Card Characteristics:
+.IP \(bu 2
+Full FatFS filesystem support (FAT12/16/32, exFAT)
+.IP \(bu 2
+Standard file operations work as expected (read, write, seek)
+.IP \(bu 2
+.B HIVE_O_RDWR
+is supported (unlike flash virtual files)
+.IP \(bu 2
+No
+.B HIVE_O_TRUNC
+requirement for writes
+.IP \(bu 2
+Multiple files can be open simultaneously (up to
+.BR HIVE_MAX_SD_FILES )
+.PP
+.B Example:
+.PP
+.nf
+int fd;
+hive_file_open("/sd/flight_log.bin", HIVE_O_WRONLY | HIVE_O_CREAT, 0644, &fd);
+hive_file_write(fd, data, sizeof(data), &written);
+hive_file_close(fd);
+.fi
+.PP
+.B Hardware Requirements:
+.IP \(bu 2
+Crazyflie 2.1+: Micro SD Card Deck (SPI3, pins PB3/PB4/PB5/PB6)
+.IP \(bu 2
+Other boards: Implement
+.B spi_ll_sd.c
+with board-specific SPI configuration
+.PP
+.B Mount Table Configuration
+(in board-specific
+.BR hive_mounts.c ):
+.PP
+.nf
+CFLAGS += -DHIVE_SD_SPI_ID=3
+CFLAGS += -DHIVE_SD_CS_PORT=1   /* GPIOB */
+CFLAGS += -DHIVE_SD_CS_PIN=6
+.fi
 .SS Partial Reads/Writes
 Read and write operations may transfer fewer bytes than requested. Always check
 the
