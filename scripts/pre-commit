@@ -8,8 +8,8 @@
 #
 # To bypass: git commit --no-verify
 
-# Get staged C and H files (excluding deleted files and vendor directories)
-STAGED_FILES=$(git diff --cached --name-only --diff-filter=d | grep -E '\.(c|h)$' | grep -v vendor/)
+# Get staged C and H files (excluding deleted files, vendor and lib directories)
+STAGED_FILES=$(git diff --cached --name-only --diff-filter=d | grep -E '\.(c|h)$' | grep -v -e vendor/ -e lib/)
 
 if [ -z "$STAGED_FILES" ]; then
     exit 0
