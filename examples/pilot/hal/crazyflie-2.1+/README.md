@@ -36,6 +36,7 @@ make -f Makefile.crazyflie-2.1+
 | Barometer | BMP388 | I2C3 | Pressure/altitude (addr: 0x77) |
 | Flow sensor | PMW3901 | SPI1 | Optical flow (Flow deck v2) |
 | ToF sensor | VL53L1x | I2C3 | Height measurement (Flow deck v2) |
+| SD card | Micro SD | SPI3 | Optional Micro SD Card Deck |
 | Motors | 7x16mm | TIM2 PWM | Brushed coreless, x4 |
 | Radio | nRF51822 | USART6 | Syslink to Crazyradio PA |
 | LED | Blue | PD2 | Status indicator |
@@ -224,6 +225,14 @@ PC7  - USART6_RX
 PA4  - TXEN (flow control from nRF51)
 ```
 
+### SPI3 (Micro SD Card Deck)
+```
+PB3  - SPI3_SCK  (AF6)
+PB4  - SPI3_MISO (AF6)
+PB5  - SPI3_MOSI (AF6)
+PB6  - SD_CS     (GPIO output)
+```
+
 ### Misc
 ```
 PD2  - Blue LED
@@ -404,10 +413,65 @@ make -f Makefile.crazyflie-2.1+ FLIGHT_PROFILE=3  # FULL_3D (requires Flow deck)
 After `st-flash write`, press the reset button on the Crazyflie or run
 `st-flash reset` to start the firmware.
 
+## SD Card Support (Optional)
+
+The [Micro SD Card Deck](https://www.bitcraze.io/products/micro-sd-card-deck/)
+enables file storage on a FAT-formatted SD card via SPI3.
+
+### Building with SD Support
+
+```bash
+make -f Makefile.crazyflie-2.1+ ENABLE_SD=1
+make -f Makefile.crazyflie-2.1+ ENABLE_SD=1 flash
+```
+
+### Usage
+
+Files on the SD card are accessed via the `/sd` mount point:
+
+```c
+int fd;
+hive_file_open("/sd/flight_log.bin", HIVE_O_WRONLY | HIVE_O_CREAT, 0644, &fd);
+hive_file_write(fd, data, sizeof(data), &written);
+hive_file_close(fd);
+```
+
+### Architecture
+
+The SD card driver uses a layered architecture:
+
+| Layer | File | Description |
+|-------|------|-------------|
+| Protocol | `src/hal/stm32/spi_sd.c` | SD card SPI protocol (generic) |
+| Interface | `src/hal/stm32/spi_ll.h` | Low-level SPI function declarations |
+| Hardware | `spi_ll_sd.c` | Board-specific SPI3 implementation |
+| Filesystem | `lib/fatfs/` | FatFS library (FAT12/16/32, exFAT) |
+
+### Configuration
+
+Mount table settings in `hive_mounts.c`:
+
+```c
+HIVE_SD_SPI_ID   = 3      // SPI3
+HIVE_SD_CS_PORT  = 1      // GPIOB
+HIVE_SD_CS_PIN   = 6      // PB6
+```
+
+### Differences from Flash Virtual Files
+
+| Feature | Flash (`/log`) | SD Card (`/sd`) |
+|---------|----------------|-----------------|
+| HIVE_O_RDWR | Not supported | Supported |
+| HIVE_O_TRUNC required | Yes (erase sector) | No |
+| Multiple open files | No (single writer) | Yes (up to HIVE_MAX_SD_FILES) |
+| Speed | Fast (internal flash) | Slower (SPI interface) |
+| Capacity | 128 KB (sector 8) | Card dependent (GB) |
+
 ## Resources
 
 - [Crazyflie 2.1 Product Page](https://www.bitcraze.io/products/crazyflie-2-1/)
 - [Flow deck v2](https://www.bitcraze.io/products/flow-deck-v2/)
+- [Micro SD Card Deck](https://www.bitcraze.io/products/micro-sd-card-deck/)
 - [BMI088 Datasheet](https://www.bosch-sensortec.com/products/motion-sensors/imus/bmi088/)
 - [BMP388 Datasheet](https://www.bosch-sensortec.com/products/environmental-sensors/pressure-sensors/bmp388/)
 - [PMW3901 Datasheet](https://www.pixart.com/products-detail/10/PMW3901MB-TXQT)
