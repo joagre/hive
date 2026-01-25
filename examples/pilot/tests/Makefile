@@ -6,7 +6,9 @@
 #   make PLATFORM=crazyflie TEST=sensors_motors   # Build sensor/motor test
 #   make PLATFORM=crazyflie TEST=flash            # Build flash storage test
 #   make PLATFORM=crazyflie TEST=sd               # Build SD card test
+#   make PLATFORM=crazyflie TEST=main             # Build combined test runner
 #   make PLATFORM=crazyflie all-tests             # Build all tests
+#   make PLATFORM=webots TEST=main                # Build for Webots (dummy pilot)
 #   make flash-crazyflie TEST=sensors_motors      # Flash specific test
 #   make clean                                    # Remove build artifacts
 #
@@ -14,6 +16,7 @@
 #   sensors_motors - HAL API validation (sensors, motors, calibration)
 #   flash          - Hive file API test with flash backend (/log)
 #   sd             - Hive file API test with SD backend (/sd)
+#   main           - Combined test runner (all applicable tests)
 
 # Default target shows help
 .PHONY: all help clean
@@ -27,6 +30,7 @@ help:
 	@echo "  make PLATFORM=crazyflie TEST=<test>  Build specific test"
 	@echo "  make PLATFORM=crazyflie all-tests    Build all tests"
 	@echo "  make PLATFORM=webots TEST=<test>     Build for Webots"
+	@echo "  make install-webots                  Build and install test_main controller"
 	@echo "  make flash-crazyflie TEST=<test>     Flash specific test"
 	@echo "  make clean                           Remove all build artifacts"
 	@echo ""
@@ -34,10 +38,12 @@ help:
 	@echo "  sensors_motors  - HAL API validation (sensors, motors)"
 	@echo "  flash           - Hive file API test (flash backend)"
 	@echo "  sd              - Hive file API test (SD backend)"
+	@echo "  main            - Combined test runner (Webots dummy pilot)"
 	@echo ""
 	@echo "Examples:"
 	@echo "  make PLATFORM=crazyflie TEST=sensors_motors"
 	@echo "  make PLATFORM=crazyflie TEST=flash"
+	@echo "  make install-webots"
 	@echo "  make flash-crazyflie TEST=flash"
 
 # Build directories
@@ -52,8 +58,8 @@ HIVE_SRC_DIR = $(HIVE_ROOT)/src
 # Test selection
 TEST ?= sensors_motors
 
-# Tests that require libhive.a (use Hive file API)
-HIVE_TESTS = flash sd
+# Tests that require libhive.a (use Hive file API or logging)
+HIVE_TESTS = flash sd main
 
 # ==============================================================================
 # Crazyflie 2.1+ Build
@@ -125,9 +131,6 @@ LDFLAGS += -lm -lc
 HAL_LIB = $(HAL_DIR)/build/libhal.a
 HIVE_LIB = $(BUILD_DIR_CF)/libhive.a
 
-# Test source file
-TEST_SRC = test_$(TEST).c
-
 # Target
 TARGET_ELF = $(BUILD_DIR_CF)/test_$(TEST).elf
 TARGET_BIN = $(BUILD_DIR_CF)/test_$(TEST).bin
@@ -137,25 +140,63 @@ NEEDS_HIVE = $(filter $(TEST),$(HIVE_TESTS))
 
 .PHONY: crazyflie all-tests
 
-# Main build target - conditionally include libhive.a
-ifeq ($(NEEDS_HIVE),)
-# sensors_motors: only needs HAL
-crazyflie: $(HAL_LIB) $(TARGET_BIN)
-	@echo ""
-	@echo "Built: $(TARGET_BIN)"
-	@$(SZ) $(TARGET_ELF)
-else
-# flash/sd: needs HAL + libhive.a
+# Main build target - handle test_main specially
+ifeq ($(TEST),main)
+# Combined test runner - needs all test objects + libhive.a
+TEST_MAIN_OBJS = $(BUILD_DIR_CF)/test_sensors_motors.o \
+                 $(BUILD_DIR_CF)/test_flash.o \
+                 $(BUILD_DIR_CF)/test_sd.o
+
 crazyflie: $(HAL_LIB) $(HIVE_LIB) $(TARGET_BIN)
 	@echo ""
 	@echo "Built: $(TARGET_BIN)"
 	@$(SZ) $(TARGET_ELF)
+
+$(BUILD_DIR_CF)/test_sensors_motors.o: test_sensors_motors.c | $(BUILD_DIR_CF)
+	@echo "CC test_sensors_motors.c (object)"
+	@$(CC) $(CFLAGS) -DTEST_MAIN_BUILD -c $< -o $@
+
+$(BUILD_DIR_CF)/test_flash.o: test_flash.c | $(BUILD_DIR_CF)
+	@echo "CC test_flash.c (object)"
+	@$(CC) $(CFLAGS) -DTEST_MAIN_BUILD -c $< -o $@
+
+$(BUILD_DIR_CF)/test_sd.o: test_sd.c | $(BUILD_DIR_CF)
+	@echo "CC test_sd.c (object)"
+	@$(CC) $(CFLAGS) -DTEST_MAIN_BUILD -c $< -o $@
+
+$(TARGET_ELF): test_main.c $(TEST_MAIN_OBJS) | $(BUILD_DIR_CF)
+	@echo "CC test_main.c (Crazyflie - combined)"
+	@$(CC) $(CFLAGS) $< $(TEST_MAIN_OBJS) $(HIVE_LIB) $(HAL_LIB) $(LDFLAGS) -o $@
+
+else ifeq ($(NEEDS_HIVE),)
+# sensors_motors standalone: only needs HAL
+crazyflie: $(HAL_LIB) $(TARGET_BIN)
+	@echo ""
+	@echo "Built: $(TARGET_BIN)"
+	@$(SZ) $(TARGET_ELF)
+
+$(TARGET_ELF): test_$(TEST).c | $(BUILD_DIR_CF)
+	@echo "CC test_$(TEST).c (Crazyflie - HAL only)"
+	@$(CC) $(CFLAGS) $< $(HAL_LIB) $(LDFLAGS) -o $@
+
+else
+# flash/sd standalone: needs HAL + libhive.a
+crazyflie: $(HAL_LIB) $(HIVE_LIB) $(TARGET_BIN)
+	@echo ""
+	@echo "Built: $(TARGET_BIN)"
+	@$(SZ) $(TARGET_ELF)
+
+$(TARGET_ELF): test_$(TEST).c | $(BUILD_DIR_CF)
+	@echo "CC test_$(TEST).c (Crazyflie - HAL + Hive)"
+	@$(CC) $(CFLAGS) $< $(HIVE_LIB) $(HAL_LIB) $(LDFLAGS) -o $@
+
 endif
 
 all-tests:
 	@$(MAKE) PLATFORM=crazyflie TEST=sensors_motors
 	@$(MAKE) PLATFORM=crazyflie TEST=flash
 	@$(MAKE) PLATFORM=crazyflie TEST=sd
+	@$(MAKE) PLATFORM=crazyflie TEST=main
 
 $(BUILD_DIR_CF):
 	mkdir -p $@
@@ -175,23 +216,12 @@ $(HIVE_LIB): | $(BUILD_DIR_CF)
 		AR=$(AR) \
 		CFLAGS="$(MCU) -std=c11 -Os -g3 -ffunction-sections -fdata-sections -DSTM32F405xx -DHIVE_PLATFORM_STM32 $(HIVE_CFLAGS) -I$(abspath $(HAL_DIR))/vendor/CMSIS/Include -I$(abspath $(HAL_DIR))/vendor/CMSIS/Device/ST/STM32F4xx/Include"
 
-# Build test binary - conditionally link against libhive.a
-ifeq ($(NEEDS_HIVE),)
-$(TARGET_ELF): $(TEST_SRC) | $(BUILD_DIR_CF)
-	@echo "CC $(TEST_SRC) (Crazyflie - HAL only)"
-	@$(CC) $(CFLAGS) $< $(HAL_LIB) $(LDFLAGS) -o $@
-else
-$(TARGET_ELF): $(TEST_SRC) | $(BUILD_DIR_CF)
-	@echo "CC $(TEST_SRC) (Crazyflie - HAL + Hive)"
-	@$(CC) $(CFLAGS) $< $(HIVE_LIB) $(HAL_LIB) $(LDFLAGS) -o $@
-endif
-
 $(TARGET_BIN): $(TARGET_ELF)
 	@echo "BIN test_$(TEST).bin"
 	@$(CP) -O binary $< $@
 
 # Include dependencies
--include $(BUILD_DIR_CF)/test_$(TEST).d
+-include $(BUILD_DIR_CF)/*.d
 
 endif # PLATFORM=crazyflie
 
@@ -241,9 +271,6 @@ LDLIBS = -lController -lm
 # Libraries
 HIVE_LIB = $(BUILD_DIR_WB)/libhive.a
 
-# Test source file
-TEST_SRC = test_$(TEST).c
-
 # Target
 TARGET = $(BUILD_DIR_WB)/test_$(TEST)
 
@@ -270,29 +297,50 @@ $(HIVE_LIB): | $(BUILD_DIR_WB)
 		PLATFORM=linux \
 		CFLAGS="$(HIVE_CFLAGS)"
 
-# Main build target - conditionally include libhive.a
-ifeq ($(NEEDS_HIVE),)
+# Main build target - handle test_main specially
+ifeq ($(TEST),main)
+# Combined test runner for Webots - only sensors_motors is applicable
+TEST_MAIN_OBJS = $(BUILD_DIR_WB)/test_sensors_motors.o
+
+webots: check-webots $(HIVE_LIB) $(TARGET)
+	@echo ""
+	@echo "Built: $(TARGET)"
+	@echo "Copy to controllers/test_main/ and run in Webots"
+
+$(BUILD_DIR_WB)/test_sensors_motors.o: test_sensors_motors.c | $(BUILD_DIR_WB)
+	@echo "CC test_sensors_motors.c (object)"
+	@$(CC) $(CFLAGS) -DTEST_MAIN_BUILD -c $< -o $@
+
+$(TARGET): test_main.c $(TEST_MAIN_OBJS) $(HAL_DIR)/hal_webots.c $(HIVE_LIB) | $(BUILD_DIR_WB)
+	@echo "CC test_main.c (Webots - combined)"
+	@$(CC) $(CFLAGS) test_main.c $(TEST_MAIN_OBJS) $(HAL_DIR)/hal_webots.c $(HIVE_LIB) $(LDFLAGS) $(LDLIBS) -o $@
+
+else ifeq ($(NEEDS_HIVE),)
+# sensors_motors standalone
 webots: check-webots $(TARGET)
 	@echo ""
 	@echo "Built: $(TARGET)"
 	@echo "Copy to controllers/test_$(TEST)/ and run in Webots"
 
-$(TARGET): $(TEST_SRC) $(HAL_DIR)/hal_webots.c | $(BUILD_DIR_WB)
-	@echo "CC $(TEST_SRC) (Webots - HAL only)"
+$(TARGET): test_$(TEST).c $(HAL_DIR)/hal_webots.c | $(BUILD_DIR_WB)
+	@echo "CC test_$(TEST).c (Webots - HAL only)"
 	@$(CC) $(CFLAGS) $^ $(LDFLAGS) $(LDLIBS) -o $@
+
 else
+# flash/sd standalone (not really applicable for Webots but included for completeness)
 webots: check-webots $(HIVE_LIB) $(TARGET)
 	@echo ""
 	@echo "Built: $(TARGET)"
 	@echo "Note: flash and sd tests are Crazyflie-specific"
 
-$(TARGET): $(TEST_SRC) $(HAL_DIR)/hal_webots.c $(HIVE_LIB) | $(BUILD_DIR_WB)
-	@echo "CC $(TEST_SRC) (Webots - HAL + Hive)"
-	@$(CC) $(CFLAGS) $(TEST_SRC) $(HAL_DIR)/hal_webots.c $(HIVE_LIB) $(LDFLAGS) $(LDLIBS) -o $@
+$(TARGET): test_$(TEST).c $(HAL_DIR)/hal_webots.c $(HIVE_LIB) | $(BUILD_DIR_WB)
+	@echo "CC test_$(TEST).c (Webots - HAL + Hive)"
+	@$(CC) $(CFLAGS) test_$(TEST).c $(HAL_DIR)/hal_webots.c $(HIVE_LIB) $(LDFLAGS) $(LDLIBS) -o $@
+
 endif
 
 # Include dependencies
--include $(BUILD_DIR_WB)/test_$(TEST).d
+-include $(BUILD_DIR_WB)/*.d
 
 endif # PLATFORM=webots
 
@@ -305,6 +353,23 @@ endif # PLATFORM=webots
 flash-crazyflie: $(BUILD_DIR_CF)/test_$(TEST).bin
 	@echo "Flashing test_$(TEST) to Crazyflie..."
 	st-flash write $< 0x8000000
+
+# ==============================================================================
+# Webots Controller Install
+# ==============================================================================
+
+# Controller directory
+CONTROLLERS_DIR = $(PILOT_DIR)/controllers
+
+.PHONY: install-webots
+
+install-webots:
+	@$(MAKE) PLATFORM=webots TEST=main
+	@mkdir -p $(CONTROLLERS_DIR)/test_main
+	@cp $(BUILD_DIR_WB)/test_main $(CONTROLLERS_DIR)/test_main/
+	@echo ""
+	@echo "Installed: $(CONTROLLERS_DIR)/test_main/test_main"
+	@echo "Ready to use in Webots simulation"
 
 # ==============================================================================
 # Clean

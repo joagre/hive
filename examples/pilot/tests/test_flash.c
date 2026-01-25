@@ -36,6 +36,12 @@
 #include <string.h>
 
 // ============================================================================
+// Public Interface (for test_main.c)
+// ============================================================================
+
+int test_flash_run(bool standalone);
+
+// ============================================================================
 // Test Configuration
 // ============================================================================
 
@@ -78,24 +84,33 @@ static void error_blink_forever(void) {
 }
 
 // ============================================================================
-// Main Test
+// Test Implementation
 // ============================================================================
 
-int main(void) {
+/**
+ * Run the flash storage test.
+ *
+ * @param standalone If true, initializes HAL/Hive and handles cleanup.
+ *                   If false, assumes caller has already initialized.
+ * @return 0 on success, -1 on failure
+ */
+int test_flash_run(bool standalone) {
     hive_status_t status;
     int fd = -1;
     size_t bytes;
 
-    // Initialize pilot HAL for LED and timing
-    hal_debug_init();
-    if (hal_init() != 0) {
-        error_blink_forever();
-    }
+    if (standalone) {
+        // Initialize pilot HAL for LED and timing
+        hal_debug_init();
+        if (hal_init() != 0) {
+            return -1;
+        }
 
-    // Initialize Hive runtime (includes file subsystem and logging)
-    status = hive_init();
-    if (HIVE_FAILED(status)) {
-        error_blink_forever();
+        // Initialize Hive runtime (includes file subsystem and logging)
+        status = hive_init();
+        if (HIVE_FAILED(status)) {
+            return -1;
+        }
     }
 
     HIVE_LOG_INFO("========================================");
@@ -120,8 +135,10 @@ int main(void) {
     status = hive_file_open("/log", HIVE_O_WRONLY | HIVE_O_TRUNC, 0, &fd);
     if (HIVE_FAILED(status)) {
         HIVE_LOG_ERROR("hive_file_open() failed: %s", HIVE_ERR_STR(status));
-        hive_cleanup();
-        error_blink_forever();
+        if (standalone) {
+            hive_cleanup();
+        }
+        return -1;
     }
 
     uint32_t erase_time = hal_get_time_ms() - start_time;
@@ -142,8 +159,10 @@ int main(void) {
             HIVE_LOG_ERROR("Write failed at block %d: %s", b,
                            HIVE_ERR_STR(status));
             hive_file_close(fd);
-            hive_cleanup();
-            error_blink_forever();
+            if (standalone) {
+                hive_cleanup();
+            }
+            return -1;
         }
         total_written += bytes;
 
@@ -153,6 +172,7 @@ int main(void) {
         }
     }
     hal_led_off();
+    (void)total_written; // Suppress unused warning
 
     uint32_t write_time = hal_get_time_ms() - start_time;
     HIVE_LOG_INFO("Write OK (%u ms)", write_time);
@@ -166,8 +186,10 @@ int main(void) {
     if (HIVE_FAILED(status)) {
         HIVE_LOG_ERROR("Sync failed: %s", HIVE_ERR_STR(status));
         hive_file_close(fd);
-        hive_cleanup();
-        error_blink_forever();
+        if (standalone) {
+            hive_cleanup();
+        }
+        return -1;
     }
     HIVE_LOG_INFO("Sync OK (%u ms)", sync_time);
 
@@ -185,8 +207,10 @@ int main(void) {
     if (HIVE_FAILED(status)) {
         HIVE_LOG_ERROR("hive_file_open(RDONLY) failed: %s",
                        HIVE_ERR_STR(status));
-        hive_cleanup();
-        error_blink_forever();
+        if (standalone) {
+            hive_cleanup();
+        }
+        return -1;
     }
 
     HIVE_LOG_INFO("Reading and verifying %d bytes...", TEST_PATTERN_SIZE);
@@ -204,16 +228,20 @@ int main(void) {
             HIVE_LOG_ERROR("Read failed at offset %zu: %s", offset,
                            HIVE_ERR_STR(status));
             hive_file_close(fd);
-            hive_cleanup();
-            error_blink_forever();
+            if (standalone) {
+                hive_cleanup();
+            }
+            return -1;
         }
 
         if (bytes != BLOCK_SIZE) {
             HIVE_LOG_ERROR("Short read at offset %zu: got %zu, expected %d",
                            offset, bytes, BLOCK_SIZE);
             hive_file_close(fd);
-            hive_cleanup();
-            error_blink_forever();
+            if (standalone) {
+                hive_cleanup();
+            }
+            return -1;
         }
 
         // Verify block
@@ -243,8 +271,10 @@ int main(void) {
                        s_test_pattern[first_error_offset],
                        s_read_buffer[first_error_offset % BLOCK_SIZE]);
         hive_file_close(fd);
-        hive_cleanup();
-        error_blink_forever();
+        if (standalone) {
+            hive_cleanup();
+        }
+        return -1;
     }
     HIVE_LOG_INFO("Read and verify OK (%u ms)", read_time);
 
@@ -266,16 +296,31 @@ int main(void) {
     HIVE_LOG_INFO("  Read time:  %u ms (%u bytes/sec)", read_time,
                   read_time > 0 ? (TEST_PATTERN_SIZE * 1000) / read_time : 0);
 
-    // Cleanup Hive runtime
-    hive_cleanup();
+    if (standalone) {
+        hive_cleanup();
+    }
 
-    // Solid LED = success
+    return 0;
+}
+
+// ============================================================================
+// Standalone Entry Point
+// ============================================================================
+
+#ifndef TEST_MAIN_BUILD
+int main(void) {
+    int result = test_flash_run(true);
+
+    if (result != 0) {
+        error_blink_forever();
+    }
+
+    // Solid LED = success, stay forever
     hal_led_on();
-
-    // Idle forever
     while (1) {
         hal_delay_ms(1000);
     }
 
     return 0;
 }
+#endif

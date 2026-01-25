@@ -41,6 +41,13 @@
 #include <string.h>
 
 // ============================================================================
+// Public Interface (for test_main.c)
+// ============================================================================
+
+// Returns: 0 = success, -1 = failure, 1 = skipped (SD not available)
+int test_sd_run(bool standalone);
+
+// ============================================================================
 // Test Configuration
 // ============================================================================
 
@@ -84,24 +91,33 @@ static void error_blink_forever(void) {
 }
 
 // ============================================================================
-// Main Test
+// Test Implementation
 // ============================================================================
 
-int main(void) {
+/**
+ * Run the SD card storage test.
+ *
+ * @param standalone If true, initializes HAL/Hive and handles cleanup.
+ *                   If false, assumes caller has already initialized.
+ * @return 0 on success, -1 on failure, 1 if skipped (SD not available)
+ */
+int test_sd_run(bool standalone) {
     hive_status_t status;
     int fd = -1;
     size_t bytes;
 
-    // Initialize pilot HAL for LED and timing
-    hal_debug_init();
-    if (hal_init() != 0) {
-        error_blink_forever();
-    }
+    if (standalone) {
+        // Initialize pilot HAL for LED and timing
+        hal_debug_init();
+        if (hal_init() != 0) {
+            return -1;
+        }
 
-    // Initialize Hive runtime (includes file subsystem and logging)
-    status = hive_init();
-    if (HIVE_FAILED(status)) {
-        error_blink_forever();
+        // Initialize Hive runtime (includes file subsystem and logging)
+        status = hive_init();
+        if (HIVE_FAILED(status)) {
+            return -1;
+        }
     }
 
     HIVE_LOG_INFO("========================================");
@@ -140,16 +156,13 @@ int main(void) {
             HIVE_LOG_WARN("Status: %s", HIVE_ERR_STR(status));
         }
 
-        // 3 blinks = SD not available (expected for placeholder)
-        hive_cleanup();
-        test_blink(3, 200, 200);
-
-        // Solid LED to indicate test completed (not failed, just skipped)
-        hal_led_on();
-
-        while (1) {
-            hal_delay_ms(1000);
+        if (standalone) {
+            hive_cleanup();
+            // 3 blinks = SD not available (expected for placeholder)
+            test_blink(3, 200, 200);
         }
+
+        return 1; // Skipped, not failed
     }
 
     HIVE_LOG_INFO("Mount /sd is available");
@@ -169,8 +182,10 @@ int main(void) {
         TEST_FILE_PATH, HIVE_O_WRONLY | HIVE_O_CREAT | HIVE_O_TRUNC, 0, &fd);
     if (HIVE_FAILED(status)) {
         HIVE_LOG_ERROR("hive_file_open() failed: %s", HIVE_ERR_STR(status));
-        hive_cleanup();
-        error_blink_forever();
+        if (standalone) {
+            hive_cleanup();
+        }
+        return -1;
     }
 
     uint32_t open_time = hal_get_time_ms() - start_time;
@@ -191,8 +206,10 @@ int main(void) {
             HIVE_LOG_ERROR("Write failed at block %d: %s", b,
                            HIVE_ERR_STR(status));
             hive_file_close(fd);
-            hive_cleanup();
-            error_blink_forever();
+            if (standalone) {
+                hive_cleanup();
+            }
+            return -1;
         }
         total_written += bytes;
 
@@ -202,6 +219,7 @@ int main(void) {
         }
     }
     hal_led_off();
+    (void)total_written; // Suppress unused warning
 
     uint32_t write_time = hal_get_time_ms() - start_time;
     HIVE_LOG_INFO("Write OK (%u ms)", write_time);
@@ -215,8 +233,10 @@ int main(void) {
     if (HIVE_FAILED(status)) {
         HIVE_LOG_ERROR("Sync failed: %s", HIVE_ERR_STR(status));
         hive_file_close(fd);
-        hive_cleanup();
-        error_blink_forever();
+        if (standalone) {
+            hive_cleanup();
+        }
+        return -1;
     }
     HIVE_LOG_INFO("Sync OK (%u ms)", sync_time);
 
@@ -234,8 +254,10 @@ int main(void) {
     if (HIVE_FAILED(status)) {
         HIVE_LOG_ERROR("hive_file_open(RDONLY) failed: %s",
                        HIVE_ERR_STR(status));
-        hive_cleanup();
-        error_blink_forever();
+        if (standalone) {
+            hive_cleanup();
+        }
+        return -1;
     }
 
     HIVE_LOG_INFO("Reading and verifying %d bytes...", TEST_PATTERN_SIZE);
@@ -251,16 +273,20 @@ int main(void) {
             HIVE_LOG_ERROR("Read failed at block %d: %s", b,
                            HIVE_ERR_STR(status));
             hive_file_close(fd);
-            hive_cleanup();
-            error_blink_forever();
+            if (standalone) {
+                hive_cleanup();
+            }
+            return -1;
         }
 
         if (bytes != BLOCK_SIZE) {
             HIVE_LOG_ERROR("Short read at block %d: got %zu, expected %d", b,
                            bytes, BLOCK_SIZE);
             hive_file_close(fd);
-            hive_cleanup();
-            error_blink_forever();
+            if (standalone) {
+                hive_cleanup();
+            }
+            return -1;
         }
 
         // Verify block
@@ -290,8 +316,10 @@ int main(void) {
                        s_test_pattern[first_error_offset],
                        s_read_buffer[first_error_offset % BLOCK_SIZE]);
         hive_file_close(fd);
-        hive_cleanup();
-        error_blink_forever();
+        if (standalone) {
+            hive_cleanup();
+        }
+        return -1;
     }
     HIVE_LOG_INFO("Read and verify OK (%u ms)", read_time);
 
@@ -313,11 +341,31 @@ int main(void) {
     HIVE_LOG_INFO("  Read time:  %u ms (%u bytes/sec)", read_time,
                   read_time > 0 ? (TEST_PATTERN_SIZE * 1000) / read_time : 0);
 
-    // Cleanup Hive runtime
-    hive_cleanup();
+    if (standalone) {
+        hive_cleanup();
+    }
 
-    // Solid LED = success
-    hal_led_on();
+    return 0;
+}
+
+// ============================================================================
+// Standalone Entry Point
+// ============================================================================
+
+#ifndef TEST_MAIN_BUILD
+int main(void) {
+    int result = test_sd_run(true);
+
+    if (result < 0) {
+        // Test failed
+        error_blink_forever();
+    } else if (result > 0) {
+        // Test skipped (SD not available) - LED already on from test
+        hal_led_on();
+    } else {
+        // Test passed
+        hal_led_on();
+    }
 
     // Idle forever
     while (1) {
@@ -326,3 +374,4 @@ int main(void) {
 
     return 0;
 }
+#endif

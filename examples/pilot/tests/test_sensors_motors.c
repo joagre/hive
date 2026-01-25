@@ -48,6 +48,12 @@
 #include <stdint.h>
 
 // ============================================================================
+// Public Interface (for test_main.c)
+// ============================================================================
+
+int test_sensors_motors_run(bool standalone);
+
+// ============================================================================
 // Test Configuration
 // ============================================================================
 
@@ -76,29 +82,32 @@ static void error_blink_forever(int on_ms, int off_ms) {
 }
 
 // ============================================================================
-// Main Test
+// Test Implementation
 // ============================================================================
 
-int main(void) {
-    // Initialize pilot HAL for LED, timing, and debug output
-    hal_debug_init();
+/**
+ * Run the sensors and motors test.
+ *
+ * @param standalone If true, initializes HAL/Hive and handles cleanup.
+ *                   If false, assumes caller has already initialized.
+ * @return 0 on success, -1 on failure
+ */
+int test_sensors_motors_run(bool standalone) {
+    if (standalone) {
+        // Initialize pilot HAL for LED, timing, and debug output
+        hal_debug_init();
 
-    // ========================================================================
-    // Phase 1: hal_init()
-    // ========================================================================
+        // Note: We can't blink before hal_init() since GPIO isn't initialized yet.
+        // hal_init() will show its own LED feedback (1-3 blinks for progress).
+        if (hal_init() != 0) {
+            return -1;
+        }
 
-    // Note: We can't blink before hal_init() since GPIO isn't initialized yet.
-    // hal_init() will show its own LED feedback (1-3 blinks for progress).
-
-    if (hal_init() != 0) {
-        // hal_init() already showed error blinks, just loop forever
-        error_blink_forever(100, 100);
-    }
-
-    // Initialize Hive runtime for logging
-    hive_status_t status = hive_init();
-    if (HIVE_FAILED(status)) {
-        error_blink_forever(100, 100);
+        // Initialize Hive runtime for logging
+        hive_status_t status = hive_init();
+        if (HIVE_FAILED(status)) {
+            return -1;
+        }
     }
 
     HIVE_LOG_INFO("========================================");
@@ -118,9 +127,10 @@ int main(void) {
     HIVE_LOG_INFO("Phase 2: hal_self_test()");
     if (!hal_self_test()) {
         HIVE_LOG_ERROR("hal_self_test() FAIL");
-        // hal_self_test() already showed error blinks (6-9)
-        hive_cleanup();
-        error_blink_forever(100, 100);
+        if (standalone) {
+            hive_cleanup();
+        }
+        return -1;
     }
     HIVE_LOG_INFO("hal_self_test() PASS");
 
@@ -195,10 +205,11 @@ int main(void) {
 
     if (!accel_ok || !gyro_ok) {
         HIVE_LOG_ERROR("Sensor data out of range");
-        // Sensor values out of range - show error
-        test_blink(10, 50, 50); // 10 fast blinks = sensor data error
-        hive_cleanup();
-        error_blink_forever(300, 300);
+        if (standalone) {
+            test_blink(10, 50, 50); // 10 fast blinks = sensor data error
+            hive_cleanup();
+        }
+        return -1;
     }
     HIVE_LOG_INFO("Sensor read test PASS");
 
@@ -261,16 +272,31 @@ int main(void) {
     HIVE_LOG_INFO("  ALL TESTS PASSED!");
     HIVE_LOG_INFO("========================================");
 
-    // Cleanup Hive runtime
-    hive_cleanup();
+    if (standalone) {
+        hive_cleanup();
+    }
 
-    // Solid LED = success
+    return 0;
+}
+
+// ============================================================================
+// Standalone Entry Point
+// ============================================================================
+
+#ifndef TEST_MAIN_BUILD
+int main(void) {
+    int result = test_sensors_motors_run(true);
+
+    if (result != 0) {
+        error_blink_forever(100, 100);
+    }
+
+    // Solid LED = success, stay forever
     hal_led_on();
-
-    // Stay in success state forever
     while (1) {
         hal_delay_ms(1000);
     }
 
     return 0;
 }
+#endif
