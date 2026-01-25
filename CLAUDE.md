@@ -68,10 +68,11 @@ Install: `make install-man` (or `sudo make install-man`)
 - All link/monitor operations
 - All I/O event dispatch paths
 
-### Unicode in Comments
+### Unicode
 
-- **Allowed** - Unicode box-drawing characters (`┌─┐│└┘├┤┬┴┼`) for diagrams (state machines, memory layouts, protocol formats)
-- **Forbidden** - Unicode in regular prose comments; use ASCII only
+- **Allowed** - Unicode box-drawing characters (`┌─┐│└┘├┤┬┴┼`) for diagrams in comments (state machines, memory layouts, protocol formats)
+- **Forbidden** - Unicode in prose (comments, markdown, documentation); use ASCII only
+- **Forbidden** - Unicode in source code (strings, identifiers)
 
 ## Architecture
 
