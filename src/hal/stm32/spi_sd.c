@@ -9,6 +9,91 @@
 #if HIVE_ENABLE_SD
 
 #include <string.h>
+#include <stdint.h>
+
+// ---------------------------------------------------------------------------
+// STM32 Register Definitions
+// ---------------------------------------------------------------------------
+
+// RCC registers
+#define RCC_BASE 0x40023800UL
+#define RCC_AHB1ENR (*(volatile uint32_t *)(RCC_BASE + 0x30))
+#define RCC_APB1ENR (*(volatile uint32_t *)(RCC_BASE + 0x40))
+
+// RCC enable bits
+#define RCC_AHB1ENR_GPIOAEN (1UL << 0)
+#define RCC_AHB1ENR_GPIOBEN (1UL << 1)
+#define RCC_AHB1ENR_GPIOCEN (1UL << 2)
+#define RCC_AHB1ENR_GPIODEN (1UL << 3)
+#define RCC_APB1ENR_SPI2EN (1UL << 14)
+#define RCC_APB1ENR_SPI3EN (1UL << 15)
+
+// GPIO registers (offset from port base)
+typedef struct {
+    volatile uint32_t MODER;
+    volatile uint32_t OTYPER;
+    volatile uint32_t OSPEEDR;
+    volatile uint32_t PUPDR;
+    volatile uint32_t IDR;
+    volatile uint32_t ODR;
+    volatile uint32_t BSRR;
+    volatile uint32_t LCKR;
+    volatile uint32_t AFR[2];
+} GPIO_TypeDef;
+
+#define GPIOA_BASE 0x40020000UL
+#define GPIOB_BASE 0x40020400UL
+#define GPIOC_BASE 0x40020800UL
+#define GPIOD_BASE 0x40020C00UL
+
+#define GPIOA ((GPIO_TypeDef *)GPIOA_BASE)
+#define GPIOB ((GPIO_TypeDef *)GPIOB_BASE)
+#define GPIOC ((GPIO_TypeDef *)GPIOC_BASE)
+#define GPIOD ((GPIO_TypeDef *)GPIOD_BASE)
+
+// SPI registers
+typedef struct {
+    volatile uint32_t CR1;
+    volatile uint32_t CR2;
+    volatile uint32_t SR;
+    volatile uint32_t DR;
+    volatile uint32_t CRCPR;
+    volatile uint32_t RXCRCR;
+    volatile uint32_t TXCRCR;
+    volatile uint32_t I2SCFGR;
+    volatile uint32_t I2SPR;
+} SPI_TypeDef;
+
+#define SPI2_BASE 0x40003800UL
+#define SPI3_BASE 0x40003C00UL
+
+#define SPI2 ((SPI_TypeDef *)SPI2_BASE)
+#define SPI3 ((SPI_TypeDef *)SPI3_BASE)
+
+// SPI CR1 bits
+#define SPI_CR1_CPHA (1UL << 0)
+#define SPI_CR1_CPOL (1UL << 1)
+#define SPI_CR1_MSTR (1UL << 2)
+#define SPI_CR1_BR_0 (1UL << 3)
+#define SPI_CR1_BR_1 (1UL << 4)
+#define SPI_CR1_BR_2 (1UL << 5)
+#define SPI_CR1_SPE (1UL << 6)
+#define SPI_CR1_SSI (1UL << 8)
+#define SPI_CR1_SSM (1UL << 9)
+
+// SPI SR bits
+#define SPI_SR_RXNE (1UL << 0)
+#define SPI_SR_TXE (1UL << 1)
+#define SPI_SR_BSY (1UL << 7)
+
+// SPI3 pin configuration (fixed for Crazyflie SD deck)
+// PB3 = SCK (AF6), PB4 = MISO (AF6), PB5 = MOSI (AF6)
+#define SPI3_AF 6
+
+// Pointers set during init based on config
+static GPIO_TypeDef *s_cs_gpio = NULL;
+static uint32_t s_cs_pin = 0;
+static SPI_TypeDef *s_spi = NULL;
 
 // ---------------------------------------------------------------------------
 // SD Card Commands (SPI Mode)
@@ -57,38 +142,139 @@ static uint32_t s_sector_count = 0;
 // SPI Low-Level Operations (Hardware-Specific)
 // ---------------------------------------------------------------------------
 
+// Get GPIO port from config port number
+static GPIO_TypeDef *get_gpio_port(uint8_t port) {
+    switch (port) {
+    case 0:
+        return GPIOA;
+    case 1:
+        return GPIOB;
+    case 2:
+        return GPIOC;
+    case 3:
+        return GPIOD;
+    default:
+        return GPIOB;
+    }
+}
+
 // Initialize SPI peripheral
 static void spi_init(void) {
-    // TODO: Configure SPI peripheral for SD card
-    // - Clock: 400 kHz for init, then up to 25 MHz
-    // - Mode: CPOL=0, CPHA=0 (SPI mode 0)
-    // - MSB first
-    // - 8-bit data
+    // Enable GPIO clocks (all ports we might use)
+    RCC_AHB1ENR |= RCC_AHB1ENR_GPIOAEN | RCC_AHB1ENR_GPIOBEN |
+                   RCC_AHB1ENR_GPIOCEN | RCC_AHB1ENR_GPIODEN;
+
+    // Select SPI peripheral based on config
+    if (s_config.spi_id == 3) {
+        // Enable SPI3 clock
+        RCC_APB1ENR |= RCC_APB1ENR_SPI3EN;
+        s_spi = SPI3;
+
+        // Configure SPI3 pins: PB3=SCK, PB4=MISO, PB5=MOSI (AF6)
+        // Set pins to alternate function mode
+        GPIOB->MODER &=
+            ~((3UL << (3 * 2)) | (3UL << (4 * 2)) | (3UL << (5 * 2)));
+        GPIOB->MODER |=
+            ((2UL << (3 * 2)) | (2UL << (4 * 2)) | (2UL << (5 * 2)));
+
+        // High speed
+        GPIOB->OSPEEDR |=
+            ((3UL << (3 * 2)) | (3UL << (4 * 2)) | (3UL << (5 * 2)));
+
+        // Set AF6 for SPI3 (pins 3,4,5 are in AFR[0])
+        GPIOB->AFR[0] &=
+            ~((0xFUL << (3 * 4)) | (0xFUL << (4 * 4)) | (0xFUL << (5 * 4)));
+        GPIOB->AFR[0] |= ((SPI3_AF << (3 * 4)) | (SPI3_AF << (4 * 4)) |
+                          (SPI3_AF << (5 * 4)));
+
+        // Pull-up on MISO
+        GPIOB->PUPDR &= ~(3UL << (4 * 2));
+        GPIOB->PUPDR |= (1UL << (4 * 2));
+
+    } else if (s_config.spi_id == 2) {
+        // Enable SPI2 clock
+        RCC_APB1ENR |= RCC_APB1ENR_SPI2EN;
+        s_spi = SPI2;
+
+        // Configure SPI2 pins: PB13=SCK, PB14=MISO, PB15=MOSI (AF5)
+        GPIOB->MODER &=
+            ~((3UL << (13 * 2)) | (3UL << (14 * 2)) | (3UL << (15 * 2)));
+        GPIOB->MODER |=
+            ((2UL << (13 * 2)) | (2UL << (14 * 2)) | (2UL << (15 * 2)));
+
+        GPIOB->OSPEEDR |=
+            ((3UL << (13 * 2)) | (3UL << (14 * 2)) | (3UL << (15 * 2)));
+
+        // AF5 for SPI2 (pins 13,14,15 are in AFR[1])
+        GPIOB->AFR[1] &=
+            ~((0xFUL << ((13 - 8) * 4)) | (0xFUL << ((14 - 8) * 4)) |
+              (0xFUL << ((15 - 8) * 4)));
+        GPIOB->AFR[1] |= ((5UL << ((13 - 8) * 4)) | (5UL << ((14 - 8) * 4)) |
+                          (5UL << ((15 - 8) * 4)));
+
+        // Pull-up on MISO
+        GPIOB->PUPDR &= ~(3UL << (14 * 2));
+        GPIOB->PUPDR |= (1UL << (14 * 2));
+    }
+
+    // Configure CS pin as output
+    s_cs_gpio = get_gpio_port(s_config.cs_port);
+    s_cs_pin = s_config.cs_pin;
+
+    s_cs_gpio->MODER &= ~(3UL << (s_cs_pin * 2));
+    s_cs_gpio->MODER |= (1UL << (s_cs_pin * 2));   // Output mode
+    s_cs_gpio->OSPEEDR |= (3UL << (s_cs_pin * 2)); // High speed
+    s_cs_gpio->ODR |= (1UL << s_cs_pin);           // CS high (deselected)
+
+    // Configure SPI: Master, 8-bit, Mode 0 (CPOL=0, CPHA=0), slow speed
+    // APB1 = 42 MHz, BR=111 (div 256) = 164 kHz for init
+    s_spi->CR1 = SPI_CR1_MSTR | // Master mode
+                 SPI_CR1_BR_2 | SPI_CR1_BR_1 |
+                 SPI_CR1_BR_0 | // Baud = fPCLK/256
+                 SPI_CR1_SSM |  // Software slave management
+                 SPI_CR1_SSI;   // Internal slave select
+
+    s_spi->CR1 |= SPI_CR1_SPE; // Enable SPI
 }
 
-// Set SPI clock speed
+// Set SPI clock speed for initialization (~400 kHz)
 static void spi_set_speed_low(void) {
-    // TODO: Set SPI clock to ~400 kHz for initialization
+    s_spi->CR1 &= ~SPI_CR1_SPE; // Disable SPI
+    s_spi->CR1 &= ~(SPI_CR1_BR_2 | SPI_CR1_BR_1 | SPI_CR1_BR_0);
+    s_spi->CR1 |=
+        SPI_CR1_BR_2 | SPI_CR1_BR_1 | SPI_CR1_BR_0; // div 256 = 164 kHz
+    s_spi->CR1 |= SPI_CR1_SPE;                      // Enable SPI
 }
 
+// Set SPI clock speed for data transfer (~21 MHz)
 static void spi_set_speed_high(void) {
-    // TODO: Set SPI clock to maximum (up to 25 MHz)
+    s_spi->CR1 &= ~SPI_CR1_SPE; // Disable SPI
+    s_spi->CR1 &= ~(SPI_CR1_BR_2 | SPI_CR1_BR_1 | SPI_CR1_BR_0);
+    s_spi->CR1 |= SPI_CR1_BR_0; // div 4 = 10.5 MHz (safe for SD)
+    s_spi->CR1 |= SPI_CR1_SPE;  // Enable SPI
 }
 
 // Chip select control
 static void cs_low(void) {
-    // TODO: Assert CS (active low)
+    s_cs_gpio->ODR &= ~(1UL << s_cs_pin);
 }
 
 static void cs_high(void) {
-    // TODO: Deassert CS
+    s_cs_gpio->ODR |= (1UL << s_cs_pin);
 }
 
-// Transfer single byte
+// Transfer single byte (full duplex)
 static uint8_t spi_xfer(uint8_t data) {
-    // TODO: Transmit data, receive response
-    (void)data;
-    return 0xFF;
+    // Wait for TX buffer empty
+    while (!(s_spi->SR & SPI_SR_TXE))
+        ;
+    // Send data
+    s_spi->DR = data;
+    // Wait for RX buffer not empty
+    while (!(s_spi->SR & SPI_SR_RXNE))
+        ;
+    // Return received data
+    return (uint8_t)s_spi->DR;
 }
 
 // Send multiple bytes (discard received)
