@@ -847,7 +847,7 @@ clang-format --dry-run --Werror src/hive_actor.c
 
 ### Pre-commit Hook
 
-A pre-commit hook checks formatting before each commit:
+A pre-commit hook auto-formats code and checks Unicode policy before each commit:
 
 ```bash
 # Install (one-time setup after clone)
@@ -856,6 +856,11 @@ git config core.hooksPath scripts
 # Bypass if needed
 git commit --no-verify
 ```
+
+The hook enforces:
+- Auto-formatting with clang-format
+- ASCII-only in prose comments
+- Unicode allowed only for diagrams: box-drawing (`─│┌┐└┘├┤┬┴┼`) and arrows (`→←↑↓`)
 
 ### Protecting ASCII Diagrams
 

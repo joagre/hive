@@ -70,7 +70,7 @@ Install: `make install-man` (or `sudo make install-man`)
 
 ### Unicode and Formatting
 
-- **Allowed** - Unicode box-drawing characters (`┌─┐│└┘├┤┬┴┼`) for diagrams in comments (state machines, memory layouts, protocol formats)
+- **Allowed** - Unicode box-drawing characters (`┌─┐│└┘├┤┬┴┼`) and arrows (`→←↑↓`) for diagrams in comments (state machines, memory layouts, protocol formats)
 - **Forbidden** - Unicode in prose (comments, markdown, documentation); use ASCII only
 - **Forbidden** - Unicode in source code (strings, identifiers)
 - **Forbidden** - Double hyphens (`--`); use a single hyphen with spaces (` - `) or an em-dash alternative
