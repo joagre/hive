@@ -30,6 +30,7 @@ ALL_CFLAGS := $(BASE_CFLAGS) $(CFLAGS)
 # Feature flags (STM32: no net, file enabled by default)
 ENABLE_NET ?= 0
 ENABLE_FILE ?= 1
+ENABLE_SD ?= 0
 
 ifeq ($(ENABLE_NET),1)
   ALL_CFLAGS += -DHIVE_ENABLE_NET=1
@@ -41,6 +42,13 @@ ifeq ($(ENABLE_FILE),1)
   ALL_CFLAGS += -DHIVE_ENABLE_FILE=1
 else
   ALL_CFLAGS += -DHIVE_ENABLE_FILE=0
+endif
+
+ifeq ($(ENABLE_SD),1)
+  ALL_CFLAGS += -DHIVE_ENABLE_SD=1
+  ALL_CFLAGS += -I../lib/fatfs
+else
+  ALL_CFLAGS += -DHIVE_ENABLE_SD=0
 endif
 
 # Source files (from shared definitions)
@@ -60,6 +68,9 @@ else
 endif
 ifeq ($(ENABLE_FILE),1)
   SRCS += $(HIVE_FILE_SRCS) $(HIVE_HAL_STM32_FILE_SRCS)
+endif
+ifeq ($(ENABLE_SD),1)
+  SRCS += $(HIVE_HAL_STM32_SD_SRCS) $(HIVE_FATFS_SRCS)
 endif
 
 ASM_SRCS := $(HIVE_HAL_STM32_ASM)

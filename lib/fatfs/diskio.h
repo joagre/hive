@@ -37,6 +37,7 @@ typedef enum {
 typedef uint8_t BYTE;
 typedef uint16_t WORD;
 typedef uint32_t DWORD;
+typedef unsigned int UINT;
 typedef uint32_t LBA_t; // LBA type (32-bit for FF_LBA64=0)
 
 // ---------------------------------------------------------------------------

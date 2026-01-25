@@ -34,10 +34,20 @@ CFLAGS += -DSTM32F405xx
 CFLAGS += -DUSE_FULL_ASSERT
 CFLAGS += -DHAL_HAS_RADIO
 
+# SD card support (passed from parent Makefile)
+ENABLE_SD ?= 0
+ifeq ($(ENABLE_SD),1)
+  CFLAGS += -DHIVE_ENABLE_SD=1
+else
+  CFLAGS += -DHIVE_ENABLE_SD=0
+endif
+
 # Include paths
 CFLAGS += -I.
 CFLAGS += -I../..
 CFLAGS += -I../../include
+CFLAGS += -I../../../../include
+CFLAGS += -I../../../../src/hal/stm32
 CFLAGS += -Ivendor/CMSIS/Include
 CFLAGS += -Ivendor/CMSIS/Device/ST/STM32F4xx/Include
 CFLAGS += -Ivendor/bosch/bmi08x
@@ -55,6 +65,7 @@ C_SOURCES = \
     hal_radio.c \
     platform_crazyflie.c \
     motors.c \
+    spi_ll_sd.c \
     syscalls.c \
     system_stm32f4xx.c
 

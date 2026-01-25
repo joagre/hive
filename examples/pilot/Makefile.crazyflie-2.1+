@@ -115,11 +115,12 @@ $(HIVE_LIB):
 		BUILD_DIR=$(abspath $(BUILD_DIR)) \
 		CC=$(CC) AR=$(AR) \
 		BOARD_MOUNTS_SRC=$(BOARD_MOUNTS_SRC) \
+		ENABLE_SD=$(ENABLE_SD) \
 		CFLAGS="$(HIVE_CFLAGS_EXPORT)"
 
 # Build HAL library (delegate to HAL Makefile)
 $(HAL_LIB):
-	@$(MAKE) -C $(HAL_DIR)
+	@$(MAKE) -C $(HAL_DIR) ENABLE_SD=$(ENABLE_SD)
 
 # Compile pilot sources
 $(BUILD_DIR)/pilot/%.o: %.c
