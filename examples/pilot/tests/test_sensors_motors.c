@@ -258,13 +258,6 @@ int test_sensors_motors_run(bool standalone) {
     test_blink(6, 200, 200);
 
     // ========================================================================
-    // Phase 6: Cleanup
-    // ========================================================================
-
-    HIVE_LOG_INFO("Phase 6: hal_cleanup()");
-    hal_cleanup();
-
-    // ========================================================================
     // All Tests Passed!
     // ========================================================================
 
@@ -273,6 +266,8 @@ int test_sensors_motors_run(bool standalone) {
     HIVE_LOG_INFO("========================================");
 
     if (standalone) {
+        HIVE_LOG_INFO("Cleanup: hal_cleanup()");
+        hal_cleanup();
         hive_cleanup();
     }
 
