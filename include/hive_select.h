@@ -16,18 +16,19 @@
 // type-based priority - bus and IPC sources are treated equally.
 //
 // Usage:
+//   enum { SEL_STATE, SEL_TIMER, SEL_CMD };
 //   hive_select_source_t sources[] = {
-//       {HIVE_SEL_BUS, .bus = state_bus},
-//       {HIVE_SEL_IPC, .ipc = {HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer_id}},
-//       {HIVE_SEL_IPC, .ipc = {HIVE_SENDER_ANY, HIVE_MSG_NOTIFY, CMD_TAG}},
+//       [SEL_STATE] = {HIVE_SEL_BUS, .bus = state_bus},
+//       [SEL_TIMER] = {HIVE_SEL_IPC, .ipc = {HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer_id}},
+//       [SEL_CMD]   = {HIVE_SEL_IPC, .ipc = {HIVE_SENDER_ANY, HIVE_MSG_NOTIFY, CMD_TAG}},
 //   };
 //   hive_select_result_t result;
 //   hive_select(sources, 3, &result, -1);
 //
 //   switch (result.index) {
-//       case 0: process_state(result.bus.data, result.bus.len); break;
-//       case 1: handle_timer(); break;
-//       case 2: handle_command(&result.ipc); break;
+//       case SEL_STATE: process_state(result.bus.data, result.bus.len); break;
+//       case SEL_TIMER: handle_timer(); break;
+//       case SEL_CMD:   handle_command(&result.ipc); break;
 //   }
 //
 // Returns:

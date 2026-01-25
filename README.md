@@ -662,10 +662,11 @@ See `examples/pilot/Makefile.crazyflie-2.1+` for a complete example and [spec/ap
 
 `hive_select()` provides unified waiting on heterogeneous sources:
 ```c
+enum { SEL_SENSOR, SEL_TIMER, SEL_SHUTDOWN };
 hive_select_source_t sources[] = {
-    {HIVE_SEL_BUS, .bus = sensor_bus},
-    {HIVE_SEL_IPC, .ipc = {HIVE_SENDER_ANY, HIVE_MSG_TIMER, heartbeat}},
-    {HIVE_SEL_IPC, .ipc = {HIVE_SENDER_ANY, HIVE_MSG_NOTIFY, CMD_SHUTDOWN}},
+    [SEL_SENSOR]   = {HIVE_SEL_BUS, .bus = sensor_bus},
+    [SEL_TIMER]    = {HIVE_SEL_IPC, .ipc = {HIVE_SENDER_ANY, HIVE_MSG_TIMER, heartbeat}},
+    [SEL_SHUTDOWN] = {HIVE_SEL_IPC, .ipc = {HIVE_SENDER_ANY, HIVE_MSG_NOTIFY, CMD_SHUTDOWN}},
 };
 hive_select_result_t result;
 hive_status_t status = hive_select(sources, 3, &result, -1);
@@ -675,15 +676,9 @@ if (HIVE_FAILED(status)) {
 }
 
 switch (result.index) {
-case 0:
-    // Bus data ready: result.bus.data, result.bus.len
-    break;
-case 1:
-    // Timer fired: result.ipc
-    break;
-case 2:
-    // Shutdown command: result.ipc
-    break;
+case SEL_SENSOR:   process_sensor(result.bus.data, result.bus.len); break;
+case SEL_TIMER:    handle_timer(); break;
+case SEL_SHUTDOWN: handle_shutdown(&result.ipc); break;
 }
 ```
 
