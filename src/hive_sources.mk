@@ -25,7 +25,8 @@ HIVE_FILE_SRCS := hive_file.c
 HIVE_HAL_LINUX_SRCS := \
 	hal/linux/hive_hal_timer_linux.c \
 	hal/linux/hive_hal_linux.c \
-	hal/linux/hive_hal_context_linux.c
+	hal/linux/hive_hal_context_linux.c \
+	hal/linux/hive_mounts.c
 
 HIVE_HAL_LINUX_ASM := hal/linux/hive_context_x86_64.S
 
@@ -33,7 +34,8 @@ HIVE_HAL_LINUX_ASM := hal/linux/hive_context_x86_64.S
 HIVE_HAL_STM32_SRCS := \
 	hal/stm32/hive_hal_timer_stm32.c \
 	hal/stm32/hive_hal_stm32.c \
-	hal/stm32/hive_hal_context_stm32.c
+	hal/stm32/hive_hal_context_stm32.c \
+	hal/stm32/hive_mounts.c
 
 HIVE_HAL_STM32_FILE_SRCS := hal/stm32/hive_hal_file_stm32.c
 

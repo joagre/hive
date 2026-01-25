@@ -46,4 +46,13 @@ hive_status_t hive_file_pwrite(int fd, const void *buf, size_t len,
 // Sync file to disk
 hive_status_t hive_file_sync(int fd);
 
+// Check if a mount point is available
+// For SD card: checks if card is inserted and filesystem mounted
+// For FLASH/POSIX: always returns HIVE_SUCCESS
+// Returns:
+// - HIVE_SUCCESS: Mount exists and backend is ready
+// - HIVE_ERR_INVALID: No mount for path
+// - HIVE_ERR_IO: Mount exists but backend unavailable (e.g., no SD card)
+hive_status_t hive_file_mount_available(const char *path);
+
 #endif // HIVE_FILE_H

@@ -11,6 +11,7 @@
 #include "hive_file.h"
 #include "hive_internal.h"
 #include "hal/hive_hal_file.h"
+#include "hal/hive_mount.h"
 
 // File I/O subsystem state
 static struct {
@@ -105,4 +106,14 @@ hive_status_t hive_file_sync(int fd) {
     HIVE_REQUIRE_INIT(s_file.initialized, "File I/O");
 
     return hive_hal_file_sync(fd);
+}
+
+hive_status_t hive_file_mount_available(const char *path) {
+    if (!path) {
+        return HIVE_ERROR(HIVE_ERR_INVALID, "NULL path");
+    }
+
+    HIVE_REQUIRE_INIT(s_file.initialized, "File I/O");
+
+    return hive_mount_available(path);
 }

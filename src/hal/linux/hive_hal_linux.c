@@ -18,7 +18,9 @@
 #if HIVE_ENABLE_FILE
 #include "hal/hive_hal_file.h"
 #include "hive_file.h"
+#include "hive_mount_linux.h"
 #include <fcntl.h>
+#include <stdio.h>
 #endif
 
 #if HIVE_ENABLE_NET
@@ -197,8 +199,32 @@ void hive_hal_file_cleanup(void) {
 
 hive_status_t hive_hal_file_open(const char *path, int flags, int mode,
                                  int *fd_out) {
+    // Find mount for path
+    size_t prefix_len;
+    const hive_mount_t *mount = hive_mount_find(path, &prefix_len);
+    if (!mount) {
+        return HIVE_ERROR(HIVE_ERR_INVALID, "no mount for path");
+    }
+
+    // Build full path: root + subpath
+    const char *root = hive_mount_get_root(mount);
+    const char *subpath = path + prefix_len;
+
+    // Handle root "/" prefix specially - subpath includes leading slash
+    if (prefix_len == 1 && path[0] == '/') {
+        subpath = path; // Keep full path for "/" mount
+    }
+
+    char fullpath[512];
+    if (root[0] == '\0') {
+        // Empty root = direct passthrough
+        snprintf(fullpath, sizeof(fullpath), "%s", path);
+    } else {
+        snprintf(fullpath, sizeof(fullpath), "%s%s", root, subpath);
+    }
+
     int posix_flags = hive_flags_to_posix(flags);
-    int fd = open(path, posix_flags, mode);
+    int fd = open(fullpath, posix_flags, mode);
     if (fd < 0) {
         return HIVE_ERROR(HIVE_ERR_IO, "open failed");
     }
