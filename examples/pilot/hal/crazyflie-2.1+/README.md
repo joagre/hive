@@ -457,6 +457,38 @@ HIVE_SD_CS_PORT  = 1      // GPIOB
 HIVE_SD_CS_PIN   = 6      // PB6
 ```
 
+### Checking Availability
+
+Use `hive_file_mount_available()` to check if the SD card is present before opening:
+
+```c
+if (HIVE_SUCCEEDED(hive_file_mount_available("/sd"))) {
+    hive_file_open("/sd/flight.bin", HIVE_O_WRONLY | HIVE_O_CREAT, 0, &fd);
+} else {
+    hive_file_open("/log", HIVE_O_WRONLY | HIVE_O_TRUNC, 0, &fd);  // Fallback
+}
+```
+
+### Memory Impact
+
+| Component | Flash | RAM |
+|-----------|-------|-----|
+| Mount table dispatch | ~0.5 KB | ~0.1 KB |
+| FatFS library | ~10 KB | ~0.5 KB |
+| FatFS FIL structs (4x) | - | ~2.4 KB |
+| SPI driver | ~1 KB | ~0.1 KB |
+| **Total** | **~12 KB** | **~3 KB** |
+
+Without SD (`ENABLE_SD=0`): Only ~0.5 KB flash overhead for mount table.
+
+### Limitations
+
+- **No hot-plug** - SD card presence is checked at init only. If the card is
+  removed mid-flight, writes fail with `HIVE_ERR_IO`.
+- **No auto-mkdir** - Parent directories must exist. Use flat paths like
+  `/sd/flight_001.bin`.
+- **No file listing** - Use sequential filenames; no `readdir()` API.
+
 ### Differences from Flash Virtual Files
 
 | Feature | Flash (`/log`) | SD Card (`/sd`) |
