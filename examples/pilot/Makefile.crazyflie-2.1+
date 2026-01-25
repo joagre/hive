@@ -172,6 +172,8 @@ help:
 	@echo ""
 	@echo "  ENABLE_SD=<0|1>           SD card support (default: 0)"
 	@echo "      Requires Micro SD Card Deck attached"
+	@echo "      Enables /sd mount point (FatFS filesystem)"
+	@echo "      Max concurrent files: HIVE_MAX_SD_FILES (default: 4)"
 	@echo ""
 	@echo "Hardware Info:"
 	@echo "  MCU:        STM32F405RG (Cortex-M4F, 168MHz)"

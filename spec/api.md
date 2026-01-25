@@ -1825,6 +1825,26 @@ hive_status_t hive_file_write(int fd, const void *buf, size_t len, size_t *bytes
 hive_status_t hive_file_pwrite(int fd, const void *buf, size_t len, size_t offset, size_t *bytes_written);
 
 hive_status_t hive_file_sync(int fd);
+
+hive_status_t hive_file_mount_available(const char *path);
+```
+
+### Mount Availability
+
+`hive_file_mount_available()` checks if a mount point is ready for I/O. This is useful for checking SD card presence before attempting file operations.
+
+**Returns:**
+- `HIVE_OK`: Mount exists and backend is ready
+- `HIVE_ERR_INVALID`: No mount for path
+- `HIVE_ERR_IO`: Mount exists but backend unavailable (e.g., SD card not inserted)
+
+**Usage example:**
+```c
+if (HIVE_SUCCEEDED(hive_file_mount_available("/sd"))) {
+    hive_file_open("/sd/flight.bin", HIVE_O_WRONLY | HIVE_O_CREAT, 0, &fd);
+} else {
+    hive_file_open("/log", HIVE_O_WRONLY | HIVE_O_TRUNC, 0, &fd);
+}
 ```
 
 ### Platform-Independent Flags
@@ -1921,6 +1941,51 @@ hive_file_write(log_fd, &sensor_data, sizeof(sensor_data), &written);
 hive_file_sync(log_fd);
 
 hive_file_close(log_fd);
+```
+
+### STM32 SD Card Support (Optional)
+
+When built with `HIVE_ENABLE_SD=1`, the STM32 implementation supports SD cards via SPI using the FatFS library. SD card files are accessed through the `/sd` mount point.
+
+**SD Card Characteristics:**
+- Full FatFS filesystem support (FAT12/16/32, exFAT)
+- Standard file operations work as expected (read, write, seek)
+- `HIVE_O_RDWR` is supported (unlike flash virtual files)
+- No `HIVE_O_TRUNC` requirement for writes
+- Multiple files can be open simultaneously (up to `HIVE_MAX_SD_FILES`)
+
+**SD Card Limitations:**
+- **No hot-plug detection** - Card presence is checked at initialization only. If the card is removed during operation, subsequent I/O fails with `HIVE_ERR_IO`.
+- **No automatic directory creation** - `hive_file_open()` with `HIVE_O_CREAT` does not create parent directories. Use flat file paths like `/sd/flight_001.bin`.
+- **No file listing API** - There is no `readdir()` equivalent. Use sequential filenames for logging.
+
+**SD Card Configuration** (`hive_static_config.h` or Makefile):
+```c
+#define HIVE_ENABLE_SD 1       // Enable SD card support
+#define HIVE_MAX_SD_FILES 4    // Max concurrent open files on SD
+```
+
+**Porting:** Each board must implement `spi_ll_sd.c` with board-specific SPI pin configuration. See `src/hal/stm32/spi_ll.h` for the required interface.
+
+**SD Card Usage Example:**
+```c
+int fd;
+hive_status_t status;
+
+// Check if SD card is available
+if (HIVE_SUCCEEDED(hive_file_mount_available("/sd"))) {
+    // SD card present - use it
+    status = hive_file_open("/sd/flight_001.bin",
+                            HIVE_O_WRONLY | HIVE_O_CREAT, 0644, &fd);
+} else {
+    // Fall back to flash
+    status = hive_file_open("/log", HIVE_O_WRONLY | HIVE_O_TRUNC, 0, &fd);
+}
+
+// Write works the same regardless of backend
+hive_file_write(fd, data, len, &written);
+hive_file_sync(fd);
+hive_file_close(fd);
 ```
 
 ## Logging API

@@ -64,6 +64,7 @@ by the supervisor at spawn time.
 **Crazyflie 2.1+** - With Flow deck v2, uses optical flow for XY positioning and ToF for altitude.
 Without Flow deck, hovers and changes altitude only. 60-second startup delay before flight.
 Radio telemetry enabled via Crazyradio 2.0 for real-time ground station logging.
+Optional SD card logging with Micro SD Card Deck (build with `ENABLE_SD=1`).
 
 **Safety features (all platforms)** - Emergency cutoff on excessive tilt (>45 deg), excessive
 altitude (>2m), or touchdown. Motor deadman watchdog zeros motors if no command received
@@ -100,9 +101,12 @@ Webots always runs the latest controller (Webots caches the binary otherwise).
 make -f Makefile.<platform>        # Build firmware
 make -f Makefile.<platform> flash  # Flash via debug adapter
 make -f Makefile.<platform> clean  # Clean build artifacts
+
+# With SD card support (requires Micro SD Card Deck)
+make -f Makefile.<platform> ENABLE_SD=1
 ```
 
-See `hal/<platform>/README.md` for hardware details, pin mapping, and flight profiles.
+See `hal/<platform>/README.md` for hardware details, pin mapping, flight profiles, and SD card configuration.
 
 ## Architecture
 

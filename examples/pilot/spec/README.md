@@ -37,6 +37,7 @@ and fail-safe supervision. Supports Webots simulation (default) and STM32 hardwa
 | Position source | Simulated GPS | Optical flow (Flow deck v2) |
 | Altitude source | Simulated rangefinder | ToF sensor (Flow deck v2) |
 | Flash logging | No | Yes |
+| SD card logging | No | Optional (ENABLE_SD=1) |
 | CSV telemetry | Yes | No |
 | Radio telemetry | No | Yes |
 

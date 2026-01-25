@@ -5,9 +5,14 @@
 //
 // View output: st-trace -c 168
 
+#include "bringup_deck.h"
+#include "bringup_eeprom.h"
+#include "bringup_flash.h"
 #include "bringup_i2c.h"
+#include "bringup_leds.h"
 #include "bringup_motors.h"
 #include "bringup_radio.h"
+#include "bringup_sd.h"
 #include "bringup_sensors.h"
 #include "bringup_swo.h"
 #include "stm32f4xx.h"
@@ -30,7 +35,14 @@ static bool s_i2c_ok = false;
 static bool s_sensors_ok = false;
 static bool s_motors_ok = false;
 static bool s_radio_ok = false;
+static bool s_flash_ok = false;
+static bool s_sd_ok = false;
+static bool s_eeprom_ok = false;
+static bool s_deck_ok = false;
+static bool s_leds_ok = false;
 static bool s_flow_deck = false;
+static bool s_sd_deck = false;
+static int s_deck_count = 0;
 
 // System clock configuration (168 MHz from 8 MHz HSE)
 static void system_clock_init(void) {
@@ -99,7 +111,11 @@ static void led_blink(int count, int period_ms) {
     }
 }
 
-// Phase 1: Boot & Clock
+// ----------------------------------------------------------------------------
+// Test Phases (ordered from primitive to complex)
+// ----------------------------------------------------------------------------
+
+// Phase 1: Boot & Clock - Most fundamental system initialization
 static bool test_boot(void) {
     swo_puts("\n=== Phase 1: Boot & Clock ===\n");
 
@@ -119,9 +135,17 @@ static bool test_boot(void) {
     }
 }
 
-// Phase 2: I2C Bus Scan
+// Phase 2: LEDs - Simple GPIO output test
+static bool test_leds(void) {
+    swo_puts("\n=== Phase 2: LED Test ===\n");
+
+    led_test_results_t results;
+    return led_run_test(&results);
+}
+
+// Phase 3: I2C Bus Scan - Basic I2C protocol
 static bool test_i2c_scan(void) {
-    swo_puts("\n=== Phase 2: I2C Bus Scan ===\n");
+    swo_puts("\n=== Phase 3: I2C Bus Scan ===\n");
 
     swo_puts("[I2C] Initializing I2C3...\n");
     i2c_init();
@@ -164,10 +188,9 @@ static bool test_i2c_scan(void) {
     return ok;
 }
 
-// Phase 3 & 4: Sensor Tests
+// Phase 4: Sensors - I2C/SPI device communication
 static bool test_sensors(void) {
-    swo_puts("\n=== Phase 3: Sensor Chip IDs ===\n");
-    swo_puts("\n=== Phase 4: Sensor Data ===\n");
+    swo_puts("\n=== Phase 4: Sensors ===\n");
 
     spi_init(); // For PMW3901
     sensors_init();
@@ -185,36 +208,86 @@ static bool test_sensors(void) {
     return ok;
 }
 
-// Phase 5: Motor Test
+// Phase 5: EEPROM - I2C read/write on separate bus
+static bool test_eeprom(void) {
+    swo_puts("\n=== Phase 5: EEPROM Test ===\n");
+
+    eeprom_test_results_t results;
+    return eeprom_run_test(&results);
+}
+
+// Phase 6: Deck Detection - 1-Wire bit-banged protocol
+static bool test_deck(void) {
+    swo_puts("\n=== Phase 6: Deck Detection ===\n");
+
+    deck_test_results_t results;
+    bool ok = deck_run_test(&results);
+
+    s_deck_count = results.deck_count;
+    return ok;
+}
+
+// Phase 7: Motors - Timer-based PWM output
 static bool test_motors(void) {
-    swo_puts("\n=== Phase 5: Motor Test ===\n");
+    swo_puts("\n=== Phase 7: Motor Test ===\n");
 
     motors_init();
     return motors_run_test();
 }
 
-// Phase 6: Radio Test
+// Phase 8: Radio - USART serial protocol (syslink)
 static bool test_radio(void) {
-    swo_puts("\n=== Phase 6: Radio Test ===\n");
+    swo_puts("\n=== Phase 8: Radio Test ===\n");
 
     return radio_run_test(5000); // 5 second timeout
 }
 
-// Print summary
+// Phase 9: Flash Storage - Internal flash programming (complex, runs from RAM)
+static bool test_flash(void) {
+    swo_puts("\n=== Phase 9: Flash Storage Test ===\n");
+
+    flash_test_results_t results;
+    return flash_run_test(&results);
+}
+
+// Phase 10: SD Card - SPI + SD protocol (most complex, optional)
+static bool test_sd(void) {
+    swo_puts("\n=== Phase 10: SD Card Test ===\n");
+
+    sd_test_results_t results;
+    bool ok = sd_run_test(&results);
+
+    s_sd_deck = results.card_present;
+    return ok;
+}
+
+// Print summary (in order of test execution: primitive to complex)
 static void print_summary(void) {
     swo_puts("\n");
     swo_puts("=== Bring-Up Test Summary ===\n");
-    swo_printf("Boot & Clock:     %s\n", s_boot_ok ? "OK" : "FAIL");
-    swo_printf("I2C Bus Scan:     %s\n", s_i2c_ok ? "OK" : "FAIL");
-    swo_printf("Sensors:          %s\n", s_sensors_ok ? "OK" : "FAIL");
-    swo_printf("Motors:           %s\n", s_motors_ok ? "OK" : "SKIP/FAIL");
-    swo_printf("Radio:            %s\n", s_radio_ok ? "OK" : "FAIL");
+    swo_printf("1. Boot & Clock:    %s\n", s_boot_ok ? "OK" : "FAIL");
+    swo_printf("2. LEDs:            %s\n", s_leds_ok ? "OK" : "FAIL");
+    swo_printf("3. I2C Bus Scan:    %s\n", s_i2c_ok ? "OK" : "FAIL");
+    swo_printf("4. Sensors:         %s\n", s_sensors_ok ? "OK" : "FAIL");
+    swo_printf("5. EEPROM:          %s\n", s_eeprom_ok ? "OK" : "FAIL");
+    swo_printf("6. Deck Detection:  %s\n", s_deck_ok ? "OK" : "FAIL");
+    swo_printf("7. Motors:          %s\n", s_motors_ok ? "OK" : "SKIP/FAIL");
+    swo_printf("8. Radio:           %s\n", s_radio_ok ? "OK" : "FAIL");
+    swo_printf("9. Flash Storage:   %s\n", s_flash_ok ? "OK" : "FAIL");
+    swo_printf("10. SD Card:        %s\n",
+               s_sd_deck ? (s_sd_ok ? "OK" : "FAIL") : "NO DECK");
     swo_puts("\n");
-    swo_printf("Flow deck:        %s\n",
+    swo_printf("Flow deck:          %s\n",
                s_flow_deck ? "DETECTED" : "NOT DETECTED");
+    swo_printf("SD card deck:       %s\n",
+               s_sd_deck ? "DETECTED" : "NOT DETECTED");
+    if (s_deck_count > 0) {
+        swo_printf("Expansion decks:    %d detected\n", s_deck_count);
+    }
     swo_puts("\n");
 
-    bool all_required = s_boot_ok && s_i2c_ok && s_sensors_ok;
+    bool all_required = s_boot_ok && s_leds_ok && s_i2c_ok && s_sensors_ok &&
+                        s_eeprom_ok && s_flash_ok;
     if (all_required) {
         swo_puts("All required tests passed!\n");
         // Steady LED on
@@ -249,23 +322,45 @@ int main(void) {
         swo_puts("(timeout - starting automatically)\n");
     }
 
-    // Run tests
+    // Run tests (ordered from primitive to complex)
+    // Phase 1: Boot & Clock
     s_boot_ok = test_boot();
     if (!s_boot_ok) {
         swo_puts("\n!!! Boot test failed - cannot continue !!!\n");
         goto done;
     }
 
+    // Phase 2: LEDs (simple GPIO)
+    s_leds_ok = test_leds();
+
+    // Phase 3: I2C Bus Scan
     s_i2c_ok = test_i2c_scan();
+
+    // Phase 4: Sensors (depends on I2C)
     if (!s_i2c_ok) {
         swo_puts("\n!!! I2C test failed - cannot test sensors !!!\n");
-        // Continue anyway to test motors/radio
+        // Continue with other tests
     } else {
         s_sensors_ok = test_sensors();
     }
 
+    // Phase 5: EEPROM (I2C on separate bus)
+    s_eeprom_ok = test_eeprom();
+
+    // Phase 6: Deck Detection (1-Wire)
+    s_deck_ok = test_deck();
+
+    // Phase 7: Motors (PWM)
     s_motors_ok = test_motors();
+
+    // Phase 8: Radio (USART)
     s_radio_ok = test_radio();
+
+    // Phase 9: Flash Storage
+    s_flash_ok = test_flash();
+
+    // Phase 10: SD Card (optional)
+    s_sd_ok = test_sd();
 
 done:
     print_summary();

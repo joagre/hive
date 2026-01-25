@@ -211,3 +211,7 @@ void swo_hex_dump(const uint8_t *data, size_t len) {
     }
     swo_puts("\n");
 }
+
+uint32_t swo_get_ticks(void) {
+    return s_ticks;
+}

@@ -173,7 +173,7 @@ static bool flash_erase_sector(uint8_t sector) {
     return ok;
 }
 
-__attribute__((section(".RamFunc"), noinline)) static void
+__attribute__((section(".ramfunc"), noinline)) static void
 flash_program_words_ram(uint32_t addr, const uint32_t *data, uint32_t words) {
     FLASH->CR = FLASH_CR_PG | FLASH_CR_PSIZE_1;
 

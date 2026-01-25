@@ -40,4 +40,7 @@ void swo_print_result(const char *phase, const char *test, bool passed);
 // Print hex dump
 void swo_hex_dump(const uint8_t *data, size_t len);
 
+// Get current tick count (milliseconds since init)
+uint32_t swo_get_ticks(void);
+
 #endif // BRINGUP_SWO_H

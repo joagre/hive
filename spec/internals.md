@@ -16,6 +16,7 @@ All resource limits are defined at compile-time and require recompilation to cha
 // Feature toggles (set to 0 to disable)
 #define HIVE_ENABLE_NET 1                     // Network I/O subsystem
 #define HIVE_ENABLE_FILE 1                    // File I/O subsystem
+#define HIVE_ENABLE_SD 0                      // SD card support (STM32 only, requires FatFS)
 
 // Resource limits
 #define HIVE_MAX_ACTORS 64                    // Maximum concurrent actors
@@ -36,9 +37,12 @@ All resource limits are defined at compile-time and require recompilation to cha
 // Supervisor limits
 #define HIVE_MAX_SUPERVISOR_CHILDREN 16       // Max children per supervisor
 #define HIVE_MAX_SUPERVISORS 8                // Max concurrent supervisors
+
+// SD card limits (STM32 only, when HIVE_ENABLE_SD=1)
+#define HIVE_MAX_SD_FILES 4                   // Max concurrent open files on SD card
 ```
 
-Feature toggles can also be set via Makefile: `make ENABLE_NET=0 ENABLE_FILE=0`.
+Feature toggles can also be set via Makefile: `make ENABLE_NET=0 ENABLE_FILE=0` or `make ENABLE_SD=1`.
 
 All runtime structures are **statically allocated** based on these limits. Actor stacks use a static arena allocator by default (configurable via `actor_config_t.malloc_stack` for malloc). This ensures:
 - Bounded memory footprint (calculable at link time)
@@ -482,7 +486,7 @@ The runtime uses a Hardware Abstraction Layer (HAL) to isolate platform-specific
 | Event notification | epoll | WFI + interrupt flags |
 | Timer | timerfd + epoll | Software timer wheel (SysTick/TIM) |
 | Network | Non-blocking BSD sockets + epoll | Stubs (future lwIP support) |
-| File | Synchronous POSIX | Flash-backed virtual files |
+| File | Synchronous POSIX | Flash-backed virtual files + optional SD card via FatFS |
 
 ### HAL Headers
 
@@ -494,6 +498,7 @@ include/hal/
   hive_hal_context.h   - Context switching (1 function + struct)
   hive_hal_file.h      - File I/O (8 functions, optional)
   hive_hal_net.h       - Network I/O (10 functions, optional)
+  hive_mount.h         - Mount table types (backend enum, function declarations)
 ```
 
 ### HAL Functions
@@ -504,7 +509,7 @@ include/hal/
 | Event | `init`, `cleanup`, `poll`, `wait`, `register`, `unregister` | Yes |
 | Timer | `init`, `cleanup`, `create`, `cancel`, `get_time`, `advance_time` | Yes |
 | Context | `init` (C), `switch` (asm) | Yes |
-| File | `init`, `cleanup`, `open`, `close`, `read`, `pread`, `write`, `pwrite`, `sync` | Optional |
+| File | `init`, `cleanup`, `open`, `close`, `read`, `pread`, `write`, `pwrite`, `sync`, `mount_available` | Optional |
 | Network | `init`, `cleanup`, `socket`, `bind`, `listen`, `accept`, `connect`, `connect_check`, `close`, `recv`, `send` | Optional |
 
 **Minimum port** - ~15 C functions + 1 assembly function + 1 struct definition
@@ -521,6 +526,8 @@ Platform implementations live in `src/hal/<platform>/`:
 | Context switch | `hal/linux/hive_context_x86_64.S` | `hal/stm32/hive_context_arm_cm.S` |
 | Context struct | `hal/linux/hive_hal_context_defs.h` | `hal/stm32/hive_hal_context_defs.h` |
 | File HAL | (in main HAL) | `hal/stm32/hive_hal_file_stm32.c` |
+| Mount table | `hal/linux/hive_mounts.c` | `hal/stm32/hive_mounts.c` (or board-specific) |
+| SD card driver | N/A | `hal/stm32/spi_sd.c` (conditional, `HIVE_ENABLE_SD`) |
 
 Platform-independent wrappers call HAL functions:
 - `hive_scheduler.c` - Unified scheduler (calls HAL event functions)

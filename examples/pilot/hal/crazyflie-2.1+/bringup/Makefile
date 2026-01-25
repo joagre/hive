@@ -17,7 +17,12 @@ SRCS = bringup_main.c \
        bringup_i2c.c \
        bringup_sensors.c \
        bringup_motors.c \
-       bringup_radio.c
+       bringup_radio.c \
+       bringup_flash.c \
+       bringup_sd.c \
+       bringup_eeprom.c \
+       bringup_deck.c \
+       bringup_leds.c
 
 # Use startup from parent directory
 STARTUP = ../startup_stm32f405.s

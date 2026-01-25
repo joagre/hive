@@ -15,7 +15,7 @@ The Hardware Abstraction Layer (HAL) isolates platform-specific code so that por
 | Context | `hive_hal_context_<platform>.c` | 1 function | Yes |
 | Context | `hive_context_<arch>.S` | 1 function | Yes |
 | Context | `hive_hal_context_defs.h` | 1 struct | Yes |
-| File I/O | (in hal or separate) | 8 functions | Optional |
+| File I/O | (in hal or separate) | 9 functions | Optional |
 | Network | (in hal or separate) | 10 functions | Optional |
 
 **Minimum port** - ~15 functions + 1 assembly function + 1 struct definition
@@ -127,7 +127,7 @@ typedef struct {
 
 ## Optional Functions
 
-### File I/O (8 functions, HIVE_ENABLE_FILE=1)
+### File I/O (9 functions, HIVE_ENABLE_FILE=1)
 
 ```c
 hive_status_t hive_hal_file_init(void);
@@ -139,7 +139,11 @@ hive_status_t hive_hal_file_pread(int fd, void *buf, size_t len, size_t offset, 
 hive_status_t hive_hal_file_write(int fd, const void *buf, size_t len, size_t *bytes_written);
 hive_status_t hive_hal_file_pwrite(int fd, const void *buf, size_t len, size_t offset, size_t *bytes_written);
 hive_status_t hive_hal_file_sync(int fd);
+hive_status_t hive_hal_file_mount_available(const char *path);
 ```
+
+**Implementation notes**
+- `mount_available`: Check if mount point for path is ready (useful for removable media like SD cards). Return `HIVE_OK` if ready, `HIVE_ERR_INVALID` if no mount for path, `HIVE_ERR_IO` if mount exists but backend unavailable.
 
 ### Network I/O (10 functions, HIVE_ENABLE_NET=1)
 

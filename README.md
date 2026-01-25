@@ -594,6 +594,7 @@ See [examples/pilot/README.md](examples/pilot/README.md) for build instructions 
 - `hive_file_write(fd, buf, len, bytes_written)` - Write to file
 - `hive_file_pwrite(fd, buf, len, offset, bytes_written)` - Write to file at offset
 - `hive_file_sync(fd)` - Sync file to disk
+- `hive_file_mount_available(path)` - Check if mount point is ready (useful for SD card detection)
 
 **Use `HIVE_O_*` flags** for cross-platform compatibility:
 - `HIVE_O_RDONLY`, `HIVE_O_WRONLY`, `HIVE_O_RDWR`
@@ -611,6 +612,12 @@ flash before continuing. Virtual file paths are hardcoded (`/log`, `/config`), e
 -DHIVE_FILE_RING_SIZE=4096         // RAM ring buffer size
 // Optional: -DHIVE_VFILE_CONFIG_BASE/SIZE/SECTOR enables "/config"
 ```
+
+**STM32 SD Card** (optional) - Build with `ENABLE_SD=1` to enable SD card support via SPI using FatFS.
+SD card files are accessed via the `/sd` mount point. Use `hive_file_mount_available("/sd")` to check
+if the card is present before opening files. See [spec/api.md](spec/api.md#stm32-sd-card-support-optional)
+for details and limitations.
+
 See `examples/pilot/Makefile.crazyflie-2.1+` for a complete example and [spec/api.md](spec/api.md#file-api) for full platform differences.
 
 ### Logging
@@ -743,7 +750,10 @@ make PLATFORM=stm32 CC=arm-none-eabi-gcc
 # Disable optional subsystems
 make ENABLE_NET=0 ENABLE_FILE=0
 
-# STM32 defaults to ENABLE_NET=0 ENABLE_FILE=1
+# STM32 with SD card support (requires FatFS library)
+make PLATFORM=stm32 ENABLE_SD=1
+
+# STM32 defaults to ENABLE_NET=0 ENABLE_FILE=1 ENABLE_SD=0
 ```
 
 ## Testing
