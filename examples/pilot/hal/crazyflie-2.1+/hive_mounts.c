@@ -1,17 +1,35 @@
-// STM32 Mount Table Implementation
+// Crazyflie 2.1+ Mount Table Implementation
 //
-// Configures flash-backed virtual files from -D flags.
-// SD card mounts are added when HIVE_ENABLE_SD is defined.
+// Board-specific mount configuration for Crazyflie 2.1+ with optional
+// Micro SD Card Deck.
+//
+// Flash mounts configured via -D flags in Makefile.crazyflie-2.1+:
+//   HIVE_VFILE_LOG_BASE, HIVE_VFILE_LOG_SIZE, HIVE_VFILE_LOG_SECTOR
+//
+// SD card deck configuration:
+//   SPI3 (PB3=SCK, PB4=MISO, PB5=MOSI)
+//   CS: PB6
+//
+// Reference: https://www.bitcraze.io/products/micro-sd-card-deck/
 
 #include "hive_mount_stm32.h"
 #include <string.h>
 #include <stdbool.h>
 
 // ----------------------------------------------------------------------------
+// Crazyflie Micro SD Card Deck Configuration
+// ----------------------------------------------------------------------------
+
+// SD card deck uses SPI3 with CS on PB6
+// Port numbering: 0=GPIOA, 1=GPIOB, 2=GPIOC, 3=GPIOD
+#define CF_SD_SPI_ID 3  // SPI3
+#define CF_SD_CS_PORT 1 // GPIOB
+#define CF_SD_CS_PIN 6  // Pin 6
+
+// ----------------------------------------------------------------------------
 // Mount Table
 // ----------------------------------------------------------------------------
 
-// Build mount table from -D flags
 static const hive_mount_t g_mounts[] = {
 #ifdef HIVE_VFILE_LOG_BASE
     {
@@ -37,15 +55,15 @@ static const hive_mount_t g_mounts[] = {
             },
     },
 #endif
-#if HIVE_ENABLE_SD && defined(HIVE_SD_SPI_ID)
+#if HIVE_ENABLE_SD
     {
         .prefix = "/sd",
         .backend = HIVE_BACKEND_SD,
         .sd =
             {
-                .spi_id = HIVE_SD_SPI_ID,
-                .cs_port = HIVE_SD_CS_PORT,
-                .cs_pin = HIVE_SD_CS_PIN,
+                .spi_id = CF_SD_SPI_ID,
+                .cs_port = CF_SD_CS_PORT,
+                .cs_pin = CF_SD_CS_PIN,
             },
     },
 #endif

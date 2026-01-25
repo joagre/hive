@@ -56,6 +56,13 @@ CFLAGS += -DHIVE_VFILE_LOG_SIZE=131072
 CFLAGS += -DHIVE_VFILE_LOG_SECTOR=8
 CFLAGS += '-DHIVE_FILE_RING_SIZE=(8*1024)'
 
+# SD card support (optional - requires Micro SD Card Deck)
+ENABLE_SD ?= 0
+ifeq ($(ENABLE_SD),1)
+  CFLAGS += -DHIVE_ENABLE_SD=1
+  CFLAGS += -DHIVE_MAX_SD_FILES=4
+endif
+
 # Linker flags
 LDSCRIPT := $(HAL_DIR)/stm32f405_flash.ld
 LDFLAGS := $(MCU) -T$(LDSCRIPT)
@@ -89,17 +96,25 @@ HIVE_CFLAGS_EXPORT += -DHIVE_VFILE_LOG_BASE=0x08080000
 HIVE_CFLAGS_EXPORT += -DHIVE_VFILE_LOG_SIZE=131072
 HIVE_CFLAGS_EXPORT += -DHIVE_VFILE_LOG_SECTOR=8
 HIVE_CFLAGS_EXPORT += '-DHIVE_FILE_RING_SIZE=(8*1024)'
+ifeq ($(ENABLE_SD),1)
+  HIVE_CFLAGS_EXPORT += -DHIVE_ENABLE_SD=1
+  HIVE_CFLAGS_EXPORT += -DHIVE_MAX_SD_FILES=4
+endif
 
 # Targets
 .PHONY: all clean flash size
 
 all: $(BUILD_DIR)/$(TARGET).elf $(BUILD_DIR)/$(TARGET).hex $(BUILD_DIR)/$(TARGET).bin size
 
+# Board-specific mount configuration
+BOARD_MOUNTS_SRC := $(abspath $(HAL_DIR)/hive_mounts.c)
+
 # Build hive library (delegate to src/Makefile.stm32)
 $(HIVE_LIB):
 	@$(MAKE) -C $(HIVE_SRC_DIR) -f Makefile.stm32 \
 		BUILD_DIR=$(abspath $(BUILD_DIR)) \
 		CC=$(CC) AR=$(AR) \
+		BOARD_MOUNTS_SRC=$(BOARD_MOUNTS_SRC) \
 		CFLAGS="$(HIVE_CFLAGS_EXPORT)"
 
 # Build HAL library (delegate to HAL Makefile)
@@ -153,6 +168,9 @@ help:
 	@echo ""
 	@echo "  LOG_LEVEL=<level>         Log verbosity (default: INFO)"
 	@echo "      TRACE, DEBUG, INFO, WARN, ERROR, NONE"
+	@echo ""
+	@echo "  ENABLE_SD=<0|1>           SD card support (default: 0)"
+	@echo "      Requires Micro SD Card Deck attached"
 	@echo ""
 	@echo "Hardware Info:"
 	@echo "  MCU:        STM32F405RG (Cortex-M4F, 168MHz)"

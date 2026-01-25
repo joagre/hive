@@ -39,4 +39,11 @@ HIVE_HAL_STM32_SRCS := \
 
 HIVE_HAL_STM32_FILE_SRCS := hal/stm32/hive_hal_file_stm32.c
 
+# SD card support sources (conditional on HIVE_ENABLE_SD)
+HIVE_HAL_STM32_SD_SRCS := hal/stm32/spi_sd.c
+
+# FatFS library sources (conditional on HIVE_ENABLE_SD)
+# Note: ff.c must be fetched separately - see lib/fatfs/README.md
+HIVE_FATFS_SRCS := diskio.c
+
 HIVE_HAL_STM32_ASM := hal/stm32/hive_context_arm_cm.S

@@ -1,20 +1,23 @@
 // Hardware Abstraction Layer - STM32 File I/O Implementation
 //
-// Flash-backed virtual file system for STM32.
-// Maps virtual paths (/log, /config) to flash sectors.
-// Uses ring buffer for efficient writes.
+// Multi-backend file system for STM32:
+// - FLASH: Internal flash sectors (ring-buffered writes)
+// - SD: SD card via FatFS (when HIVE_ENABLE_SD is defined)
 //
-// Board-specific flash configuration via -D flags:
-// - HIVE_VFILE_LOG_BASE, HIVE_VFILE_LOG_SIZE, HIVE_VFILE_LOG_SECTOR
-// - HIVE_VFILE_CONFIG_BASE, HIVE_VFILE_CONFIG_SIZE, HIVE_VFILE_CONFIG_SECTOR
+// Uses mount table for path-based backend selection.
+// File descriptors encode backend type for dispatch.
 
 #include "hal/hive_hal_file.h"
+#include "hive_mount_stm32.h"
 #include "hive_file.h"
 #include "hive_internal.h"
-#include "hive_static_config.h"
 #include <string.h>
 #include <stdbool.h>
 #include <stdint.h>
+
+// ============================================================================
+// Flash Backend
+// ============================================================================
 
 // STM32 Flash register definitions
 // These are standard for STM32F4xx - included via CMSIS headers in real builds
@@ -62,65 +65,33 @@ typedef struct {
 #define FLASH_CR_LOCK (1UL << 31)   // Lock
 
 // ----------------------------------------------------------------------------
-// Virtual File Table
+// Flash File State
 // ----------------------------------------------------------------------------
 
 typedef struct {
-    const char *path;
-    uint32_t flash_base;
-    uint32_t flash_size;
-    uint8_t sector;
-    // Runtime state
-    uint32_t write_pos;
+    const hive_mount_t *mount; // Mount configuration (NULL = unused)
+    uint32_t write_pos;        // Current write position
     bool opened;
     bool erased_ok;
     bool write_mode;
-} vfile_t;
+} flash_file_t;
 
-// Build virtual file table from -D flags
-static vfile_t s_vfiles[] = {
-#ifdef HIVE_VFILE_LOG_BASE
-    {
-        .path = "/log",
-        .flash_base = HIVE_VFILE_LOG_BASE,
-        .flash_size = HIVE_VFILE_LOG_SIZE,
-        .sector = HIVE_VFILE_LOG_SECTOR,
-        .write_pos = 0,
-        .opened = false,
-        .erased_ok = false,
-        .write_mode = false,
-    },
-#endif
-#ifdef HIVE_VFILE_CONFIG_BASE
-    {
-        .path = "/config",
-        .flash_base = HIVE_VFILE_CONFIG_BASE,
-        .flash_size = HIVE_VFILE_CONFIG_SIZE,
-        .sector = HIVE_VFILE_CONFIG_SECTOR,
-        .write_pos = 0,
-        .opened = false,
-        .erased_ok = false,
-        .write_mode = false,
-    },
-#endif
-};
-
-#define VFILE_COUNT (sizeof(s_vfiles) / sizeof(s_vfiles[0]))
+static flash_file_t s_flash_files[HIVE_MAX_FLASH_FILES];
 
 // ----------------------------------------------------------------------------
 // Ring Buffer for Deferred Writes
 // ----------------------------------------------------------------------------
 
 static uint8_t s_ring_buf[HIVE_FILE_RING_SIZE];
-static volatile uint32_t s_ring_head; // Write position (producers)
-static volatile uint32_t s_ring_tail; // Read position (sync)
+static volatile uint32_t s_ring_head; // Write position
+static volatile uint32_t s_ring_tail; // Read position
 
 // Staging buffer for flash block commits
 static uint8_t s_staging[HIVE_FILE_BLOCK_SIZE];
 static uint32_t s_staging_len;
 
-// Current file being written (for ring buffer association)
-static int s_ring_fd = -1;
+// Current file being written (index into s_flash_files, or -1)
+static int s_ring_file_idx = -1;
 
 // ----------------------------------------------------------------------------
 // Ring Buffer Operations
@@ -131,7 +102,6 @@ static inline uint32_t ring_used(void) {
 }
 
 static inline uint32_t ring_free(void) {
-    // Leave one byte unused to distinguish full from empty
     return HIVE_FILE_RING_SIZE - 1 - ring_used();
 }
 
@@ -187,64 +157,48 @@ static void flash_clear_errors(void) {
     FLASH->SR = FLASH_SR_ERRORS;
 }
 
-// Erase a flash sector (blocking, takes 1-4 seconds for 128KB sector!)
 static bool flash_erase_sector(uint8_t sector) {
     flash_unlock();
     flash_clear_errors();
     flash_wait_bsy();
 
-    // Set sector erase mode and sector number
     FLASH->CR = FLASH_CR_SER | ((uint32_t)sector << FLASH_CR_SNB_Pos);
     FLASH->CR |= FLASH_CR_STRT;
 
-    // Wait for completion (blocking!)
     flash_wait_bsy();
 
-    // Check for errors
     bool ok = (FLASH->SR & FLASH_SR_ERRORS) == 0;
 
     flash_lock();
     return ok;
 }
 
-// Program words to flash - MUST execute from RAM during write
-// This function is placed in .RamFunc section (copied to RAM at startup)
 __attribute__((section(".RamFunc"), noinline)) static void
 flash_program_words_ram(uint32_t addr, const uint32_t *data, uint32_t words) {
-    // Enable programming mode with 32-bit parallelism
     FLASH->CR = FLASH_CR_PG | FLASH_CR_PSIZE_1;
 
     for (uint32_t i = 0; i < words; i++) {
-        // Write word
         *(volatile uint32_t *)(addr + i * 4) = data[i];
-        // Wait for completion
         while (FLASH->SR & FLASH_SR_BSY)
             ;
     }
 
-    // Disable programming mode
     FLASH->CR &= ~FLASH_CR_PG;
 }
 
-// Write a block to flash (with IRQ masking)
 static bool flash_write_block(uint32_t addr, const void *data, uint32_t len) {
     if (len == 0 || (len & 3) != 0) {
-        return false; // Must be word-aligned
+        return false;
     }
 
     flash_unlock();
     flash_clear_errors();
     flash_wait_bsy();
 
-    // Disable interrupts during flash programming
-    // This keeps the critical section short (~1ms for 256 bytes)
     __asm volatile("cpsid i" ::: "memory");
-
     flash_program_words_ram(addr, (const uint32_t *)data, len / 4);
-
     __asm volatile("cpsie i" ::: "memory");
 
-    // Check for errors
     bool ok = (FLASH->SR & FLASH_SR_ERRORS) == 0;
 
     flash_lock();
@@ -257,7 +211,6 @@ static bool flash_write_block(uint32_t addr, const void *data, uint32_t len) {
 
 static void staging_reset(void) {
     s_staging_len = 0;
-    // Fill with 0xFF (erased flash state)
     memset(s_staging, 0xFF, HIVE_FILE_BLOCK_SIZE);
 }
 
@@ -273,40 +226,36 @@ static void staging_append(const uint8_t *data, size_t len) {
     s_staging_len += len;
 }
 
-// Commit staging buffer to flash
-static bool staging_commit(vfile_t *vf) {
+static bool staging_commit(flash_file_t *ff) {
     if (s_staging_len == 0) {
-        return true; // Nothing to commit
+        return true;
     }
 
-    // Check if we have space in flash
-    if (vf->write_pos + HIVE_FILE_BLOCK_SIZE > vf->flash_size) {
-        return false; // Flash region full
+    uint32_t flash_size = hive_mount_flash_size(ff->mount);
+    if (ff->write_pos + HIVE_FILE_BLOCK_SIZE > flash_size) {
+        return false;
     }
 
-    // Write block to flash
-    uint32_t addr = vf->flash_base + vf->write_pos;
+    uint32_t addr = hive_mount_flash_base(ff->mount) + ff->write_pos;
     bool ok = flash_write_block(addr, s_staging, HIVE_FILE_BLOCK_SIZE);
 
     if (ok) {
-        vf->write_pos += HIVE_FILE_BLOCK_SIZE;
+        ff->write_pos += HIVE_FILE_BLOCK_SIZE;
     }
 
     staging_reset();
     return ok;
 }
 
-// Flush ring buffer contents to flash via staging buffer
-// Returns false if flash is full or write error occurs
-static bool flush_ring_to_flash(vfile_t *vf) {
+static bool flush_ring_to_flash(flash_file_t *ff) {
     uint8_t temp[64];
     while (!ring_empty()) {
         size_t n = ring_pop(temp, sizeof(temp));
 
         for (size_t i = 0; i < n; i++) {
             if (staging_space() == 0) {
-                if (!staging_commit(vf)) {
-                    return false; // Flash full or write error
+                if (!staging_commit(ff)) {
+                    return false;
                 }
             }
             staging_append(&temp[i], 1);
@@ -316,192 +265,174 @@ static bool flush_ring_to_flash(vfile_t *vf) {
 }
 
 // ----------------------------------------------------------------------------
-// Helper Functions
+// Flash Backend API
 // ----------------------------------------------------------------------------
 
-// Find virtual file by path
-static vfile_t *find_vfile(const char *path) {
-    for (size_t i = 0; i < VFILE_COUNT; i++) {
-        if (strcmp(s_vfiles[i].path, path) == 0) {
-            return &s_vfiles[i];
-        }
-    }
-    return NULL;
-}
-
-// Get virtual file by fd (fd = index into s_vfiles)
-static vfile_t *get_vfile(int fd) {
-    if (fd < 0 || (size_t)fd >= VFILE_COUNT) {
-        return NULL;
-    }
-    return &s_vfiles[fd];
-}
-
-// ----------------------------------------------------------------------------
-// HAL File API Implementation
-// ----------------------------------------------------------------------------
-
-hive_status_t hive_hal_file_init(void) {
-    // Reset ring buffer
+static void flash_init(void) {
     s_ring_head = 0;
     s_ring_tail = 0;
-    s_ring_fd = -1;
-
-    // Reset staging
+    s_ring_file_idx = -1;
     staging_reset();
 
-    // Reset virtual file state
-    for (size_t i = 0; i < VFILE_COUNT; i++) {
-        s_vfiles[i].write_pos = 0;
-        s_vfiles[i].opened = false;
-        s_vfiles[i].erased_ok = false;
-        s_vfiles[i].write_mode = false;
-    }
-
-    return HIVE_SUCCESS;
-}
-
-void hive_hal_file_cleanup(void) {
-    // Close any open files
-    for (size_t i = 0; i < VFILE_COUNT; i++) {
-        s_vfiles[i].opened = false;
+    for (int i = 0; i < HIVE_MAX_FLASH_FILES; i++) {
+        s_flash_files[i].mount = NULL;
+        s_flash_files[i].opened = false;
     }
 }
 
-hive_status_t hive_hal_file_open(const char *path, int flags, int mode,
-                                 int *fd_out) {
-    (void)mode; // Not used for flash files
+static void flash_cleanup(void) {
+    for (int i = 0; i < HIVE_MAX_FLASH_FILES; i++) {
+        s_flash_files[i].opened = false;
+    }
+}
 
-    vfile_t *vf = find_vfile(path);
-    if (!vf) {
-        return HIVE_ERROR(HIVE_ERR_INVALID, "unknown virtual file path");
+static hive_status_t flash_open(const hive_mount_t *mount, int flags,
+                                int *fd_out) {
+    // Find free slot
+    int slot = -1;
+    for (int i = 0; i < HIVE_MAX_FLASH_FILES; i++) {
+        if (!s_flash_files[i].opened) {
+            slot = i;
+            break;
+        }
+    }
+    if (slot < 0) {
+        return HIVE_ERROR(HIVE_ERR_NOMEM, "no free flash file slots");
     }
 
-    if (vf->opened) {
-        return HIVE_ERROR(HIVE_ERR_INVALID, "file already open");
+    flash_file_t *ff = &s_flash_files[slot];
+
+    // Check if already open (same mount)
+    for (int i = 0; i < HIVE_MAX_FLASH_FILES; i++) {
+        if (s_flash_files[i].opened && s_flash_files[i].mount == mount) {
+            return HIVE_ERROR(HIVE_ERR_INVALID, "file already open");
+        }
     }
 
-    // Determine access mode
     int access = flags & 0x0003;
 
-    // STM32 flag restrictions:
-    // - HIVE_O_RDWR not supported (read() doesn't work, only pread())
-    // - HIVE_O_WRONLY requires HIVE_O_TRUNC (flash must be erased first)
-    // - HIVE_O_CREAT and HIVE_O_APPEND are silently ignored
     if (access == HIVE_O_RDWR) {
         return HIVE_ERROR(HIVE_ERR_INVALID,
-                          "HIVE_O_RDWR not supported on STM32; use "
-                          "HIVE_O_RDONLY or HIVE_O_WRONLY");
+                          "HIVE_O_RDWR not supported; use RDONLY or WRONLY");
     }
 
     bool write_mode = (access == HIVE_O_WRONLY);
 
     if (write_mode && !(flags & HIVE_O_TRUNC)) {
-        return HIVE_ERROR(
-            HIVE_ERR_INVALID,
-            "HIVE_O_TRUNC required for flash writes (must erase sector first)");
+        return HIVE_ERROR(HIVE_ERR_INVALID,
+                          "HIVE_O_TRUNC required for flash writes");
     }
 
-    // Handle TRUNC flag - erase the sector
     if ((flags & HIVE_O_TRUNC) && write_mode) {
-        if (!flash_erase_sector(vf->sector)) {
+        if (!flash_erase_sector(hive_mount_flash_sector(mount))) {
             return HIVE_ERROR(HIVE_ERR_IO, "flash erase failed");
         }
-        vf->erased_ok = true;
-        vf->write_pos = 0;
+        ff->erased_ok = true;
+        ff->write_pos = 0;
+    } else {
+        ff->erased_ok = false;
+        ff->write_pos = 0;
     }
 
-    vf->opened = true;
-    vf->write_mode = write_mode;
+    ff->mount = mount;
+    ff->opened = true;
+    ff->write_mode = write_mode;
 
-    // fd is the index into s_vfiles
-    *fd_out = (int)(vf - s_vfiles);
-
-    // If this is write mode, associate ring buffer with this fd
     if (write_mode) {
-        s_ring_fd = *fd_out;
+        s_ring_file_idx = slot;
         s_ring_head = 0;
         s_ring_tail = 0;
         staging_reset();
     }
 
+    *fd_out = FD_MAKE(HIVE_BACKEND_FLASH, slot);
     return HIVE_SUCCESS;
 }
 
-hive_status_t hive_hal_file_close(int fd) {
-    vfile_t *vf = get_vfile(fd);
-    if (!vf || !vf->opened) {
-        return HIVE_ERROR(HIVE_ERR_INVALID, "invalid fd");
+static hive_status_t flash_close(int index) {
+    if (index < 0 || index >= HIVE_MAX_FLASH_FILES) {
+        return HIVE_ERROR(HIVE_ERR_INVALID, "invalid flash fd");
     }
 
-    // Final sync if write mode
-    if (vf->write_mode && s_ring_fd == fd) {
-        hive_hal_file_sync(fd);
-        s_ring_fd = -1;
+    flash_file_t *ff = &s_flash_files[index];
+    if (!ff->opened) {
+        return HIVE_ERROR(HIVE_ERR_INVALID, "file not open");
     }
 
-    vf->opened = false;
-    vf->write_mode = false;
+    if (ff->write_mode && s_ring_file_idx == index) {
+        // Sync before close
+        if (ff->erased_ok) {
+            flush_ring_to_flash(ff);
+            if (s_staging_len > 0) {
+                staging_commit(ff);
+            }
+        }
+        s_ring_file_idx = -1;
+    }
+
+    ff->opened = false;
+    ff->mount = NULL;
 
     return HIVE_SUCCESS;
 }
 
-hive_status_t hive_hal_file_read(int fd, void *buf, size_t len,
-                                 size_t *bytes_read) {
-    (void)fd;
+static hive_status_t flash_read(int index, void *buf, size_t len,
+                                size_t *bytes_read) {
+    (void)index;
     (void)buf;
     (void)len;
-
-    // For now, read is not implemented (would need read position tracking)
-    // This is primarily a write-optimized implementation for logging
     *bytes_read = 0;
-    return HIVE_ERROR(HIVE_ERR_INVALID, "read not implemented for flash files");
+    return HIVE_ERROR(HIVE_ERR_INVALID, "read not supported for flash");
 }
 
-hive_status_t hive_hal_file_pread(int fd, void *buf, size_t len, size_t offset,
-                                  size_t *bytes_read) {
-    vfile_t *vf = get_vfile(fd);
-    if (!vf || !vf->opened) {
-        return HIVE_ERROR(HIVE_ERR_INVALID, "invalid fd");
+static hive_status_t flash_pread(int index, void *buf, size_t len,
+                                 size_t offset, size_t *bytes_read) {
+    if (index < 0 || index >= HIVE_MAX_FLASH_FILES) {
+        return HIVE_ERROR(HIVE_ERR_INVALID, "invalid flash fd");
     }
 
-    // Clamp read to available data
-    if (offset >= vf->flash_size) {
+    flash_file_t *ff = &s_flash_files[index];
+    if (!ff->opened) {
+        return HIVE_ERROR(HIVE_ERR_INVALID, "file not open");
+    }
+
+    uint32_t flash_size = hive_mount_flash_size(ff->mount);
+    if (offset >= flash_size) {
         *bytes_read = 0;
         return HIVE_SUCCESS;
     }
 
-    size_t avail = vf->flash_size - offset;
+    size_t avail = flash_size - offset;
     if (len > avail) {
         len = avail;
     }
 
-    // Direct read from flash memory
-    memcpy(buf, (const void *)(vf->flash_base + offset), len);
+    uint32_t flash_base = hive_mount_flash_base(ff->mount);
+    memcpy(buf, (const void *)(flash_base + offset), len);
     *bytes_read = len;
 
     return HIVE_SUCCESS;
 }
 
-hive_status_t hive_hal_file_write(int fd, const void *buf, size_t len,
-                                  size_t *bytes_written) {
-    vfile_t *vf = get_vfile(fd);
-    if (!vf || !vf->opened) {
-        return HIVE_ERROR(HIVE_ERR_INVALID, "invalid fd");
+static hive_status_t flash_write(int index, const void *buf, size_t len,
+                                 size_t *bytes_written) {
+    if (index < 0 || index >= HIVE_MAX_FLASH_FILES) {
+        return HIVE_ERROR(HIVE_ERR_INVALID, "invalid flash fd");
     }
 
-    if (!vf->write_mode) {
+    flash_file_t *ff = &s_flash_files[index];
+    if (!ff->opened) {
+        return HIVE_ERROR(HIVE_ERR_INVALID, "file not open");
+    }
+
+    if (!ff->write_mode) {
         return HIVE_ERROR(HIVE_ERR_INVALID, "file not opened for writing");
     }
 
-    if (!vf->erased_ok) {
-        return HIVE_ERROR(HIVE_ERR_INVALID,
-                          "flash not erased (use HIVE_O_TRUNC)");
+    if (!ff->erased_ok) {
+        return HIVE_ERROR(HIVE_ERR_INVALID, "flash not erased");
     }
 
-    // Write data to ring buffer, flushing to flash when buffer is full.
-    // Most writes complete immediately (O(1)). When buffer fills up, we flush
-    // to flash (blocking) to make room, ensuring no data loss.
     const uint8_t *data = (const uint8_t *)buf;
     size_t remaining = len;
     *bytes_written = 0;
@@ -513,9 +444,7 @@ hive_status_t hive_hal_file_write(int fd, const void *buf, size_t len,
         remaining -= pushed;
 
         if (remaining > 0) {
-            // Ring buffer is full - flush to flash to make room
-            if (!flush_ring_to_flash(vf)) {
-                // Flash is full or write error - return partial write
+            if (!flush_ring_to_flash(ff)) {
                 return (*bytes_written > 0)
                            ? HIVE_SUCCESS
                            : HIVE_ERROR(HIVE_ERR_IO, "flash region full");
@@ -526,42 +455,497 @@ hive_status_t hive_hal_file_write(int fd, const void *buf, size_t len,
     return HIVE_SUCCESS;
 }
 
-hive_status_t hive_hal_file_pwrite(int fd, const void *buf, size_t len,
-                                   size_t offset, size_t *bytes_written) {
-    // pwrite not supported for ring-buffered flash writes
-    (void)fd;
+static hive_status_t flash_pwrite(int index, const void *buf, size_t len,
+                                  size_t offset, size_t *bytes_written) {
+    (void)index;
     (void)buf;
     (void)len;
     (void)offset;
     (void)bytes_written;
-    return HIVE_ERROR(HIVE_ERR_INVALID, "pwrite not supported for flash files");
+    return HIVE_ERROR(HIVE_ERR_INVALID, "pwrite not supported for flash");
 }
 
-hive_status_t hive_hal_file_sync(int fd) {
-    vfile_t *vf = get_vfile(fd);
-    if (!vf || !vf->opened) {
-        return HIVE_ERROR(HIVE_ERR_INVALID, "invalid fd");
+static hive_status_t flash_sync(int index) {
+    if (index < 0 || index >= HIVE_MAX_FLASH_FILES) {
+        return HIVE_ERROR(HIVE_ERR_INVALID, "invalid flash fd");
     }
 
-    if (!vf->write_mode || s_ring_fd != fd) {
-        return HIVE_SUCCESS; // Nothing to sync
+    flash_file_t *ff = &s_flash_files[index];
+    if (!ff->opened) {
+        return HIVE_ERROR(HIVE_ERR_INVALID, "file not open");
     }
 
-    if (!vf->erased_ok) {
+    if (!ff->write_mode || s_ring_file_idx != index) {
+        return HIVE_SUCCESS;
+    }
+
+    if (!ff->erased_ok) {
         return HIVE_ERROR(HIVE_ERR_INVALID, "flash not erased");
     }
 
-    // Drain ring buffer to staging buffer, then to flash
-    if (!flush_ring_to_flash(vf)) {
+    if (!flush_ring_to_flash(ff)) {
         return HIVE_ERROR(HIVE_ERR_IO, "flash write failed");
     }
 
-    // Commit any remaining data in staging (padded with 0xFF)
     if (s_staging_len > 0) {
-        if (!staging_commit(vf)) {
+        if (!staging_commit(ff)) {
             return HIVE_ERROR(HIVE_ERR_IO, "flash write failed");
         }
     }
 
     return HIVE_SUCCESS;
+}
+
+// ============================================================================
+// SD Backend (FatFS)
+// ============================================================================
+
+#if HIVE_ENABLE_SD
+
+#include "spi_sd.h"
+#include "ff.h"
+
+// FatFS filesystem and file handles
+static FATFS s_fatfs;
+static FIL s_sd_files[HIVE_MAX_SD_FILES];
+static bool s_sd_file_used[HIVE_MAX_SD_FILES];
+static bool s_sd_initialized = false;
+
+// Convert HIVE flags to FatFS mode
+static BYTE hive_flags_to_fatfs(int flags) {
+    BYTE mode = 0;
+    int access = flags & 0x0003;
+
+    if (access == HIVE_O_RDONLY) {
+        mode = FA_READ;
+    } else if (access == HIVE_O_WRONLY) {
+        mode = FA_WRITE;
+    } else if (access == HIVE_O_RDWR) {
+        mode = FA_READ | FA_WRITE;
+    }
+
+    if (flags & HIVE_O_CREAT) {
+        mode |= FA_OPEN_ALWAYS;
+    } else {
+        mode |= FA_OPEN_EXISTING;
+    }
+
+    if (flags & HIVE_O_TRUNC) {
+        mode |= FA_CREATE_ALWAYS;
+    }
+
+    if (flags & HIVE_O_APPEND) {
+        mode |= FA_OPEN_APPEND;
+    }
+
+    return mode;
+}
+
+static void sd_init(void) {
+    for (int i = 0; i < HIVE_MAX_SD_FILES; i++) {
+        s_sd_file_used[i] = false;
+    }
+    s_sd_initialized = false;
+}
+
+static void sd_cleanup(void) {
+    // Close any open files
+    for (int i = 0; i < HIVE_MAX_SD_FILES; i++) {
+        if (s_sd_file_used[i]) {
+            f_close(&s_sd_files[i]);
+            s_sd_file_used[i] = false;
+        }
+    }
+
+    // Unmount FatFS
+    if (s_sd_initialized) {
+        f_mount(NULL, "", 0);
+        s_sd_initialized = false;
+    }
+}
+
+// Initialize SD card on first access
+static hive_status_t sd_ensure_init(const hive_mount_t *mount) {
+    if (s_sd_initialized) {
+        return HIVE_SUCCESS;
+    }
+
+    // Configure SPI driver with mount settings
+    spi_sd_config_t cfg = {
+        .spi_id = hive_mount_sd_spi(mount),
+        .cs_port = hive_mount_sd_cs_port(mount),
+        .cs_pin = hive_mount_sd_cs_pin(mount),
+    };
+    spi_sd_configure(&cfg);
+
+    // Check card presence
+    if (!spi_sd_is_present()) {
+        return HIVE_ERROR(HIVE_ERR_IO, "SD card not present");
+    }
+
+    // Mount FatFS
+    FRESULT res = f_mount(&s_fatfs, "", 1); // Force mount
+    if (res != FR_OK) {
+        return HIVE_ERROR(HIVE_ERR_IO, "SD card mount failed");
+    }
+
+    s_sd_initialized = true;
+    return HIVE_SUCCESS;
+}
+
+static hive_status_t sd_open(const hive_mount_t *mount, const char *subpath,
+                             int flags, int *fd_out) {
+    // Initialize SD if needed
+    hive_status_t status = sd_ensure_init(mount);
+    if (HIVE_FAILED(status)) {
+        return status;
+    }
+
+    // Find free slot
+    int slot = -1;
+    for (int i = 0; i < HIVE_MAX_SD_FILES; i++) {
+        if (!s_sd_file_used[i]) {
+            slot = i;
+            break;
+        }
+    }
+    if (slot < 0) {
+        return HIVE_ERROR(HIVE_ERR_NOMEM, "no free SD file slots");
+    }
+
+    // Skip leading slash in subpath
+    if (subpath && subpath[0] == '/') {
+        subpath++;
+    }
+
+    // Open file
+    BYTE mode = hive_flags_to_fatfs(flags);
+    FRESULT res = f_open(&s_sd_files[slot], subpath, mode);
+    if (res != FR_OK) {
+        if (res == FR_NO_FILE || res == FR_NO_PATH) {
+            return HIVE_ERROR(HIVE_ERR_INVALID, "file not found");
+        }
+        return HIVE_ERROR(HIVE_ERR_IO, "f_open failed");
+    }
+
+    s_sd_file_used[slot] = true;
+    *fd_out = FD_MAKE(HIVE_BACKEND_SD, slot);
+    return HIVE_SUCCESS;
+}
+
+static hive_status_t sd_close(int index) {
+    if (index < 0 || index >= HIVE_MAX_SD_FILES) {
+        return HIVE_ERROR(HIVE_ERR_INVALID, "invalid SD fd");
+    }
+
+    if (!s_sd_file_used[index]) {
+        return HIVE_ERROR(HIVE_ERR_INVALID, "file not open");
+    }
+
+    FRESULT res = f_close(&s_sd_files[index]);
+    s_sd_file_used[index] = false;
+
+    if (res != FR_OK) {
+        return HIVE_ERROR(HIVE_ERR_IO, "f_close failed");
+    }
+
+    return HIVE_SUCCESS;
+}
+
+static hive_status_t sd_read(int index, void *buf, size_t len,
+                             size_t *bytes_read) {
+    if (index < 0 || index >= HIVE_MAX_SD_FILES) {
+        return HIVE_ERROR(HIVE_ERR_INVALID, "invalid SD fd");
+    }
+
+    if (!s_sd_file_used[index]) {
+        return HIVE_ERROR(HIVE_ERR_INVALID, "file not open");
+    }
+
+    UINT br;
+    FRESULT res = f_read(&s_sd_files[index], buf, len, &br);
+    *bytes_read = br;
+
+    if (res != FR_OK) {
+        return HIVE_ERROR(HIVE_ERR_IO, "f_read failed");
+    }
+
+    return HIVE_SUCCESS;
+}
+
+static hive_status_t sd_pread(int index, void *buf, size_t len, size_t offset,
+                              size_t *bytes_read) {
+    if (index < 0 || index >= HIVE_MAX_SD_FILES) {
+        return HIVE_ERROR(HIVE_ERR_INVALID, "invalid SD fd");
+    }
+
+    if (!s_sd_file_used[index]) {
+        return HIVE_ERROR(HIVE_ERR_INVALID, "file not open");
+    }
+
+    // Seek to offset
+    FRESULT res = f_lseek(&s_sd_files[index], offset);
+    if (res != FR_OK) {
+        *bytes_read = 0;
+        return HIVE_ERROR(HIVE_ERR_IO, "f_lseek failed");
+    }
+
+    // Read data
+    UINT br;
+    res = f_read(&s_sd_files[index], buf, len, &br);
+    *bytes_read = br;
+
+    if (res != FR_OK) {
+        return HIVE_ERROR(HIVE_ERR_IO, "f_read failed");
+    }
+
+    return HIVE_SUCCESS;
+}
+
+static hive_status_t sd_write(int index, const void *buf, size_t len,
+                              size_t *bytes_written) {
+    if (index < 0 || index >= HIVE_MAX_SD_FILES) {
+        return HIVE_ERROR(HIVE_ERR_INVALID, "invalid SD fd");
+    }
+
+    if (!s_sd_file_used[index]) {
+        return HIVE_ERROR(HIVE_ERR_INVALID, "file not open");
+    }
+
+    UINT bw;
+    FRESULT res = f_write(&s_sd_files[index], buf, len, &bw);
+    *bytes_written = bw;
+
+    if (res != FR_OK) {
+        return HIVE_ERROR(HIVE_ERR_IO, "f_write failed");
+    }
+
+    return HIVE_SUCCESS;
+}
+
+static hive_status_t sd_pwrite(int index, const void *buf, size_t len,
+                               size_t offset, size_t *bytes_written) {
+    if (index < 0 || index >= HIVE_MAX_SD_FILES) {
+        return HIVE_ERROR(HIVE_ERR_INVALID, "invalid SD fd");
+    }
+
+    if (!s_sd_file_used[index]) {
+        return HIVE_ERROR(HIVE_ERR_INVALID, "file not open");
+    }
+
+    // Seek to offset
+    FRESULT res = f_lseek(&s_sd_files[index], offset);
+    if (res != FR_OK) {
+        *bytes_written = 0;
+        return HIVE_ERROR(HIVE_ERR_IO, "f_lseek failed");
+    }
+
+    // Write data
+    UINT bw;
+    res = f_write(&s_sd_files[index], buf, len, &bw);
+    *bytes_written = bw;
+
+    if (res != FR_OK) {
+        return HIVE_ERROR(HIVE_ERR_IO, "f_write failed");
+    }
+
+    return HIVE_SUCCESS;
+}
+
+static hive_status_t sd_sync(int index) {
+    if (index < 0 || index >= HIVE_MAX_SD_FILES) {
+        return HIVE_ERROR(HIVE_ERR_INVALID, "invalid SD fd");
+    }
+
+    if (!s_sd_file_used[index]) {
+        return HIVE_ERROR(HIVE_ERR_INVALID, "file not open");
+    }
+
+    FRESULT res = f_sync(&s_sd_files[index]);
+    if (res != FR_OK) {
+        return HIVE_ERROR(HIVE_ERR_IO, "f_sync failed");
+    }
+
+    return HIVE_SUCCESS;
+}
+
+// Check if SD card is available (for mount_available API)
+hive_status_t sd_check_available(const hive_mount_t *mount) {
+    // If already initialized, we're good
+    if (s_sd_initialized) {
+        return HIVE_SUCCESS;
+    }
+
+    // Try to initialize (but don't keep it mounted)
+    spi_sd_config_t cfg = {
+        .spi_id = hive_mount_sd_spi(mount),
+        .cs_port = hive_mount_sd_cs_port(mount),
+        .cs_pin = hive_mount_sd_cs_pin(mount),
+    };
+    spi_sd_configure(&cfg);
+
+    if (!spi_sd_is_present()) {
+        return HIVE_ERROR(HIVE_ERR_IO, "SD card not present");
+    }
+
+    return HIVE_SUCCESS;
+}
+
+#endif // HIVE_ENABLE_SD
+
+// ============================================================================
+// HAL File API - Dispatch Layer
+// ============================================================================
+
+hive_status_t hive_hal_file_init(void) {
+    flash_init();
+#if HIVE_ENABLE_SD
+    sd_init();
+#endif
+    return HIVE_SUCCESS;
+}
+
+void hive_hal_file_cleanup(void) {
+    flash_cleanup();
+#if HIVE_ENABLE_SD
+    sd_cleanup();
+#endif
+}
+
+hive_status_t hive_hal_file_open(const char *path, int flags, int mode,
+                                 int *fd_out) {
+    (void)mode;
+
+    size_t prefix_len;
+    const hive_mount_t *mount = hive_mount_find(path, &prefix_len);
+    if (!mount) {
+        return HIVE_ERROR(HIVE_ERR_INVALID, "no mount for path");
+    }
+
+    switch (hive_mount_get_backend(mount)) {
+    case HIVE_BACKEND_FLASH:
+        return flash_open(mount, flags, fd_out);
+
+#if HIVE_ENABLE_SD
+    case HIVE_BACKEND_SD: {
+        const char *subpath = path + prefix_len;
+        return sd_open(mount, subpath, flags, fd_out);
+    }
+#endif
+
+    default:
+        return HIVE_ERROR(HIVE_ERR_INVALID, "unsupported backend");
+    }
+}
+
+hive_status_t hive_hal_file_close(int fd) {
+    hive_file_backend_t backend = FD_BACKEND(fd);
+    int index = FD_INDEX(fd);
+
+    switch (backend) {
+    case HIVE_BACKEND_FLASH:
+        return flash_close(index);
+
+#if HIVE_ENABLE_SD
+    case HIVE_BACKEND_SD:
+        return sd_close(index);
+#endif
+
+    default:
+        return HIVE_ERROR(HIVE_ERR_INVALID, "invalid fd");
+    }
+}
+
+hive_status_t hive_hal_file_read(int fd, void *buf, size_t len,
+                                 size_t *bytes_read) {
+    hive_file_backend_t backend = FD_BACKEND(fd);
+    int index = FD_INDEX(fd);
+
+    switch (backend) {
+    case HIVE_BACKEND_FLASH:
+        return flash_read(index, buf, len, bytes_read);
+
+#if HIVE_ENABLE_SD
+    case HIVE_BACKEND_SD:
+        return sd_read(index, buf, len, bytes_read);
+#endif
+
+    default:
+        return HIVE_ERROR(HIVE_ERR_INVALID, "invalid fd");
+    }
+}
+
+hive_status_t hive_hal_file_pread(int fd, void *buf, size_t len, size_t offset,
+                                  size_t *bytes_read) {
+    hive_file_backend_t backend = FD_BACKEND(fd);
+    int index = FD_INDEX(fd);
+
+    switch (backend) {
+    case HIVE_BACKEND_FLASH:
+        return flash_pread(index, buf, len, offset, bytes_read);
+
+#if HIVE_ENABLE_SD
+    case HIVE_BACKEND_SD:
+        return sd_pread(index, buf, len, offset, bytes_read);
+#endif
+
+    default:
+        return HIVE_ERROR(HIVE_ERR_INVALID, "invalid fd");
+    }
+}
+
+hive_status_t hive_hal_file_write(int fd, const void *buf, size_t len,
+                                  size_t *bytes_written) {
+    hive_file_backend_t backend = FD_BACKEND(fd);
+    int index = FD_INDEX(fd);
+
+    switch (backend) {
+    case HIVE_BACKEND_FLASH:
+        return flash_write(index, buf, len, bytes_written);
+
+#if HIVE_ENABLE_SD
+    case HIVE_BACKEND_SD:
+        return sd_write(index, buf, len, bytes_written);
+#endif
+
+    default:
+        return HIVE_ERROR(HIVE_ERR_INVALID, "invalid fd");
+    }
+}
+
+hive_status_t hive_hal_file_pwrite(int fd, const void *buf, size_t len,
+                                   size_t offset, size_t *bytes_written) {
+    hive_file_backend_t backend = FD_BACKEND(fd);
+    int index = FD_INDEX(fd);
+
+    switch (backend) {
+    case HIVE_BACKEND_FLASH:
+        return flash_pwrite(index, buf, len, offset, bytes_written);
+
+#if HIVE_ENABLE_SD
+    case HIVE_BACKEND_SD:
+        return sd_pwrite(index, buf, len, offset, bytes_written);
+#endif
+
+    default:
+        return HIVE_ERROR(HIVE_ERR_INVALID, "invalid fd");
+    }
+}
+
+hive_status_t hive_hal_file_sync(int fd) {
+    hive_file_backend_t backend = FD_BACKEND(fd);
+    int index = FD_INDEX(fd);
+
+    switch (backend) {
+    case HIVE_BACKEND_FLASH:
+        return flash_sync(index);
+
+#if HIVE_ENABLE_SD
+    case HIVE_BACKEND_SD:
+        return sd_sync(index);
+#endif
+
+    default:
+        return HIVE_ERROR(HIVE_ERR_INVALID, "invalid fd");
+    }
 }

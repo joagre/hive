@@ -46,7 +46,18 @@ endif
 # Source files (from shared definitions)
 include hive_sources.mk
 
-SRCS := $(HIVE_CORE_SRCS) $(HIVE_HAL_STM32_SRCS)
+# Allow caller to provide board-specific hive_mounts.c
+# If BOARD_MOUNTS_SRC is set, exclude default and use board's instead
+BOARD_MOUNTS_SRC ?=
+
+SRCS := $(HIVE_CORE_SRCS)
+ifneq ($(BOARD_MOUNTS_SRC),)
+  # Use board-specific mounts, exclude default from HAL sources
+  SRCS += $(filter-out hal/stm32/hive_mounts.c,$(HIVE_HAL_STM32_SRCS))
+  SRCS += $(BOARD_MOUNTS_SRC)
+else
+  SRCS += $(HIVE_HAL_STM32_SRCS)
+endif
 ifeq ($(ENABLE_FILE),1)
   SRCS += $(HIVE_FILE_SRCS) $(HIVE_HAL_STM32_FILE_SRCS)
 endif
