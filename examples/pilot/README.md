@@ -203,7 +203,13 @@ See `hal/<platform>/README.md` for motor layout and mixing equations.
 
 ## Main Loop
 
-The main loop is minimal - all logic is in actors:
+All logic is in actors. On hardware, the main loop is just:
+
+```c
+hive_run();  // Never returns - runs scheduler with real-time timers
+```
+
+Webots requires a simulation loop because Webots controls time:
 
 ```c
 while (hal_step()) {
@@ -212,7 +218,7 @@ while (hal_step()) {
 }
 ```
 
-Webots controls time via `hal_step()` (which wraps `wb_robot_step()`). Each call:
+Each `hal_step()` call (wraps `wb_robot_step()`):
 1. Blocks until Webots simulates TIME_STEP milliseconds
 2. Returns, `hive_advance_time()` fires due timers
 3. `hive_run_until_blocked()` runs all ready actors
