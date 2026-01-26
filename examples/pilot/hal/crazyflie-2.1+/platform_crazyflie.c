@@ -339,11 +339,11 @@ static bool i2c3_read(uint8_t addr, uint8_t *data, uint16_t len) {
         return false;
     }
 
-    // Special handling for 1-byte read
+    // N=1: Disable ACK before clearing ADDR, then set STOP
     if (len == 1) {
-        I2C3->CR1 &= ~I2C_CR1_ACK; // Disable ACK before clearing ADDR
-        (void)I2C3->SR2;           // Clear ADDR
-        I2C3->CR1 |= I2C_CR1_STOP; // Generate STOP
+        I2C3->CR1 &= ~I2C_CR1_ACK;
+        (void)I2C3->SR2; // Clear ADDR
+        I2C3->CR1 |= I2C_CR1_STOP;
 
         if (!i2c3_wait(&I2C3->SR1, I2C_SR1_RXNE, I2C_SR1_RXNE)) {
             return false;
@@ -352,23 +352,55 @@ static bool i2c3_read(uint8_t addr, uint8_t *data, uint16_t len) {
         return true;
     }
 
-    // Multi-byte read
+    // N=2: Use POS bit per STM32 reference manual (RM0090)
+    if (len == 2) {
+        I2C3->CR1 |= I2C_CR1_POS;
+        (void)I2C3->SR2; // Clear ADDR
+        I2C3->CR1 &= ~I2C_CR1_ACK;
+
+        // Wait for BTF (both bytes received)
+        if (!i2c3_wait(&I2C3->SR1, I2C_SR1_BTF, I2C_SR1_BTF)) {
+            I2C3->CR1 &= ~I2C_CR1_POS;
+            I2C3->CR1 |= I2C_CR1_STOP;
+            return false;
+        }
+
+        // Set STOP before reading
+        I2C3->CR1 |= I2C_CR1_STOP;
+        data[0] = I2C3->DR;
+        data[1] = I2C3->DR;
+
+        I2C3->CR1 &= ~I2C_CR1_POS;
+        return true;
+    }
+
+    // N>2: Standard sequence with BTF for last two bytes
     (void)I2C3->SR2; // Clear ADDR
 
     for (uint16_t i = 0; i < len; i++) {
         if (i == len - 1) {
-            // Last byte: disable ACK and generate STOP
+            // Last byte: STOP already set after previous byte
+            if (!i2c3_wait(&I2C3->SR1, I2C_SR1_RXNE, I2C_SR1_RXNE)) {
+                return false;
+            }
+            data[i] = I2C3->DR;
+        } else if (i == len - 2) {
+            // Second to last: wait for BTF, clear ACK, set STOP, read
+            if (!i2c3_wait(&I2C3->SR1, I2C_SR1_BTF, I2C_SR1_BTF)) {
+                I2C3->CR1 |= I2C_CR1_STOP;
+                return false;
+            }
             I2C3->CR1 &= ~I2C_CR1_ACK;
             I2C3->CR1 |= I2C_CR1_STOP;
-        }
-
-        if (!i2c3_wait(&I2C3->SR1, I2C_SR1_RXNE, I2C_SR1_RXNE)) {
-            if (!(I2C3->CR1 & I2C_CR1_STOP)) {
+            data[i] = I2C3->DR;
+        } else {
+            // Normal byte
+            if (!i2c3_wait(&I2C3->SR1, I2C_SR1_RXNE, I2C_SR1_RXNE)) {
                 I2C3->CR1 |= I2C_CR1_STOP;
+                return false;
             }
-            return false;
+            data[i] = I2C3->DR;
         }
-        data[i] = I2C3->DR;
     }
 
     return true;
