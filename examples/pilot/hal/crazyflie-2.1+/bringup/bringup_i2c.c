@@ -213,28 +213,62 @@ bool i2c_read(uint8_t addr, uint8_t *data, size_t len) {
     }
 
     if (len == 1) {
-        // Disable ACK before clearing ADDR
+        // N=1: Disable ACK before clearing ADDR, then set STOP
         I2C3->CR1 &= ~I2C_CR1_ACK;
-        (void)I2C3->SR2;
+        (void)I2C3->SR2; // Clear ADDR
         I2C3->CR1 |= I2C_CR1_STOP;
-    } else {
-        (void)I2C3->SR2;
-    }
-
-    // Read data
-    for (size_t i = 0; i < len; i++) {
-        if (i == len - 2) {
-            // Disable ACK before last byte
-            I2C3->CR1 &= ~I2C_CR1_ACK;
-        }
-        if (i == len - 1) {
-            I2C3->CR1 |= I2C_CR1_STOP;
-        }
 
         if (!i2c_wait_flag(&I2C3->SR1, I2C_SR1_RXNE, true)) {
             goto error;
         }
-        data[i] = (uint8_t)I2C3->DR;
+        data[0] = (uint8_t)I2C3->DR;
+    } else if (len == 2) {
+        // N=2: Use POS bit per STM32 reference manual
+        // Set POS to shift NACK to second byte
+        I2C3->CR1 |= I2C_CR1_POS;
+        (void)I2C3->SR2; // Clear ADDR
+        I2C3->CR1 &= ~I2C_CR1_ACK;
+
+        // Wait for BTF (both bytes received)
+        if (!i2c_wait_flag(&I2C3->SR1, I2C_SR1_BTF, true)) {
+            goto error;
+        }
+
+        // Set STOP before reading
+        I2C3->CR1 |= I2C_CR1_STOP;
+        data[0] = (uint8_t)I2C3->DR;
+        data[1] = (uint8_t)I2C3->DR;
+
+        // Clear POS
+        I2C3->CR1 &= ~I2C_CR1_POS;
+    } else {
+        // N>2: Standard sequence
+        (void)I2C3->SR2; // Clear ADDR
+
+        for (size_t i = 0; i < len; i++) {
+            if (i == len - 1) {
+                // Last byte: STOP already set after previous byte
+                if (!i2c_wait_flag(&I2C3->SR1, I2C_SR1_RXNE, true)) {
+                    goto error;
+                }
+                data[i] = (uint8_t)I2C3->DR;
+            } else if (i == len - 2) {
+                // Second to last: wait for BTF, clear ACK, set STOP, read both
+                if (!i2c_wait_flag(&I2C3->SR1, I2C_SR1_BTF, true)) {
+                    goto error;
+                }
+                I2C3->CR1 &= ~I2C_CR1_ACK;
+                I2C3->CR1 |= I2C_CR1_STOP;
+                data[i] = (uint8_t)I2C3->DR;
+                // Next iteration reads last byte
+            } else {
+                // Normal byte
+                if (!i2c_wait_flag(&I2C3->SR1, I2C_SR1_RXNE, true)) {
+                    goto error;
+                }
+                data[i] = (uint8_t)I2C3->DR;
+            }
+        }
     }
 
     return true;
@@ -243,6 +277,7 @@ error:
     if (i2c_check_errors()) {
         i2c_recover();
     }
+    I2C3->CR1 &= ~I2C_CR1_POS; // Ensure POS is cleared
     I2C3->CR1 |= I2C_CR1_STOP;
     return false;
 }
@@ -288,26 +323,60 @@ bool i2c_write_read(uint8_t addr, const uint8_t *write_data, size_t write_len,
     }
 
     if (read_len == 1) {
+        // N=1: Disable ACK before clearing ADDR, then set STOP
         I2C3->CR1 &= ~I2C_CR1_ACK;
-        (void)I2C3->SR2;
+        (void)I2C3->SR2; // Clear ADDR
         I2C3->CR1 |= I2C_CR1_STOP;
-    } else {
-        (void)I2C3->SR2;
-    }
-
-    // Read data
-    for (size_t i = 0; i < read_len; i++) {
-        if (i == read_len - 2) {
-            I2C3->CR1 &= ~I2C_CR1_ACK;
-        }
-        if (i == read_len - 1) {
-            I2C3->CR1 |= I2C_CR1_STOP;
-        }
 
         if (!i2c_wait_flag(&I2C3->SR1, I2C_SR1_RXNE, true)) {
             goto error;
         }
-        read_data[i] = (uint8_t)I2C3->DR;
+        read_data[0] = (uint8_t)I2C3->DR;
+    } else if (read_len == 2) {
+        // N=2: Use POS bit per STM32 reference manual
+        I2C3->CR1 |= I2C_CR1_POS;
+        (void)I2C3->SR2; // Clear ADDR
+        I2C3->CR1 &= ~I2C_CR1_ACK;
+
+        // Wait for BTF (both bytes received)
+        if (!i2c_wait_flag(&I2C3->SR1, I2C_SR1_BTF, true)) {
+            goto error;
+        }
+
+        // Set STOP before reading
+        I2C3->CR1 |= I2C_CR1_STOP;
+        read_data[0] = (uint8_t)I2C3->DR;
+        read_data[1] = (uint8_t)I2C3->DR;
+
+        // Clear POS
+        I2C3->CR1 &= ~I2C_CR1_POS;
+    } else {
+        // N>2: Standard sequence
+        (void)I2C3->SR2; // Clear ADDR
+
+        for (size_t i = 0; i < read_len; i++) {
+            if (i == read_len - 1) {
+                // Last byte: STOP already set after previous byte
+                if (!i2c_wait_flag(&I2C3->SR1, I2C_SR1_RXNE, true)) {
+                    goto error;
+                }
+                read_data[i] = (uint8_t)I2C3->DR;
+            } else if (i == read_len - 2) {
+                // Second to last: wait for BTF, clear ACK, set STOP, read
+                if (!i2c_wait_flag(&I2C3->SR1, I2C_SR1_BTF, true)) {
+                    goto error;
+                }
+                I2C3->CR1 &= ~I2C_CR1_ACK;
+                I2C3->CR1 |= I2C_CR1_STOP;
+                read_data[i] = (uint8_t)I2C3->DR;
+            } else {
+                // Normal byte
+                if (!i2c_wait_flag(&I2C3->SR1, I2C_SR1_RXNE, true)) {
+                    goto error;
+                }
+                read_data[i] = (uint8_t)I2C3->DR;
+            }
+        }
     }
 
     return true;
@@ -316,6 +385,7 @@ error:
     if (i2c_check_errors()) {
         i2c_recover();
     }
+    I2C3->CR1 &= ~I2C_CR1_POS; // Ensure POS is cleared
     I2C3->CR1 |= I2C_CR1_STOP;
     return false;
 }
