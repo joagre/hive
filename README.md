@@ -27,6 +27,7 @@ See [spec/](spec/) for design details.
 **Overview**
 - [Features](#features)
 - [Hive vs QP/C](#hive-vs-qpc)
+- [Hive vs RTOS](#hive-vs-rtos-freertos-zephyr-etc)
 
 **Core Concepts**
 - [Cooperative Scheduling](#cooperative-scheduling)
@@ -101,6 +102,20 @@ See [spec/](spec/) for design details.
 **Choose Hive if** - You prefer sequential actor code with blocking operations (IPC, bus, timers, I/O) over event-driven state machines, want fault-tolerant supervision, or find explicit statecharts overkill for your use case.
 
 **Choose QP/C if** - You need formal state machine modeling, want UML tooling integration, or require safety certification with established track record.
+
+## Hive vs RTOS (FreeRTOS, Zephyr, etc.)
+
+Hive is designed for **bare-metal** - it *is* the runtime, not a layer on top of one.
+
+**Why not run Hive on FreeRTOS?**
+
+- **Redundant scheduling** - FreeRTOS has tasks, priorities, preemption. Adding Hive's cooperative scheduler on top means two schedulers.
+- **Redundant IPC** - FreeRTOS has queues, semaphores, event groups. Hive has mailboxes, bus. Duplication.
+- **Wasted resources** - FreeRTOS task stacks + Hive actor stacks = double memory overhead.
+
+**If you're already on an RTOS** (e.g., ESP32 with ESP-IDF), you're better off using RTOS primitives directly or building lightweight actor patterns on top of them, rather than running Hive inside an RTOS task.
+
+**Hive makes sense when** - You want the full runtime on bare-metal (STM32 and other ARM Cortex-M) where there's no OS, and you want Erlang-style actors, supervision, and message passing without pulling in an RTOS.
 
 ## Cooperative Scheduling
 
