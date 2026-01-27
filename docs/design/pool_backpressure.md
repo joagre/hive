@@ -117,20 +117,20 @@ hive_ipc_notify_ex(target, class, tag, data, len, HIVE_SEND_BLOCK);
 
 ### Option 4: Separate Blocking API
 
-Keep existing API non-blocking, add parallel blocking API.
+Keep existing API non-blocking, add parallel blocking API with `_wait` suffix.
 
 ```c
 // Existing - always returns immediately
 hive_ipc_notify(target, tag, data, len);
 
-// New - blocks until sent or timeout
-hive_ipc_send(target, tag, data, len, timeout);
+// New - blocks until pool space available or timeout
+hive_ipc_notify_wait(target, tag, data, len, timeout);
 ```
 
 **Pros:**
 - Clear separation of concerns
 - Existing code unchanged
-- Name suggests blocking (`send` vs `notify`)
+- Consistent naming (`_wait` suffix matches existing conventions)
 
 **Cons:**
 - Two ways to do the same thing
@@ -159,7 +159,8 @@ This is the closest embedded precedent.
 
 ## Recommendation
 
-**Option 4 (Separate Blocking API)** with timeout, following FreeRTOS precedent.
+**Option 4 (Separate Blocking API)** with `_wait` suffix and timeout, following
+FreeRTOS precedent.
 
 ```c
 // Non-blocking (existing) - returns HIVE_ERR_NOMEM on pool exhaustion
@@ -167,17 +168,18 @@ hive_status hive_ipc_notify(actor_id to, uint32_t tag,
                             const void *data, size_t len);
 
 // Blocking (new) - waits for pool space, with timeout
-hive_status hive_ipc_send(actor_id to, uint32_t tag,
-                          const void *data, size_t len,
-                          int32_t timeout_ms);
+hive_status hive_ipc_notify_wait(actor_id to, uint32_t tag,
+                                 const void *data, size_t len,
+                                 int32_t timeout_ms);
 ```
 
 **Rationale:**
-1. **Least surprise** - Embedded developers expect timeout parameter for blocking ops
-2. **Explicit** - Blocking is visible at call site, no hidden state
-3. **Backward compatible** - Existing code unchanged
-4. **Flexible** - Can use `0` for try-once, `-1` for infinite, or specific timeout
-5. **Matches precedent** - FreeRTOS, POSIX (`sem_timedwait`), etc.
+1. **Consistent naming** - Uses existing verbs (notify, request, reply, publish) with `_wait` suffix
+2. **Least surprise** - Embedded developers expect timeout parameter for blocking ops
+3. **Explicit** - Blocking is visible at call site, no hidden state
+4. **Backward compatible** - Existing code unchanged
+5. **Flexible** - Can use `0` for try-once, `-1` for infinite, or specific timeout
+6. **Matches precedent** - FreeRTOS, POSIX (`sem_timedwait`), etc.
 
 ## Implementation Considerations
 
@@ -242,13 +244,13 @@ hive_status hive_ipc_reply(const hive_message *request,
                            const void *data, size_t len);
 hive_status hive_bus_publish(hive_bus *bus, const void *data, size_t len);
 
-// New blocking variants
-hive_status hive_ipc_send(actor_id to, uint32_t tag,
-                          const void *data, size_t len,
-                          int32_t timeout_ms);
-hive_status hive_ipc_send_ex(actor_id to, hive_msg_class class, uint32_t tag,
-                             const void *data, size_t len,
-                             int32_t timeout_ms);
+// New blocking variants (with _wait suffix)
+hive_status hive_ipc_notify_wait(actor_id to, uint32_t tag,
+                                 const void *data, size_t len,
+                                 int32_t timeout_ms);
+hive_status hive_ipc_notify_ex_wait(actor_id to, hive_msg_class class, uint32_t tag,
+                                    const void *data, size_t len,
+                                    int32_t timeout_ms);
 hive_status hive_ipc_reply_wait(const hive_message *request,
                                 const void *data, size_t len,
                                 int32_t timeout_ms);
@@ -264,11 +266,11 @@ exhausted, should it:
 Option (B) is more consistent but changes existing semantics. Recommend keeping
 (A) for backward compatibility, or adding `hive_ipc_request_wait()` if needed.
 
-### Example: hive_ipc_send()
+### Example: hive_ipc_notify_wait()
 
 ```c
 /**
- * Send a message, blocking if pool exhausted.
+ * Send a notification, blocking if pool exhausted.
  *
  * @param to        Target actor ID
  * @param tag       Message tag for correlation
@@ -288,9 +290,9 @@ Option (B) is more consistent but changes existing semantics. Recommend keeping
  * @warning Do NOT use with timeout=-1 in production without careful
  *          deadlock analysis.
  */
-hive_status hive_ipc_send(actor_id to, uint32_t tag,
-                          const void *data, size_t len,
-                          int32_t timeout_ms);
+hive_status hive_ipc_notify_wait(actor_id to, uint32_t tag,
+                                 const void *data, size_t len,
+                                 int32_t timeout_ms);
 ```
 
 ## Alternative: Receiver-Side Backpressure
@@ -335,11 +337,11 @@ Could be combined with sender-side blocking for complete solution.
 
 ## Conclusion
 
-Adding `hive_ipc_send()` with timeout provides embedded developers a familiar
-pattern for blocking sends while keeping the existing non-blocking API unchanged.
-Implementation requires a wait queue for blocked actors and integration with
-the pool free path.
+Adding `_wait` variants (e.g., `hive_ipc_notify_wait()`) with timeout provides
+embedded developers a familiar pattern for blocking operations while keeping the
+existing non-blocking API unchanged. Implementation requires a wait queue for
+blocked actors and integration with the pool free path.
 
 This is a **low priority** enhancement - the current explicit error handling
 works well and is arguably safer for embedded systems. Only implement if
-real-world usage shows significant demand for blocking sends.
+real-world usage shows significant demand for blocking behavior.
