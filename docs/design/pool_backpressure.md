@@ -70,26 +70,28 @@ hive_spawn(my_actor, NULL, NULL, &cfg, &id);
 
 ### Option 2: Runtime Configuration Function
 
-Add a function to change the current actor's send behavior dynamically.
+Add a function to change the current actor's pool exhaustion behavior dynamically.
 
 ```c
 // At start of actor or when entering critical section
-hive_send_config(HIVE_SEND_BLOCK_ON_FULL);
+hive_pool_config(HIVE_POOL_BLOCK_ON_FULL);
 
 hive_ipc_notify(target, tag, data, len);  // Now blocks if pool full
+hive_bus_publish(bus, data, len);         // This too
 
 // Later, switch back
-hive_send_config(HIVE_SEND_RETURN_ERROR);
+hive_pool_config(HIVE_POOL_RETURN_ERROR);
 ```
 
 **Pros:**
 - Flexible, can change behavior based on context
-- Actor can use blocking for critical messages, non-blocking for optional
+- Affects all pool-using operations uniformly
 
 **Cons:**
 - Hidden state affects API behavior
 - Easy to forget current mode
 - Potential for confusion in code review
+- Applies to all operations - can't have blocking IPC but non-blocking bus
 
 ### Option 3: Per-Send Flag
 
