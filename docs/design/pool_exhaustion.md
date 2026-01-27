@@ -72,20 +72,22 @@ actor_config cfg = {
 };
 hive_spawn(my_actor, NULL, NULL, &cfg, &id);
 
-// Query current actor's setting
-bool blocking = hive_pool_get_config();
+// Query current actor's config
+actor_config current;
+hive_get_actor_config(&current);
+if (current.block_on_pool_full) { ... }
 ```
 
 **Pros:**
 - Simple, declared at spawn time
 - Behavior is fixed and predictable for the actor's lifetime
 - No per-call overhead
+- `hive_get_actor_config()` useful for other config inspection too
 
 **Cons:**
 - Inflexible (can't change at runtime)
 - All-or-nothing for entire actor
 - May not match real usage patterns (some messages critical, some optional)
-- Requires getter API to inspect current behavior
 
 ### Option 2: Runtime Configuration Function
 
