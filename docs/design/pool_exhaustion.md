@@ -9,7 +9,7 @@
 
 **Pool exhaustion** is a different problem:
 - All pool entries are in use
-- New sends fail with `HIVE_ERR_NOMEM`
+- New notify/request/reply/publish calls fail with `HIVE_ERR_NOMEM`
 - This is an error condition, not normal flow control
 
 This document explores how to handle pool exhaustion - specifically, whether to
@@ -20,7 +20,7 @@ add blocking behavior when the pool is full.
 Currently, when the global message pool is exhausted, all pool-using functions
 return `HIVE_ERR_NOMEM` immediately. The caller must handle this by retrying,
 backing off, or discarding the message. This is explicit and predictable, but
-requires every send site to handle the error.
+requires every call site to handle the error.
 
 This document explores adding optional **blocking behavior** on pool exhaustion,
 where the sending actor yields until pool space becomes available.
@@ -52,7 +52,7 @@ if (HIVE_FAILED(s)) {
 ```
 
 **Characteristics:**
-- Non-blocking send (returns immediately on pool exhaustion)
+- Non-blocking (returns immediately on pool exhaustion)
 - Explicit error handling required at every call site
 - No surprise blocking or deadlocks
 - Caller decides retry policy
@@ -61,14 +61,14 @@ if (HIVE_FAILED(s)) {
 
 ### Option 1: Per-Actor Spawn Configuration
 
-Add a flag to `actor_config` that makes all sends from that actor block on
-pool exhaustion.
+Add a flag to `actor_config` that makes all pool operations from that actor
+block on pool exhaustion.
 
 ```c
 actor_config cfg = {
     .priority = HIVE_PRIORITY_NORMAL,
     .stack_size = 8192,
-    .block_on_send = true,  // New field
+    .block_on_pool_full = true,  // New field
 };
 hive_spawn(my_actor, NULL, NULL, &cfg, &id);
 ```
@@ -76,12 +76,12 @@ hive_spawn(my_actor, NULL, NULL, &cfg, &id);
 **Pros:**
 - Simple, declared at spawn time
 - Behavior is fixed and predictable for the actor's lifetime
-- No per-send overhead
+- No per-call overhead
 
 **Cons:**
 - Inflexible (can't change at runtime)
 - All-or-nothing for entire actor
-- May not match real usage patterns (some sends critical, some optional)
+- May not match real usage patterns (some messages critical, some optional)
 
 ### Option 2: Runtime Configuration Function
 
@@ -108,16 +108,16 @@ hive_pool_config(HIVE_POOL_RETURN_ERROR);
 - Potential for confusion in code review
 - Applies to all operations - can't have blocking IPC but non-blocking bus
 
-### Option 3: Per-Send Flag
+### Option 3: Per-Call Flag
 
-Add blocking variants or flags to send functions.
+Add blocking variants or flags to pool-using functions.
 
 ```c
-// Blocking send
+// Blocking variant
 hive_ipc_notify_blocking(target, tag, data, len, timeout);
 
 // Or flag-based
-hive_ipc_notify_ex(target, class, tag, data, len, HIVE_SEND_BLOCK);
+hive_ipc_notify_ex(target, class, tag, data, len, HIVE_BLOCK_ON_POOL_FULL);
 ```
 
 **Pros:**
@@ -196,18 +196,18 @@ Embedded developers expect blocking operations with timeouts:
 - POSIX `sem_wait()`, `pthread_cond_wait()` block
 - Blocking is the norm; non-blocking is the variant (`_trylock`, `_trywait`)
 
-### The Problem with Blocking Send
+### The Problem with Blocking on Pool Full
 
 Adding `hive_ipc_notify_wait()` introduces risks:
 
-1. **Deadlock** - Actor A blocks sending to B, B blocks sending to A
+1. **Deadlock** - Actor A blocks notifying B, B blocks notifying A
 2. **Priority inversion** - High-priority actor blocked by low-priority pool usage
 3. **Breaks mental model** - "notify" implies fire-and-forget, not "wait until delivered"
 4. **Hidden coupling** - Actors become temporally coupled
 
 ### Alternative: Embrace the Actor Model
 
-Instead of adding blocking sends, Hive could:
+Instead of adding blocking variants, Hive could:
 
 1. **Size pools appropriately** - Pool exhaustion is a design error, not runtime condition
 2. **Use request/reply** - `hive_ipc_request()` provides natural backpressure
@@ -281,11 +281,11 @@ When pool space becomes available, how do blocked senders wake up?
 
 ### Deadlock Prevention
 
-Blocking sends can cause deadlocks:
+Blocking on pool full can cause deadlocks:
 
 ```
-Actor A sends to B (blocks, pool full)
-Actor B sends to A (blocks, pool full)
+Actor A notifies B (blocks, pool full)
+Actor B notifies A (blocks, pool full)
 ```
 
 **Mitigations:**
@@ -296,11 +296,11 @@ Actor B sends to A (blocks, pool full)
 
 ### Priority Inversion
 
-If a high-priority actor blocks on send, and pool is held by low-priority actors:
+If a high-priority actor blocks on pool full, and pool is held by low-priority actors:
 
 **Mitigations:**
 1. **Priority-based wake-up** - Wake highest priority waiter first
-2. **Documentation** - Note that blocking send may delay high-priority actors
+2. **Documentation** - Note that blocking may delay high-priority actors
 
 ### Memory/Stack Impact
 
@@ -350,7 +350,7 @@ Option (B) is more consistent but changes existing semantics. Recommend keeping
 
 ```c
 /**
- * Send a notification, blocking if pool exhausted.
+ * Notify an actor, blocking if pool exhausted.
  *
  * @param to        Target actor ID
  * @param tag       Message tag for correlation
@@ -375,9 +375,9 @@ hive_status hive_ipc_notify_wait(actor_id to, uint32_t tag,
                                  int32_t timeout_ms);
 ```
 
-## Alternative: Receiver-Side Backpressure
+## Alternative: Receiver-Side Limits
 
-Instead of blocking senders, could implement per-actor mailbox limits:
+Instead of blocking callers, could implement per-actor mailbox limits:
 
 ```c
 actor_config cfg = {
@@ -395,9 +395,9 @@ This shifts control to the receiver, which may be more natural for some patterns
 
 **Cons:**
 - More complex implementation (per-actor tracking)
-- Still need to handle sender behavior on overflow
+- Still need to handle caller behavior on overflow
 
-Could be combined with sender-side blocking for complete solution.
+Could be combined with caller-side blocking for complete solution.
 
 ## Questions for Further Discussion
 
@@ -421,7 +421,7 @@ Could be combined with sender-side blocking for complete solution.
 
 The current non-blocking API with explicit `HIVE_ERR_NOMEM` handling:
 - Stays true to actor model semantics
-- Avoids deadlock risks inherent in blocking sends
+- Avoids deadlock risks inherent in blocking on pool full
 - Forces developers to think about resource limits at design time
 - Matches QP/C philosophy (pool exhaustion = design error)
 
