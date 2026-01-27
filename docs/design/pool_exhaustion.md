@@ -1,4 +1,19 @@
-# Pool Backpressure Design
+# Pool Exhaustion Handling
+
+## Backpressure vs Pool Exhaustion
+
+**Normal backpressure** is already handled by `hive_ipc_request()`:
+- Sender sends request, waits for reply
+- Naturally rate-limits the sender
+- This is the idiomatic actor pattern for flow control
+
+**Pool exhaustion** is a different problem:
+- All pool entries are in use
+- New sends fail with `HIVE_ERR_NOMEM`
+- This is an error condition, not normal flow control
+
+This document explores how to handle pool exhaustion - specifically, whether to
+add blocking behavior when the pool is full.
 
 ## Problem Statement
 
