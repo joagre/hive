@@ -157,10 +157,73 @@ No runtime recovery.
 **FreeRTOS** - `xQueueSend()` has timeout parameter. `portMAX_DELAY` = block forever.
 This is the closest embedded precedent.
 
-## Recommendation
+## Semantic Tension: Actor Model vs Embedded Conventions
 
-**Option 4 (Separate Blocking API)** with `_wait` suffix and timeout, following
-FreeRTOS precedent.
+There is a fundamental tension between two communities:
+
+### Actor Model Semantics
+
+In classic actor systems, **send is always asynchronous and non-blocking**:
+
+- Actors are decoupled; sender doesn't wait for receiver
+- Blocking on send couples actors temporally, enabling deadlocks
+- Backpressure is achieved via **request/reply patterns**, not blocking sends
+- If you need guaranteed delivery, use `request()` which naturally rate-limits
+
+Erlang's `!` (send) operator never blocks. Akka's `tell` never blocks. This is
+fundamental to the actor model's ability to reason about concurrency.
+
+### Embedded C Conventions
+
+Embedded developers expect blocking operations with timeouts:
+
+- FreeRTOS `xQueueSend()` blocks if queue full
+- POSIX `sem_wait()`, `pthread_cond_wait()` block
+- Blocking is the norm; non-blocking is the variant (`_trylock`, `_trywait`)
+
+### The Problem with Blocking Send
+
+Adding `hive_ipc_notify_wait()` introduces risks:
+
+1. **Deadlock** - Actor A blocks sending to B, B blocks sending to A
+2. **Priority inversion** - High-priority actor blocked by low-priority pool usage
+3. **Breaks mental model** - "notify" implies fire-and-forget, not "wait until delivered"
+4. **Hidden coupling** - Actors become temporally coupled
+
+### Alternative: Embrace the Actor Model
+
+Instead of adding blocking sends, Hive could:
+
+1. **Size pools appropriately** - Pool exhaustion is a design error, not runtime condition
+2. **Use request/reply** - `hive_ipc_request()` provides natural backpressure
+3. **Drop and log** - For non-critical messages, NOMEM means "system overloaded, drop it"
+4. **Crash early** - For critical messages, NOMEM is fatal (QP/C approach)
+
+This keeps the API true to actor semantics while being honest about resource limits.
+
+### Recommendation Revisited
+
+Given this tension, there are two defensible positions:
+
+**Position A: Don't add blocking variants**
+- Keep `hive_ipc_notify()` non-blocking only
+- Document that NOMEM requires explicit handling
+- Recommend request/reply for backpressure
+- Stay true to actor model semantics
+
+**Position B: Add blocking variants with strong warnings**
+- Add `_wait` variants for embedded developers who expect them
+- Document deadlock risks prominently
+- Recommend non-blocking as default
+- Accept that some users will misuse them
+
+Hive currently follows Position A. This document explores Position B but does
+not necessarily recommend it.
+
+## If We Choose Position B
+
+**If** we decide to add blocking variants, Option 4 (Separate Blocking API) with
+`_wait` suffix and timeout would follow FreeRTOS precedent:
 
 ```c
 // Non-blocking (existing) - returns HIVE_ERR_NOMEM on pool exhaustion
@@ -173,13 +236,15 @@ hive_status hive_ipc_notify_wait(actor_id to, uint32_t tag,
                                  int32_t timeout_ms);
 ```
 
-**Rationale:**
+**Rationale for this approach (if implementing):**
 1. **Consistent naming** - Uses existing verbs (notify, request, reply, publish) with `_wait` suffix
-2. **Least surprise** - Embedded developers expect timeout parameter for blocking ops
+2. **Least surprise for embedded** - Timeout parameter matches FreeRTOS, POSIX conventions
 3. **Explicit** - Blocking is visible at call site, no hidden state
 4. **Backward compatible** - Existing code unchanged
 5. **Flexible** - Can use `0` for try-once, `-1` for infinite, or specific timeout
-6. **Matches precedent** - FreeRTOS, POSIX (`sem_timedwait`), etc.
+
+**However**, this conflicts with actor model semantics where "notify" means
+fire-and-forget. A `notify` that blocks is semantically confusing.
 
 ## Implementation Considerations
 
@@ -337,11 +402,19 @@ Could be combined with sender-side blocking for complete solution.
 
 ## Conclusion
 
-Adding `_wait` variants (e.g., `hive_ipc_notify_wait()`) with timeout provides
-embedded developers a familiar pattern for blocking operations while keeping the
-existing non-blocking API unchanged. Implementation requires a wait queue for
-blocked actors and integration with the pool free path.
+**Recommendation: Stay with Position A (no blocking variants).**
 
-This is a **low priority** enhancement - the current explicit error handling
-works well and is arguably safer for embedded systems. Only implement if
-real-world usage shows significant demand for blocking behavior.
+The current non-blocking API with explicit `HIVE_ERR_NOMEM` handling:
+- Stays true to actor model semantics
+- Avoids deadlock risks inherent in blocking sends
+- Forces developers to think about resource limits at design time
+- Matches QP/C philosophy (pool exhaustion = design error)
+
+For backpressure, recommend:
+- Use `hive_ipc_request()` - natural rate limiting via reply wait
+- Size pools for worst-case at design time
+- Handle NOMEM by dropping non-critical messages or failing fast
+
+If real-world usage shows strong demand for blocking behavior, Position B with
+`_wait` variants could be reconsidered, but the semantic tension with "notify"
+(fire-and-forget) should give us pause.
