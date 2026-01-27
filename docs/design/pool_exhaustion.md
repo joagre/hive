@@ -71,6 +71,9 @@ actor_config cfg = {
     .block_on_pool_full = true,  // New field
 };
 hive_spawn(my_actor, NULL, NULL, &cfg, &id);
+
+// Query current actor's setting
+bool blocking = hive_pool_get_config();
 ```
 
 **Pros:**
@@ -82,6 +85,7 @@ hive_spawn(my_actor, NULL, NULL, &cfg, &id);
 - Inflexible (can't change at runtime)
 - All-or-nothing for entire actor
 - May not match real usage patterns (some messages critical, some optional)
+- Requires getter API to inspect current behavior
 
 ### Option 2: Runtime Configuration Function
 
