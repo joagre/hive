@@ -95,16 +95,22 @@ Add a function to change the current actor's pool exhaustion behavior dynamicall
 
 ```c
 // At start of actor or when entering critical section
-hive_pool_set_config(HIVE_POOL_BLOCK_ON_FULL);
+hive_pool_config cfg = {
+    .block_on_full = true,
+    .block_timeout_ms = 1000,  // -1 = infinite, 0 = try once
+};
+hive_pool_set_config(&cfg);
 
 hive_ipc_notify(target, tag, data, len);  // Now blocks if pool full
 hive_bus_publish(bus, data, len);         // This too
 
 // Later, switch back
-hive_pool_set_config(HIVE_POOL_RETURN_ERROR);
+cfg.block_on_full = false;
+hive_pool_set_config(&cfg);
 
 // Query current setting
-hive_pool_behavior_t current = hive_pool_get_config();
+hive_pool_config current;
+hive_pool_get_config(&current);
 ```
 
 **Pros:**
