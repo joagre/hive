@@ -1,14 +1,30 @@
-# Mailbox Backpressure Design
+# Pool Backpressure Design
 
 ## Problem Statement
 
-Currently, when the global message pool is exhausted, `hive_ipc_notify()` returns
-`HIVE_ERR_NOMEM` immediately. The caller must handle this by retrying, backing
-off, or discarding the message. This is explicit and predictable, but requires
-every send site to handle the error.
+Currently, when the global message pool is exhausted, all pool-using functions
+return `HIVE_ERR_NOMEM` immediately. The caller must handle this by retrying,
+backing off, or discarding the message. This is explicit and predictable, but
+requires every send site to handle the error.
 
 This document explores adding optional **blocking behavior** on pool exhaustion,
 where the sending actor yields until pool space becomes available.
+
+## Affected APIs
+
+The following functions use the global message pool and can return `HIVE_ERR_NOMEM`:
+
+| Function | Pool Usage | Notes |
+|----------|------------|-------|
+| `hive_ipc_notify()` | Message data pool | Fire-and-forget |
+| `hive_ipc_notify_ex()` | Message data pool | With explicit class/tag |
+| `hive_ipc_request()` | Message data pool | Blocking request/reply |
+| `hive_ipc_reply()` | Message data pool | Reply to request |
+| `hive_bus_publish()` | Message data pool | Pub/sub (also has per-bus buffer) |
+
+**Note:** `hive_ipc_request()` already blocks (waiting for reply), but can still
+fail immediately with `HIVE_ERR_NOMEM` if the pool is exhausted when sending the
+request.
 
 ## Current Behavior
 
@@ -21,8 +37,8 @@ if (HIVE_FAILED(s)) {
 ```
 
 **Characteristics:**
-- Non-blocking (returns immediately)
-- Explicit error handling required
+- Non-blocking send (returns immediately on pool exhaustion)
+- Explicit error handling required at every call site
 - No surprise blocking or deadlocks
 - Caller decides retry policy
 
@@ -212,6 +228,42 @@ No additional memory allocation in hot path.
 
 ## API Design
 
+### Blocking Variants for All Pool-Using Functions
+
+```c
+// Existing non-blocking (unchanged)
+hive_status hive_ipc_notify(actor_id to, uint32_t tag,
+                            const void *data, size_t len);
+hive_status hive_ipc_notify_ex(actor_id to, hive_msg_class class, uint32_t tag,
+                               const void *data, size_t len);
+hive_status hive_ipc_reply(const hive_message *request,
+                           const void *data, size_t len);
+hive_status hive_bus_publish(hive_bus *bus, const void *data, size_t len);
+
+// New blocking variants
+hive_status hive_ipc_send(actor_id to, uint32_t tag,
+                          const void *data, size_t len,
+                          int32_t timeout_ms);
+hive_status hive_ipc_send_ex(actor_id to, hive_msg_class class, uint32_t tag,
+                             const void *data, size_t len,
+                             int32_t timeout_ms);
+hive_status hive_ipc_reply_wait(const hive_message *request,
+                                const void *data, size_t len,
+                                int32_t timeout_ms);
+hive_status hive_bus_publish_wait(hive_bus *bus, const void *data, size_t len,
+                                  int32_t timeout_ms);
+```
+
+**Note:** `hive_ipc_request()` already has a timeout parameter. If the pool is
+exhausted, should it:
+- (A) Return `HIVE_ERR_NOMEM` immediately (current behavior), or
+- (B) Wait for pool space using the same timeout?
+
+Option (B) is more consistent but changes existing semantics. Recommend keeping
+(A) for backward compatibility, or adding `hive_ipc_request_wait()` if needed.
+
+### Example: hive_ipc_send()
+
 ```c
 /**
  * Send a message, blocking if pool exhausted.
@@ -223,7 +275,7 @@ No additional memory allocation in hot path.
  * @param timeout_ms Timeout: -1 = infinite, 0 = try once, >0 = milliseconds
  *
  * @return HIVE_SUCCESS on success
- *         HIVE_ERR_TIMEOUT if timeout expired
+ *         HIVE_ERR_TIMEOUT if timeout expired waiting for pool space
  *         HIVE_ERR_INVALID if target doesn't exist
  *         HIVE_ERR_NOMEM if timeout=0 and pool full
  *
@@ -265,16 +317,19 @@ Could be combined with sender-side blocking for complete solution.
 
 ## Questions for Further Discussion
 
-1. Should `hive_ipc_request()` also have a blocking variant, or is the existing
-   timeout sufficient?
+1. Should `hive_ipc_request()` wait for pool space using its existing timeout,
+   or keep returning `HIVE_ERR_NOMEM` immediately? (See API Design section)
 
-2. Should bus publish (`hive_bus_publish()`) support blocking? Bus already
-   drops oldest on buffer full, which may be acceptable.
+2. Is `hive_bus_publish_wait()` useful? Bus already drops oldest on buffer full,
+   so blocking may not match typical pub/sub patterns.
 
 3. Is per-actor mailbox limit worth the complexity? Current global pool is
    simpler and sufficient for many use cases.
 
 4. Should blocked senders be killable via `hive_kill()`? (Probably yes)
+
+5. Should there be a single unified `hive_pool_wait(timeout)` that blocks until
+   pool space is available, rather than per-function variants?
 
 ## Conclusion
 
