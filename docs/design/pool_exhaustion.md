@@ -172,17 +172,11 @@ Combine spawn-time defaults with runtime override capability. No API changes
 to pool-using functions - behavior is controlled per-actor.
 
 ```c
-typedef struct {
-    bool block;  // false = try once (default), true = block until available
-} hive_pool_config;
-
 // Set default at spawn time
 actor_config cfg = {
     .priority = HIVE_PRIORITY_NORMAL,  // Also used for pool wait ordering
     .stack_size = 8192,
-    .pool_config = {
-        .block = true                    // Block on pool exhaustion
-    }
+    .block_on_pool_full = true         // Block on pool exhaustion
 };
 hive_spawn(my_actor, NULL, NULL, &cfg, &id);
 
@@ -191,14 +185,12 @@ hive_ipc_notify(to, tag, data, len);
 hive_bus_publish(bus, data, len);
 
 // Override temporarily
-hive_pool_config blocking = { .block = true };
-hive_pool_set_config(&blocking);
+hive_pool_set_block(true);
 hive_ipc_notify(to, tag, data, len);
-hive_pool_set_config(NULL);  // Back to spawn default
+hive_pool_restore_block();  // Back to spawn default
 
 // Query current setting
-hive_pool_config current;
-hive_pool_get_config(&current);
+bool blocking = hive_pool_get_block();
 ```
 
 **Note:** Pool wait queue priority uses the actor's scheduling priority
@@ -213,29 +205,29 @@ in a well-designed system - if it does, the pool is undersized.
 - No boilerplate at call sites - API unchanged
 - Sensible defaults set once at spawn
 - Runtime override when needed for special cases
-- `NULL` to `hive_pool_set_config()` restores spawn default
+- `hive_pool_restore_block()` restores spawn default
 - No new function variants to maintain
 - Single priority system - actor priority used for pool wait ordering
-- Minimal config struct - just `bool block`
+- Just a bool in actor_config - no struct
 - KISS - no timeout complexity
 
 **Cons:**
-- Hidden state (current pool config) affects behavior
-- Deadlock risk when `block = true`
+- Hidden state affects behavior
+- Deadlock risk when `block_on_pool_full = true`
 - Requires scheduler wait queue implementation
 
 **Implementation:**
-- `actor_config.pool_config` not set = current behavior (non-blocking, return NOMEM)
-- `actor_config.pool_config.block = true` = block until pool available
-- `hive_pool_set_config()` overrides for current actor (no stack, just overwrite)
-- `hive_pool_set_config(NULL)` restores spawn default
-- `hive_pool_get_config()` returns current active config (default values if unset)
+- `actor_config.block_on_pool_full` not set (false) = current behavior (return NOMEM)
+- `actor_config.block_on_pool_full = true` = block until pool available
+- `hive_pool_set_block(bool)` overrides for current actor
+- `hive_pool_restore_block()` restores spawn default
+- `hive_pool_get_block()` returns current active setting
 - Scheduler maintains wait queue (static pool, bounded by HIVE_MAX_ACTORS)
 - Wait queue ordered by actor's scheduling priority (CRITICAL > HIGH > NORMAL > LOW)
 - On pool slot freed, wake highest priority waiter first (FIFO within same priority)
 - Scheduler logs warning when actor blocks (rate-limited to avoid spam)
 - `hive_kill()` on blocked actor removes it from wait queue
-- Supervisor child_spec must include pool_config for restarts
+- Supervisor child_spec must include `block_on_pool_full` for restarts
 
 **Hidden state is acceptable because:**
 - Default behavior = current (non-blocking) - no surprises for existing code
@@ -244,48 +236,29 @@ in a well-designed system - if it does, the pool is undersized.
 - Library code is unaffected unless caller explicitly enabled blocking
 
 **Deadlock:**
-- `block = true` can cause deadlock if all actors block
+- `block_on_pool_full = true` can cause deadlock if all actors block
 - Deadlock = design error - pool is undersized
 - Rate-limited warnings make pool exhaustion visible
 
-### Option 6: Optional Parameter (Per-Call Override)
+### Option 6: Per-Call Bool Parameter
 
-Add an optional `hive_pool_config` parameter to all pool-using functions. If `NULL`,
-use actor's default. If provided, override for this call only.
+Add an optional bool parameter to all pool-using functions.
 
 ```c
-typedef struct {
-    bool block;  // false = try once, true = block until available
-} hive_pool_config;
+// Use actor's default
+hive_ipc_notify(target, tag, data, len, HIVE_POOL_DEFAULT);
 
-// Use actor's default pool config
-hive_ipc_notify(target, tag, data, len, NULL);
-
-// Override for this call only - block
-hive_pool_config cfg = { .block = true };
-hive_ipc_notify(target, tag, data, len, &cfg);
+// Override for this call only
+hive_ipc_notify(target, tag, data, len, HIVE_POOL_BLOCK);
+hive_ipc_notify(target, tag, data, len, HIVE_POOL_NO_BLOCK);
 ```
-
-**All affected functions:**
-```c
-hive_ipc_notify(to, tag, data, len, cfg);
-hive_ipc_notify_ex(to, class, tag, data, len, cfg);
-hive_ipc_request(to, req, len, reply, timeout, cfg);
-hive_ipc_reply(request, data, len, cfg);
-hive_bus_publish(bus, data, len, cfg);
-```
-
-**Pros:**
-- Per-call control when needed
-- Explicit at call site
 
 **Cons:**
 - API change (additional parameter to all functions)
-- Boilerplate returns (must pass NULL everywhere)
-- Inconsistent with Option 5 approach
+- Boilerplate (must pass something everywhere)
+- Defeats the purpose of Option 5's "no boilerplate" goal
 
-**Note:** Could be combined with Option 5 - actor default set at spawn,
-per-call override via parameter. But adds complexity.
+**Not recommended** - Option 5 already solves the problem without API changes.
 
 ## Comparison with Other Actor Systems
 
@@ -569,16 +542,21 @@ Option 5 solves this by:
 
 **The design is simple (KISS):**
 ```c
-typedef struct {
-    bool block;  // false = try once (default), true = block until available
-} hive_pool_config;
+// In actor_config
+bool block_on_pool_full;  // false = try once (default), true = block
+
+// Runtime API
+hive_pool_set_block(bool block);
+hive_pool_restore_block(void);
+bool hive_pool_get_block(void);
 ```
 
-One field. Actor's scheduling priority determines pool wait order. No timeouts.
+Just a bool. Actor's scheduling priority determines pool wait order. No timeouts.
+No struct. YAGNI.
 
 **Trade-offs accepted:**
-- Hidden state (pool config) affects API behavior
-- Deadlock risk when `block = true`
+- Hidden state affects API behavior
+- Deadlock risk when blocking enabled
 - Scheduler complexity (wait queue)
 
 **Mitigations:**
@@ -588,7 +566,7 @@ One field. Actor's scheduling priority determines pool wait order. No timeouts.
 - `hive_kill()` removes blocked actors from wait queue
 
 **For users who prefer explicit control:**
-- Omit `pool_config` or set `block = false` - current behavior preserved
+- Don't set `block_on_pool_full` (or set to false) - current behavior preserved
 - They can still handle NOMEM explicitly at each call site
 
 **Remember:**
