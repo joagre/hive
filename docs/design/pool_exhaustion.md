@@ -46,7 +46,7 @@ to pool-using functions - behavior is controlled per-actor.
 actor_config cfg = {
     .priority = HIVE_PRIORITY_NORMAL,  // Also used for pool wait ordering
     .stack_size = 8192,
-    .block_on_pool_full = true         // Block on pool exhaustion
+    .pool_block = true                 // Block on pool exhaustion
 };
 hive_spawn(my_actor, NULL, NULL, &cfg, &id);
 
@@ -78,7 +78,7 @@ bool blocking = hive_pool_get_block();
 ```c
 typedef enum {
     HIVE_POOL_NO_BLOCK,  // Force non-blocking (return NOMEM on exhaustion)
-    HIVE_POOL_BLOCK,     // Force blocking (wait until pool available)
+    HIVE_POOL_BLOCK,     // Force blocking (yield until pool available)
     HIVE_POOL_DEFAULT    // Restore spawn default
 } hive_pool_block_t;
 ```
@@ -91,7 +91,7 @@ typedef struct {
     size_t stack_size;
     bool malloc_stack;
     const char *auto_register;
-    bool block_on_pool_full;  // NEW: false = return NOMEM (default), true = block
+    bool pool_block;  // NEW: false = return NOMEM (default), true = block
 } actor_config;
 ```
 
@@ -112,18 +112,18 @@ bool hive_pool_get_block(void);
 In `hive_actor_t`:
 
 ```c
-bool block_spawn_default;  // From actor_config at spawn
-bool block_current;        // Effective value now
+bool pool_block_default;  // From actor_config at spawn
+bool pool_block;          // Effective value now
 ```
 
 ### Behavior
 
-- `actor_config.block_on_pool_full` not set (false) = current behavior (return NOMEM)
-- `actor_config.block_on_pool_full = true` = block until pool available
-- `hive_pool_set_block(HIVE_POOL_NO_BLOCK)` = set `block_current = false`
-- `hive_pool_set_block(HIVE_POOL_BLOCK)` = set `block_current = true`
-- `hive_pool_set_block(HIVE_POOL_DEFAULT)` = set `block_current = block_spawn_default`
-- `hive_pool_get_block()` returns `block_current`
+- `actor_config.pool_block` not set (false) = current behavior (return NOMEM)
+- `actor_config.pool_block = true` = block until pool available
+- `hive_pool_set_block(HIVE_POOL_NO_BLOCK)` = set `pool_block = false`
+- `hive_pool_set_block(HIVE_POOL_BLOCK)` = set `pool_block = true`
+- `hive_pool_set_block(HIVE_POOL_DEFAULT)` = set `pool_block = pool_block_default`
+- `hive_pool_get_block()` returns `pool_block`
 
 ### Wait Queue
 
@@ -135,7 +135,7 @@ bool block_current;        // Effective value now
 ### Interactions
 
 - `hive_kill()` on blocked actor removes it from wait queue
-- Supervisor `child_spec` must explicitly include `block_on_pool_full` (no inheritance)
+- Supervisor `child_spec` must explicitly include `pool_block` (no inheritance)
 
 ### Memory Impact
 
@@ -227,7 +227,7 @@ This is the closest embedded precedent.
 
 ### For Users Who Prefer Explicit Control
 
-- Don't set `block_on_pool_full` (or set to false) - current behavior preserved
+- Don't set `pool_block` (or set to false) - current behavior preserved
 - They can still handle NOMEM explicitly at each call site
 
 ## Summary
