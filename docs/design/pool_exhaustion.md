@@ -166,7 +166,58 @@ hive_ipc_notify_wait(target, tag, data, len, timeout);
 - Two ways to do the same thing
 - Must maintain parallel APIs
 
-### Option 5: Optional Parameter with Priority
+### Option 5: Combine Option 1 + Option 2 (Recommended)
+
+Combine spawn-time defaults with runtime override capability. No API changes
+to pool-using functions - behavior is controlled per-actor.
+
+```c
+// Set default at spawn time
+actor_config cfg = {
+    .priority = HIVE_PRIORITY_NORMAL,
+    .stack_size = 8192,
+    .pool_config = {
+        .timeout_ms = 1000,              // Block up to 1 second
+        .priority = HIVE_PRIORITY_NORMAL
+    }
+};
+hive_spawn(my_actor, NULL, NULL, &cfg, &id);
+
+// All calls use spawn default - no boilerplate!
+hive_ipc_notify(to, tag, data, len);
+hive_bus_publish(bus, data, len);
+
+// Override temporarily for critical section
+hive_pool_config critical = { .timeout_ms = -1, .priority = HIVE_PRIORITY_CRITICAL };
+hive_pool_set_config(&critical);
+hive_ipc_notify(to, CRITICAL_TAG, data, len);
+hive_pool_set_config(NULL);  // Back to spawn default
+
+// Query current setting
+hive_pool_config current;
+hive_pool_get_config(&current);
+```
+
+**Pros:**
+- No boilerplate at call sites - API unchanged
+- Sensible defaults set once at spawn
+- Runtime override when needed for special cases
+- `NULL` to `hive_pool_set_config()` restores spawn default
+- No new function variants to maintain
+
+**Cons:**
+- Hidden state (current pool config) affects behavior
+- Deadlock risk when timeout_ms != 0
+- Requires scheduler wait queue implementation
+
+**Implementation:**
+- `actor_config.pool_config` sets default (NULL = current behavior: non-blocking)
+- `hive_pool_set_config()` overrides for current actor
+- `hive_pool_set_config(NULL)` restores spawn default
+- Scheduler maintains wait queue, wakes highest priority waiter on pool free
+- Scheduler logs warning when actor blocks on pool exhaustion
+
+### Option 6: Optional Parameter with Priority
 
 Add an optional `hive_pool_config` parameter to all pool-using functions. If `NULL`,
 current behavior. If provided, controls blocking and message priority.
@@ -489,25 +540,33 @@ Could be combined with caller-side blocking for complete solution.
 
 ## Conclusion
 
-**Current recommendation: Position A (no blocking variants).**
+**Recommendation: Option 5 (Combine Option 1 + Option 2).**
 
-The current non-blocking API with explicit `HIVE_ERR_NOMEM` handling:
-- Stays true to actor model semantics
-- Avoids deadlock risks inherent in blocking on pool full
-- Forces developers to think about resource limits at design time
-- Matches QP/C philosophy (pool exhaustion = design error)
+The key insight is that requiring NOMEM handling at every call site leads to:
+- Boilerplate code that developers resent
+- Ad-hoc busy-loop retry patterns that are often worse than blocking
+- Inconsistent error handling across the codebase
 
-For backpressure, recommend:
-- Use `hive_ipc_request()` - natural rate limiting via reply wait
-- Size pools for worst-case at design time
-- Handle NOMEM by dropping non-critical messages or failing fast
+Option 5 solves this by:
+- Setting pool behavior once at spawn time (no per-call boilerplate)
+- Allowing runtime override for special cases
+- Keeping the existing API unchanged
+- Making pool exhaustion visible via scheduler warnings
 
-**However**, Option 5 (optional parameter with priority) is worth considering:
-- Prevents the busy-loop anti-pattern when users handle NOMEM poorly
-- Backward compatible - `NULL` preserves current behavior
+**Trade-offs accepted:**
+- Hidden state (pool config) affects API behavior
+- Deadlock risk when blocking is enabled
+- Scheduler complexity (wait queue, priority-based wake-up)
+
+**Mitigations:**
+- Scheduler logs warnings when actors block on pool exhaustion
+- Timeouts prevent infinite deadlocks (recommend against `timeout_ms = -1`)
 - Priority-based wake-up prevents starvation of critical messages
-- Explicit at call site - no hidden state or semantic confusion
+- Documentation must clearly explain deadlock risks
 
-The deadlock risk with `block = true` remains, but users who enable blocking
-are making an explicit choice and should understand the implications. This is
-arguably better than users implementing ad-hoc retry loops that may be worse.
+**For users who prefer explicit control:**
+- `pool_config.timeout_ms = 0` (or omit `pool_config`) preserves current behavior
+- They can still handle NOMEM explicitly at each call site
+
+**Pool exhaustion is still a design smell** - but blocking with warnings is
+better than forcing users to write bad retry loops.
