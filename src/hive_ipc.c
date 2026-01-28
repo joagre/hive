@@ -231,7 +231,7 @@ mailbox_entry_t *hive_ipc_dequeue_head(actor_t *a) {
 hive_status_t hive_mailbox_handle_timeout(actor_t *current,
                                           timer_id_t timeout_timer,
                                           const char *operation) {
-    if (timeout_timer == TIMER_ID_INVALID) {
+    if (timeout_timer == HIVE_TIMER_ID_INVALID) {
         return HIVE_SUCCESS; // No timeout was set
     }
 

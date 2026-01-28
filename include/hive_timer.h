@@ -6,7 +6,7 @@
 
 // timer_id_t is defined in hive_types.h
 
-#define TIMER_ID_INVALID ((timer_id_t)0)
+#define HIVE_TIMER_ID_INVALID ((timer_id_t)0)
 
 // Timer operations
 // All timers are owned by the calling actor and are automatically cancelled

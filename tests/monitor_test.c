@@ -70,7 +70,7 @@ static void test1_monitor_actor(void *args, const hive_spawn_info_t *siblings,
         hive_exit();
     }
 
-    if (!hive_is_exit_msg(&msg)) {
+    if (!hive_msg_is_exit(&msg)) {
         TEST_FAIL("message is not exit notification");
         hive_exit();
     }
@@ -151,7 +151,7 @@ static void test3_multi_monitor_actor(void *args,
             hive_exit();
         }
 
-        if (!hive_is_exit_msg(&msg)) {
+        if (!hive_msg_is_exit(&msg)) {
             continue; // Skip non-exit messages
         }
 
@@ -229,7 +229,7 @@ static void test4_demonitor_actor(void *args, const hive_spawn_info_t *siblings,
         TEST_PASS("demonitor prevents exit notification (no message)");
     } else {
         // Got a message - check if it's an exit notification
-        if (hive_is_exit_msg(&msg)) {
+        if (hive_msg_is_exit(&msg)) {
             TEST_FAIL("received exit notification after demonitor");
         } else {
             TEST_PASS("demonitor prevents exit notification");
@@ -255,7 +255,7 @@ static void target_waits_for_exit(void *args, const hive_spawn_info_t *siblings,
     hive_message_t msg;
     hive_status_t status = hive_ipc_recv(&msg, 500); // 500ms timeout
 
-    if (HIVE_SUCCEEDED(status) && hive_is_exit_msg(&msg)) {
+    if (HIVE_SUCCEEDED(status) && hive_msg_is_exit(&msg)) {
         g_target_received_exit = true;
     }
 
@@ -330,11 +330,11 @@ static void test6_monitor_invalid(void *args, const hive_spawn_info_t *siblings,
     uint32_t ref;
 
     // Try to monitor invalid actor ID
-    hive_status_t status = hive_monitor(ACTOR_ID_INVALID, &ref);
+    hive_status_t status = hive_monitor(HIVE_ACTOR_ID_INVALID, &ref);
     if (HIVE_FAILED(status)) {
-        TEST_PASS("hive_monitor rejects ACTOR_ID_INVALID");
+        TEST_PASS("hive_monitor rejects HIVE_ACTOR_ID_INVALID");
     } else {
-        TEST_FAIL("hive_monitor should reject ACTOR_ID_INVALID");
+        TEST_FAIL("hive_monitor should reject HIVE_ACTOR_ID_INVALID");
     }
 
     // Try to monitor non-existent actor (high ID that doesn't exist)
@@ -473,7 +473,7 @@ static void test9_monitor_pool_exhaustion(void *args,
 
     // Spawn actors and monitor them until pool exhaustion
     for (int i = 0; i < HIVE_MONITOR_ENTRY_POOL_SIZE + 10; i++) {
-        actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+        hive_actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
         cfg.malloc_stack = true;
         cfg.stack_size = TEST_STACK_SIZE(8 * 1024);
 
@@ -540,7 +540,7 @@ static void run_all_tests(void *args, const hive_spawn_info_t *siblings,
     (void)sibling_count;
 
     for (size_t i = 0; i < NUM_TESTS; i++) {
-        actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+        hive_actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
         cfg.stack_size = TEST_STACK_SIZE(64 * 1024);
 
         actor_id_t test;
@@ -570,7 +570,7 @@ int main(void) {
         return 1;
     }
 
-    actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+    hive_actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
     cfg.stack_size = TEST_STACK_SIZE(128 * 1024);
 
     actor_id_t runner;

@@ -198,7 +198,7 @@ void hive_hal_file_cleanup(void) {
 }
 
 hive_status_t hive_hal_file_open(const char *path, int flags, int mode,
-                                 int *fd_out) {
+                                 int *out) {
     // Find mount for path
     size_t prefix_len;
     const hive_mount_t *mount = hive_mount_find(path, &prefix_len);
@@ -228,7 +228,7 @@ hive_status_t hive_hal_file_open(const char *path, int flags, int mode,
     if (fd < 0) {
         return HIVE_ERROR(HIVE_ERR_IO, "open failed");
     }
-    *fd_out = fd;
+    *out = fd;
     return HIVE_SUCCESS;
 }
 
@@ -312,7 +312,7 @@ void hive_hal_net_cleanup(void) {
     // No cleanup needed for BSD sockets
 }
 
-hive_status_t hive_hal_net_socket(int *fd_out) {
+hive_status_t hive_hal_net_socket(int *out) {
     int fd = socket(AF_INET, SOCK_STREAM, 0);
     if (fd < 0) {
         return HIVE_ERROR(HIVE_ERR_IO, "socket failed");
@@ -328,7 +328,7 @@ hive_status_t hive_hal_net_socket(int *fd_out) {
     int opt = 1;
     setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
 
-    *fd_out = fd;
+    *out = fd;
     return HIVE_SUCCESS;
 }
 
@@ -352,7 +352,7 @@ hive_status_t hive_hal_net_listen(int fd, int backlog) {
     return HIVE_SUCCESS;
 }
 
-hive_status_t hive_hal_net_accept(int listen_fd, int *conn_fd_out) {
+hive_status_t hive_hal_net_accept(int listen_fd, int *out) {
     struct sockaddr_in client_addr;
     socklen_t client_len = sizeof(client_addr);
     int conn_fd =
@@ -371,7 +371,7 @@ hive_status_t hive_hal_net_accept(int listen_fd, int *conn_fd_out) {
         return HIVE_ERROR(HIVE_ERR_IO, "fcntl failed");
     }
 
-    *conn_fd_out = conn_fd;
+    *out = conn_fd;
     return HIVE_SUCCESS;
 }
 
@@ -415,7 +415,7 @@ hive_status_t hive_hal_net_close(int fd) {
 }
 
 hive_status_t hive_hal_net_recv(int fd, void *buf, size_t len,
-                                size_t *received) {
+                                size_t *bytes_read) {
     ssize_t n = recv(fd, buf, len, MSG_DONTWAIT);
 
     if (n < 0) {
@@ -425,12 +425,12 @@ hive_status_t hive_hal_net_recv(int fd, void *buf, size_t len,
         return HIVE_ERROR(HIVE_ERR_IO, "recv failed");
     }
 
-    *received = (size_t)n;
+    *bytes_read = (size_t)n;
     return HIVE_SUCCESS;
 }
 
 hive_status_t hive_hal_net_send(int fd, const void *buf, size_t len,
-                                size_t *sent) {
+                                size_t *bytes_written) {
     ssize_t n = send(fd, buf, len, MSG_DONTWAIT);
 
     if (n < 0) {
@@ -440,7 +440,7 @@ hive_status_t hive_hal_net_send(int fd, const void *buf, size_t len,
         return HIVE_ERROR(HIVE_ERR_IO, "send failed");
     }
 
-    *sent = (size_t)n;
+    *bytes_written = (size_t)n;
     return HIVE_SUCCESS;
 }
 

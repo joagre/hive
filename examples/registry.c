@@ -11,7 +11,7 @@
 // - Client actors find services by name (no hardcoded actor IDs)
 // - Names auto-cleaned when actors exit (handles crashes gracefully)
 //
-// Note: For supervised actors, prefer auto_register in actor_config_t instead
+// Note: For supervised actors, prefer auto_register in hive_actor_config_t instead
 // of manual hive_register() calls. This example shows the manual API.
 
 #include "hive_runtime.h"
@@ -158,7 +158,7 @@ int main(void) {
     }
 
     // Spawn service first so it can register
-    actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+    hive_actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
     cfg.name = "calc_service";
 
     actor_id_t service_id;

@@ -32,7 +32,7 @@ void *waypoint_actor_init(void *init_args) {
     static waypoint_state_t state;
     state.state_bus = buses->state_bus;
     state.position_target_bus = buses->position_target_bus;
-    state.flight_manager = ACTOR_ID_INVALID; // Set from siblings in actor
+    state.flight_manager = HIVE_ACTOR_ID_INVALID; // Set from siblings in actor
     return &state;
 }
 
@@ -58,7 +58,7 @@ void waypoint_actor(void *args, const hive_spawn_info_t *siblings,
     // Look up flight_manager from sibling info
     state->flight_manager =
         hive_find_sibling(siblings, sibling_count, "flight_manager");
-    if (state->flight_manager == ACTOR_ID_INVALID) {
+    if (state->flight_manager == HIVE_ACTOR_ID_INVALID) {
         HIVE_LOG_ERROR("[WPT] Failed to find flight_manager sibling");
         return;
     }
@@ -86,7 +86,7 @@ void waypoint_actor(void *args, const hive_spawn_info_t *siblings,
     HIVE_LOG_INFO("[WPT] START received - beginning flight sequence");
 
     int waypoint_index = 0;
-    timer_id_t hover_timer = TIMER_ID_INVALID;
+    timer_id_t hover_timer = HIVE_TIMER_ID_INVALID;
     bool hovering = false;
 
     // Set up hive_select() sources (dynamically adjust count based on hovering)
@@ -123,7 +123,7 @@ void waypoint_actor(void *args, const hive_spawn_info_t *siblings,
         if (result.index == SEL_HOVER_TIMER) {
             // Hover timer fired - advance to next waypoint (loops back to 0)
             hovering = false;
-            hover_timer = TIMER_ID_INVALID;
+            hover_timer = HIVE_TIMER_ID_INVALID;
             waypoint_index = (waypoint_index + 1) % (int)NUM_WAYPOINTS;
             HIVE_LOG_INFO("[WPT] Advancing to waypoint %d: (%.1f, %.1f, "
                           "%.1f) yaw=%.0f deg",

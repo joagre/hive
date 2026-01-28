@@ -81,7 +81,7 @@ static void test1_basic_spawn(void *args, const hive_spawn_info_t *siblings,
 // Test 2: hive_self returns correct ID
 // ============================================================================
 
-static actor_id_t g_self_id_from_actor = ACTOR_ID_INVALID;
+static actor_id_t g_self_id_from_actor = HIVE_ACTOR_ID_INVALID;
 
 static void self_reporter_actor(void *args, const hive_spawn_info_t *siblings,
                                 size_t sibling_count) {
@@ -99,7 +99,7 @@ static void test2_rt_self(void *args, const hive_spawn_info_t *siblings,
     (void)sibling_count;
     printf("\nTest 2: hive_self returns correct ID\n");
 
-    g_self_id_from_actor = ACTOR_ID_INVALID;
+    g_self_id_from_actor = HIVE_ACTOR_ID_INVALID;
 
     actor_id_t spawned_id;
     hive_spawn(self_reporter_actor, NULL, NULL, NULL, &spawned_id);
@@ -272,10 +272,11 @@ static void test5_actor_alive(void *args, const hive_spawn_info_t *siblings,
     }
 
     // Invalid actor should return false
-    if (!hive_actor_alive(ACTOR_ID_INVALID)) {
-        TEST_PASS("hive_actor_alive returns false for ACTOR_ID_INVALID");
+    if (!hive_actor_alive(HIVE_ACTOR_ID_INVALID)) {
+        TEST_PASS("hive_actor_alive returns false for HIVE_ACTOR_ID_INVALID");
     } else {
-        TEST_FAIL("hive_actor_alive should return false for ACTOR_ID_INVALID");
+        TEST_FAIL(
+            "hive_actor_alive should return false for HIVE_ACTOR_ID_INVALID");
     }
 
     if (!hive_actor_alive(9999)) {
@@ -315,7 +316,7 @@ static void test6_custom_priority(void *args, const hive_spawn_info_t *siblings,
 
     s_captured_priority = HIVE_PRIORITY_NORMAL;
 
-    actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+    hive_actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
     cfg.priority = HIVE_PRIORITY_HIGH;
 
     actor_id_t id;
@@ -371,7 +372,7 @@ static void test7_custom_stack_size(void *args,
 
     g_large_stack_ok = false;
 
-    actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+    hive_actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
     cfg.stack_size = TEST_STACK_SIZE(64 * 1024);
 
     actor_id_t id;
@@ -417,7 +418,7 @@ static void test8_malloc_stack(void *args, const hive_spawn_info_t *siblings,
 
     g_malloc_stack_ran = false;
 
-    actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+    hive_actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
     cfg.malloc_stack = true;
     cfg.stack_size = TEST_STACK_SIZE(32 * 1024);
 
@@ -459,7 +460,7 @@ static void test9_named_actor(void *args, const hive_spawn_info_t *siblings,
     (void)sibling_count;
     printf("\nTest 9: Spawn with name\n");
 
-    actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+    hive_actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
     cfg.name = "test_actor_name";
 
     actor_id_t id;
@@ -596,7 +597,7 @@ static void test12_actor_crash(void *args, const hive_spawn_info_t *siblings,
         hive_exit();
     }
 
-    if (!hive_is_exit_msg(&msg)) {
+    if (!hive_msg_is_exit(&msg)) {
         TEST_FAIL("received non-exit message");
         hive_exit();
     }
@@ -646,7 +647,7 @@ static void test13_actor_table_exhaustion(void *args,
 
     // Use malloc stacks with small size to avoid arena exhaustion
     // This tests the actual actor table limit, not stack arena
-    actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+    hive_actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
     cfg.malloc_stack = true;
     cfg.stack_size = TEST_STACK_SIZE(8 * 1024);
 
@@ -696,7 +697,7 @@ static void test13_actor_table_exhaustion(void *args,
 // Test runner
 // ============================================================================
 
-static actor_fn_t test_funcs[] = {
+static hive_actor_fn_t test_funcs[] = {
     test1_basic_spawn,
     test2_rt_self,
     test3_argument_passing,
@@ -721,7 +722,7 @@ static void run_all_tests(void *args, const hive_spawn_info_t *siblings,
     (void)sibling_count;
 
     for (size_t i = 0; i < NUM_TESTS; i++) {
-        actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+        hive_actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
         cfg.stack_size = TEST_STACK_SIZE(64 * 1024);
 
         actor_id_t test;
@@ -750,7 +751,7 @@ int main(void) {
         return 1;
     }
 
-    actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+    hive_actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
     cfg.stack_size = TEST_STACK_SIZE(128 * 1024);
 
     actor_id_t runner;

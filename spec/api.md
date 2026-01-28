@@ -117,10 +117,10 @@ void hive_yield(void);
 bool hive_actor_alive(actor_id_t id);
 
 // Kill an actor externally
-hive_status_t hive_kill(actor_id_t target);
+hive_status_t hive_actor_kill(actor_id_t target);
 ```
 
-**hive_kill(target)**: Terminates the target actor immediately. This is a **hard kill** - the target cannot resist or defer termination. There is no graceful shutdown protocol; the actor is removed from the scheduler at the next opportunity. The target's exit reason is set to `HIVE_EXIT_KILLED`. Linked/monitoring actors receive exit notifications. Cannot kill self (use `hive_exit()` instead). Used internally by supervisors to terminate children during shutdown or strategy application.
+**hive_actor_kill(target)**: Terminates the target actor immediately. This is a **hard kill** - the target cannot resist or defer termination. There is no graceful shutdown protocol; the actor is removed from the scheduler at the next opportunity. The target's exit reason is set to `HIVE_EXIT_KILLED`. Linked/monitoring actors receive exit notifications. Cannot kill self (use `hive_exit()` instead). Used internally by supervisors to terminate children during shutdown or strategy application.
 
 For graceful shutdown, implement an application-level protocol: send a shutdown request message, wait for acknowledgment, then kill if needed.
 
@@ -191,7 +191,7 @@ typedef struct {
 } hive_exit_msg_t;
 
 // Check if message is exit notification
-bool hive_is_exit_msg(const hive_message_t *msg);
+bool hive_msg_is_exit(const hive_message_t *msg);
 
 // Decode exit message into struct
 hive_status_t hive_decode_exit(const hive_message_t *msg, hive_exit_msg_t *out);
@@ -212,7 +212,7 @@ Exit messages should be decoded using `hive_decode_exit()`:
 hive_message_t msg;
 hive_ipc_recv(&msg, -1);
 
-if (hive_is_exit_msg(&msg)) {
+if (hive_msg_is_exit(&msg)) {
     hive_exit_msg_t exit_info;
     hive_decode_exit(&msg, &exit_info);
     if (exit_info.monitor_id == 0) {
@@ -1450,7 +1450,7 @@ Supervision for automatic child actor restart. A supervisor is an actor that mon
 // Start supervisor with configuration
 hive_status_t hive_supervisor_start(const hive_supervisor_config_t *config,
                                   const actor_config_t *sup_actor_cfg,
-                                  actor_id_t *out_supervisor);
+                                  actor_id_t *out);
 
 // Request graceful shutdown (async)
 hive_status_t hive_supervisor_stop(actor_id_t supervisor);
@@ -1556,7 +1556,7 @@ The supervisor tracks restart attempts within a sliding time window. If `max_res
 
 ### Functions
 
-**hive_supervisor_start(config, sup_actor_cfg, out_supervisor)**
+**hive_supervisor_start(config, sup_actor_cfg, out)**
 
 Creates a new supervisor actor that immediately spawns and monitors all specified children.
 
@@ -1564,11 +1564,11 @@ Creates a new supervisor actor that immediately spawns and monitors all specifie
 |-----------|-------------|
 | `config` | Supervisor configuration (children, strategy, intensity) |
 | `sup_actor_cfg` | Optional actor config for supervisor itself (NULL = defaults) |
-| `out_supervisor` | Receives supervisor's actor ID |
+| `out` | Receives supervisor's actor ID |
 
 Returns:
 - `HIVE_OK`: Supervisor started, all children spawned
-- `HIVE_ERR_INVALID`: NULL config, NULL out_supervisor, too many children, NULL children with non-zero count, NULL child function
+- `HIVE_ERR_INVALID`: NULL config, NULL out, too many children, NULL children with non-zero count, NULL child function
 - `HIVE_ERR_NOMEM`: No supervisor slots available or spawn failed
 
 **hive_supervisor_stop(supervisor)**
@@ -1603,7 +1603,7 @@ Returns:
 
 **Shutdown callback** - Called from supervisor actor context just before exit. All children already stopped when callback runs.
 
-**hive_kill()** - Supervisors use `hive_kill(target)` to terminate children during shutdown or when applying `one_for_all`/`rest_for_one` strategies.
+**hive_actor_kill()** - Supervisors use `hive_actor_kill(target)` to terminate children during shutdown or when applying `one_for_all`/`rest_for_one` strategies.
 
 ### Restart Semantics
 
@@ -1731,14 +1731,14 @@ Non-blocking network I/O with blocking wrappers.
 
 ```c
 // Socket management
-hive_status_t hive_net_listen(uint16_t port, int *fd_out);
-hive_status_t hive_net_accept(int listen_fd, int *conn_fd_out, int32_t timeout_ms);
-hive_status_t hive_net_connect(const char *ip, uint16_t port, int *fd_out, int32_t timeout_ms);
+hive_status_t hive_net_listen(uint16_t port, int *out);
+hive_status_t hive_net_accept(int listen_fd, int *out, int32_t timeout_ms);
+hive_status_t hive_net_connect(const char *ip, uint16_t port, int *out, int32_t timeout_ms);
 hive_status_t hive_net_close(int fd);
 
 // Data transfer
-hive_status_t hive_net_recv(int fd, void *buf, size_t len, size_t *received, int32_t timeout_ms);
-hive_status_t hive_net_send(int fd, const void *buf, size_t len, size_t *sent, int32_t timeout_ms);
+hive_status_t hive_net_recv(int fd, void *buf, size_t len, size_t *bytes_read, int32_t timeout_ms);
+hive_status_t hive_net_send(int fd, const void *buf, size_t len, size_t *bytes_written, int32_t timeout_ms);
 ```
 
 **DNS resolution is out of scope.** The `ip` parameter must be a numeric IPv4 address (e.g., "192.168.1.1"). Hostnames are not supported. Rationale:
@@ -1761,7 +1761,7 @@ On blocking calls, the actor yields to the scheduler. The scheduler's event loop
 **`hive_net_recv()` - Partial completion**
 - Returns successfully when **at least 1 byte** is read (or 0 for EOF/peer closed)
 - Does NOT loop until `len` bytes are received
-- `*received` contains actual bytes read (may be less than `len`)
+- `*bytes_read` contains actual bytes read (may be less than `len`)
 - Caller must loop if full message is required:
 ```c
 size_t total = 0;
@@ -1777,7 +1777,7 @@ while (total < expected_len) {
 **`hive_net_send()` - Partial completion**
 - Returns successfully when **at least 1 byte** is written
 - Does NOT loop until `len` bytes are sent
-- `*sent` contains actual bytes written (may be less than `len`)
+- `*bytes_written` contains actual bytes written (may be less than `len`)
 - Caller must loop if full buffer must be sent:
 ```c
 size_t total = 0;
@@ -1792,14 +1792,14 @@ while (total < len) {
 **`hive_net_connect()` - Async connect completion**
 - If `connect()` returns `EINPROGRESS`: registers for `EPOLLOUT`, actor yields
 - When socket becomes writable: checks `getsockopt(fd, SOL_SOCKET, SO_ERROR, ...)`
-- If `SO_ERROR == 0`: success, returns `HIVE_SUCCESS` with connected socket in `*fd_out`
+- If `SO_ERROR == 0`: success, returns `HIVE_SUCCESS` with connected socket in `*out`
 - If `SO_ERROR != 0`: returns `HIVE_ERR_IO` with error message, socket is closed
 - If timeout expires before writable: returns `HIVE_ERR_TIMEOUT`, socket is closed
 
 **`hive_net_accept()` - Connection ready**
 - Waits for `EPOLLIN` on listen socket (incoming connection ready)
 - Calls `accept()` to obtain connected socket
-- Returns `HIVE_SUCCESS` with new socket in `*conn_fd_out`
+- Returns `HIVE_SUCCESS` with new socket in `*out`
 
 **Rationale for partial completion**
 - Matches POSIX socket semantics (recv/send may return partial)
@@ -1814,7 +1814,7 @@ File I/O operations.
 > **Note** - File I/O is synchronous and briefly pauses the scheduler. This is fine for short operations - use `LOW` priority actors for file work. See [Scheduler-Stalling Calls](design.md#scheduler-stalling-calls) for details.
 
 ```c
-hive_status_t hive_file_open(const char *path, int flags, int mode, int *fd_out);
+hive_status_t hive_file_open(const char *path, int flags, int mode, int *out);
 hive_status_t hive_file_close(int fd);
 
 hive_status_t hive_file_read(int fd, void *buf, size_t len, size_t *bytes_read);

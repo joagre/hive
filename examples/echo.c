@@ -214,7 +214,7 @@ int main(void) {
     }
 
     // Spawn client actor first (so we know its ID to pass to server)
-    actor_config_t client_cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+    hive_actor_config_t client_cfg = HIVE_ACTOR_CONFIG_DEFAULT;
     client_cfg.name = "client";
     client_cfg.priority = HIVE_PRIORITY_NORMAL;
 
@@ -227,7 +227,7 @@ int main(void) {
     }
 
     // Spawn server actor with client ID so it can send ready notification
-    actor_config_t server_cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+    hive_actor_config_t server_cfg = HIVE_ACTOR_CONFIG_DEFAULT;
     server_cfg.name = "server";
     server_cfg.priority = HIVE_PRIORITY_NORMAL;
 

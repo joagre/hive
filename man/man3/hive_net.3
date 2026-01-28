@@ -6,12 +6,12 @@ hive_net_listen, hive_net_accept, hive_net_connect, hive_net_close, hive_net_rec
 .nf
 .B #include <hive_net.h>
 .PP
-.BI "hive_status_t hive_net_listen(uint16_t " port ", int *" fd_out ");"
-.BI "hive_status_t hive_net_accept(int " listen_fd ", int *" conn_fd_out ", int32_t " timeout_ms ");"
-.BI "hive_status_t hive_net_connect(const char *" ip ", uint16_t " port ", int *" fd_out ", int32_t " timeout_ms ");"
+.BI "hive_status_t hive_net_listen(uint16_t " port ", int *" out ");"
+.BI "hive_status_t hive_net_accept(int " listen_fd ", int *" out ", int32_t " timeout_ms ");"
+.BI "hive_status_t hive_net_connect(const char *" ip ", uint16_t " port ", int *" out ", int32_t " timeout_ms ");"
 .BI "hive_status_t hive_net_close(int " fd ");"
-.BI "hive_status_t hive_net_recv(int " fd ", void *" buf ", size_t " len ", size_t *" received ", int32_t " timeout_ms ");"
-.BI "hive_status_t hive_net_send(int " fd ", const void *" buf ", size_t " len ", size_t *" sent ", int32_t " timeout_ms ");"
+.BI "hive_status_t hive_net_recv(int " fd ", void *" buf ", size_t " len ", size_t *" bytes_read ", int32_t " timeout_ms ");"
+.BI "hive_status_t hive_net_send(int " fd ", const void *" buf ", size_t " len ", size_t *" bytes_written ", int32_t " timeout_ms ");"
 .fi
 .SH DESCRIPTION
 These functions provide non-blocking TCP network I/O for actors. All operations
@@ -26,14 +26,14 @@ creates a listening socket bound to
 .I port
 on all interfaces (INADDR_ANY). The socket is configured non-blocking with
 SO_REUSEADDR. The socket descriptor is stored in
-.IR fd_out .
+.IR out .
 This operation does not block.
 .PP
 .BR hive_net_accept ()
 accepts an incoming connection on
 .IR listen_fd .
 The new connection socket is stored in
-.IR conn_fd_out .
+.IR out .
 If no connection is immediately available, the actor blocks until a connection
 arrives or timeout expires.
 .SS Client Operations
@@ -45,7 +45,7 @@ establishes a TCP connection to
 DNS resolution is
 .B not supported
 because it would block the scheduler. The connected socket is stored in
-.IR fd_out .
+.IR out .
 .SS Data Transfer
 .BR hive_net_recv ()
 receives up to
@@ -53,7 +53,7 @@ receives up to
 bytes into
 .IR buf .
 The actual number of bytes received is stored in
-.IR received .
+.IR bytes_read .
 Returns 0 bytes on connection close (EOF).
 .PP
 .BR hive_net_send ()
@@ -62,7 +62,7 @@ sends up to
 bytes from
 .IR buf .
 The actual number of bytes sent is stored in
-.IR sent .
+.IR bytes_written .
 Note: May send fewer bytes than requested (partial write); caller must retry with
 remaining data.
 .SS Closing
@@ -128,9 +128,9 @@ the waiting actor yields automatically.
 and
 .BR hive_net_send ()
 may transfer fewer bytes than requested. Always check the
-.I received
+.I bytes_read
 or
-.I sent
+.I bytes_written
 output parameter and loop to transfer remaining data:
 .PP
 .nf
@@ -146,7 +146,7 @@ while (total_sent < len) {
 .SS Connection Close Detection
 .BR hive_net_recv ()
 returns success with
-.I *received = 0
+.I *bytes_read = 0
 when the peer closes the connection. This is normal EOF, not an error:
 .PP
 .nf

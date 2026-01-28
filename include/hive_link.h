@@ -19,7 +19,7 @@ hive_status_t hive_monitor(actor_id_t target, uint32_t *out);
 hive_status_t hive_demonitor(uint32_t id);
 
 // Exit message helpers
-bool hive_is_exit_msg(const hive_message_t *msg);
+bool hive_msg_is_exit(const hive_message_t *msg);
 hive_status_t hive_decode_exit(const hive_message_t *msg, hive_exit_msg_t *out);
 
 // Convert exit reason to string (for logging/debugging)

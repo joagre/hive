@@ -418,7 +418,7 @@ void hive_hal_net_cleanup(void) {
     // Nothing to do - lwIP lifecycle managed by system
 }
 
-hive_status_t hive_hal_net_socket(int *fd_out) {
+hive_status_t hive_hal_net_socket(int *out) {
     int sock = lwip_socket(AF_INET, SOCK_STREAM, 0);
     if (sock < 0) {
         return HIVE_ERROR(HIVE_ERR_IO, "Failed to create socket");
@@ -432,7 +432,7 @@ hive_status_t hive_hal_net_socket(int *fd_out) {
     int opt = 1;
     lwip_setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
 
-    *fd_out = sock;
+    *out = sock;
     return HIVE_SUCCESS;
 }
 
@@ -455,7 +455,7 @@ hive_status_t hive_hal_net_listen(int fd, int backlog) {
     return HIVE_SUCCESS;
 }
 
-hive_status_t hive_hal_net_accept(int listen_fd, int *conn_fd_out) {
+hive_status_t hive_hal_net_accept(int listen_fd, int *out) {
     struct sockaddr_in addr;
     socklen_t len = sizeof(addr);
 
@@ -471,7 +471,7 @@ hive_status_t hive_hal_net_accept(int listen_fd, int *conn_fd_out) {
     int flags = lwip_fcntl(conn, F_GETFL, 0);
     lwip_fcntl(conn, F_SETFL, flags | O_NONBLOCK);
 
-    *conn_fd_out = conn;
+    *out = conn;
     return HIVE_SUCCESS;
 }
 
@@ -516,7 +516,7 @@ hive_status_t hive_hal_net_close(int fd) {
     return HIVE_SUCCESS;
 }
 
-hive_status_t hive_hal_net_recv(int fd, void *buf, size_t len, size_t *received) {
+hive_status_t hive_hal_net_recv(int fd, void *buf, size_t len, size_t *bytes_read) {
     ssize_t ret = lwip_recv(fd, buf, len, 0);
 
     if (ret < 0) {
@@ -526,11 +526,11 @@ hive_status_t hive_hal_net_recv(int fd, void *buf, size_t len, size_t *received)
         return HIVE_ERROR(HIVE_ERR_IO, "Recv failed");
     }
 
-    *received = (size_t)ret;  // 0 = EOF (connection closed)
+    *bytes_read = (size_t)ret;  // 0 = EOF (connection closed)
     return HIVE_SUCCESS;
 }
 
-hive_status_t hive_hal_net_send(int fd, const void *buf, size_t len, size_t *sent) {
+hive_status_t hive_hal_net_send(int fd, const void *buf, size_t len, size_t *bytes_written) {
     ssize_t ret = lwip_send(fd, buf, len, 0);
 
     if (ret < 0) {
@@ -540,7 +540,7 @@ hive_status_t hive_hal_net_send(int fd, const void *buf, size_t len, size_t *sen
         return HIVE_ERROR(HIVE_ERR_IO, "Send failed");
     }
 
-    *sent = (size_t)ret;
+    *bytes_written = (size_t)ret;
     return HIVE_SUCCESS;
 }
 ```

@@ -814,7 +814,7 @@ static void test12_actor_death_during_recv(void *args,
     status =
         hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
 
-    if (HIVE_SUCCEEDED(status) && hive_is_exit_msg(&msg)) {
+    if (HIVE_SUCCEEDED(status) && hive_msg_is_exit(&msg)) {
         TEST_PASS("actor cleaned up after socket closed during recv");
     } else if (hive_msg_is_timer(&msg)) {
         // Actor didn't die - might still be blocked
@@ -853,7 +853,7 @@ static void run_all_tests(void *args, const hive_spawn_info_t *siblings,
     (void)sibling_count;
 
     for (size_t i = 0; i < NUM_TESTS; i++) {
-        actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+        hive_actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
         cfg.stack_size = 64 * 1024;
 
         actor_id_t test;
@@ -881,7 +881,7 @@ int main(void) {
         return 1;
     }
 
-    actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+    hive_actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
     cfg.stack_size = 128 * 1024;
 
     actor_id_t runner;

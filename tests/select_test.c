@@ -138,7 +138,7 @@ static void test2_ipc_filtered(void *args, const hive_spawn_info_t *siblings,
 // Test 3: Single bus source - equivalent to hive_bus_read() with timeout
 // ============================================================================
 
-static bus_id_t s_test_bus = BUS_ID_INVALID;
+static bus_id_t s_test_bus = HIVE_BUS_ID_INVALID;
 
 static void test3_publisher(void *args, const hive_spawn_info_t *siblings,
                             size_t sibling_count) {
@@ -220,7 +220,7 @@ static void test3_bus_source(void *args, const hive_spawn_info_t *siblings,
     // Cleanup
     hive_bus_unsubscribe(s_test_bus);
     hive_bus_destroy(s_test_bus);
-    s_test_bus = BUS_ID_INVALID;
+    s_test_bus = HIVE_BUS_ID_INVALID;
 
     hive_exit();
 }
@@ -316,8 +316,8 @@ static void test5_ipc_multi_second(void *args,
 // Test 6: Multi-source bus + bus
 // ============================================================================
 
-static bus_id_t s_bus1 = BUS_ID_INVALID;
-static bus_id_t s_bus2 = BUS_ID_INVALID;
+static bus_id_t s_bus1 = HIVE_BUS_ID_INVALID;
+static bus_id_t s_bus2 = HIVE_BUS_ID_INVALID;
 
 static void test6_bus_publisher(void *args, const hive_spawn_info_t *siblings,
                                 size_t sibling_count) {
@@ -380,7 +380,7 @@ static void test6_bus_multi(void *args, const hive_spawn_info_t *siblings,
     hive_bus_unsubscribe(s_bus2);
     hive_bus_destroy(s_bus1);
     hive_bus_destroy(s_bus2);
-    s_bus1 = s_bus2 = BUS_ID_INVALID;
+    s_bus1 = s_bus2 = HIVE_BUS_ID_INVALID;
 
     hive_exit();
 }
@@ -686,7 +686,7 @@ static void run_all_tests(void *args, const hive_spawn_info_t *siblings,
     (void)sibling_count;
 
     for (size_t i = 0; i < NUM_TESTS; i++) {
-        actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+        hive_actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
         cfg.stack_size = TEST_STACK_SIZE(64 * 1024);
 
         actor_id_t test;
@@ -714,7 +714,7 @@ int main(void) {
         return 1;
     }
 
-    actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+    hive_actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
     cfg.stack_size = TEST_STACK_SIZE(128 * 1024);
 
     actor_id_t runner;

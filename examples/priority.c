@@ -137,13 +137,13 @@ static void starving_demo(void) {
            "priorities.\n\n");
 
     // Spawn low priority first (but it won't run until high is done)
-    actor_config_t low_cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+    hive_actor_config_t low_cfg = HIVE_ACTOR_CONFIG_DEFAULT;
     low_cfg.priority = HIVE_PRIORITY_LOW;
     actor_id_t low_id;
     hive_spawn(waiting_low_actor, NULL, NULL, &low_cfg, &low_id);
 
     // Spawn high priority - it will run first and block low
-    actor_config_t high_cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+    hive_actor_config_t high_cfg = HIVE_ACTOR_CONFIG_DEFAULT;
     high_cfg.priority = HIVE_PRIORITY_HIGH;
     actor_id_t high_id;
     hive_spawn(busy_high_actor, NULL, NULL, &high_cfg, &high_id);
@@ -174,25 +174,25 @@ int main(void) {
 
     // Spawn in reverse order to show priority matters, not spawn order
     {
-        actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+        hive_actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
         cfg.priority = HIVE_PRIORITY_LOW;
         actor_id_t id;
         hive_spawn(low_actor, NULL, (void *)(uintptr_t)4, &cfg, &id);
     }
     {
-        actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+        hive_actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
         cfg.priority = HIVE_PRIORITY_NORMAL;
         actor_id_t id;
         hive_spawn(normal_actor, NULL, (void *)(uintptr_t)3, &cfg, &id);
     }
     {
-        actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+        hive_actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
         cfg.priority = HIVE_PRIORITY_HIGH;
         actor_id_t id;
         hive_spawn(high_actor, NULL, (void *)(uintptr_t)2, &cfg, &id);
     }
     {
-        actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+        hive_actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
         cfg.priority = HIVE_PRIORITY_CRITICAL;
         actor_id_t id;
         hive_spawn(critical_actor, NULL, (void *)(uintptr_t)1, &cfg, &id);
@@ -206,7 +206,7 @@ int main(void) {
     printf("Spawning 2 NORMAL actors - they alternate.\n\n");
 
     {
-        actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+        hive_actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
         cfg.priority = HIVE_PRIORITY_NORMAL;
         actor_id_t id5, id6;
         hive_spawn(normal_actor, NULL, (void *)(uintptr_t)5, &cfg, &id5);

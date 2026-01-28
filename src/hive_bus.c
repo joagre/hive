@@ -74,7 +74,7 @@ static uint64_t get_time_ms(void) {
 
 // Find bus by ID
 static bus_t *find_bus(bus_id_t id) {
-    if (id == BUS_ID_INVALID) {
+    if (id == HIVE_BUS_ID_INVALID) {
         return NULL;
     }
 

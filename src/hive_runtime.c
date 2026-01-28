@@ -163,8 +163,8 @@ static hive_status_t register_actor_by_id(const char *name, actor_id_t id) {
     return HIVE_SUCCESS;
 }
 
-hive_status_t hive_spawn(actor_fn_t fn, hive_actor_init_fn_t init,
-                         void *init_args, const actor_config_t *cfg,
+hive_status_t hive_spawn(hive_actor_fn_t fn, hive_actor_init_fn_t init,
+                         void *init_args, const hive_actor_config_t *cfg,
                          actor_id_t *out) {
     if (!fn) {
         return HIVE_ERROR(HIVE_ERR_INVALID, "NULL function pointer");
@@ -174,13 +174,13 @@ hive_status_t hive_spawn(actor_fn_t fn, hive_actor_init_fn_t init,
     }
 
     // Use default config if none provided
-    actor_config_t default_cfg = HIVE_ACTOR_CONFIG_DEFAULT;
-    const actor_config_t *use_cfg = cfg ? cfg : &default_cfg;
+    hive_actor_config_t default_cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+    const hive_actor_config_t *use_cfg = cfg ? cfg : &default_cfg;
 
     // Copy config field by field instead of struct copy to avoid alignment
     // issues (struct copy may use SIMD instructions requiring 16-byte
     // alignment)
-    actor_config_t actual_cfg;
+    hive_actor_config_t actual_cfg;
     actual_cfg.stack_size = use_cfg->stack_size;
     actual_cfg.priority = use_cfg->priority;
     actual_cfg.name = use_cfg->name;
@@ -280,7 +280,7 @@ _Noreturn void hive_exit_crash(void) {
 
 actor_id_t hive_self(void) {
     actor_t *current = hive_actor_current();
-    return current ? current->id : ACTOR_ID_INVALID;
+    return current ? current->id : HIVE_ACTOR_ID_INVALID;
 }
 
 void hive_yield(void) {
@@ -292,7 +292,7 @@ bool hive_actor_alive(actor_id_t id) {
     return a != NULL && a->state != ACTOR_STATE_DEAD;
 }
 
-hive_status_t hive_kill(actor_id_t target) {
+hive_status_t hive_actor_kill(actor_id_t target) {
     // Cannot kill self
     actor_t *current = hive_actor_current();
     if (current && current->id == target) {

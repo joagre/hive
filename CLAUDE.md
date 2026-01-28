@@ -198,14 +198,14 @@ Enable via: `make CFLAGS+='-DHIVE_STACK_WATERMARK=1'`
 ### Exit Message Handling
 Exit messages are received when linked/monitored actors die:
 ```c
-if (hive_is_exit_msg(&msg)) {
+if (hive_msg_is_exit(&msg)) {
     hive_exit_msg_t exit_info;
     hive_decode_exit(&msg, &exit_info);
     printf("Actor %u died: %s (monitor_id=%u)\n", exit_info.actor,
            hive_exit_reason_str(exit_info.reason), exit_info.monitor_id);
 }
 ```
-- `hive_is_exit_msg(msg)` checks if message is an exit notification
+- `hive_msg_is_exit(msg)` checks if message is an exit notification
 - `hive_decode_exit(msg, out)` decodes exit message into `hive_exit_msg_t` struct
 - `hive_exit_reason_str(reason)` returns "NORMAL", "CRASH", or "KILLED"
 - Exit reasons: `HIVE_EXIT_NORMAL`, `HIVE_EXIT_CRASH`, `HIVE_EXIT_KILLED`

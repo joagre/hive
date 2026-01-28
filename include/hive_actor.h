@@ -109,9 +109,9 @@ actor_t *hive_actor_get(actor_id_t id);
 // siblings: sibling info array (stack-allocated by spawner, copied to actor's stack)
 // sibling_count: number of siblings
 // cfg: actor configuration
-actor_t *hive_actor_alloc(actor_fn_t fn, void *args,
+actor_t *hive_actor_alloc(hive_actor_fn_t fn, void *args,
                           const hive_spawn_info_t *siblings,
-                          size_t sibling_count, const actor_config_t *cfg);
+                          size_t sibling_count, const hive_actor_config_t *cfg);
 
 // Free an actor
 void hive_actor_free(actor_t *a);

@@ -148,7 +148,7 @@ hive_status_t hive_actor_init(void) {
     s_actor_table.actors = s_actors;
     s_actor_table.max_actors = HIVE_MAX_ACTORS;
     s_actor_table.num_actors = 0;
-    s_actor_table.next_id = 1; // Start at 1, 0 is ACTOR_ID_INVALID
+    s_actor_table.next_id = 1; // Start at 1, 0 is HIVE_ACTOR_ID_INVALID
 
     return HIVE_SUCCESS;
 }
@@ -174,7 +174,7 @@ void hive_actor_cleanup(void) {
 }
 
 actor_t *hive_actor_get(actor_id_t id) {
-    if (id == ACTOR_ID_INVALID) {
+    if (id == HIVE_ACTOR_ID_INVALID) {
         return NULL;
     }
 
@@ -188,9 +188,10 @@ actor_t *hive_actor_get(actor_id_t id) {
     return NULL;
 }
 
-actor_t *hive_actor_alloc(actor_fn_t fn, void *args,
+actor_t *hive_actor_alloc(hive_actor_fn_t fn, void *args,
                           const hive_spawn_info_t *siblings,
-                          size_t sibling_count, const actor_config_t *cfg) {
+                          size_t sibling_count,
+                          const hive_actor_config_t *cfg) {
     if (s_actor_table.num_actors >= s_actor_table.max_actors) {
         return NULL;
     }
@@ -199,7 +200,7 @@ actor_t *hive_actor_alloc(actor_fn_t fn, void *args,
     actor_t *a = NULL;
     for (size_t i = 0; i < s_actor_table.max_actors; i++) {
         if (s_actor_table.actors[i].state == ACTOR_STATE_DEAD ||
-            s_actor_table.actors[i].id == ACTOR_ID_INVALID) {
+            s_actor_table.actors[i].id == HIVE_ACTOR_ID_INVALID) {
             a = &s_actor_table.actors[i];
             break;
         }
@@ -333,7 +334,7 @@ actor_table_t *hive_actor_get_table(void) {
 actor_id_t hive_find_sibling(const hive_spawn_info_t *siblings, size_t count,
                              const char *name) {
     if (!siblings || !name) {
-        return ACTOR_ID_INVALID;
+        return HIVE_ACTOR_ID_INVALID;
     }
 
     for (size_t i = 0; i < count; i++) {
@@ -342,7 +343,7 @@ actor_id_t hive_find_sibling(const hive_spawn_info_t *siblings, size_t count,
         }
     }
 
-    return ACTOR_ID_INVALID;
+    return HIVE_ACTOR_ID_INVALID;
 }
 
 // Stack watermarking functions
@@ -383,7 +384,7 @@ void hive_actor_stack_usage_all(stack_usage_callback_t cb) {
 
     for (size_t i = 0; i < s_actor_table.max_actors; i++) {
         actor_t *a = &s_actor_table.actors[i];
-        if (a->state != ACTOR_STATE_DEAD && a->id != ACTOR_ID_INVALID) {
+        if (a->state != ACTOR_STATE_DEAD && a->id != HIVE_ACTOR_ID_INVALID) {
             size_t used = hive_actor_stack_usage(a->id);
             cb(a->id, a->name, a->stack_size, used);
         }

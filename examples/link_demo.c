@@ -5,8 +5,8 @@
 #include <stdio.h>
 
 // Shared actor IDs
-static actor_id_t g_actor_a = ACTOR_ID_INVALID;
-static actor_id_t g_actor_b = ACTOR_ID_INVALID;
+static actor_id_t g_actor_a = HIVE_ACTOR_ID_INVALID;
+static actor_id_t g_actor_b = HIVE_ACTOR_ID_INVALID;
 
 // Actor A - links to B, then waits for exit notification
 static void actor_a(void *args, const hive_spawn_info_t *siblings,
@@ -87,7 +87,7 @@ int main(void) {
     }
 
     // Spawn Actor B first
-    actor_config_t actor_cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+    hive_actor_config_t actor_cfg = HIVE_ACTOR_CONFIG_DEFAULT;
     actor_cfg.name = "actor_b";
     if (HIVE_FAILED(hive_spawn(actor_b, NULL, NULL, &actor_cfg, &g_actor_b))) {
         fprintf(stderr, "Failed to spawn Actor B\n");

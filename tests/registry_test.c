@@ -30,7 +30,7 @@ static int tests_failed = 0;
 // Test 1: Basic register and whereis
 // ============================================================================
 
-static actor_id_t g_test1_expected_id = ACTOR_ID_INVALID;
+static actor_id_t g_test1_expected_id = HIVE_ACTOR_ID_INVALID;
 static bool g_test1_lookup_success = false;
 
 static void test1_register_actor(void *args, const hive_spawn_info_t *siblings,
@@ -84,7 +84,7 @@ static void test1_basic_register_whereis(void *args,
     (void)sibling_count;
     printf("\nTest 1: Basic register and whereis\n");
 
-    g_test1_expected_id = ACTOR_ID_INVALID;
+    g_test1_expected_id = HIVE_ACTOR_ID_INVALID;
     g_test1_lookup_success = false;
 
     actor_id_t reg_actor, lookup_actor;
@@ -593,7 +593,7 @@ static void run_all_tests(void *args, const hive_spawn_info_t *siblings,
     (void)sibling_count;
 
     for (size_t i = 0; i < NUM_TESTS; i++) {
-        actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+        hive_actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
         cfg.stack_size = TEST_STACK_SIZE(64 * 1024);
 
         actor_id_t test;
@@ -621,7 +621,7 @@ int main(void) {
         return 1;
     }
 
-    actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+    hive_actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
     cfg.stack_size = TEST_STACK_SIZE(128 * 1024);
 
     actor_id_t runner;

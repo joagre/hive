@@ -133,7 +133,7 @@ hive_status_t hive_select(const hive_select_source_t *sources,
     set_bus_blocked_flags(sources, num_sources);
 
     // Create timeout timer if needed
-    timer_id_t timeout_timer = TIMER_ID_INVALID;
+    timer_id_t timeout_timer = HIVE_TIMER_ID_INVALID;
     if (timeout_ms > 0) {
         hive_status_t status =
             hive_timer_after((uint32_t)timeout_ms * 1000, &timeout_timer);
@@ -155,7 +155,7 @@ hive_status_t hive_select(const hive_select_source_t *sources,
     clear_bus_blocked_flags(sources, num_sources);
 
     // Check for timeout
-    if (timeout_timer != TIMER_ID_INVALID) {
+    if (timeout_timer != HIVE_TIMER_ID_INVALID) {
         hive_status_t timeout_status = hive_mailbox_handle_timeout(
             current, timeout_timer, "Select timeout");
         if (HIVE_FAILED(timeout_status)) {

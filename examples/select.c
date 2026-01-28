@@ -29,7 +29,7 @@ typedef struct {
 #define CMD_STATUS 101
 
 // Global bus for sensor data
-static bus_id_t s_sensor_bus = BUS_ID_INVALID;
+static bus_id_t s_sensor_bus = HIVE_BUS_ID_INVALID;
 
 // Sensor publisher actor - simulates sensor readings
 static void sensor_publisher(void *args, const hive_spawn_info_t *siblings,
@@ -185,7 +185,7 @@ static void controller(void *args, const hive_spawn_info_t *siblings,
         hive_message_t msg;
         if (HIVE_SUCCEEDED(hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_EXIT,
                                                HIVE_TAG_ANY, &msg, 0))) {
-            if (hive_is_exit_msg(&msg)) {
+            if (hive_msg_is_exit(&msg)) {
                 hive_exit_msg_t exit_info;
                 hive_decode_exit(&msg, &exit_info);
                 printf("[Controller] Actor %u exited (%s)\n", exit_info.actor,
@@ -234,7 +234,7 @@ int main(void) {
     }
 
     // Spawn controller
-    actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+    hive_actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
     cfg.name = "controller";
 
     actor_id_t id;

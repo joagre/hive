@@ -187,7 +187,7 @@ int main(void) {
     }
 
     // Spawn orchestrator with larger stack
-    actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+    hive_actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
     cfg.name = "orchestrator";
     cfg.stack_size = 128 * 1024;
 

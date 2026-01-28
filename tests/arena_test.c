@@ -30,7 +30,7 @@ int main(void) {
     printf("Using custom stack size: 32 KB per actor\n");
     printf("Expected actors that fit: ~30-32\n\n");
 
-    actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+    hive_actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
     cfg.stack_size = TEST_STACK_SIZE(32 * 1024);
     cfg.malloc_stack = false; // Use arena (default)
 

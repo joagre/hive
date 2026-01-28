@@ -37,15 +37,14 @@ void hive_file_cleanup(void) {
     s_file.initialized = false;
 }
 
-hive_status_t hive_file_open(const char *path, int flags, int mode,
-                             int *fd_out) {
-    if (!path || !fd_out) {
-        return HIVE_ERROR(HIVE_ERR_INVALID, "NULL path or fd_out pointer");
+hive_status_t hive_file_open(const char *path, int flags, int mode, int *out) {
+    if (!path || !out) {
+        return HIVE_ERROR(HIVE_ERR_INVALID, "NULL path or out pointer");
     }
 
     HIVE_REQUIRE_INIT(s_file.initialized, "File I/O");
 
-    return hive_hal_file_open(path, flags, mode, fd_out);
+    return hive_hal_file_open(path, flags, mode, out);
 }
 
 hive_status_t hive_file_close(int fd) {

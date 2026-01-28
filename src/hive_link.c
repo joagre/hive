@@ -207,7 +207,7 @@ hive_status_t hive_demonitor(uint32_t monitor_id) {
 }
 
 // Check if message is an exit notification
-bool hive_is_exit_msg(const hive_message_t *msg) {
+bool hive_msg_is_exit(const hive_message_t *msg) {
     if (!msg) {
         return false;
     }
@@ -221,7 +221,7 @@ hive_status_t hive_decode_exit(const hive_message_t *msg,
         return HIVE_ERROR(HIVE_ERR_INVALID, "NULL msg or out pointer");
     }
 
-    if (!hive_is_exit_msg(msg)) {
+    if (!hive_msg_is_exit(msg)) {
         return HIVE_ERROR(HIVE_ERR_INVALID, "Not an exit message");
     }
 
@@ -338,7 +338,8 @@ void hive_link_cleanup_actor(actor_id_t dying_actor_id) {
     {
         for (size_t i = 0; i < table->max_actors; i++) {
             actor_t *a = &table->actors[i];
-            if (a->state == ACTOR_STATE_DEAD || a->id == ACTOR_ID_INVALID) {
+            if (a->state == ACTOR_STATE_DEAD ||
+                a->id == HIVE_ACTOR_ID_INVALID) {
                 continue;
             }
 

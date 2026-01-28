@@ -458,7 +458,7 @@ static void test8_invalid_operations(void *args,
     printf("\nTest 8: Invalid bus operations\n");
 
     // Subscribe to invalid bus
-    hive_status_t status = hive_bus_subscribe(BUS_ID_INVALID);
+    hive_status_t status = hive_bus_subscribe(HIVE_BUS_ID_INVALID);
     if (HIVE_FAILED(status)) {
         TEST_PASS("subscribe to invalid bus fails");
     } else {
@@ -466,7 +466,7 @@ static void test8_invalid_operations(void *args,
     }
 
     // Publish to invalid bus
-    status = hive_bus_publish(BUS_ID_INVALID, "test", 4);
+    status = hive_bus_publish(HIVE_BUS_ID_INVALID, "test", 4);
     if (HIVE_FAILED(status)) {
         TEST_PASS("publish to invalid bus fails");
     } else {
@@ -476,7 +476,7 @@ static void test8_invalid_operations(void *args,
     // Read from invalid bus
     char buf[64];
     size_t actual_len;
-    status = hive_bus_read(BUS_ID_INVALID, buf, sizeof(buf), &actual_len,
+    status = hive_bus_read(HIVE_BUS_ID_INVALID, buf, sizeof(buf), &actual_len,
                            HIVE_TIMEOUT_NONBLOCKING);
     if (HIVE_FAILED(status)) {
         TEST_PASS("read from invalid bus fails");
@@ -797,7 +797,7 @@ static void run_all_tests(void *args, const hive_spawn_info_t *siblings,
     (void)sibling_count;
 
     for (size_t i = 0; i < NUM_TESTS; i++) {
-        actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+        hive_actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
         cfg.stack_size = TEST_STACK_SIZE(64 * 1024);
 
         actor_id_t test;
@@ -825,7 +825,7 @@ int main(void) {
         return 1;
     }
 
-    actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+    hive_actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
     cfg.stack_size = TEST_STACK_SIZE(128 * 1024);
 
     actor_id_t runner;

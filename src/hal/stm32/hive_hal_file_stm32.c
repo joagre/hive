@@ -287,7 +287,7 @@ static void flash_cleanup(void) {
 }
 
 static hive_status_t flash_open(const hive_mount_t *mount, int flags,
-                                int *fd_out) {
+                                int *out) {
     // Find free slot
     int slot = -1;
     for (int i = 0; i < HIVE_MAX_FLASH_FILES; i++) {
@@ -345,7 +345,7 @@ static hive_status_t flash_open(const hive_mount_t *mount, int flags,
         staging_reset();
     }
 
-    *fd_out = FD_MAKE(HIVE_BACKEND_FLASH, slot);
+    *out = FD_MAKE(HIVE_BACKEND_FLASH, slot);
     return HIVE_SUCCESS;
 }
 
@@ -594,7 +594,7 @@ static hive_status_t sd_ensure_init(const hive_mount_t *mount) {
 }
 
 static hive_status_t sd_open(const hive_mount_t *mount, const char *subpath,
-                             int flags, int *fd_out) {
+                             int flags, int *out) {
     // Initialize SD if needed
     hive_status_t status = sd_ensure_init(mount);
     if (HIVE_FAILED(status)) {
@@ -629,7 +629,7 @@ static hive_status_t sd_open(const hive_mount_t *mount, const char *subpath,
     }
 
     s_sd_file_used[slot] = true;
-    *fd_out = FD_MAKE(HIVE_BACKEND_SD, slot);
+    *out = FD_MAKE(HIVE_BACKEND_SD, slot);
     return HIVE_SUCCESS;
 }
 
@@ -813,7 +813,7 @@ void hive_hal_file_cleanup(void) {
 }
 
 hive_status_t hive_hal_file_open(const char *path, int flags, int mode,
-                                 int *fd_out) {
+                                 int *out) {
     (void)mode;
 
     size_t prefix_len;
@@ -824,12 +824,12 @@ hive_status_t hive_hal_file_open(const char *path, int flags, int mode,
 
     switch (hive_mount_get_backend(mount)) {
     case HIVE_BACKEND_FLASH:
-        return flash_open(mount, flags, fd_out);
+        return flash_open(mount, flags, out);
 
 #if HIVE_ENABLE_SD
     case HIVE_BACKEND_SD: {
         const char *subpath = path + prefix_len;
-        return sd_open(mount, subpath, flags, fd_out);
+        return sd_open(mount, subpath, flags, out);
     }
 #endif
 

@@ -10,7 +10,7 @@ typedef uint32_t actor_id_t;
 typedef uint32_t bus_id_t;
 typedef uint32_t timer_id_t;
 
-#define ACTOR_ID_INVALID ((actor_id_t)0)
+#define HIVE_ACTOR_ID_INVALID ((actor_id_t)0)
 
 // Wildcard sender for filtering (use with hive_ipc_recv_match)
 #define HIVE_SENDER_ANY ((actor_id_t)0xFFFFFFFF)
@@ -76,8 +76,8 @@ typedef struct {
 typedef struct hive_spawn_info hive_spawn_info_t;
 
 // Actor entry point (receives args, sibling info array, and count)
-typedef void (*actor_fn_t)(void *args, const hive_spawn_info_t *siblings,
-                           size_t sibling_count);
+typedef void (*hive_actor_fn_t)(void *args, const hive_spawn_info_t *siblings,
+                                size_t sibling_count);
 
 // Actor init function: transforms init_args before actor runs
 // Called in spawner context. Return value becomes args to actor function.
@@ -98,7 +98,7 @@ typedef struct {
     const char *name;   // for debugging AND registry (if auto_register)
     bool malloc_stack;  // false = use static arena (default), true = malloc
     bool auto_register; // Register name in registry (requires name != NULL)
-} actor_config_t;
+} hive_actor_config_t;
 
 // Default configuration
 #define HIVE_ACTOR_CONFIG_DEFAULT                                        \
@@ -172,7 +172,7 @@ typedef struct {
 // -----------------------------------------------------------------------------
 
 // Find a sibling actor by name in the spawn info array
-// Returns the actor_id_t if found, or ACTOR_ID_INVALID if not found
+// Returns the actor_id_t if found, or HIVE_ACTOR_ID_INVALID if not found
 actor_id_t hive_find_sibling(const hive_spawn_info_t *siblings, size_t count,
                              const char *name);
 

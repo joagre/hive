@@ -97,8 +97,8 @@ void hive_hal_net_cleanup(void) {
     // Future: Cleanup lwIP stack
 }
 
-hive_status_t hive_hal_net_socket(int *fd_out) {
-    (void)fd_out;
+hive_status_t hive_hal_net_socket(int *out) {
+    (void)out;
     return HIVE_ERROR(HIVE_ERR_INVALID, "Network not supported on STM32");
 }
 
@@ -114,9 +114,9 @@ hive_status_t hive_hal_net_listen(int fd, int backlog) {
     return HIVE_ERROR(HIVE_ERR_INVALID, "Network not supported on STM32");
 }
 
-hive_status_t hive_hal_net_accept(int listen_fd, int *conn_fd_out) {
+hive_status_t hive_hal_net_accept(int listen_fd, int *out) {
     (void)listen_fd;
-    (void)conn_fd_out;
+    (void)out;
     return HIVE_ERROR(HIVE_ERR_INVALID, "Network not supported on STM32");
 }
 
@@ -138,20 +138,20 @@ hive_status_t hive_hal_net_close(int fd) {
 }
 
 hive_status_t hive_hal_net_recv(int fd, void *buf, size_t len,
-                                size_t *received) {
+                                size_t *bytes_read) {
     (void)fd;
     (void)buf;
     (void)len;
-    (void)received;
+    (void)bytes_read;
     return HIVE_ERROR(HIVE_ERR_INVALID, "Network not supported on STM32");
 }
 
 hive_status_t hive_hal_net_send(int fd, const void *buf, size_t len,
-                                size_t *sent) {
+                                size_t *bytes_written) {
     (void)fd;
     (void)buf;
     (void)len;
-    (void)sent;
+    (void)bytes_written;
     return HIVE_ERROR(HIVE_ERR_INVALID, "Network not supported on STM32");
 }
 

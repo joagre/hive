@@ -132,7 +132,7 @@ typedef struct {
 ```c
 hive_status_t hive_hal_file_init(void);
 void hive_hal_file_cleanup(void);
-hive_status_t hive_hal_file_open(const char *path, int flags, int mode, int *fd_out);
+hive_status_t hive_hal_file_open(const char *path, int flags, int mode, int *out);
 hive_status_t hive_hal_file_close(int fd);
 hive_status_t hive_hal_file_read(int fd, void *buf, size_t len, size_t *bytes_read);
 hive_status_t hive_hal_file_pread(int fd, void *buf, size_t len, size_t offset, size_t *bytes_read);
@@ -150,15 +150,15 @@ hive_status_t hive_hal_file_mount_available(const char *path);
 ```c
 hive_status_t hive_hal_net_init(void);
 void hive_hal_net_cleanup(void);
-hive_status_t hive_hal_net_socket(int *fd_out);
+hive_status_t hive_hal_net_socket(int *out);
 hive_status_t hive_hal_net_bind(int fd, uint16_t port);
 hive_status_t hive_hal_net_listen(int fd, int backlog);
-hive_status_t hive_hal_net_accept(int listen_fd, int *conn_fd_out);
+hive_status_t hive_hal_net_accept(int listen_fd, int *out);
 hive_status_t hive_hal_net_connect(int fd, const char *ip, uint16_t port);
 hive_status_t hive_hal_net_connect_check(int fd);
 hive_status_t hive_hal_net_close(int fd);
-hive_status_t hive_hal_net_recv(int fd, void *buf, size_t len, size_t *received);
-hive_status_t hive_hal_net_send(int fd, const void *buf, size_t len, size_t *sent);
+hive_status_t hive_hal_net_recv(int fd, void *buf, size_t len, size_t *bytes_read);
+hive_status_t hive_hal_net_send(int fd, const void *buf, size_t len, size_t *bytes_written);
 ```
 
 **Implementation notes**

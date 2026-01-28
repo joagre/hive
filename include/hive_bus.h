@@ -7,7 +7,7 @@
 
 // bus_id_t typedef is now in hive_types.h
 
-#define BUS_ID_INVALID ((bus_id_t)0)
+#define HIVE_BUS_ID_INVALID ((bus_id_t)0)
 
 // Bus configuration
 typedef struct {

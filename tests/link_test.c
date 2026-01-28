@@ -49,7 +49,7 @@ static void actor_a_links_to_b(void *args, const hive_spawn_info_t *siblings,
     hive_message_t msg;
     status = hive_ipc_recv(&msg, 1000);
 
-    if (HIVE_SUCCEEDED(status) && hive_is_exit_msg(&msg)) {
+    if (HIVE_SUCCEEDED(status) && hive_msg_is_exit(&msg)) {
         hive_exit_msg_t exit_info;
         hive_decode_exit(&msg, &exit_info);
         if (exit_info.actor == actor_b) {
@@ -120,7 +120,7 @@ static void test1_basic_link(void *args, const hive_spawn_info_t *siblings,
 // Test 2: Link is bidirectional - reverse direction
 // ============================================================================
 
-static actor_id_t g_linker_id = ACTOR_ID_INVALID;
+static actor_id_t g_linker_id = HIVE_ACTOR_ID_INVALID;
 static bool g_target_notified = false;
 
 static void target_waits_for_linker(void *args,
@@ -134,7 +134,7 @@ static void target_waits_for_linker(void *args,
     hive_message_t msg;
     hive_status_t status = hive_ipc_recv(&msg, 500);
 
-    if (HIVE_SUCCEEDED(status) && hive_is_exit_msg(&msg)) {
+    if (HIVE_SUCCEEDED(status) && hive_msg_is_exit(&msg)) {
         hive_exit_msg_t exit_info;
         hive_decode_exit(&msg, &exit_info);
         if (exit_info.actor == g_linker_id) {
@@ -217,7 +217,7 @@ static void actor_unlinks_before_death(void *args,
     hive_message_t msg;
     hive_status_t status = hive_ipc_recv(&msg, 300);
 
-    if (HIVE_SUCCEEDED(status) && hive_is_exit_msg(&msg)) {
+    if (HIVE_SUCCEEDED(status) && hive_msg_is_exit(&msg)) {
         g_unlinked_received_notification = true;
     }
 
@@ -284,11 +284,11 @@ static void test4_link_invalid(void *args, const hive_spawn_info_t *siblings,
     (void)sibling_count;
     printf("\nTest 4: Link to invalid actor fails\n");
 
-    hive_status_t status = hive_link(ACTOR_ID_INVALID);
+    hive_status_t status = hive_link(HIVE_ACTOR_ID_INVALID);
     if (HIVE_FAILED(status)) {
-        TEST_PASS("hive_link rejects ACTOR_ID_INVALID");
+        TEST_PASS("hive_link rejects HIVE_ACTOR_ID_INVALID");
     } else {
-        TEST_FAIL("hive_link should reject ACTOR_ID_INVALID");
+        TEST_FAIL("hive_link should reject HIVE_ACTOR_ID_INVALID");
     }
 
     status = hive_link(9999); // Non-existent actor
@@ -336,7 +336,7 @@ static void multi_linker(void *args, const hive_spawn_info_t *siblings,
     for (int i = 0; i < 3; i++) {
         hive_message_t msg;
         hive_status_t status = hive_ipc_recv(&msg, 500);
-        if (HIVE_SUCCEEDED(status) && hive_is_exit_msg(&msg)) {
+        if (HIVE_SUCCEEDED(status) && hive_msg_is_exit(&msg)) {
             g_multi_link_count++;
         }
     }
@@ -399,7 +399,7 @@ static void link_target_waits(void *args, const hive_spawn_info_t *siblings,
     (void)sibling_count;
     hive_message_t msg;
     hive_status_t status = hive_ipc_recv(&msg, 300);
-    if (HIVE_SUCCEEDED(status) && hive_is_exit_msg(&msg)) {
+    if (HIVE_SUCCEEDED(status) && hive_msg_is_exit(&msg)) {
         g_link_target_got_notification = true;
     }
     hive_exit();
@@ -412,7 +412,7 @@ static void monitor_target_waits(void *args, const hive_spawn_info_t *siblings,
     (void)sibling_count;
     hive_message_t msg;
     hive_status_t status = hive_ipc_recv(&msg, 300);
-    if (HIVE_SUCCEEDED(status) && hive_is_exit_msg(&msg)) {
+    if (HIVE_SUCCEEDED(status) && hive_msg_is_exit(&msg)) {
         g_monitor_target_got_notification = true;
     }
     hive_exit();
@@ -500,7 +500,7 @@ static void link_receiver_checks_reason(void *args,
 
     hive_message_t msg;
     hive_status_t status = hive_ipc_recv(&msg, 500);
-    if (HIVE_SUCCEEDED(status) && hive_is_exit_msg(&msg)) {
+    if (HIVE_SUCCEEDED(status) && hive_msg_is_exit(&msg)) {
         hive_exit_msg_t exit_info;
         hive_decode_exit(&msg, &exit_info);
         s_received_reason = exit_info.reason;
@@ -692,11 +692,11 @@ static void test11_unlink_invalid(void *args, const hive_spawn_info_t *siblings,
     printf("\nTest 11: Unlink invalid actor\n");
     fflush(stdout);
 
-    hive_status_t status = hive_unlink(ACTOR_ID_INVALID);
+    hive_status_t status = hive_unlink(HIVE_ACTOR_ID_INVALID);
     if (HIVE_FAILED(status)) {
-        TEST_PASS("hive_unlink rejects ACTOR_ID_INVALID");
+        TEST_PASS("hive_unlink rejects HIVE_ACTOR_ID_INVALID");
     } else {
-        TEST_FAIL("hive_unlink should reject ACTOR_ID_INVALID");
+        TEST_FAIL("hive_unlink should reject HIVE_ACTOR_ID_INVALID");
     }
 
     status = hive_unlink(9999);
@@ -744,7 +744,7 @@ static void test12_link_pool_exhaustion(void *args,
 
     // Spawn actors and link to them until pool exhaustion
     for (int i = 0; i < max_links + 10; i++) {
-        actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+        hive_actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
         cfg.malloc_stack = true;
         cfg.stack_size = TEST_STACK_SIZE(8 * 1024);
 
@@ -812,7 +812,7 @@ static void run_all_tests(void *args, const hive_spawn_info_t *siblings,
     (void)sibling_count;
 
     for (size_t i = 0; i < NUM_TESTS; i++) {
-        actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+        hive_actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
         cfg.stack_size = TEST_STACK_SIZE(64 * 1024);
 
         actor_id_t test;
@@ -840,7 +840,7 @@ int main(void) {
         return 1;
     }
 
-    actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+    hive_actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
     cfg.stack_size = TEST_STACK_SIZE(128 * 1024);
 
     actor_id_t runner;

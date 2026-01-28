@@ -47,7 +47,7 @@ static void run_timer_tests(void *args, const hive_spawn_info_t *siblings,
         hive_status_t status = hive_timer_after(100000, &timer); // 100ms
         if (HIVE_FAILED(status)) {
             TEST_FAIL("hive_timer_after failed");
-        } else if (timer == TIMER_ID_INVALID) {
+        } else if (timer == HIVE_TIMER_ID_INVALID) {
             TEST_FAIL("got invalid timer ID");
         } else {
             uint64_t start = time_ms();
@@ -155,11 +155,11 @@ static void run_timer_tests(void *args, const hive_spawn_info_t *siblings,
     // ========================================================================
     printf("\nTest 5: Cancel invalid timer\n");
     {
-        hive_status_t status = hive_timer_cancel(TIMER_ID_INVALID);
+        hive_status_t status = hive_timer_cancel(HIVE_TIMER_ID_INVALID);
         if (HIVE_FAILED(status)) {
-            TEST_PASS("cancel TIMER_ID_INVALID fails");
+            TEST_PASS("cancel HIVE_TIMER_ID_INVALID fails");
         } else {
-            TEST_FAIL("cancel TIMER_ID_INVALID should fail");
+            TEST_FAIL("cancel HIVE_TIMER_ID_INVALID should fail");
         }
 
         status = hive_timer_cancel(9999);
@@ -570,7 +570,7 @@ int main(void) {
         return 1;
     }
 
-    actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+    hive_actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
     cfg.stack_size = TEST_STACK_SIZE(128 * 1024);
 
     actor_id_t runner;

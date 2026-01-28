@@ -328,7 +328,7 @@ Without SD: ~0.5 KB flash overhead for mount table.
 // src/hal/linux/hive_hal_linux.c
 
 hive_status_t hive_hal_file_open(const char *path, int flags, int mode,
-                                 int *fd_out) {
+                                 int *out) {
     // Find mount for path
     size_t prefix_len;
     const hive_mount_t *mount = hive_mount_find(path, &prefix_len);
@@ -353,7 +353,7 @@ hive_status_t hive_hal_file_open(const char *path, int flags, int mode,
         return HIVE_ERROR(HIVE_ERR_IO, "open failed");
     }
 
-    *fd_out = fd;  // Return POSIX fd directly
+    *out = fd;  // Return POSIX fd directly
     return HIVE_SUCCESS;
 }
 ```
@@ -364,13 +364,13 @@ Flash backend uses mount config for sector info. Flash files don't use subpaths:
 
 ```c
 static hive_status_t flash_open(const hive_mount_t *mount, int flags,
-                                int *fd_out) {
+                                int *out) {
     // Find free slot, validate flags (HIVE_O_TRUNC required for writes)
     // Use hive_mount_flash_base/size/sector() accessors
     // Erase sector if HIVE_O_TRUNC + HIVE_O_WRONLY
     // ... existing flash logic ...
 
-    *fd_out = FD_MAKE(HIVE_BACKEND_FLASH, slot);
+    *out = FD_MAKE(HIVE_BACKEND_FLASH, slot);
     return HIVE_SUCCESS;
 }
 ```
@@ -415,7 +415,7 @@ static hive_status_t sd_ensure_init(const hive_mount_t *mount) {
 }
 
 static hive_status_t sd_open(const hive_mount_t *mount, const char *subpath,
-                             int flags, int *fd_out) {
+                             int flags, int *out) {
     hive_status_t status = sd_ensure_init(mount);
     if (HIVE_FAILED(status)) {
         return status;
@@ -445,7 +445,7 @@ static hive_status_t sd_open(const hive_mount_t *mount, const char *subpath,
     }
 
     s_sd_file_used[slot] = true;
-    *fd_out = FD_MAKE(HIVE_BACKEND_SD, slot);
+    *out = FD_MAKE(HIVE_BACKEND_SD, slot);
     return HIVE_SUCCESS;
 }
 
@@ -458,7 +458,7 @@ static hive_status_t sd_open(const hive_mount_t *mount, const char *subpath,
 // src/hal/stm32/hive_hal_file_stm32.c
 
 hive_status_t hive_hal_file_open(const char *path, int flags, int mode,
-                                 int *fd_out) {
+                                 int *out) {
     (void)mode;
 
     size_t prefix_len;
@@ -469,11 +469,11 @@ hive_status_t hive_hal_file_open(const char *path, int flags, int mode,
 
     switch (hive_mount_get_backend(mount)) {
     case HIVE_BACKEND_FLASH:
-        return flash_open(mount, flags, fd_out);
+        return flash_open(mount, flags, out);
 #if HIVE_ENABLE_SD
     case HIVE_BACKEND_SD: {
         const char *subpath = path + prefix_len;
-        return sd_open(mount, subpath, flags, fd_out);
+        return sd_open(mount, subpath, flags, out);
     }
 #endif
     default:

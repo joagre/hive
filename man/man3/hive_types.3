@@ -1,7 +1,7 @@
 .\" Man page for types and compile-time configuration
 .TH HIVE_TYPES 3 "January 2026" "Hive 1.0" "Actor Runtime Manual"
 .SH NAME
-hive_types, hive_status_t, hive_message_t, actor_config_t \- runtime types and constants
+hive_types, hive_status_t, hive_message_t, hive_actor_config_t \- runtime types and constants
 .SH SYNOPSIS
 .nf
 .B #include <hive_types.h>
@@ -15,14 +15,14 @@ configuration for the actor runtime.
 .B actor_id_t
 Opaque 32-bit handle identifying an actor.
 .TP
-.B ACTOR_ID_INVALID
+.B HIVE_ACTOR_ID_INVALID
 Sentinel value (0) indicating an invalid or uninitialized actor ID.
 .TP
 .B bus_id_t
 Opaque 32-bit handle identifying a bus (defined in
 .IR <hive_bus.h> ).
 .TP
-.B BUS_ID_INVALID
+.B HIVE_BUS_ID_INVALID
 Sentinel value (0) indicating an invalid bus ID (defined in
 .IR <hive_bus.h> ).
 .TP
@@ -30,7 +30,7 @@ Sentinel value (0) indicating an invalid bus ID (defined in
 Opaque 32-bit handle identifying a timer (defined in
 .IR <hive_timer.h> ).
 .TP
-.B TIMER_ID_INVALID
+.B HIVE_TIMER_ID_INVALID
 Sentinel value (0) indicating an invalid timer ID (defined in
 .IR <hive_timer.h> ).
 .SS Status Type
@@ -176,9 +176,9 @@ before lower priority actors.
 .PP
 .nf
 /* Actor entry function signature */
-typedef void (*actor_fn_t)(void *args,
-                         const hive_spawn_info_t *siblings,
-                         size_t sibling_count);
+typedef void (*hive_actor_fn_t)(void *args,
+                               const hive_spawn_info_t *siblings,
+                               size_t sibling_count);
 
 /* Init function signature (called in spawner context) */
 typedef void *(*hive_actor_init_fn_t)(void *init_args);
@@ -215,7 +215,7 @@ typedef struct {
     const char *name;         /* for debugging, may be NULL */
     bool        malloc_stack; /* false = arena (default), true = malloc */
     bool        auto_register;/* auto-register name in registry */
-} actor_config_t;
+} hive_actor_config_t;
 
 #define HIVE_ACTOR_CONFIG_DEFAULT { \\
     .stack_size = 0, \\
@@ -261,7 +261,7 @@ typedef struct {
 .PP
 Use helper functions from
 .BR hive_link (3):
-.BR hive_is_exit_msg ()
+.BR hive_msg_is_exit ()
 and
 .BR hive_decode_exit ().
 .SS Receive Filter Structure

@@ -99,12 +99,12 @@ static void test2_async_invalid_receiver(void *args,
 
     int data = 42;
 
-    hive_status_t status =
-        hive_ipc_notify(ACTOR_ID_INVALID, HIVE_TAG_NONE, &data, sizeof(data));
+    hive_status_t status = hive_ipc_notify(HIVE_ACTOR_ID_INVALID, HIVE_TAG_NONE,
+                                           &data, sizeof(data));
     if (HIVE_FAILED(status)) {
-        TEST_PASS("send to ACTOR_ID_INVALID fails");
+        TEST_PASS("send to HIVE_ACTOR_ID_INVALID fails");
     } else {
-        TEST_FAIL("send to ACTOR_ID_INVALID should fail");
+        TEST_FAIL("send to HIVE_ACTOR_ID_INVALID should fail");
     }
 
     status = hive_ipc_notify(9999, HIVE_TAG_NONE, &data, sizeof(data));
@@ -165,7 +165,7 @@ static void test3_message_ordering(void *args,
 // Test 4: Multiple senders to one receiver
 // ============================================================================
 
-static actor_id_t g_receiver_id = ACTOR_ID_INVALID;
+static actor_id_t g_receiver_id = HIVE_ACTOR_ID_INVALID;
 static int g_messages_received = 0;
 
 static void sender_actor(void *args, const hive_spawn_info_t *siblings,
@@ -842,7 +842,7 @@ static void test17_spawn_death_cycle_leak(void *args,
     int messages_received = 0;
 
     for (int i = 0; i < cycles; i++) {
-        actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+        hive_actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
         cfg.malloc_stack = true;
         cfg.stack_size = TEST_STACK_SIZE(8 * 1024);
 
@@ -1135,7 +1135,7 @@ static void run_all_tests(void *args, const hive_spawn_info_t *siblings,
     (void)sibling_count;
 
     for (size_t i = 0; i < NUM_TESTS; i++) {
-        actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+        hive_actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
         cfg.stack_size = TEST_STACK_SIZE(64 * 1024);
 
         actor_id_t test;
@@ -1163,7 +1163,7 @@ int main(void) {
         return 1;
     }
 
-    actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+    hive_actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
     cfg.stack_size = TEST_STACK_SIZE(128 * 1024);
 
     actor_id_t runner;

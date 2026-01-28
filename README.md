@@ -458,7 +458,7 @@ hive_monitor(worker, &mon_id);  // We watch worker, but worker doesn't watch us
 // Wait for exit notification (from link or monitor)
 hive_message_t msg;
 hive_ipc_recv(&msg, -1);
-if (hive_is_exit_msg(&msg)) {
+if (hive_msg_is_exit(&msg)) {
     hive_exit_msg_t info;
     hive_decode_exit(&msg, &info);
     printf("Actor %u died: %s\n", info.actor, hive_exit_reason_str(info.reason));
@@ -630,14 +630,14 @@ See [examples/pilot/README.md](examples/pilot/README.md) for build instructions 
 - `hive_unlink(target)` - Remove bidirectional link
 - `hive_monitor(target, out)` - Create unidirectional monitor
 - `hive_demonitor(id)` - Cancel monitor
-- `hive_is_exit_msg(msg)` - Check if message is exit notification
+- `hive_msg_is_exit(msg)` - Check if message is exit notification
 - `hive_decode_exit(msg, out)` - Decode exit message into `hive_exit_msg_t` struct
 - `hive_exit_reason_str(reason)` - Convert exit reason to string ("NORMAL", "CRASH", etc.)
-- `hive_kill(target)` - Kill an actor externally (for supervisor use)
+- `hive_actor_kill(target)` - Kill an actor externally (for supervisor use)
 
 ### Supervision
 
-- `hive_supervisor_start(config, actor_cfg, out)` - Start supervisor with child specs
+- `hive_supervisor_start(config, sup_actor_cfg, out)` - Start supervisor with child specs
 - `hive_supervisor_stop(supervisor)` - Stop supervisor gracefully (terminates all children)
 - `hive_restart_strategy_str(strategy)` - Convert strategy to string
 - `hive_child_restart_str(restart)` - Convert restart type to string
@@ -653,7 +653,7 @@ See [examples/pilot/README.md](examples/pilot/README.md) for build instructions 
 
 ### File I/O
 
-- `hive_file_open(path, flags, mode, fd_out)` - Open file
+- `hive_file_open(path, flags, mode, out)` - Open file
 - `hive_file_close(fd)` - Close file
 - `hive_file_read(fd, buf, len, bytes_read)` - Read from file
 - `hive_file_pread(fd, buf, len, offset, bytes_read)` - Read from file at offset
@@ -711,11 +711,11 @@ See `examples/pilot/Makefile.crazyflie-2.1+` for a complete example and [spec/ap
 
 ### Network I/O
 
-- `hive_net_listen(port, out_fd)` - Create TCP listening socket (backlog hardcoded to 5)
-- `hive_net_accept(listen_fd, out_fd, timeout_ms)` - Accept incoming connection
-- `hive_net_connect(ip, port, out_fd, timeout_ms)` - Connect to remote server (numeric IPv4 only)
-- `hive_net_send(fd, buf, len, sent, timeout_ms)` - Send data
-- `hive_net_recv(fd, buf, len, received, timeout_ms)` - Receive data
+- `hive_net_listen(port, out)` - Create TCP listening socket (backlog hardcoded to 5)
+- `hive_net_accept(listen_fd, out, timeout_ms)` - Accept incoming connection
+- `hive_net_connect(ip, port, out, timeout_ms)` - Connect to remote server (numeric IPv4 only)
+- `hive_net_send(fd, buf, len, bytes_written, timeout_ms)` - Send data
+- `hive_net_recv(fd, buf, len, bytes_read, timeout_ms)` - Receive data
 - `hive_net_close(fd)` - Close socket
 
 ### Bus (Pub-Sub)

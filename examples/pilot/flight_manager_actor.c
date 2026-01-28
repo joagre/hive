@@ -54,8 +54,8 @@ void flight_manager_actor(void *args, const hive_spawn_info_t *siblings,
     actor_id_t altitude =
         hive_find_sibling(siblings, sibling_count, "altitude");
     actor_id_t motor = hive_find_sibling(siblings, sibling_count, "motor");
-    if (waypoint == ACTOR_ID_INVALID || altitude == ACTOR_ID_INVALID ||
-        motor == ACTOR_ID_INVALID) {
+    if (waypoint == HIVE_ACTOR_ID_INVALID ||
+        altitude == HIVE_ACTOR_ID_INVALID || motor == HIVE_ACTOR_ID_INVALID) {
         HIVE_LOG_ERROR("[FLM] Failed to find required siblings");
         return;
     }

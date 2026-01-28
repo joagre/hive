@@ -7,8 +7,8 @@ hive_supervisor_start, hive_supervisor_stop, hive_restart_strategy_str, hive_chi
 .B #include <hive_supervisor.h>
 .PP
 .BI "hive_status_t hive_supervisor_start(const hive_supervisor_config_t *" config ","
-.BI "                                  const actor_config_t *" sup_actor_cfg ","
-.BI "                                  actor_id_t *" out_supervisor ");"
+.BI "                                  const hive_actor_config_t *" sup_actor_cfg ","
+.BI "                                  actor_id_t *" out ");"
 .BI "hive_status_t hive_supervisor_stop(actor_id_t " supervisor ");"
 .BI "const char *hive_restart_strategy_str(hive_restart_strategy_t " strategy ");"
 .BI "const char *hive_child_restart_str(hive_child_restart_t " restart ");"
@@ -45,14 +45,14 @@ or sequential dependencies.
 .PP
 .nf
 typedef struct {
-    actor_fn_t start;              /* Actor entry point */
+    hive_actor_fn_t start;         /* Actor entry point */
     hive_actor_init_fn_t init;     /* Init function (NULL = skip) */
     void *init_args;             /* Arguments to init/actor */
     size_t init_args_size;       /* Size to copy (0 = pointer) */
     const char *name;            /* Child identifier for tracking */
     bool auto_register;          /* Auto-register in name registry */
     hive_child_restart_t restart;  /* Restart policy */
-    actor_config_t actor_cfg;      /* Actor config */
+    hive_actor_config_t actor_cfg; /* Actor config */
 } hive_child_spec_t;
 .fi
 .PP
@@ -189,7 +189,7 @@ return static string pointers that should not be freed.
 .SH ERRORS
 .TP
 .B HIVE_ERR_INVALID
-NULL config or out_supervisor, too many children, NULL children array with
+NULL config or out, too many children, NULL children array with
 non-zero count, NULL child function, or invalid supervisor ID.
 .TP
 .B HIVE_ERR_NOMEM

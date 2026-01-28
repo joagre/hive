@@ -17,7 +17,7 @@ static void pong_actor(void *args, const hive_spawn_info_t *siblings,
 
     printf("Pong actor started (ID: %u)\n", hive_self());
 
-    actor_id_t ping_id = ACTOR_ID_INVALID;
+    actor_id_t ping_id = HIVE_ACTOR_ID_INVALID;
 
     for (int i = 0; i < 5; i++) {
         // Wait for ping
@@ -32,7 +32,7 @@ static void pong_actor(void *args, const hive_spawn_info_t *siblings,
         }
 
         // Get ping actor ID from first message
-        if (ping_id == ACTOR_ID_INVALID) {
+        if (ping_id == HIVE_ACTOR_ID_INVALID) {
             ping_id = msg.sender;
         }
 
@@ -125,7 +125,7 @@ int main(void) {
     printf("Runtime initialized\n");
 
     // Spawn pong actor first
-    actor_config_t pong_cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+    hive_actor_config_t pong_cfg = HIVE_ACTOR_CONFIG_DEFAULT;
     pong_cfg.name = "pong";
     pong_cfg.priority = HIVE_PRIORITY_NORMAL;
 
@@ -139,7 +139,7 @@ int main(void) {
     printf("Spawned pong actor (ID: %u)\n", pong_id);
 
     // Spawn ping actor with pong's ID
-    actor_config_t ping_cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+    hive_actor_config_t ping_cfg = HIVE_ACTOR_CONFIG_DEFAULT;
     ping_cfg.name = "ping";
     ping_cfg.priority = HIVE_PRIORITY_NORMAL;
 

@@ -162,7 +162,7 @@ static void test3_auto_register(void *args, const hive_spawn_info_t *siblings,
     (void)sibling_count;
     printf("\nTest 3: Auto-register with name\n");
 
-    actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+    hive_actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
     cfg.name = "test_registered";
     cfg.auto_register = true;
 
@@ -215,7 +215,7 @@ static void test4_register_conflict(void *args,
     (void)sibling_count;
     printf("\nTest 4: Auto-register fails if name taken\n");
 
-    actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+    hive_actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
     cfg.name = "conflict_test";
     cfg.auto_register = true;
 
@@ -234,7 +234,7 @@ static void test4_register_conflict(void *args,
         TEST_PASS("second spawn correctly failed with HIVE_ERR_EXISTS");
     } else if (HIVE_SUCCEEDED(s)) {
         TEST_FAIL("second spawn should have failed but succeeded");
-        hive_kill(id2);
+        hive_actor_kill(id2);
     } else {
         printf("    Got error code %d instead of HIVE_ERR_EXISTS\n", s.code);
         TEST_FAIL("second spawn failed with wrong error");

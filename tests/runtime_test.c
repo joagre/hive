@@ -55,12 +55,12 @@ static void test2_self_outside_actor(void *args,
     printf("\nTest 2: hive_self outside actor context\n");
     printf("    NOTE: Cannot test from within actor - would need separate "
            "process\n");
-    printf("    Expected: Should return ACTOR_ID_INVALID or crash\n");
+    printf("    Expected: Should return HIVE_ACTOR_ID_INVALID or crash\n");
     fflush(stdout);
 
     // We're inside an actor, so hive_self() works fine here
     actor_id_t self = hive_self();
-    if (self != ACTOR_ID_INVALID) {
+    if (self != HIVE_ACTOR_ID_INVALID) {
         TEST_PASS("hive_self returns valid ID inside actor context");
     } else {
         TEST_FAIL("hive_self returned invalid ID inside actor context");
@@ -165,10 +165,11 @@ static void test4_actor_alive(void *args, const hive_spawn_info_t *siblings,
     }
 
     // Invalid ID should not be alive
-    if (!hive_actor_alive(ACTOR_ID_INVALID)) {
-        TEST_PASS("hive_actor_alive returns false for ACTOR_ID_INVALID");
+    if (!hive_actor_alive(HIVE_ACTOR_ID_INVALID)) {
+        TEST_PASS("hive_actor_alive returns false for HIVE_ACTOR_ID_INVALID");
     } else {
-        TEST_FAIL("hive_actor_alive should return false for ACTOR_ID_INVALID");
+        TEST_FAIL(
+            "hive_actor_alive should return false for HIVE_ACTOR_ID_INVALID");
     }
 
     // Non-existent ID should not be alive
@@ -340,7 +341,7 @@ static void test7_stack_sizes(void *args, const hive_spawn_info_t *siblings,
     g_large_stack_ok = false;
 
     // Small stack
-    actor_config_t small_cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+    hive_actor_config_t small_cfg = HIVE_ACTOR_CONFIG_DEFAULT;
     small_cfg.stack_size = TEST_STACK_SIZE(8 * 1024); // 8KB
 
     actor_id_t small;
@@ -360,7 +361,7 @@ static void test7_stack_sizes(void *args, const hive_spawn_info_t *siblings,
     }
 
     // Large stack
-    actor_config_t large_cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+    hive_actor_config_t large_cfg = HIVE_ACTOR_CONFIG_DEFAULT;
     large_cfg.stack_size = TEST_STACK_SIZE(32 * 1024); // 32KB
 
     actor_id_t large;
@@ -417,7 +418,7 @@ static void test8_priorities(void *args, const hive_spawn_info_t *siblings,
     actor_id_t ids[4];
 
     for (int i = 0; i < 4; i++) {
-        actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+        hive_actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
         cfg.priority = levels[i];
         hive_spawn(priority_actor, NULL, &levels[i], &cfg, &ids[i]);
         hive_link(ids[i]);
@@ -470,7 +471,7 @@ static void run_all_tests(void *args, const hive_spawn_info_t *siblings,
     test1_init_success();
 
     for (size_t i = 0; i < NUM_TESTS; i++) {
-        actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+        hive_actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
         cfg.stack_size = TEST_STACK_SIZE(64 * 1024);
 
         actor_id_t test;
@@ -500,7 +501,7 @@ int main(void) {
         return 1;
     }
 
-    actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+    hive_actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
     cfg.stack_size = TEST_STACK_SIZE(128 * 1024);
 
     actor_id_t runner;

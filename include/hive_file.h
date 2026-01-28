@@ -22,8 +22,7 @@
 // Open file
 // flags: HIVE_O_RDONLY, HIVE_O_WRONLY, HIVE_O_RDWR, HIVE_O_CREAT, HIVE_O_TRUNC,
 // etc.
-hive_status_t hive_file_open(const char *path, int flags, int mode,
-                             int *fd_out);
+hive_status_t hive_file_open(const char *path, int flags, int mode, int *out);
 
 // Close file
 hive_status_t hive_file_close(int fd);

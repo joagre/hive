@@ -46,7 +46,7 @@ static void supervisor_actor(void *args, const hive_spawn_info_t *siblings,
     printf("Supervisor: Spawning %d workers...\n", NUM_WORKERS);
 
     for (int i = 0; i < NUM_WORKERS; i++) {
-        actor_config_t worker_cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+        hive_actor_config_t worker_cfg = HIVE_ACTOR_CONFIG_DEFAULT;
         worker_cfg.name = "worker";
 
         actor_id_t worker;
@@ -109,7 +109,7 @@ int main(void) {
     }
 
     // Spawn supervisor with larger stack (needs space for arrays and nested spawns)
-    actor_config_t sup_cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+    hive_actor_config_t sup_cfg = HIVE_ACTOR_CONFIG_DEFAULT;
     sup_cfg.name = "supervisor";
 #ifdef QEMU_TEST_STACK_SIZE
     sup_cfg.stack_size = 2048; // Reduced for QEMU

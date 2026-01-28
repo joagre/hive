@@ -31,10 +31,10 @@ void hive_hal_file_cleanup(void);
 // path: File path (Linux: filesystem path, STM32: virtual path like "/log")
 // flags: HIVE_O_* flags (HIVE_O_RDONLY, HIVE_O_WRONLY, etc.)
 // mode: Permission mode (Linux only, ignored on STM32)
-// fd_out: Output file descriptor
+// out: Output file descriptor
 // Returns: HIVE_SUCCESS or error status
 hive_status_t hive_hal_file_open(const char *path, int flags, int mode,
-                                 int *fd_out);
+                                 int *out);
 
 // Close a file.
 // fd: File descriptor to close

@@ -141,7 +141,7 @@ static void test2_supervisor_siblings(void *args,
     for (int i = 0; i < NUM_CHILDREN; i++) {
         s_child_sibling_counts[i] = 0;
         s_child_saw_all_siblings[i] = false;
-        s_child_ids[i] = ACTOR_ID_INVALID;
+        s_child_ids[i] = HIVE_ACTOR_ID_INVALID;
     }
 
     static int indices[NUM_CHILDREN] = {0, 1, 2};
@@ -231,7 +231,7 @@ static void test2_supervisor_siblings(void *args,
 // Test 3: hive_find_sibling helper function
 // ============================================================================
 
-static actor_id_t s_found_sibling_id = ACTOR_ID_INVALID;
+static actor_id_t s_found_sibling_id = HIVE_ACTOR_ID_INVALID;
 
 static void finder_actor(void *args, const hive_spawn_info_t *siblings,
                          size_t sibling_count) {
@@ -261,7 +261,7 @@ static void test3_find_sibling(void *args, const hive_spawn_info_t *siblings,
     (void)sibling_count;
     printf("\nTest 3: hive_find_sibling helper function\n");
 
-    s_found_sibling_id = ACTOR_ID_INVALID;
+    s_found_sibling_id = HIVE_ACTOR_ID_INVALID;
 
     hive_child_spec_t children[] = {
         {.start = finder_actor,
@@ -301,7 +301,7 @@ static void test3_find_sibling(void *args, const hive_spawn_info_t *siblings,
 
     hive_sleep(200000);
 
-    if (s_found_sibling_id != ACTOR_ID_INVALID) {
+    if (s_found_sibling_id != HIVE_ACTOR_ID_INVALID) {
         TEST_PASS("hive_find_sibling found target by name");
     } else {
         TEST_FAIL("hive_find_sibling did not find target");
@@ -325,7 +325,7 @@ static void not_finder_actor(void *args, const hive_spawn_info_t *siblings,
 
     actor_id_t found =
         hive_find_sibling(siblings, sibling_count, "nonexistent");
-    s_not_found_returned_null = (found == ACTOR_ID_INVALID);
+    s_not_found_returned_null = (found == HIVE_ACTOR_ID_INVALID);
 
     hive_exit();
 }
@@ -341,7 +341,7 @@ static void test4_find_sibling_not_found(void *args,
     s_not_found_returned_null = false;
 
     actor_id_t id;
-    actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+    hive_actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
     cfg.name = "searcher";
 
     hive_status_t s = hive_spawn(not_finder_actor, NULL, NULL, &cfg, &id);

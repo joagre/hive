@@ -115,7 +115,7 @@ int main(void) {
     }
 
     // Spawn logging demo actor
-    actor_config_t actor_cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+    hive_actor_config_t actor_cfg = HIVE_ACTOR_CONFIG_DEFAULT;
     actor_cfg.name = "logging_demo";
 
     actor_id_t id;

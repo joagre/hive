@@ -1,7 +1,7 @@
 .\" Man page for linking and monitoring functions
 .TH HIVE_LINK 3 "January 2026" "Hive 1.0" "Actor Runtime Manual"
 .SH NAME
-hive_link, hive_unlink, hive_monitor, hive_demonitor, hive_is_exit_msg, hive_decode_exit, hive_exit_reason_str \- actor linking and monitoring
+hive_link, hive_unlink, hive_monitor, hive_demonitor, hive_msg_is_exit, hive_decode_exit, hive_exit_reason_str \- actor linking and monitoring
 .SH SYNOPSIS
 .nf
 .B #include <hive_link.h>
@@ -10,7 +10,7 @@ hive_link, hive_unlink, hive_monitor, hive_demonitor, hive_is_exit_msg, hive_dec
 .BI "hive_status_t hive_unlink(actor_id_t " target ");"
 .BI "hive_status_t hive_monitor(actor_id_t " target ", uint32_t *" out ");"
 .BI "hive_status_t hive_demonitor(uint32_t " id ");"
-.BI "bool hive_is_exit_msg(const hive_message_t *" msg ");"
+.BI "bool hive_msg_is_exit(const hive_message_t *" msg ");"
 .BI "hive_status_t hive_decode_exit(const hive_message_t *" msg ", hive_exit_msg_t *" out ");"
 .BI "const char *hive_exit_reason_str(hive_exit_reason_t " reason ");"
 .fi
@@ -69,7 +69,7 @@ Use
 to extract the exit information:
 .PP
 .nf
-if (hive_is_exit_msg(&msg)) {
+if (hive_msg_is_exit(&msg)) {
     hive_exit_msg_t info;
     hive_decode_exit(&msg, &info);
     if (info.monitor_id == 0) {
@@ -96,7 +96,7 @@ Stack overflow detected (reserved for future hardware-based detection).
 .B HIVE_EXIT_KILLED
 Actor was killed externally (reserved for future use).
 .SS Helper Functions
-.BR hive_is_exit_msg ()
+.BR hive_msg_is_exit ()
 returns true if
 .I msg
 has class
@@ -125,7 +125,7 @@ return an
 .I hive_status_t
 structure.
 .PP
-.BR hive_is_exit_msg ()
+.BR hive_msg_is_exit ()
 returns true if the message is an exit notification.
 .PP
 .BR hive_exit_reason_str ()
@@ -227,7 +227,7 @@ void manager(void *arg, const hive_spawn_info_t *siblings,
         hive_message_t msg;
         hive_ipc_recv(&msg, -1);
 
-        if (hive_is_exit_msg(&msg)) {
+        if (hive_msg_is_exit(&msg)) {
             hive_exit_msg_t info;
             hive_decode_exit(&msg, &info);
             printf("Manager: worker %u exited (%s)\\n",

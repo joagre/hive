@@ -32,7 +32,7 @@ void *motor_actor_init(void *init_args) {
     const pilot_buses_t *buses = init_args;
     static motor_state_t state;
     state.torque_bus = buses->torque_bus;
-    state.flight_manager = ACTOR_ID_INVALID; // Set from siblings in actor
+    state.flight_manager = HIVE_ACTOR_ID_INVALID; // Set from siblings in actor
     return &state;
 }
 
@@ -43,7 +43,7 @@ void motor_actor(void *args, const hive_spawn_info_t *siblings,
     // Look up flight_manager from sibling info
     state->flight_manager =
         hive_find_sibling(siblings, sibling_count, "flight_manager");
-    if (state->flight_manager == ACTOR_ID_INVALID) {
+    if (state->flight_manager == HIVE_ACTOR_ID_INVALID) {
         HIVE_LOG_ERROR("[MOTOR] flight_manager sibling not found");
         return;
     }

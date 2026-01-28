@@ -155,7 +155,7 @@ static hive_status_t try_or_wait(int fd, uint32_t hal_events, int operation,
 
     // Create timeout timer if needed (timeout > 0)
     // Note: timeout < 0 means "wait forever" (no timer)
-    timer_id_t timeout_timer = TIMER_ID_INVALID;
+    timer_id_t timeout_timer = HIVE_TIMER_ID_INVALID;
     if (timeout_ms > 0) {
         hive_status_t status =
             hive_timer_after((uint32_t)timeout_ms * 1000, &timeout_timer);
@@ -167,7 +167,7 @@ static hive_status_t try_or_wait(int fd, uint32_t hal_events, int operation,
     // Allocate io_source_t from pool
     io_source_t *source = hive_pool_alloc(&s_io_source_pool_mgr);
     if (!source) {
-        if (timeout_timer != TIMER_ID_INVALID) {
+        if (timeout_timer != HIVE_TIMER_ID_INVALID) {
             hive_timer_cancel(timeout_timer);
         }
         return HIVE_ERROR(HIVE_ERR_NOMEM, "io_source_t pool exhausted");
@@ -185,7 +185,7 @@ static hive_status_t try_or_wait(int fd, uint32_t hal_events, int operation,
     hive_status_t reg_status = hive_hal_event_register(fd, hal_events, source);
     if (HIVE_FAILED(reg_status)) {
         hive_pool_free(&s_io_source_pool_mgr, source);
-        if (timeout_timer != TIMER_ID_INVALID) {
+        if (timeout_timer != HIVE_TIMER_ID_INVALID) {
             hive_timer_cancel(timeout_timer);
         }
         return reg_status;
@@ -209,9 +209,9 @@ static hive_status_t try_or_wait(int fd, uint32_t hal_events, int operation,
     return current->io_status;
 }
 
-hive_status_t hive_net_listen(uint16_t port, int *fd_out) {
-    if (!fd_out) {
-        return HIVE_ERROR(HIVE_ERR_INVALID, "NULL fd_out pointer");
+hive_status_t hive_net_listen(uint16_t port, int *out) {
+    if (!out) {
+        return HIVE_ERROR(HIVE_ERR_INVALID, "NULL out pointer");
     }
 
     HIVE_REQUIRE_INIT(s_net.initialized, "Network I/O");
@@ -237,14 +237,13 @@ hive_status_t hive_net_listen(uint16_t port, int *fd_out) {
         return status;
     }
 
-    *fd_out = fd;
+    *out = fd;
     return HIVE_SUCCESS;
 }
 
-hive_status_t hive_net_accept(int listen_fd, int *conn_fd_out,
-                              int32_t timeout_ms) {
-    if (!conn_fd_out) {
-        return HIVE_ERROR(HIVE_ERR_INVALID, "NULL conn_fd_out pointer");
+hive_status_t hive_net_accept(int listen_fd, int *out, int32_t timeout_ms) {
+    if (!out) {
+        return HIVE_ERROR(HIVE_ERR_INVALID, "NULL out pointer");
     }
 
     HIVE_REQUIRE_INIT(s_net.initialized, "Network I/O");
@@ -258,7 +257,7 @@ hive_status_t hive_net_accept(int listen_fd, int *conn_fd_out,
 
     if (HIVE_SUCCEEDED(status)) {
         // Success immediately!
-        *conn_fd_out = conn_fd;
+        *out = conn_fd;
         return HIVE_SUCCESS;
     }
 
@@ -275,14 +274,14 @@ hive_status_t hive_net_accept(int listen_fd, int *conn_fd_out,
     }
 
     // Result stored by event handler
-    *conn_fd_out = current->io_result_fd;
+    *out = current->io_result_fd;
     return HIVE_SUCCESS;
 }
 
-hive_status_t hive_net_connect(const char *ip, uint16_t port, int *fd_out,
+hive_status_t hive_net_connect(const char *ip, uint16_t port, int *out,
                                int32_t timeout_ms) {
-    if (!ip || !fd_out) {
-        return HIVE_ERROR(HIVE_ERR_INVALID, "NULL ip or fd_out pointer");
+    if (!ip || !out) {
+        return HIVE_ERROR(HIVE_ERR_INVALID, "NULL ip or out pointer");
     }
 
     HIVE_REQUIRE_INIT(s_net.initialized, "Network I/O");
@@ -302,7 +301,7 @@ hive_status_t hive_net_connect(const char *ip, uint16_t port, int *fd_out,
 
     if (HIVE_SUCCEEDED(status)) {
         // Connected immediately (rare but possible on localhost)
-        *fd_out = fd;
+        *out = fd;
         return HIVE_SUCCESS;
     }
 
@@ -321,7 +320,7 @@ hive_status_t hive_net_connect(const char *ip, uint16_t port, int *fd_out,
     }
 
     // Result stored by event handler
-    *fd_out = current->io_result_fd;
+    *out = current->io_result_fd;
     return HIVE_SUCCESS;
 }
 
@@ -330,10 +329,11 @@ hive_status_t hive_net_close(int fd) {
     return hive_hal_net_close(fd);
 }
 
-hive_status_t hive_net_recv(int fd, void *buf, size_t len, size_t *received,
+hive_status_t hive_net_recv(int fd, void *buf, size_t len, size_t *bytes_read,
                             int32_t timeout_ms) {
-    if (!buf || !received) {
-        return HIVE_ERROR(HIVE_ERR_INVALID, "NULL buffer or received pointer");
+    if (!buf || !bytes_read) {
+        return HIVE_ERROR(HIVE_ERR_INVALID,
+                          "NULL buffer or bytes_read pointer");
     }
 
     HIVE_REQUIRE_INIT(s_net.initialized, "Network I/O");
@@ -342,7 +342,7 @@ hive_status_t hive_net_recv(int fd, void *buf, size_t len, size_t *received,
     actor_t *current = hive_actor_current();
 
     // Try immediate non-blocking recv
-    hive_status_t status = hive_hal_net_recv(fd, buf, len, received);
+    hive_status_t status = hive_hal_net_recv(fd, buf, len, bytes_read);
 
     if (HIVE_SUCCEEDED(status)) {
         // Success immediately!
@@ -362,14 +362,15 @@ hive_status_t hive_net_recv(int fd, void *buf, size_t len, size_t *received,
     }
 
     // Result stored by event handler
-    *received = current->io_result_bytes;
+    *bytes_read = current->io_result_bytes;
     return HIVE_SUCCESS;
 }
 
-hive_status_t hive_net_send(int fd, const void *buf, size_t len, size_t *sent,
-                            int32_t timeout_ms) {
-    if (!buf || !sent) {
-        return HIVE_ERROR(HIVE_ERR_INVALID, "NULL buffer or sent pointer");
+hive_status_t hive_net_send(int fd, const void *buf, size_t len,
+                            size_t *bytes_written, int32_t timeout_ms) {
+    if (!buf || !bytes_written) {
+        return HIVE_ERROR(HIVE_ERR_INVALID,
+                          "NULL buffer or bytes_written pointer");
     }
 
     HIVE_REQUIRE_INIT(s_net.initialized, "Network I/O");
@@ -378,7 +379,7 @@ hive_status_t hive_net_send(int fd, const void *buf, size_t len, size_t *sent,
     actor_t *current = hive_actor_current();
 
     // Try immediate non-blocking send
-    hive_status_t status = hive_hal_net_send(fd, buf, len, sent);
+    hive_status_t status = hive_hal_net_send(fd, buf, len, bytes_written);
 
     if (HIVE_SUCCEEDED(status)) {
         // Success immediately!
@@ -398,6 +399,6 @@ hive_status_t hive_net_send(int fd, const void *buf, size_t len, size_t *sent,
     }
 
     // Result stored by event handler
-    *sent = current->io_result_bytes;
+    *bytes_written = current->io_result_bytes;
     return HIVE_SUCCESS;
 }

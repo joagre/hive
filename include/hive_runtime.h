@@ -47,8 +47,8 @@ void hive_cleanup(void);
 //
 // The actor receives its own spawn info as siblings[0] with sibling_count=1.
 // For supervised actors, siblings contains all sibling children.
-hive_status_t hive_spawn(actor_fn_t fn, hive_actor_init_fn_t init,
-                         void *init_args, const actor_config_t *cfg,
+hive_status_t hive_spawn(hive_actor_fn_t fn, hive_actor_init_fn_t init,
+                         void *init_args, const hive_actor_config_t *cfg,
                          actor_id_t *out);
 
 // Terminate current actor
@@ -68,7 +68,7 @@ bool hive_actor_alive(actor_id_t id);
 // The target's exit reason will be HIVE_EXIT_KILLED.
 // Cannot kill the currently running actor (use hive_exit instead).
 // Returns HIVE_ERR_INVALID if target is self or invalid.
-hive_status_t hive_kill(actor_id_t target);
+hive_status_t hive_actor_kill(actor_id_t target);
 
 // ============================================================================
 // Name Registry API

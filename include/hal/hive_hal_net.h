@@ -29,9 +29,9 @@ hive_status_t hive_hal_net_init(void);
 void hive_hal_net_cleanup(void);
 
 // Create a TCP socket and set it to non-blocking mode.
-// fd_out: Output socket file descriptor
+// out: Output socket file descriptor
 // Returns: HIVE_SUCCESS or error status
-hive_status_t hive_hal_net_socket(int *fd_out);
+hive_status_t hive_hal_net_socket(int *out);
 
 // Bind socket to a port (listen on all interfaces).
 // fd: Socket file descriptor
@@ -47,11 +47,11 @@ hive_status_t hive_hal_net_listen(int fd, int backlog);
 
 // Accept a connection (non-blocking).
 // listen_fd: Listening socket file descriptor
-// conn_fd_out: Output connected socket file descriptor
+// out: Output connected socket file descriptor
 // Returns: HIVE_SUCCESS if connection accepted
 //          HIVE_ERR_WOULDBLOCK if no pending connections
 //          Other error status on failure
-hive_status_t hive_hal_net_accept(int listen_fd, int *conn_fd_out);
+hive_status_t hive_hal_net_accept(int listen_fd, int *out);
 
 // Initiate a connection (non-blocking).
 // fd: Socket file descriptor
@@ -77,22 +77,22 @@ hive_status_t hive_hal_net_close(int fd);
 // fd: Socket file descriptor
 // buf: Buffer to receive data
 // len: Maximum bytes to receive
-// received: Output - actual bytes received
-// Returns: HIVE_SUCCESS if data received (received may be 0 for EOF)
+// bytes_read: Output - actual bytes received
+// Returns: HIVE_SUCCESS if data read (bytes_read may be 0 for EOF)
 //          HIVE_ERR_WOULDBLOCK if no data available
 //          Other error status on failure
 hive_status_t hive_hal_net_recv(int fd, void *buf, size_t len,
-                                size_t *received);
+                                size_t *bytes_read);
 
 // Send data (non-blocking).
 // fd: Socket file descriptor
 // buf: Data to send
 // len: Bytes to send
-// sent: Output - actual bytes sent
-// Returns: HIVE_SUCCESS if data sent
+// bytes_written: Output - actual bytes sent
+// Returns: HIVE_SUCCESS if data written
 //          HIVE_ERR_WOULDBLOCK if send buffer full
 //          Other error status on failure
 hive_status_t hive_hal_net_send(int fd, const void *buf, size_t len,
-                                size_t *sent);
+                                size_t *bytes_written);
 
 #endif // HIVE_HAL_NET_H

@@ -263,7 +263,7 @@ void my_actor(void *args, const hive_spawn_info_t *siblings, size_t count) {
         hive_message_t msg;
         hive_ipc_recv(&msg, -1);
 
-        if (hive_is_exit_msg(&msg)) {
+        if (hive_msg_is_exit(&msg)) {
             hive_exit_msg_t exit;
             hive_decode_exit(&msg, &exit);
             if (exit.actor == motor) {

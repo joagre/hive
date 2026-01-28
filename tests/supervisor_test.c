@@ -151,7 +151,7 @@ static void test1_basic_lifecycle(void *args, const hive_spawn_info_t *siblings,
     cfg.num_children = 2;
     cfg.on_shutdown = test_shutdown_callback;
 
-    actor_config_t sup_cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+    hive_actor_config_t sup_cfg = HIVE_ACTOR_CONFIG_DEFAULT;
     sup_cfg.stack_size = TEST_STACK_SIZE(64 * 1024);
 
     actor_id_t supervisor;
@@ -243,7 +243,7 @@ static void test2_one_for_one(void *args, const hive_spawn_info_t *siblings,
     cfg.children = children;
     cfg.num_children = 2;
 
-    actor_config_t sup_cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+    hive_actor_config_t sup_cfg = HIVE_ACTOR_CONFIG_DEFAULT;
     sup_cfg.stack_size = TEST_STACK_SIZE(64 * 1024);
 
     actor_id_t supervisor;
@@ -313,7 +313,7 @@ static void test3_one_for_all(void *args, const hive_spawn_info_t *siblings,
     cfg.children = children;
     cfg.num_children = 2;
 
-    actor_config_t sup_cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+    hive_actor_config_t sup_cfg = HIVE_ACTOR_CONFIG_DEFAULT;
     sup_cfg.stack_size = TEST_STACK_SIZE(64 * 1024);
 
     actor_id_t supervisor;
@@ -391,7 +391,7 @@ static void test4_rest_for_one(void *args, const hive_spawn_info_t *siblings,
     cfg.children = children;
     cfg.num_children = 3;
 
-    actor_config_t sup_cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+    hive_actor_config_t sup_cfg = HIVE_ACTOR_CONFIG_DEFAULT;
     sup_cfg.stack_size = TEST_STACK_SIZE(64 * 1024);
 
     actor_id_t supervisor;
@@ -455,7 +455,7 @@ static void test5_restart_intensity(void *args,
     cfg.num_children = 1;
     cfg.on_shutdown = test_shutdown_callback;
 
-    actor_config_t sup_cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+    hive_actor_config_t sup_cfg = HIVE_ACTOR_CONFIG_DEFAULT;
     sup_cfg.stack_size = TEST_STACK_SIZE(64 * 1024);
 
     actor_id_t supervisor;
@@ -541,7 +541,7 @@ static void test6_restart_types(void *args, const hive_spawn_info_t *siblings,
     cfg.children = children;
     cfg.num_children = 3;
 
-    actor_config_t sup_cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+    hive_actor_config_t sup_cfg = HIVE_ACTOR_CONFIG_DEFAULT;
     sup_cfg.stack_size = TEST_STACK_SIZE(64 * 1024);
 
     actor_id_t supervisor;
@@ -601,7 +601,7 @@ static void test7_empty_children(void *args, const hive_spawn_info_t *siblings,
     cfg.num_children = 0;
     cfg.on_shutdown = test_shutdown_callback;
 
-    actor_config_t sup_cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+    hive_actor_config_t sup_cfg = HIVE_ACTOR_CONFIG_DEFAULT;
     sup_cfg.stack_size = TEST_STACK_SIZE(64 * 1024);
 
     actor_id_t supervisor;
@@ -768,7 +768,7 @@ static void test9_utility_functions(void *args,
 // Test Runner
 // =============================================================================
 
-static actor_fn_t test_funcs[] = {
+static hive_actor_fn_t test_funcs[] = {
     test1_basic_lifecycle, test2_one_for_one,       test3_one_for_all,
     test4_rest_for_one,    test5_restart_intensity, test6_restart_types,
     test7_empty_children,  test8_invalid_config,    test9_utility_functions,
@@ -783,7 +783,7 @@ static void run_all_tests(void *args, const hive_spawn_info_t *siblings,
     (void)sibling_count;
 
     for (size_t i = 0; i < NUM_TESTS; i++) {
-        actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+        hive_actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
         cfg.stack_size = TEST_STACK_SIZE(128 * 1024);
 
         actor_id_t test;
@@ -811,7 +811,7 @@ int main(void) {
         return 1;
     }
 
-    actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+    hive_actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
     cfg.stack_size = TEST_STACK_SIZE(128 * 1024);
 
     actor_id_t runner;

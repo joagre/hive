@@ -100,7 +100,7 @@ HIVE_MESSAGE_DATA_POOL    256     IPC message data buffers
 .PP
 No heap allocation occurs in hot paths (scheduling, IPC, I/O). Actor stacks
 use a static arena allocator by default; malloc is only used if
-.I actor_config_t.malloc_stack
+.I hive_actor_config_t.malloc_stack
 is set to true.
 .SS Single-Threaded Architecture
 The runtime is completely single-threaded. All actors run cooperatively in

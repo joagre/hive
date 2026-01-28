@@ -134,7 +134,7 @@ bool pool_block;          // Effective value now
 
 ### Interactions
 
-- `hive_kill()` on blocked actor removes it from wait queue
+- `hive_actor_kill()` on blocked actor removes it from wait queue
 - Supervisor `child_spec` must explicitly include `pool_block` (no inheritance)
 
 ### Memory Impact
@@ -223,7 +223,7 @@ This is the closest embedded precedent.
 - Default = current behavior (non-blocking) - backward compatible
 - Scheduler logs warnings when actors block (rate-limited)
 - Actor priority used for wake-up ordering - critical actors get pool first
-- `hive_kill()` removes blocked actors from wait queue
+- `hive_actor_kill()` removes blocked actors from wait queue
 
 ### For Users Who Prefer Explicit Control
 

@@ -6,7 +6,7 @@ hive_file_open, hive_file_close, hive_file_read, hive_file_pread, hive_file_writ
 .nf
 .B #include <hive_file.h>
 .PP
-.BI "hive_status_t hive_file_open(const char *" path ", int " flags ", int " mode ", int *" fd_out ");"
+.BI "hive_status_t hive_file_open(const char *" path ", int " flags ", int " mode ", int *" out ");"
 .BI "hive_status_t hive_file_close(int " fd ");"
 .BI "hive_status_t hive_file_read(int " fd ", void *" buf ", size_t " len ", size_t *" bytes_read ");"
 .BI "hive_status_t hive_file_pread(int " fd ", void *" buf ", size_t " len ", size_t " offset ", size_t *" bytes_read ");"
@@ -30,7 +30,7 @@ with the specified
 and
 .IR mode .
 The file descriptor is stored in
-.IR fd_out .
+.IR out .
 .PP
 The
 .I flags
@@ -395,7 +395,7 @@ int main(void) {
 
     /* Spawn logger at LOW priority */
     actor_id_t logger;
-    actor_config_t cfg = {.priority = 3};  /* LOW */
+    hive_actor_config_t cfg = {.priority = 3};  /* LOW */
     hive_spawn(logger_actor, NULL, NULL, &cfg, &logger);
 
     hive_run();

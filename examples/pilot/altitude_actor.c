@@ -44,7 +44,7 @@ void *altitude_actor_init(void *init_args) {
     state.state_bus = buses->state_bus;
     state.thrust_bus = buses->thrust_bus;
     state.position_target_bus = buses->position_target_bus;
-    state.flight_manager = ACTOR_ID_INVALID; // Set from siblings in actor
+    state.flight_manager = HIVE_ACTOR_ID_INVALID; // Set from siblings in actor
     return &state;
 }
 
@@ -55,7 +55,7 @@ void altitude_actor(void *args, const hive_spawn_info_t *siblings,
     // Look up flight_manager from sibling info
     state->flight_manager =
         hive_find_sibling(siblings, sibling_count, "flight_manager");
-    if (state->flight_manager == ACTOR_ID_INVALID) {
+    if (state->flight_manager == HIVE_ACTOR_ID_INVALID) {
         HIVE_LOG_ERROR("[ALT] Failed to find flight_manager sibling");
         return;
     }

@@ -115,7 +115,7 @@ int main(void) {
     printf("Runtime initialized\n");
 
     // Spawn writer actor
-    actor_config_t writer_cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+    hive_actor_config_t writer_cfg = HIVE_ACTOR_CONFIG_DEFAULT;
     writer_cfg.name = "writer";
     writer_cfg.priority = HIVE_PRIORITY_NORMAL;
 
@@ -130,7 +130,7 @@ int main(void) {
     printf("Spawned writer actor (ID: %u)\n", writer_id);
 
     // Spawn reader actor
-    actor_config_t reader_cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+    hive_actor_config_t reader_cfg = HIVE_ACTOR_CONFIG_DEFAULT;
     reader_cfg.name = "reader";
     reader_cfg.priority = HIVE_PRIORITY_NORMAL;
 

@@ -6,8 +6,8 @@ hive_spawn, hive_exit, hive_self, hive_yield, hive_actor_alive, hive_find_siblin
 .nf
 .B #include <hive_runtime.h>
 .PP
-.BI "hive_status_t hive_spawn(actor_fn_t " fn ", hive_actor_init_fn_t " init ","
-.BI "                       void *" init_args ", const actor_config_t *" cfg ","
+.BI "hive_status_t hive_spawn(hive_actor_fn_t " fn ", hive_actor_init_fn_t " init ","
+.BI "                       void *" init_args ", const hive_actor_config_t *" cfg ","
 .BI "                       actor_id_t *" out ");"
 .BI "_Noreturn void hive_exit(void);"
 .BI "actor_id_t hive_self(void);"
@@ -79,7 +79,7 @@ typedef struct {
     const char *name;          /* for debugging, may be NULL */
     bool        malloc_stack;  /* false = arena, true = malloc */
     bool        auto_register; /* auto-register name in registry */
-} actor_config_t;
+} hive_actor_config_t;
 
 #define HIVE_ACTOR_CONFIG_DEFAULT { \\
     .stack_size = 0, \\
@@ -158,7 +158,7 @@ instead of
 .SS Querying Actor State
 .BR hive_self ()
 returns the actor ID of the calling actor. Returns
-.B ACTOR_ID_INVALID
+.B HIVE_ACTOR_ID_INVALID
 if called outside actor context.
 .PP
 .BR hive_yield ()
@@ -169,7 +169,7 @@ rescheduled.
 .BR hive_actor_alive ()
 returns true if the specified actor exists and has not exited, false otherwise.
 Returns false for
-.BR ACTOR_ID_INVALID .
+.BR HIVE_ACTOR_ID_INVALID .
 .SS Name Registry
 The name registry provides actor naming. Actors can register
 themselves with a symbolic name, and other actors can look up actor IDs by name.
@@ -214,7 +214,7 @@ contains the new actor's ID.
 .PP
 .BR hive_self ()
 returns the current actor's ID, or
-.B ACTOR_ID_INVALID
+.B HIVE_ACTOR_ID_INVALID
 outside actor context.
 .PP
 .BR hive_actor_alive ()
@@ -324,7 +324,7 @@ int main(void) {
     hive_init();
 
     /* Spawn with custom config */
-    actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+    hive_actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
     cfg.priority = HIVE_PRIORITY_HIGH;
     cfg.stack_size = 32 * 1024;  /* 32 KB stack */
     cfg.name = "sensor";
@@ -395,7 +395,7 @@ void database_service(void *args, const hive_spawn_info_t *siblings,
 int main(void) {
     hive_init();
 
-    actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+    hive_actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
     cfg.name = "database";
     cfg.auto_register = true;
 

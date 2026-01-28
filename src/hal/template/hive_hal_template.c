@@ -222,16 +222,16 @@ void hive_hal_file_cleanup(void) {
 //   path - File path
 //   flags - Open flags (HIVE_O_RDONLY, HIVE_O_WRONLY, HIVE_O_CREAT, etc.)
 //   mode - File permissions (for HIVE_O_CREAT)
-//   fd_out - Output file descriptor
+//   out - Output file descriptor
 //
 // Note: STM32 only supports virtual paths like "/log", "/config"
 //
 hive_status_t hive_hal_file_open(const char *path, int flags, int mode,
-                                 int *fd_out) {
+                                 int *out) {
     (void)path;
     (void)flags;
     (void)mode;
-    (void)fd_out;
+    (void)out;
     return HIVE_ERROR(HIVE_ERR_INVALID, "File I/O not implemented");
 }
 
@@ -314,8 +314,8 @@ void hive_hal_net_cleanup(void) {
 }
 
 // Create a TCP socket (non-blocking).
-hive_status_t hive_hal_net_socket(int *fd_out) {
-    (void)fd_out;
+hive_status_t hive_hal_net_socket(int *out) {
+    (void)out;
     return HIVE_ERROR(HIVE_ERR_INVALID, "Network not implemented");
 }
 
@@ -336,13 +336,13 @@ hive_status_t hive_hal_net_listen(int fd, int backlog) {
 // Accept a connection (non-blocking).
 //
 // Returns:
-//   HIVE_SUCCESS - Connection accepted, fd in conn_fd_out
+//   HIVE_SUCCESS - Connection accepted, fd in out
 //   HIVE_ERR_WOULDBLOCK - No pending connections
 //   Other error on failure
 //
-hive_status_t hive_hal_net_accept(int listen_fd, int *conn_fd_out) {
+hive_status_t hive_hal_net_accept(int listen_fd, int *out) {
     (void)listen_fd;
-    (void)conn_fd_out;
+    (void)out;
     return HIVE_ERROR(HIVE_ERR_INVALID, "Network not implemented");
 }
 
@@ -375,16 +375,16 @@ hive_status_t hive_hal_net_close(int fd) {
 // Receive data (non-blocking).
 //
 // Returns:
-//   HIVE_SUCCESS - Data received (received=0 means EOF)
+//   HIVE_SUCCESS - Data received (bytes_read=0 means EOF)
 //   HIVE_ERR_WOULDBLOCK - No data available
 //   Other error on failure
 //
 hive_status_t hive_hal_net_recv(int fd, void *buf, size_t len,
-                                size_t *received) {
+                                size_t *bytes_read) {
     (void)fd;
     (void)buf;
     (void)len;
-    (void)received;
+    (void)bytes_read;
     return HIVE_ERROR(HIVE_ERR_INVALID, "Network not implemented");
 }
 
@@ -396,11 +396,11 @@ hive_status_t hive_hal_net_recv(int fd, void *buf, size_t len,
 //   Other error on failure
 //
 hive_status_t hive_hal_net_send(int fd, const void *buf, size_t len,
-                                size_t *sent) {
+                                size_t *bytes_written) {
     (void)fd;
     (void)buf;
     (void)len;
-    (void)sent;
+    (void)bytes_written;
     return HIVE_ERROR(HIVE_ERR_INVALID, "Network not implemented");
 }
 

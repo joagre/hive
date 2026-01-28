@@ -46,7 +46,7 @@ typedef enum {
 // -----------------------------------------------------------------------------
 
 typedef struct {
-    actor_fn_t start;          // Actor entry point
+    hive_actor_fn_t start;     // Actor entry point
     hive_actor_init_fn_t init; // Init function (NULL = skip)
     void *init_args;           // Arguments to init function
     size_t init_args_size;     // Size to copy (0 = pass pointer directly)
@@ -54,7 +54,7 @@ typedef struct {
     bool auto_register; // Register in name registry
     hive_child_restart_t
         restart; // Restart policy (permanent, transient, temporary)
-    actor_config_t
+    hive_actor_config_t
         actor_cfg; // Actor configuration (stack size, priority, etc.)
 } hive_child_spec_t;
 
@@ -95,8 +95,8 @@ typedef struct {
 //   HIVE_ERR_INVALID  - NULL config, too many children, invalid child spec
 //   HIVE_ERR_NOMEM    - No supervisor slots available or spawn failed
 hive_status_t hive_supervisor_start(const hive_supervisor_config_t *config,
-                                    const actor_config_t *sup_actor_cfg,
-                                    actor_id_t *out_supervisor);
+                                    const hive_actor_config_t *sup_actor_cfg,
+                                    actor_id_t *out);
 
 // Request supervisor shutdown (async)
 // The supervisor will stop all children and then exit.
