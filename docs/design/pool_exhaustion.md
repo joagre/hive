@@ -173,7 +173,7 @@ to pool-using functions - behavior is controlled per-actor.
 
 ```c
 typedef struct {
-    int32_t timeout_ms;  // 0 = try once (default), >0 = ms, -1 = infinite
+    bool block;  // false = try once (default), true = block until available
 } hive_pool_config;
 
 // Set default at spawn time
@@ -181,7 +181,7 @@ actor_config cfg = {
     .priority = HIVE_PRIORITY_NORMAL,  // Also used for pool wait ordering
     .stack_size = 8192,
     .pool_config = {
-        .timeout_ms = 1000               // Block up to 1 second
+        .block = true                    // Block on pool exhaustion
     }
 };
 hive_spawn(my_actor, NULL, NULL, &cfg, &id);
@@ -191,7 +191,7 @@ hive_ipc_notify(to, tag, data, len);
 hive_bus_publish(bus, data, len);
 
 // Override temporarily
-hive_pool_config blocking = { .timeout_ms = 5000 };
+hive_pool_config blocking = { .block = true };
 hive_pool_set_config(&blocking);
 hive_ipc_notify(to, tag, data, len);
 hive_pool_set_config(NULL);  // Back to spawn default
@@ -205,6 +205,10 @@ hive_pool_get_config(&current);
 (`actor_config.priority`). No separate pool priority - critical actors
 naturally get pool space first.
 
+**Important:** This is about **pool exhaustion** handling, not normal backpressure.
+Normal backpressure uses `hive_ipc_request()`. Pool exhaustion should not happen
+in a well-designed system - if it does, the pool is undersized.
+
 **Pros:**
 - No boilerplate at call sites - API unchanged
 - Sensible defaults set once at spawn
@@ -212,25 +216,25 @@ naturally get pool space first.
 - `NULL` to `hive_pool_set_config()` restores spawn default
 - No new function variants to maintain
 - Single priority system - actor priority used for pool wait ordering
-- Simple config struct - just `timeout_ms`
+- Minimal config struct - just `bool block`
+- KISS - no timeout complexity
 
 **Cons:**
 - Hidden state (current pool config) affects behavior
-- Deadlock risk when timeout_ms != 0 (especially -1)
+- Deadlock risk when `block = true`
 - Requires scheduler wait queue implementation
 
 **Implementation:**
 - `actor_config.pool_config` not set = current behavior (non-blocking, return NOMEM)
-- `actor_config.pool_config` set = actor's default pool behavior
-- `hive_pool_set_config()` overrides for current actor
+- `actor_config.pool_config.block = true` = block until pool available
+- `hive_pool_set_config()` overrides for current actor (no stack, just overwrite)
 - `hive_pool_set_config(NULL)` restores spawn default
-- `hive_pool_get_config()` returns current active config
+- `hive_pool_get_config()` returns current active config (default values if unset)
 - Scheduler maintains wait queue (static pool, bounded by HIVE_MAX_ACTORS)
 - Wait queue ordered by actor's scheduling priority (CRITICAL > HIGH > NORMAL > LOW)
 - On pool slot freed, wake highest priority waiter first (FIFO within same priority)
 - Scheduler logs warning when actor blocks (rate-limited to avoid spam)
 - `hive_kill()` on blocked actor removes it from wait queue
-- Pool exhaustion is a design error - warnings make it visible
 - Supervisor child_spec must include pool_config for restarts
 
 **Hidden state is acceptable because:**
@@ -239,10 +243,10 @@ naturally get pool space first.
 - If user forgets they enabled blocking, that's their responsibility
 - Library code is unaffected unless caller explicitly enabled blocking
 
-**Deadlock warning:**
-- `timeout_ms = -1` (infinite) is dangerous - can cause permanent deadlock
+**Deadlock:**
+- `block = true` can cause deadlock if all actors block
 - Deadlock = design error - pool is undersized
-- Always prefer finite timeouts in production
+- Rate-limited warnings make pool exhaustion visible
 
 ### Option 6: Optional Parameter (Per-Call Override)
 
@@ -251,14 +255,14 @@ use actor's default. If provided, override for this call only.
 
 ```c
 typedef struct {
-    int32_t timeout_ms;  // 0 = try once, >0 = ms, -1 = infinite
+    bool block;  // false = try once, true = block until available
 } hive_pool_config;
 
 // Use actor's default pool config
 hive_ipc_notify(target, tag, data, len, NULL);
 
-// Override for this call only - block up to 1 second
-hive_pool_config cfg = { .timeout_ms = 1000 };
+// Override for this call only - block
+hive_pool_config cfg = { .block = true };
 hive_ipc_notify(target, tag, data, len, &cfg);
 ```
 
@@ -561,33 +565,35 @@ Option 5 solves this by:
 - Allowing runtime override for special cases
 - Keeping the existing API unchanged
 - Using actor priority for pool wait ordering (no new priority concept)
-- Making pool exhaustion visible via scheduler warnings
+- Making pool exhaustion visible via scheduler warnings (rate-limited)
 
-**The design is simple:**
+**The design is simple (KISS):**
 ```c
 typedef struct {
-    int32_t timeout_ms;  // 0 = try once (default), >0 = ms, -1 = infinite
+    bool block;  // false = try once (default), true = block until available
 } hive_pool_config;
 ```
 
-One field. Actor's scheduling priority determines pool wait order.
+One field. Actor's scheduling priority determines pool wait order. No timeouts.
 
 **Trade-offs accepted:**
 - Hidden state (pool config) affects API behavior
-- Deadlock risk when blocking is enabled
+- Deadlock risk when `block = true`
 - Scheduler complexity (wait queue)
 
 **Mitigations:**
 - Default = current behavior (non-blocking) - backward compatible
 - Scheduler logs warnings when actors block (rate-limited)
-- Timeouts prevent infinite deadlocks (strongly discourage `timeout_ms = -1`)
 - Actor priority used for wake-up ordering - critical actors get pool first
 - `hive_kill()` removes blocked actors from wait queue
-- Documentation must clearly explain deadlock risks
 
 **For users who prefer explicit control:**
-- Omit `pool_config` or set `timeout_ms = 0` - current behavior preserved
+- Omit `pool_config` or set `block = false` - current behavior preserved
 - They can still handle NOMEM explicitly at each call site
 
-**Pool exhaustion is still a design smell** - but blocking with warnings is
-better than forcing users to write bad retry loops.
+**Remember:**
+- This is about **pool exhaustion**, not normal backpressure
+- Normal backpressure uses `hive_ipc_request()`
+- Pool exhaustion = design error (pool is undersized)
+- Deadlock = design error (pool is undersized)
+- Blocking with warnings is better than bad retry loops
