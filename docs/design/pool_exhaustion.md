@@ -120,10 +120,10 @@ bool block_current;        // Effective value now
 
 - `actor_config.block_on_pool_full` not set (false) = current behavior (return NOMEM)
 - `actor_config.block_on_pool_full = true` = block until pool available
-- `hive_pool_set_block(HIVE_POOL_NO_BLOCK)` = force non-blocking
-- `hive_pool_set_block(HIVE_POOL_BLOCK)` = force blocking
-- `hive_pool_set_block(HIVE_POOL_DEFAULT)` = restore spawn default
-- `hive_pool_get_block()` returns current effective setting (`block_current`)
+- `hive_pool_set_block(HIVE_POOL_NO_BLOCK)` = set `block_current = false`
+- `hive_pool_set_block(HIVE_POOL_BLOCK)` = set `block_current = true`
+- `hive_pool_set_block(HIVE_POOL_DEFAULT)` = set `block_current = block_spawn_default`
+- `hive_pool_get_block()` returns `block_current`
 
 ### Wait Queue
 
@@ -135,7 +135,7 @@ bool block_current;        // Effective value now
 ### Interactions
 
 - `hive_kill()` on blocked actor removes it from wait queue
-- Supervisor `child_spec` must include `block_on_pool_full` for restarts
+- Supervisor `child_spec` must explicitly include `block_on_pool_full` (no inheritance)
 
 ### Memory Impact
 
