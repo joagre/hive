@@ -155,11 +155,8 @@ void altitude_actor(void *args, const hive_spawn_info_t *siblings,
             if (touchdown && !landed) {
                 landed = true;
                 HIVE_LOG_INFO("[ALT] Touchdown - notifying flight manager");
-                if (HIVE_FAILED(hive_ipc_notify(state->flight_manager,
-                                                NOTIFY_FLIGHT_LANDED, NULL,
-                                                0))) {
-                    HIVE_LOG_WARN("[ALT] notify LANDED failed");
-                }
+                hive_ipc_notify(state->flight_manager, NOTIFY_FLIGHT_LANDED,
+                                NULL, 0);
             }
         } else if (landing_mode) {
             // Landing mode: control descent rate, not altitude
@@ -193,10 +190,7 @@ void altitude_actor(void *args, const hive_spawn_info_t *siblings,
         }
 
         thrust_cmd_t cmd = {.thrust = thrust};
-        if (HIVE_FAILED(
-                hive_bus_publish(state->thrust_bus, &cmd, sizeof(cmd)))) {
-            HIVE_LOG_WARN("[ALT] bus publish failed");
-        }
+        hive_bus_publish(state->thrust_bus, &cmd, sizeof(cmd));
 
         if (++count % DEBUG_PRINT_INTERVAL == 0) {
             HIVE_LOG_DEBUG("[ALT] tgt=%.2f alt=%.2f vvel=%.2f thrust=%.3f %s",

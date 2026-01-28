@@ -94,9 +94,6 @@ void attitude_actor(void *args, const hive_spawn_info_t *siblings,
             pid_update(&pitch_pid, attitude_sp.pitch, est.pitch, dt);
         setpoint.yaw = pid_update_angle(&yaw_pid, attitude_sp.yaw, est.yaw, dt);
 
-        if (HIVE_FAILED(hive_bus_publish(state->rate_setpoint_bus, &setpoint,
-                                         sizeof(setpoint)))) {
-            HIVE_LOG_WARN("[ATT] bus publish failed");
-        }
+        hive_bus_publish(state->rate_setpoint_bus, &setpoint, sizeof(setpoint));
     }
 }

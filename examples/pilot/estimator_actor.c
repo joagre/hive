@@ -213,9 +213,6 @@ void estimator_actor(void *args, const hive_spawn_info_t *siblings,
         est.x_velocity = x_velocity;
         est.y_velocity = y_velocity;
 
-        if (HIVE_FAILED(
-                hive_bus_publish(state->state_bus, &est, sizeof(est)))) {
-            HIVE_LOG_WARN("[EST] bus publish failed");
-        }
+        hive_bus_publish(state->state_bus, &est, sizeof(est));
     }
 }

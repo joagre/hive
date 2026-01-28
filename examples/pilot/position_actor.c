@@ -100,9 +100,7 @@ void position_actor(void *args, const hive_spawn_info_t *siblings,
         attitude_setpoint_t setpoint = {
             .roll = -roll_cmd, .pitch = pitch_cmd, .yaw = target.yaw};
 
-        if (HIVE_FAILED(hive_bus_publish(state->attitude_setpoint_bus,
-                                         &setpoint, sizeof(setpoint)))) {
-            HIVE_LOG_WARN("[POS] bus publish failed");
-        }
+        hive_bus_publish(state->attitude_setpoint_bus, &setpoint,
+                         sizeof(setpoint));
     }
 }
