@@ -1,6 +1,9 @@
 // Crazyflie 2.1+ Bring-Up - I2C3 Bus Scan and Communication
+//
+// I2C3: PA8 (SCL), PC9 (SDA) at 400 kHz
+// Used for: On-board sensors (BMI088, BMP388)
 
-#include "bringup_i2c.h"
+#include "bringup_i2c3.h"
 #include "bringup_swo.h"
 #include "stm32f4xx.h"
 
@@ -21,7 +24,7 @@ static void delay_us(uint32_t us) {
         ;
 }
 
-static bool i2c_wait_flag(volatile uint32_t *reg, uint32_t flag, bool set) {
+static bool i2c3_wait_flag(volatile uint32_t *reg, uint32_t flag, bool set) {
     uint32_t timeout = I2C_TIMEOUT;
     while (timeout--) {
         bool is_set = (*reg & flag) != 0;
@@ -32,7 +35,7 @@ static bool i2c_wait_flag(volatile uint32_t *reg, uint32_t flag, bool set) {
     return false;
 }
 
-static bool i2c_check_errors(void) {
+static bool i2c3_check_errors(void) {
     uint32_t sr1 = I2C3->SR1;
     if (sr1 & (I2C_SR1_BERR | I2C_SR1_ARLO | I2C_SR1_AF | I2C_SR1_OVR)) {
         // Clear error flags
@@ -44,7 +47,7 @@ static bool i2c_check_errors(void) {
     return false;
 }
 
-void i2c_init(void) {
+void i2c3_init(void) {
     // Enable clocks
     RCC->AHB1ENR |= RCC_AHB1ENR_GPIOAEN | RCC_AHB1ENR_GPIOCEN;
     RCC->APB1ENR |= RCC_APB1ENR_I2C3EN;
@@ -96,7 +99,7 @@ void i2c_init(void) {
     I2C3->CR1 = I2C_CR1_PE; // Enable
 }
 
-void i2c_recover(void) {
+void i2c3_recover(void) {
     // Disable I2C
     I2C3->CR1 &= ~I2C_CR1_PE;
 
@@ -120,10 +123,10 @@ void i2c_recover(void) {
     I2C3->CR1 |= I2C_CR1_PE;
 }
 
-bool i2c_probe(uint8_t addr) {
+bool i2c3_probe(uint8_t addr) {
     // Generate start
     I2C3->CR1 |= I2C_CR1_START;
-    if (!i2c_wait_flag(&I2C3->SR1, I2C_SR1_SB, true)) {
+    if (!i2c3_wait_flag(&I2C3->SR1, I2C_SR1_SB, true)) {
         I2C3->CR1 |= I2C_CR1_STOP;
         return false;
     }
@@ -153,11 +156,11 @@ bool i2c_probe(uint8_t addr) {
     return false;
 }
 
-int i2c_scan(uint8_t *found_addrs, int max_addrs) {
+int i2c3_scan(uint8_t *found_addrs, int max_addrs) {
     int count = 0;
 
     for (uint8_t addr = 0x08; addr <= 0x77; addr++) {
-        if (i2c_probe(addr)) {
+        if (i2c3_probe(addr)) {
             if (count < max_addrs) {
                 found_addrs[count] = addr;
             }
@@ -169,48 +172,48 @@ int i2c_scan(uint8_t *found_addrs, int max_addrs) {
     return count;
 }
 
-bool i2c_write(uint8_t addr, const uint8_t *data, size_t len) {
+bool i2c3_write(uint8_t addr, const uint8_t *data, size_t len) {
     // Generate start
     I2C3->CR1 |= I2C_CR1_START;
-    if (!i2c_wait_flag(&I2C3->SR1, I2C_SR1_SB, true)) {
+    if (!i2c3_wait_flag(&I2C3->SR1, I2C_SR1_SB, true)) {
         goto error;
     }
 
     // Send address (write)
     I2C3->DR = (addr << 1) | 0;
-    if (!i2c_wait_flag(&I2C3->SR1, I2C_SR1_ADDR, true)) {
+    if (!i2c3_wait_flag(&I2C3->SR1, I2C_SR1_ADDR, true)) {
         goto error;
     }
     (void)I2C3->SR2; // Clear ADDR
 
     // Send data
     for (size_t i = 0; i < len; i++) {
-        if (!i2c_wait_flag(&I2C3->SR1, I2C_SR1_TXE, true)) {
+        if (!i2c3_wait_flag(&I2C3->SR1, I2C_SR1_TXE, true)) {
             goto error;
         }
         I2C3->DR = data[i];
     }
 
     // Wait for transfer complete
-    if (!i2c_wait_flag(&I2C3->SR1, I2C_SR1_BTF, true)) {
+    if (!i2c3_wait_flag(&I2C3->SR1, I2C_SR1_BTF, true)) {
         goto error;
     }
 
     I2C3->CR1 |= I2C_CR1_STOP;
     // Wait for STOP to complete (BUSY flag cleared)
-    i2c_wait_flag(&I2C3->SR2, I2C_SR2_BUSY, false);
+    i2c3_wait_flag(&I2C3->SR2, I2C_SR2_BUSY, false);
     return true;
 
 error:
-    if (i2c_check_errors()) {
-        i2c_recover();
+    if (i2c3_check_errors()) {
+        i2c3_recover();
     }
     I2C3->CR1 |= I2C_CR1_STOP;
-    i2c_wait_flag(&I2C3->SR2, I2C_SR2_BUSY, false);
+    i2c3_wait_flag(&I2C3->SR2, I2C_SR2_BUSY, false);
     return false;
 }
 
-bool i2c_read(uint8_t addr, uint8_t *data, size_t len) {
+bool i2c3_read(uint8_t addr, uint8_t *data, size_t len) {
     if (len == 0) {
         return true;
     }
@@ -220,13 +223,13 @@ bool i2c_read(uint8_t addr, uint8_t *data, size_t len) {
 
     // Generate start
     I2C3->CR1 |= I2C_CR1_START;
-    if (!i2c_wait_flag(&I2C3->SR1, I2C_SR1_SB, true)) {
+    if (!i2c3_wait_flag(&I2C3->SR1, I2C_SR1_SB, true)) {
         goto error;
     }
 
     // Send address (read)
     I2C3->DR = (addr << 1) | 1;
-    if (!i2c_wait_flag(&I2C3->SR1, I2C_SR1_ADDR, true)) {
+    if (!i2c3_wait_flag(&I2C3->SR1, I2C_SR1_ADDR, true)) {
         goto error;
     }
 
@@ -236,7 +239,7 @@ bool i2c_read(uint8_t addr, uint8_t *data, size_t len) {
         (void)I2C3->SR2; // Clear ADDR
         I2C3->CR1 |= I2C_CR1_STOP;
 
-        if (!i2c_wait_flag(&I2C3->SR1, I2C_SR1_RXNE, true)) {
+        if (!i2c3_wait_flag(&I2C3->SR1, I2C_SR1_RXNE, true)) {
             goto error;
         }
         data[0] = (uint8_t)I2C3->DR;
@@ -248,7 +251,7 @@ bool i2c_read(uint8_t addr, uint8_t *data, size_t len) {
         I2C3->CR1 &= ~I2C_CR1_ACK;
 
         // Wait for BTF (both bytes received)
-        if (!i2c_wait_flag(&I2C3->SR1, I2C_SR1_BTF, true)) {
+        if (!i2c3_wait_flag(&I2C3->SR1, I2C_SR1_BTF, true)) {
             goto error;
         }
 
@@ -265,14 +268,14 @@ bool i2c_read(uint8_t addr, uint8_t *data, size_t len) {
 
         // Read bytes 0 to N-3 normally
         for (size_t i = 0; i < len - 2; i++) {
-            if (!i2c_wait_flag(&I2C3->SR1, I2C_SR1_RXNE, true)) {
+            if (!i2c3_wait_flag(&I2C3->SR1, I2C_SR1_RXNE, true)) {
                 goto error;
             }
             data[i] = (uint8_t)I2C3->DR;
         }
 
         // Wait for BTF (byte N-2 in DR, byte N-1 in shift register)
-        if (!i2c_wait_flag(&I2C3->SR1, I2C_SR1_BTF, true)) {
+        if (!i2c3_wait_flag(&I2C3->SR1, I2C_SR1_BTF, true)) {
             goto error;
         }
         // Clear ACK, set STOP
@@ -281,7 +284,7 @@ bool i2c_read(uint8_t addr, uint8_t *data, size_t len) {
         // Read DataN-2 (shifts DataN-1 to DR)
         data[len - 2] = (uint8_t)I2C3->DR;
         // Wait for DataN-1 to be ready
-        if (!i2c_wait_flag(&I2C3->SR1, I2C_SR1_RXNE, true)) {
+        if (!i2c3_wait_flag(&I2C3->SR1, I2C_SR1_RXNE, true)) {
             goto error;
         }
         // Read DataN-1
@@ -289,56 +292,56 @@ bool i2c_read(uint8_t addr, uint8_t *data, size_t len) {
     }
 
     // Wait for STOP to complete (BUSY flag cleared)
-    i2c_wait_flag(&I2C3->SR2, I2C_SR2_BUSY, false);
+    i2c3_wait_flag(&I2C3->SR2, I2C_SR2_BUSY, false);
     return true;
 
 error:
-    if (i2c_check_errors()) {
-        i2c_recover();
+    if (i2c3_check_errors()) {
+        i2c3_recover();
     }
     I2C3->CR1 &= ~I2C_CR1_POS; // Ensure POS is cleared
     I2C3->CR1 |= I2C_CR1_STOP;
-    i2c_wait_flag(&I2C3->SR2, I2C_SR2_BUSY, false);
+    i2c3_wait_flag(&I2C3->SR2, I2C_SR2_BUSY, false);
     return false;
 }
 
-bool i2c_write_read(uint8_t addr, const uint8_t *write_data, size_t write_len,
-                    uint8_t *read_data, size_t read_len) {
+bool i2c3_write_read(uint8_t addr, const uint8_t *write_data, size_t write_len,
+                     uint8_t *read_data, size_t read_len) {
     // Generate start
     I2C3->CR1 |= I2C_CR1_START;
-    if (!i2c_wait_flag(&I2C3->SR1, I2C_SR1_SB, true)) {
+    if (!i2c3_wait_flag(&I2C3->SR1, I2C_SR1_SB, true)) {
         goto error;
     }
 
     // Send address (write)
     I2C3->DR = (addr << 1) | 0;
-    if (!i2c_wait_flag(&I2C3->SR1, I2C_SR1_ADDR, true)) {
+    if (!i2c3_wait_flag(&I2C3->SR1, I2C_SR1_ADDR, true)) {
         goto error;
     }
     (void)I2C3->SR2;
 
     // Send write data
     for (size_t i = 0; i < write_len; i++) {
-        if (!i2c_wait_flag(&I2C3->SR1, I2C_SR1_TXE, true)) {
+        if (!i2c3_wait_flag(&I2C3->SR1, I2C_SR1_TXE, true)) {
             goto error;
         }
         I2C3->DR = write_data[i];
     }
 
-    if (!i2c_wait_flag(&I2C3->SR1, I2C_SR1_BTF, true)) {
+    if (!i2c3_wait_flag(&I2C3->SR1, I2C_SR1_BTF, true)) {
         goto error;
     }
 
     // Repeated start
     I2C3->CR1 |= I2C_CR1_ACK;
     I2C3->CR1 |= I2C_CR1_START;
-    if (!i2c_wait_flag(&I2C3->SR1, I2C_SR1_SB, true)) {
+    if (!i2c3_wait_flag(&I2C3->SR1, I2C_SR1_SB, true)) {
         goto error;
     }
 
     // Send address (read)
     I2C3->DR = (addr << 1) | 1;
-    if (!i2c_wait_flag(&I2C3->SR1, I2C_SR1_ADDR, true)) {
+    if (!i2c3_wait_flag(&I2C3->SR1, I2C_SR1_ADDR, true)) {
         goto error;
     }
 
@@ -348,7 +351,7 @@ bool i2c_write_read(uint8_t addr, const uint8_t *write_data, size_t write_len,
         (void)I2C3->SR2; // Clear ADDR
         I2C3->CR1 |= I2C_CR1_STOP;
 
-        if (!i2c_wait_flag(&I2C3->SR1, I2C_SR1_RXNE, true)) {
+        if (!i2c3_wait_flag(&I2C3->SR1, I2C_SR1_RXNE, true)) {
             goto error;
         }
         read_data[0] = (uint8_t)I2C3->DR;
@@ -359,7 +362,7 @@ bool i2c_write_read(uint8_t addr, const uint8_t *write_data, size_t write_len,
         I2C3->CR1 &= ~I2C_CR1_ACK;
 
         // Wait for BTF (both bytes received)
-        if (!i2c_wait_flag(&I2C3->SR1, I2C_SR1_BTF, true)) {
+        if (!i2c3_wait_flag(&I2C3->SR1, I2C_SR1_BTF, true)) {
             goto error;
         }
 
@@ -376,14 +379,14 @@ bool i2c_write_read(uint8_t addr, const uint8_t *write_data, size_t write_len,
 
         // Read bytes 0 to N-3 normally
         for (size_t i = 0; i < read_len - 2; i++) {
-            if (!i2c_wait_flag(&I2C3->SR1, I2C_SR1_RXNE, true)) {
+            if (!i2c3_wait_flag(&I2C3->SR1, I2C_SR1_RXNE, true)) {
                 goto error;
             }
             read_data[i] = (uint8_t)I2C3->DR;
         }
 
         // Wait for BTF (byte N-2 in DR, byte N-1 in shift register)
-        if (!i2c_wait_flag(&I2C3->SR1, I2C_SR1_BTF, true)) {
+        if (!i2c3_wait_flag(&I2C3->SR1, I2C_SR1_BTF, true)) {
             goto error;
         }
         // Clear ACK, set STOP
@@ -392,7 +395,7 @@ bool i2c_write_read(uint8_t addr, const uint8_t *write_data, size_t write_len,
         // Read DataN-2 (shifts DataN-1 to DR)
         read_data[read_len - 2] = (uint8_t)I2C3->DR;
         // Wait for DataN-1 to be ready
-        if (!i2c_wait_flag(&I2C3->SR1, I2C_SR1_RXNE, true)) {
+        if (!i2c3_wait_flag(&I2C3->SR1, I2C_SR1_RXNE, true)) {
             goto error;
         }
         // Read DataN-1
@@ -400,7 +403,7 @@ bool i2c_write_read(uint8_t addr, const uint8_t *write_data, size_t write_len,
     }
 
     // Wait for STOP bit to be cleared by hardware
-    if (!i2c_wait_flag(&I2C3->CR1, I2C_CR1_STOP, false)) {
+    if (!i2c3_wait_flag(&I2C3->CR1, I2C_CR1_STOP, false)) {
         // STOP didn't clear - do full software reset with bus recovery
         I2C3->CR1 = 0; // Disable
         RCC->APB1RSTR |= RCC_APB1RSTR_I2C3RST;
@@ -431,43 +434,41 @@ bool i2c_write_read(uint8_t addr, const uint8_t *write_data, size_t write_len,
         I2C3->CR1 = I2C_CR1_PE;
     }
     // Wait for BUSY flag cleared
-    i2c_wait_flag(&I2C3->SR2, I2C_SR2_BUSY, false);
+    i2c3_wait_flag(&I2C3->SR2, I2C_SR2_BUSY, false);
     return true;
 
 error:
-    if (i2c_check_errors()) {
-        i2c_recover();
+    if (i2c3_check_errors()) {
+        i2c3_recover();
     }
     I2C3->CR1 &= ~I2C_CR1_POS; // Ensure POS is cleared
     I2C3->CR1 |= I2C_CR1_STOP;
-    i2c_wait_flag(&I2C3->CR1, I2C_CR1_STOP, false);
-    i2c_wait_flag(&I2C3->SR2, I2C_SR2_BUSY, false);
+    i2c3_wait_flag(&I2C3->CR1, I2C_CR1_STOP, false);
+    i2c3_wait_flag(&I2C3->SR2, I2C_SR2_BUSY, false);
     return false;
 }
 
-bool i2c_read_reg(uint8_t addr, uint8_t reg, uint8_t *value) {
-    return i2c_write_read(addr, &reg, 1, value, 1);
+bool i2c3_read_reg(uint8_t addr, uint8_t reg, uint8_t *value) {
+    return i2c3_write_read(addr, &reg, 1, value, 1);
 }
 
-bool i2c_read_regs(uint8_t addr, uint8_t reg, uint8_t *data, size_t len) {
-    return i2c_write_read(addr, &reg, 1, data, len);
+bool i2c3_read_regs(uint8_t addr, uint8_t reg, uint8_t *data, size_t len) {
+    return i2c3_write_read(addr, &reg, 1, data, len);
 }
 
-bool i2c_write_reg(uint8_t addr, uint8_t reg, uint8_t value) {
+bool i2c3_write_reg(uint8_t addr, uint8_t reg, uint8_t value) {
     uint8_t buf[2] = {reg, value};
-    return i2c_write(addr, buf, 2);
+    return i2c3_write(addr, buf, 2);
 }
 
-const char *i2c_device_name(uint8_t addr) {
+const char *i2c3_device_name(uint8_t addr) {
     switch (addr) {
-    case I2C_ADDR_BMI088_ACCEL:
+    case I2C3_ADDR_BMI088_ACCEL:
         return "BMI088 Accel";
-    case I2C_ADDR_BMI088_GYRO:
+    case I2C3_ADDR_BMI088_GYRO:
         return "BMI088 Gyro";
-    case I2C_ADDR_BMP388:
+    case I2C3_ADDR_BMP388:
         return "BMP388 Baro";
-    case I2C_ADDR_VL53L1X:
-        return "VL53L1x ToF";
     default:
         return "Unknown";
     }

@@ -61,6 +61,55 @@ make && make install
 
 Alternatively, run manually: `st-trace --clock=168m --trace=2m`
 
+## Hardware Architecture
+
+### I2C Bus Configuration
+
+The Crazyflie 2.1+ has two separate I2C buses:
+
+| Bus | Pins | Speed | Devices |
+|-----|------|-------|---------|
+| I2C3 | PA8 (SCL), PC9 (SDA) | 400 kHz | On-board sensors (BMI088, BMP388) |
+| I2C1 | PB6 (SCL), PB7 (SDA) | 400 kHz | Expansion connector (EEPROM, Flow deck VL53L1x) |
+
+**Important**: The Flow deck's VL53L1x ToF sensor is on **I2C1** (expansion connector),
+not I2C3 (on-board sensors). This is a common source of confusion.
+
+### SPI Configuration
+
+| Bus | Pins | Devices |
+|-----|------|---------|
+| SPI1 | PA5 (SCK), PA6 (MISO), PA7 (MOSI), PB4 (CS) | PMW3901 optical flow (Flow deck) |
+| SPI3 | PB3 (SCK), PB4 (MISO), PB5 (MOSI), PB6 (CS) | SD card (Micro SD Card deck) |
+
+### Expansion Deck Connector GPIO
+
+| Signal | STM32 Pin | Description |
+|--------|-----------|-------------|
+| IO1 | PB8 | General purpose I/O |
+| IO2 | PB5 | General purpose I/O |
+| IO3 | PB4 | PMW3901 chip select (Flow deck) |
+| IO4 | PC12 | General purpose I/O |
+| OW | PC11 | 1-Wire deck detection |
+
+### Stock Firmware Reference
+
+The file `crazflie_firmware_log.txt` contains console output from the stock
+Bitcraze firmware (captured via cfclient). Useful reference values:
+
+| Item | Value | Notes |
+|------|-------|-------|
+| PMW3901 chip ID | 0x49 | Product ID register 0x00 |
+| PMW3901 inverse ID | 0xB6 | Register 0x5F (sanity check) |
+| VL53L1x | "ZR2: Z-down sensor [OK]" | Detected on I2C1 |
+| Flow deck driver | bcFlow2 | PID 0x0A via 1-Wire |
+| BMI088 | "Using I2C interface" | On I2C3 |
+| BMP388 | "I2C connection [OK]" | On I2C3 |
+| EEPROM | "I2C connection [OK]" | On I2C1 at 0x50 |
+
+The log also shows FreeRTOS task stack usage which may be useful for sizing
+actor stacks in the Hive pilot firmware.
+
 ## Building and Flashing
 
 ```bash
@@ -135,24 +184,25 @@ be tested directly from the STM32.
 
 ### Phase 3: I2C Bus Scan
 
-Scans I2C3 bus for all connected devices:
+Scans I2C3 bus (on-board sensors) for connected devices:
 
-| Address | Device | Required |
-|---------|--------|----------|
-| 0x18 | BMI088 Accelerometer | Yes |
-| 0x69 | BMI088 Gyroscope (SDO=VDD) | Yes |
-| 0x77 | BMP388 Barometer | Yes |
-| 0x29 | VL53L1x ToF (Flow deck) | No |
+| Address | Device | Bus | Required |
+|---------|--------|-----|----------|
+| 0x18 | BMI088 Accelerometer | I2C3 | Yes |
+| 0x69 | BMI088 Gyroscope (SDO=VDD) | I2C3 | Yes |
+| 0x77 | BMP388 Barometer | I2C3 | Yes |
+
+**Note**: The VL53L1x ToF sensor (Flow deck) is on I2C1 (expansion connector),
+not I2C3. It is detected separately during the sensor init phase.
 
 **Expected output**
 ```
 === Phase 3: I2C Bus Scan ===
 [I2C] Scanning I2C3 bus...
 [I2C] Found device at 0x18 (BMI088 Accel)
-[I2C] Found device at 0x29 (VL53L1x ToF) [Flow deck detected]
 [I2C] Found device at 0x69 (BMI088 Gyro)
 [I2C] Found device at 0x77 (BMP388 Baro)
-[I2C] Scan complete: 4 devices found... OK
+[I2C] Scan complete: 3 devices found... OK
 ```
 
 ### Phase 4: Sensors
@@ -161,13 +211,13 @@ Reads chip IDs and sensor data via I2C and SPI:
 
 **Chip IDs:**
 
-| Sensor | Register | Expected Value |
-|--------|----------|----------------|
-| BMI088 Accel | 0x00 | 0x1E |
-| BMI088 Gyro | 0x00 | 0x0F |
-| BMP388 | 0x00 | 0x50 |
-| VL53L1x | Model ID | 0xEACC |
-| PMW3901 | Product ID | 0x49 |
+| Sensor | Bus | Register | Expected Value |
+|--------|-----|----------|----------------|
+| BMI088 Accel | I2C3 (0x18) | 0x00 | 0x1E |
+| BMI088 Gyro | I2C3 (0x69) | 0x00 | 0x0F |
+| BMP388 | I2C3 (0x77) | 0x00 | 0x50 |
+| VL53L1x | I2C1 (0x29) | Model ID | 0xEACC |
+| PMW3901 | SPI1 (PB4 CS) | Product ID | 0x49 |
 
 **Sensor Data (at rest, level):**
 
@@ -385,10 +435,17 @@ This is the most complex test, combining SPI with the SD card protocol.
 
 ### I2C devices not found
 
+**On-board sensors (I2C3 - PA8/PC9):**
 1. Check I2C3 pull-ups present on board
 2. Verify PA8 (SCL) and PC9 (SDA) not shorted
 3. Try slower I2C clock (reduce from 400kHz to 100kHz)
 4. Check for bus contention (other masters)
+
+**Expansion deck sensors (I2C1 - PB6/PB7):**
+1. Ensure deck is fully seated in expansion headers
+2. Check I2C1 pull-ups on expansion connector (PB6, PB7)
+3. Verify the correct I2C bus is being used (VL53L1x is on I2C1, not I2C3)
+4. EEPROM and VL53L1x share I2C1 - if EEPROM works, bus is OK
 
 ### Sensor chip ID wrong
 
@@ -499,7 +556,8 @@ The following tests are planned but not yet implemented:
 |------|-------------|
 | `bringup_main.c` | Main test sequence and coordination |
 | `bringup_swo.c/h` | SWO debug output via ITM |
-| `bringup_i2c.c/h` | I2C3 bus scan and communication |
+| `bringup_i2c1.c/h` | I2C1 bus communication (expansion connector: EEPROM, VL53L1x) |
+| `bringup_i2c3.c/h` | I2C3 bus scan and communication (on-board sensors: BMI088, BMP388) |
 | `bringup_sensors.c/h` | Sensor chip ID and data readout |
 | `bringup_motors.c/h` | Motor PWM test (TIM2) |
 | `bringup_radio.c/h` | Syslink radio test (USART6) |

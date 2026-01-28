@@ -1,7 +1,8 @@
 // Crazyflie 2.1+ Bring-Up - Sensor Tests
 
 #include "bringup_sensors.h"
-#include "bringup_i2c.h"
+#include "bringup_i2c1.h"
+#include "bringup_i2c3.h"
 #include "bringup_swo.h"
 #include "stm32f4xx.h"
 #include <math.h>
@@ -138,41 +139,44 @@ void spi_init(void) {
 }
 
 void sensors_init(void) {
-    // Check if Flow deck is present (VL53L1x responds on I2C)
-    s_flow_deck_present = i2c_probe(I2C_ADDR_VL53L1X);
+    // Check if Flow deck is present (VL53L1x responds on I2C1 - expansion connector)
+    // Note: VL53L1x is on I2C1 (PB6/PB7), not I2C3 (PA8/PC9)
+    i2c1_init();
+    s_flow_deck_present = i2c1_probe(I2C1_ADDR_VL53L1X);
     swo_puts("[INIT] Flow deck probe done\n");
 
     // Initialize BMI088 accelerometer
     // Exit suspend mode
-    i2c_write_reg(I2C_ADDR_BMI088_ACCEL, BMI088_ACC_PWR_CONF_REG, 0x00);
+    i2c3_write_reg(I2C3_ADDR_BMI088_ACCEL, BMI088_ACC_PWR_CONF_REG, 0x00);
     delay_ms(1);
     // Enable accelerometer
-    i2c_write_reg(I2C_ADDR_BMI088_ACCEL, BMI088_ACC_PWR_CTRL_REG, 0x04);
+    i2c3_write_reg(I2C3_ADDR_BMI088_ACCEL, BMI088_ACC_PWR_CTRL_REG, 0x04);
     delay_ms(50);
     // Set range +/-12g
-    i2c_write_reg(I2C_ADDR_BMI088_ACCEL, BMI088_ACC_RANGE_REG, 0x02);
+    i2c3_write_reg(I2C3_ADDR_BMI088_ACCEL, BMI088_ACC_RANGE_REG, 0x02);
     // Set ODR 800Hz, normal mode
-    i2c_write_reg(I2C_ADDR_BMI088_ACCEL, BMI088_ACC_CONF_REG, 0xAB);
+    i2c3_write_reg(I2C3_ADDR_BMI088_ACCEL, BMI088_ACC_CONF_REG, 0xAB);
     swo_puts("[INIT] Accel init done\n");
 
     // Initialize BMI088 gyroscope
     // Set range +/-2000 dps
-    i2c_write_reg(I2C_ADDR_BMI088_GYRO, BMI088_GYRO_RANGE_REG, 0x00);
+    i2c3_write_reg(I2C3_ADDR_BMI088_GYRO, BMI088_GYRO_RANGE_REG, 0x00);
     // Set bandwidth 116Hz
-    i2c_write_reg(I2C_ADDR_BMI088_GYRO, BMI088_GYRO_BW_REG, 0x02);
+    i2c3_write_reg(I2C3_ADDR_BMI088_GYRO, BMI088_GYRO_BW_REG, 0x02);
     // Normal power mode
-    i2c_write_reg(I2C_ADDR_BMI088_GYRO, BMI088_GYRO_LPM1_REG, 0x00);
+    i2c3_write_reg(I2C3_ADDR_BMI088_GYRO, BMI088_GYRO_LPM1_REG, 0x00);
     delay_ms(30);
     swo_puts("[INIT] Gyro init done\n");
 
     // Initialize BMP388
     // Soft reset first
-    i2c_write_reg(I2C_ADDR_BMP388, 0x7E, 0xB6); // CMD register, soft reset
+    i2c3_write_reg(I2C3_ADDR_BMP388, 0x7E, 0xB6); // CMD register, soft reset
     delay_ms(10);
 
     // Read calibration data after reset
     uint8_t calib[21];
-    bool calib_ok = i2c_read_regs(I2C_ADDR_BMP388, BMP388_CALIB_REG, calib, 21);
+    bool calib_ok =
+        i2c3_read_regs(I2C3_ADDR_BMP388, BMP388_CALIB_REG, calib, 21);
     swo_printf("[INIT] BMP388 calib read: %s\n", calib_ok ? "OK" : "FAIL");
     bmp388_calib_t.t1 = (uint16_t)(calib[1] << 8 | calib[0]);
     bmp388_calib_t.t2 = (uint16_t)(calib[3] << 8 | calib[2]);
@@ -190,10 +194,10 @@ void sensors_init(void) {
     bmp388_calib_t.p11 = (int8_t)calib[20];
 
     // Set OSR x1 for fast measurements during bringup
-    i2c_write_reg(I2C_ADDR_BMP388, BMP388_OSR_REG, 0x00);
+    i2c3_write_reg(I2C3_ADDR_BMP388, BMP388_OSR_REG, 0x00);
     // Enable pressure and temperature in forced mode (0x13)
     // This triggers a single measurement, then returns to sleep
-    i2c_write_reg(I2C_ADDR_BMP388, BMP388_PWR_CTRL_REG, 0x13);
+    i2c3_write_reg(I2C3_ADDR_BMP388, BMP388_PWR_CTRL_REG, 0x13);
     // Allow time for first measurement (should be ~5ms at OSR x1)
     delay_ms(50);
 
@@ -201,21 +205,23 @@ void sensors_init(void) {
 }
 
 bool sensor_test_accel_id(uint8_t *chip_id) {
-    if (!i2c_read_reg(I2C_ADDR_BMI088_ACCEL, BMI088_ACC_CHIP_ID_REG, chip_id)) {
+    if (!i2c3_read_reg(I2C3_ADDR_BMI088_ACCEL, BMI088_ACC_CHIP_ID_REG,
+                       chip_id)) {
         return false;
     }
     return *chip_id == BMI088_ACCEL_CHIP_ID;
 }
 
 bool sensor_test_gyro_id(uint8_t *chip_id) {
-    if (!i2c_read_reg(I2C_ADDR_BMI088_GYRO, BMI088_GYRO_CHIP_ID_REG, chip_id)) {
+    if (!i2c3_read_reg(I2C3_ADDR_BMI088_GYRO, BMI088_GYRO_CHIP_ID_REG,
+                       chip_id)) {
         return false;
     }
     return *chip_id == BMI088_GYRO_CHIP_ID;
 }
 
 bool sensor_test_baro_id(uint8_t *chip_id) {
-    if (!i2c_read_reg(I2C_ADDR_BMP388, BMP388_CHIP_ID_REG, chip_id)) {
+    if (!i2c3_read_reg(I2C3_ADDR_BMP388, BMP388_CHIP_ID_REG, chip_id)) {
         return false;
     }
     return *chip_id == BMP388_CHIP_ID;
@@ -228,10 +234,8 @@ bool sensor_test_tof_id(uint16_t *model_id) {
     }
 
     uint8_t id[2];
-    uint8_t reg[2] = {(VL53L1X_MODEL_ID_REG >> 8) & 0xFF,
-                      VL53L1X_MODEL_ID_REG & 0xFF};
-
-    if (!i2c_write_read(I2C_ADDR_VL53L1X, reg, 2, id, 2)) {
+    // VL53L1x is on I2C1 (expansion connector)
+    if (!i2c1_read_regs16(I2C1_ADDR_VL53L1X, VL53L1X_MODEL_ID_REG, id, 2)) {
         return false;
     }
 
@@ -251,7 +255,7 @@ bool sensor_test_flow_id(uint8_t *product_id) {
 
 bool sensor_read_accel(accel_data_t *data) {
     uint8_t raw[6];
-    if (!i2c_read_regs(I2C_ADDR_BMI088_ACCEL, BMI088_ACC_DATA_REG, raw, 6)) {
+    if (!i2c3_read_regs(I2C3_ADDR_BMI088_ACCEL, BMI088_ACC_DATA_REG, raw, 6)) {
         return false;
     }
 
@@ -270,7 +274,7 @@ bool sensor_read_accel(accel_data_t *data) {
 
 bool sensor_read_gyro(gyro_data_t *data) {
     uint8_t raw[6];
-    if (!i2c_read_regs(I2C_ADDR_BMI088_GYRO, BMI088_GYRO_DATA_REG, raw, 6)) {
+    if (!i2c3_read_regs(I2C3_ADDR_BMI088_GYRO, BMI088_GYRO_DATA_REG, raw, 6)) {
         return false;
     }
 
@@ -289,12 +293,12 @@ bool sensor_read_gyro(gyro_data_t *data) {
 
 bool sensor_read_baro(baro_data_t *data) {
     // Trigger a forced measurement
-    i2c_write_reg(I2C_ADDR_BMP388, BMP388_PWR_CTRL_REG, 0x13);
+    i2c3_write_reg(I2C3_ADDR_BMP388, BMP388_PWR_CTRL_REG, 0x13);
 
     // Wait for data ready (bits 5 and 6 of status register)
     uint8_t status = 0;
     for (int i = 0; i < 50; i++) {
-        if (!i2c_read_reg(I2C_ADDR_BMP388, 0x03, &status)) {
+        if (!i2c3_read_reg(I2C3_ADDR_BMP388, 0x03, &status)) {
             return false;
         }
         if ((status & 0x60) == 0x60) {
@@ -308,7 +312,7 @@ bool sensor_read_baro(baro_data_t *data) {
     }
 
     uint8_t raw[6];
-    if (!i2c_read_regs(I2C_ADDR_BMP388, BMP388_DATA_REG, raw, 6)) {
+    if (!i2c3_read_regs(I2C3_ADDR_BMP388, BMP388_DATA_REG, raw, 6)) {
         return false;
     }
 
@@ -351,10 +355,9 @@ bool sensor_read_tof(uint16_t *range_mm) {
 
     // Read range result (simplified - real driver needs full init sequence)
     // For bringup, just verify we can read something
-    uint8_t reg[2] = {0x00, 0x96}; // RESULT__RANGE_STATUS register
+    // VL53L1x is on I2C1 (expansion connector)
     uint8_t data[2];
-
-    if (!i2c_write_read(I2C_ADDR_VL53L1X, reg, 2, data, 2)) {
+    if (!i2c1_read_regs16(I2C1_ADDR_VL53L1X, 0x0096, data, 2)) {
         return false;
     }
 

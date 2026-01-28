@@ -14,7 +14,8 @@ CMSIS_DIR = ../vendor/CMSIS
 # Source files
 SRCS = bringup_main.c \
        bringup_swo.c \
-       bringup_i2c.c \
+       bringup_i2c1.c \
+       bringup_i2c3.c \
        bringup_sensors.c \
        bringup_motors.c \
        bringup_radio.c \

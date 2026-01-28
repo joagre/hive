@@ -1,0 +1,69 @@
+SYS: Crazyflie 2.1 is up and running!
+SYS: Build 0:252b41341a07 (2025.12.1) CLEAN
+SYS: I am 0x383134373135511000430039 and I have 1024KB of flash!
+CFGBLK: v1, verification [OK]
+DECK_DISCOVERY: Backend found: onewire
+DECK_DISCOVERY: Backend found: deckctrl
+DECK_CORE: 1 deck(s) found
+DECK_CORE: Calling INIT on driver bcFlow2 for deck 0
+ZR2: Z-down sensor [OK]
+PMW: Motion chip id: 0x49:0xB6
+IMU: BMI088: Using I2C interface.
+IMU: BMI088 Gyro connection [OK].
+IMU: BMI088 Accel connection [OK]
+IMU: BMP388 I2C connection [OK]
+ESTIMATOR: Using Kalman (2) estimator
+CONTROLLER: Using PID (1) controller
+MTR-DRV: Using brushed motor driver
+SYS: About to run tests in system.c.
+SYS: NRF51 version: 2024.10 (CF21)
+EEPROM: I2C connection [OK].
+STORAGE: Storage check [OK].
+IMU: BMI088 gyro self-test [OK]
+DECK_CORE: Deck 0 test [OK].
+SYS: Self test passed!
+STAB: Wait for sensor calibration...
+SYS: Free heap: 15056 bytes
+STAB: Starting stabilizer loop
+ESTKALMAN: State out of bounds, resetting
+SYSLOAD: Task dump
+SYSLOAD: Load	Stack left	Name
+SYSLOAD: 1.15 	231 	Tmr Svc
+SYSLOAD: 68.63 	128 	IDLE
+SYSLOAD: 0.0 	33 	PWRMGNT
+SYSLOAD: 0.39 	216 	CRTP-RX
+SYSLOAD: 2.13 	75 	ZRANGER2
+SYSLOAD: 0.96 	117 	RATE_SUPE
+SYSLOAD: 2.55 	191 	FLOW
+SYSLOAD: 0.01 	157 	SYSTEM
+SYSLOAD: 0.0 	248 	CMDHL
+SYSLOAD: 0.0 	266 	PASSTHROU
+SYSLOAD: 0.0 	116 	PLATFORM-
+SYSLOAD: 0.0 	221 	MEM
+SYSLOAD: 0.0 	254 	LOG
+SYSLOAD: 0.0 	259 	PARAM
+SYSLOAD: 0.05 	62 	CRTP-TX
+SYSLOAD: 0.05 	215 	WORKER
+SYSLOAD: 0.77 	175 	SYSLINK
+SYSLOAD: 0.71 	87 	LEDSEQCMD
+SYSLOAD: 0.27 	109 	CRTP-SRV
+SYSLOAD: 5.29 	349 	STABILIZE
+SYSLOAD: 7.11 	144 	SENSORS
+SYSLOAD: 9.85 	317 	KALMAN
+SYSLOAD: 0.0 	116 	USBLINK
+SYS: No assert information found
+HEALTH: Acc noise floor variance X+Y:0.003367, (Z:0.003196)
+HEALTH: Motor M1 variance X+Y: 0.97 (Z:0.22), voltage sag:0.44
+HEALTH: Motor M2 variance X+Y: 2.25 (Z:3.90), voltage sag:0.44
+HEALTH: Motor M3 variance X+Y: 0.77 (Z:0.16), voltage sag:0.45
+HEALTH: Motor M4 variance X+Y: 9.10 (Z:31.54), voltage sag:0.45
+HEALTH: Propeller test on M1. No threshold set. measured: 0.97
+HEALTH: Propeller test on M2. No threshold set. measured: 2.25
+HEALTH: Propeller test on M3. No threshold set. measured: 0.77
+HEALTH: Propeller test on M4. No threshold set. measured: 9.10
+ESTKALMAN: WARNING: Kalman prediction rate off (73)
+HEALTH: Idle:4.14V sag: 0.59V (< 0.70V) [OK]
+ESTKALMAN: WARNING: Kalman prediction rate off (95)
+STORAGE: Used storage: 0 item stored, 0 Bytes/7168 Bytes (0%)
+STORAGE: Fragmentation: 0%
+STORAGE: Efficiency: Data: 0 Bytes (0%), Keys: 0 Bytes (0%), Metadata: 0 Bytes (0%)

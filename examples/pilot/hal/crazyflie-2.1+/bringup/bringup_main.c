@@ -8,7 +8,7 @@
 #include "bringup_deck.h"
 #include "bringup_eeprom.h"
 #include "bringup_flash.h"
-#include "bringup_i2c.h"
+#include "bringup_i2c3.h"
 #include "bringup_leds.h"
 #include "bringup_motors.h"
 #include "bringup_radio.h"
@@ -147,47 +147,39 @@ static bool test_leds(void) {
     return led_run_test(&results);
 }
 
-// Phase 3: I2C Bus Scan - Basic I2C protocol
+// Phase 3: I2C Bus Scan - Basic I2C protocol (on-board sensors only)
 static bool test_i2c_scan(void) {
     swo_puts("\n=== Phase 3: I2C Bus Scan ===\n");
 
-    swo_puts("[I2C] Initializing I2C3...\n");
-    i2c_init();
+    swo_puts("[I2C] Initializing I2C3 (on-board sensors)...\n");
+    i2c3_init();
 
     swo_puts("[I2C] Scanning I2C3 bus...\n");
 
     uint8_t found[16];
-    int count = i2c_scan(found, 16);
+    int count = i2c3_scan(found, 16);
 
     bool accel_found = false;
     bool gyro_found = false;
     bool baro_found = false;
-    bool tof_found = false;
 
     for (int i = 0; i < count; i++) {
-        const char *name = i2c_device_name(found[i]);
+        const char *name = i2c3_device_name(found[i]);
         swo_printf("[I2C] Found device at 0x%02X (%s)\n", found[i], name);
 
-        if (found[i] == I2C_ADDR_BMI088_ACCEL)
+        if (found[i] == I2C3_ADDR_BMI088_ACCEL)
             accel_found = true;
-        if (found[i] == I2C_ADDR_BMI088_GYRO)
+        if (found[i] == I2C3_ADDR_BMI088_GYRO)
             gyro_found = true;
-        if (found[i] == I2C_ADDR_BMP388)
+        if (found[i] == I2C3_ADDR_BMP388)
             baro_found = true;
-        if (found[i] == I2C_ADDR_VL53L1X)
-            tof_found = true;
     }
 
     swo_printf("[I2C] Scan complete: %d devices found\n", count);
 
-    // Check required devices
+    // Check required devices (on-board only - VL53L1x is on I2C1)
     bool ok = accel_found && gyro_found && baro_found;
     swo_printf("[I2C] Required sensors (IMU, Baro): %s\n", ok ? "OK" : "FAIL");
-
-    if (tof_found) {
-        swo_puts("[I2C] Flow deck detected\n");
-        s_flow_deck = true;
-    }
 
     return ok;
 }
