@@ -185,9 +185,9 @@ hive_ipc_notify(to, tag, data, len);
 hive_bus_publish(bus, data, len);
 
 // Override temporarily
-hive_pool_set_block(true);
+hive_pool_set_block(HIVE_POOL_NO_BLOCK);
 hive_ipc_notify(to, tag, data, len);
-hive_pool_restore_block();  // Back to spawn default
+hive_pool_set_block(HIVE_POOL_DEFAULT);  // Back to spawn default
 
 // Query current setting
 bool blocking = hive_pool_get_block();
@@ -219,9 +219,14 @@ in a well-designed system - if it does, the pool is undersized.
 **Implementation:**
 - `actor_config.block_on_pool_full` not set (false) = current behavior (return NOMEM)
 - `actor_config.block_on_pool_full = true` = block until pool available
-- `hive_pool_set_block(bool)` overrides for current actor
-- `hive_pool_restore_block()` restores spawn default
-- `hive_pool_get_block()` returns current active setting
+- `hive_pool_set_block(hive_pool_block_t)` overrides for current actor:
+  - `HIVE_POOL_NO_BLOCK` = force non-blocking (return NOMEM on pool exhaustion)
+  - `HIVE_POOL_BLOCK` = force blocking (wait until pool available)
+  - `HIVE_POOL_DEFAULT` = restore spawn default
+- `hive_pool_get_block()` returns current active setting (true/false)
+- Storage in `hive_actor_t`:
+  - `block_spawn_default` (bool) - from `actor_config` at spawn
+  - `block_current` (bool) - effective value now
 - Scheduler maintains wait queue (static pool, bounded by HIVE_MAX_ACTORS)
 - Wait queue ordered by actor's scheduling priority (CRITICAL > HIGH > NORMAL > LOW)
 - On pool slot freed, wake highest priority waiter first (FIFO within same priority)
@@ -542,17 +547,27 @@ Option 5 solves this by:
 
 **The design is simple (KISS):**
 ```c
+// Enum for runtime override
+typedef enum {
+    HIVE_POOL_NO_BLOCK,  // Force non-blocking
+    HIVE_POOL_BLOCK,     // Force blocking
+    HIVE_POOL_DEFAULT    // Restore spawn default
+} hive_pool_block_t;
+
 // In actor_config
 bool block_on_pool_full;  // false = try once (default), true = block
 
 // Runtime API
-hive_pool_set_block(bool block);
-hive_pool_restore_block(void);
+void hive_pool_set_block(hive_pool_block_t mode);
 bool hive_pool_get_block(void);
+
+// Storage in hive_actor_t
+bool block_spawn_default;  // From actor_config at spawn
+bool block_current;        // Effective value now
 ```
 
-Just a bool. Actor's scheduling priority determines pool wait order. No timeouts.
-No struct. YAGNI.
+Just a bool at spawn, three-value enum for runtime override. Actor's scheduling
+priority determines pool wait order. No timeouts. No struct. YAGNI.
 
 **Trade-offs accepted:**
 - Hidden state affects API behavior
