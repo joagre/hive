@@ -211,11 +211,20 @@ hive_pool_get_config(&current);
 - Requires scheduler wait queue implementation
 
 **Implementation:**
-- `actor_config.pool_config` sets default (NULL = current behavior: non-blocking)
+- `actor_config.pool_config` not set = current behavior (non-blocking, return NOMEM)
+- `actor_config.pool_config` set = actor's default pool behavior
 - `hive_pool_set_config()` overrides for current actor
 - `hive_pool_set_config(NULL)` restores spawn default
+- `hive_pool_get_config()` returns current active config
 - Scheduler maintains wait queue, wakes highest priority waiter on pool free
-- Scheduler logs warning when actor blocks on pool exhaustion
+- Scheduler logs warning when actor blocks (rate-limited to avoid spam)
+- Pool exhaustion is a design error - warnings make it visible
+
+**Hidden state is acceptable because:**
+- Default behavior = current (non-blocking) - no surprises for existing code
+- Blocking requires explicit opt-in at spawn time
+- If user forgets they enabled blocking, that's their responsibility
+- Library code is unaffected unless caller explicitly enabled blocking
 
 ### Option 6: Optional Parameter with Priority
 
@@ -223,9 +232,16 @@ Add an optional `hive_pool_config` parameter to all pool-using functions. If `NU
 current behavior. If provided, controls blocking and message priority.
 
 ```c
+typedef enum {
+    HIVE_POOL_PRIORITY_LOW,
+    HIVE_POOL_PRIORITY_NORMAL,
+    HIVE_POOL_PRIORITY_HIGH,
+    HIVE_POOL_PRIORITY_CRITICAL
+} hive_pool_priority_t;
+
 typedef struct {
     int32_t timeout_ms;            // 0 = try once (current behavior), >0 = ms, -1 = infinite
-    hive_priority_t priority;      // Message priority for pool allocation
+    hive_pool_priority_t priority; // Message priority for pool allocation
 } hive_pool_config;
 
 // Current behavior (NULL = non-blocking, returns HIVE_ERR_NOMEM)
