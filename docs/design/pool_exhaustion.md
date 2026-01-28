@@ -217,6 +217,13 @@ hive_bus_publish(bus, data, len, cfg);
 - Same priority = FIFO order
 - Prevents low-priority bulk messages from starving critical control messages
 
+**Implementation:**
+- Scheduler maintains a wait queue of actors blocked on pool exhaustion
+- Each entry stores: actor_id, priority, timeout deadline
+- When a pool slot is freed, scheduler scans wait queue for highest priority waiter
+- That actor is rescheduled and retries the pool allocation
+- Timed-out waiters are removed and return `HIVE_ERR_TIMEOUT`
+
 ## Comparison with Other Actor Systems
 
 | System | Mailbox Behavior |
