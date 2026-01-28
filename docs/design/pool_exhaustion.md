@@ -173,20 +173,19 @@ current behavior. If provided, controls blocking and message priority.
 
 ```c
 typedef struct {
-    bool block;                    // Block if pool exhausted
-    int32_t timeout_ms;            // -1 = infinite, 0 = try once, >0 = ms
+    int32_t timeout_ms;            // 0 = try once (current behavior), >0 = ms, -1 = infinite
     hive_priority_t priority;      // Message priority for pool allocation
 } hive_pool_config;
 
 // Current behavior (NULL = non-blocking, returns HIVE_ERR_NOMEM)
 hive_ipc_notify(target, tag, data, len, NULL);
 
-// Block until pool space available, normal priority
-hive_pool_config cfg = { .block = true, .timeout_ms = 1000 };
+// Block up to 1 second, normal priority
+hive_pool_config cfg = { .timeout_ms = 1000 };
 hive_ipc_notify(target, tag, data, len, &cfg);
 
 // High priority message - gets pool space first when available
-hive_pool_config critical = { .block = true, .priority = HIVE_PRIORITY_CRITICAL };
+hive_pool_config critical = { .timeout_ms = -1, .priority = HIVE_PRIORITY_CRITICAL };
 hive_ipc_notify(target, tag, data, len, &critical);
 ```
 
