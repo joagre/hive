@@ -432,7 +432,7 @@ hive_status_t hive_ipc_request(actor_id_t to, const void *request,
     status = hive_ipc_notify_internal(to, current->id, HIVE_MSG_REQUEST,
                                       call_tag, request, req_len);
     if (HIVE_FAILED(status)) {
-        hive_monitor_cancel(monitor_id);
+        hive_demonitor(monitor_id);
         return status;
     }
 
@@ -445,7 +445,7 @@ hive_status_t hive_ipc_request(actor_id_t to, const void *request,
     hive_message_t msg;
     size_t matched;
     status = hive_ipc_recv_matches(filters, 2, &msg, timeout_ms, &matched);
-    hive_monitor_cancel(monitor_id);
+    hive_demonitor(monitor_id);
 
     if (HIVE_FAILED(status)) {
         return status;

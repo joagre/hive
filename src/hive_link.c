@@ -121,7 +121,7 @@ hive_status_t hive_link(actor_id_t target_id) {
 }
 
 // Remove bidirectional link
-hive_status_t hive_link_remove(actor_id_t target_id) {
+hive_status_t hive_unlink(actor_id_t target_id) {
     HIVE_REQUIRE_ACTOR_CONTEXT();
     actor_t *current = hive_actor_current();
 
@@ -144,8 +144,7 @@ hive_status_t hive_link_remove(actor_id_t target_id) {
         }
     }
 
-    HIVE_LOG_DEBUG("Actor %u removed link to actor_t %u", current->id,
-                   target_id);
+    HIVE_LOG_DEBUG("Actor %u unlinked from actor_t %u", current->id, target_id);
     return HIVE_SUCCESS;
 }
 
@@ -191,7 +190,7 @@ hive_status_t hive_monitor(actor_id_t target_id, uint32_t *monitor_id) {
 }
 
 // Cancel unidirectional monitor
-hive_status_t hive_monitor_cancel(uint32_t monitor_id) {
+hive_status_t hive_demonitor(uint32_t monitor_id) {
     HIVE_REQUIRE_ACTOR_CONTEXT();
     actor_t *current = hive_actor_current();
 
@@ -199,8 +198,7 @@ hive_status_t hive_monitor_cancel(uint32_t monitor_id) {
     monitor_entry_t *found = NULL;
     SLIST_FIND_REMOVE(current->monitors, entry->ref == monitor_id, found);
     if (found) {
-        HIVE_LOG_DEBUG("Actor %u cancelled monitor (id=%u)", current->id,
-                       monitor_id);
+        HIVE_LOG_DEBUG("Actor %u demonitored (id=%u)", current->id, monitor_id);
         hive_pool_free(&s_monitor_pool_mgr, found);
         return HIVE_SUCCESS;
     }

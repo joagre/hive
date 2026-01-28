@@ -167,11 +167,11 @@ Actors can link to other actors to receive notification when they die:
 ```c
 // Bidirectional link: if either dies, the other receives exit message
 hive_status_t hive_link(actor_id_t target);
-hive_status_t hive_link_remove(actor_id_t target);
+hive_status_t hive_unlink(actor_id_t target);
 
 // Unidirectional monitor: receive notification when target dies
 hive_status_t hive_monitor(actor_id_t target, uint32_t *out);
-hive_status_t hive_monitor_cancel(uint32_t id);
+hive_status_t hive_demonitor(uint32_t id);
 ```
 
 Exit message structure:

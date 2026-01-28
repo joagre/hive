@@ -1,15 +1,15 @@
 .\" Man page for linking and monitoring functions
 .TH HIVE_LINK 3 "January 2026" "Hive 1.0" "Actor Runtime Manual"
 .SH NAME
-hive_link, hive_link_remove, hive_monitor, hive_monitor_cancel, hive_is_exit_msg, hive_decode_exit, hive_exit_reason_str \- actor linking and monitoring
+hive_link, hive_unlink, hive_monitor, hive_demonitor, hive_is_exit_msg, hive_decode_exit, hive_exit_reason_str \- actor linking and monitoring
 .SH SYNOPSIS
 .nf
 .B #include <hive_link.h>
 .PP
 .BI "hive_status_t hive_link(actor_id_t " target ");"
-.BI "hive_status_t hive_link_remove(actor_id_t " target ");"
+.BI "hive_status_t hive_unlink(actor_id_t " target ");"
 .BI "hive_status_t hive_monitor(actor_id_t " target ", uint32_t *" out ");"
-.BI "hive_status_t hive_monitor_cancel(uint32_t " id ");"
+.BI "hive_status_t hive_demonitor(uint32_t " id ");"
 .BI "bool hive_is_exit_msg(const hive_message_t *" msg ");"
 .BI "hive_status_t hive_decode_exit(const hive_message_t *" msg ", hive_exit_msg_t *" out ");"
 .BI "const char *hive_exit_reason_str(hive_exit_reason_t " reason ");"
@@ -24,7 +24,7 @@ creates a bidirectional link between the calling actor and
 If either actor dies, the other receives an EXIT message. Links are symmetric:
 if A links to B, both A and B receive notifications when the other dies.
 .PP
-.BR hive_link_remove ()
+.BR hive_unlink ()
 removes a previously established link. Both directions are removed.
 .SS Unidirectional Monitors
 .BR hive_monitor ()
@@ -35,7 +35,7 @@ dies, but not vice versa. The monitor ID is stored in
 .IR out .
 Multiple monitors can be created for the same target.
 .PP
-.BR hive_monitor_cancel ()
+.BR hive_demonitor ()
 cancels a monitor using the ID returned by
 .BR hive_monitor ().
 .SS Exit Messages
@@ -116,9 +116,9 @@ returns a human-readable string for the exit reason:
 "NORMAL", "CRASH", "STACK_OVERFLOW", or "KILLED".
 .SH RETURN VALUE
 .BR hive_link (),
-.BR hive_link_remove (),
+.BR hive_unlink (),
 .BR hive_monitor (),
-.BR hive_monitor_cancel (),
+.BR hive_demonitor (),
 and
 .BR hive_decode_exit ()
 return an

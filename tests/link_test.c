@@ -211,7 +211,7 @@ static void actor_unlinks_before_death(void *args,
     actor_id_t target = *(actor_id_t *)args;
 
     hive_link(target);
-    hive_link_remove(target);
+    hive_unlink(target);
 
     // Wait for any exit notification
     hive_message_t msg;
@@ -662,13 +662,13 @@ static void test10_unlink_non_linked(void *args,
     }
 
     // Try to unlink from an actor we're not linked to
-    hive_status_t status = hive_link_remove(target);
+    hive_status_t status = hive_unlink(target);
 
     // Should either fail or be a no-op
     if (HIVE_FAILED(status)) {
-        TEST_PASS("hive_link_remove non-linked actor fails gracefully");
+        TEST_PASS("hive_unlink non-linked actor fails gracefully");
     } else {
-        TEST_PASS("hive_link_remove non-linked actor is no-op");
+        TEST_PASS("hive_unlink non-linked actor is no-op");
     }
 
     // Wait for target to exit
@@ -692,18 +692,18 @@ static void test11_unlink_invalid(void *args, const hive_spawn_info_t *siblings,
     printf("\nTest 11: Unlink invalid actor\n");
     fflush(stdout);
 
-    hive_status_t status = hive_link_remove(ACTOR_ID_INVALID);
+    hive_status_t status = hive_unlink(ACTOR_ID_INVALID);
     if (HIVE_FAILED(status)) {
-        TEST_PASS("hive_link_remove rejects ACTOR_ID_INVALID");
+        TEST_PASS("hive_unlink rejects ACTOR_ID_INVALID");
     } else {
-        TEST_FAIL("hive_link_remove should reject ACTOR_ID_INVALID");
+        TEST_FAIL("hive_unlink should reject ACTOR_ID_INVALID");
     }
 
-    status = hive_link_remove(9999);
+    status = hive_unlink(9999);
     if (HIVE_FAILED(status)) {
-        TEST_PASS("hive_link_remove rejects non-existent actor");
+        TEST_PASS("hive_unlink rejects non-existent actor");
     } else {
-        TEST_FAIL("hive_link_remove should reject non-existent actor");
+        TEST_FAIL("hive_unlink should reject non-existent actor");
     }
 
     hive_exit();

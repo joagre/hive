@@ -190,9 +190,8 @@ static void target_slow_exit(void *args, const hive_spawn_info_t *siblings,
     hive_exit();
 }
 
-static void test4_monitor_cancel_actor(void *args,
-                                       const hive_spawn_info_t *siblings,
-                                       size_t sibling_count) {
+static void test4_demonitor_actor(void *args, const hive_spawn_info_t *siblings,
+                                  size_t sibling_count) {
     (void)args;
     (void)siblings;
     (void)sibling_count;
@@ -213,10 +212,10 @@ static void test4_monitor_cancel_actor(void *args,
         hive_exit();
     }
 
-    // Immediately monitor_cancel
-    status = hive_monitor_cancel(ref);
+    // Immediately demonitor
+    status = hive_demonitor(ref);
     if (HIVE_FAILED(status)) {
-        TEST_FAIL("hive_monitor_cancel");
+        TEST_FAIL("hive_demonitor");
         hive_exit();
     }
 
@@ -225,15 +224,15 @@ static void test4_monitor_cancel_actor(void *args,
     status = hive_ipc_recv(&msg, 700); // 700ms timeout (target exits at 500ms)
 
     if (status.code == HIVE_ERR_TIMEOUT) {
-        TEST_PASS("monitor_cancel prevents exit notification");
+        TEST_PASS("demonitor prevents exit notification");
     } else if (HIVE_FAILED(status)) {
-        TEST_PASS("monitor_cancel prevents exit notification (no message)");
+        TEST_PASS("demonitor prevents exit notification (no message)");
     } else {
         // Got a message - check if it's an exit notification
         if (hive_is_exit_msg(&msg)) {
-            TEST_FAIL("received exit notification after monitor_cancel");
+            TEST_FAIL("received exit notification after demonitor");
         } else {
-            TEST_PASS("monitor_cancel prevents exit notification");
+            TEST_PASS("demonitor prevents exit notification");
         }
     }
 
@@ -353,39 +352,39 @@ static void test6_monitor_invalid(void *args, const hive_spawn_info_t *siblings,
 // Test 6: Demonitor invalid/non-existent ref
 // ============================================================================
 
-static void test7_monitor_cancel_invalid(void *args,
-                                         const hive_spawn_info_t *siblings,
-                                         size_t sibling_count) {
+static void test7_demonitor_invalid(void *args,
+                                    const hive_spawn_info_t *siblings,
+                                    size_t sibling_count) {
     (void)args;
     (void)siblings;
     (void)sibling_count;
     printf("\nTest 6: Demonitor invalid ref\n");
 
-    // Try to monitor_cancel with invalid ref (0 or very high number)
-    hive_status_t status = hive_monitor_cancel(0);
+    // Try to demonitor with invalid ref (0 or very high number)
+    hive_status_t status = hive_demonitor(0);
     if (HIVE_FAILED(status)) {
-        TEST_PASS("hive_monitor_cancel rejects ref 0");
+        TEST_PASS("hive_demonitor rejects ref 0");
     } else {
-        TEST_PASS("hive_monitor_cancel ref 0 is no-op");
+        TEST_PASS("hive_demonitor ref 0 is no-op");
     }
 
-    status = hive_monitor_cancel(99999);
+    status = hive_demonitor(99999);
     if (HIVE_FAILED(status)) {
-        TEST_PASS("hive_monitor_cancel rejects non-existent ref");
+        TEST_PASS("hive_demonitor rejects non-existent ref");
     } else {
-        TEST_PASS("hive_monitor_cancel non-existent ref is no-op");
+        TEST_PASS("hive_demonitor non-existent ref is no-op");
     }
 
     hive_exit();
 }
 
 // ============================================================================
-// Test 7: Double monitor_cancel (same ref twice)
+// Test 7: Double demonitor (same ref twice)
 // ============================================================================
 
-static void double_monitor_cancel_target(void *args,
-                                         const hive_spawn_info_t *siblings,
-                                         size_t sibling_count) {
+static void double_demonitor_target(void *args,
+                                    const hive_spawn_info_t *siblings,
+                                    size_t sibling_count) {
     (void)args;
     (void)siblings;
     (void)sibling_count;
@@ -396,17 +395,17 @@ static void double_monitor_cancel_target(void *args,
     hive_exit();
 }
 
-static void test8_double_monitor_cancel(void *args,
-                                        const hive_spawn_info_t *siblings,
-                                        size_t sibling_count) {
+static void test8_double_demonitor(void *args,
+                                   const hive_spawn_info_t *siblings,
+                                   size_t sibling_count) {
     (void)args;
     (void)siblings;
     (void)sibling_count;
-    printf("\nTest 7: Double monitor_cancel (same ref twice)\n");
+    printf("\nTest 7: Double demonitor (same ref twice)\n");
 
     actor_id_t target;
-    if (HIVE_FAILED(hive_spawn(double_monitor_cancel_target, NULL, NULL, NULL,
-                               &target))) {
+    if (HIVE_FAILED(
+            hive_spawn(double_demonitor_target, NULL, NULL, NULL, &target))) {
         TEST_FAIL("spawn target");
         hive_exit();
     }
@@ -418,20 +417,20 @@ static void test8_double_monitor_cancel(void *args,
         hive_exit();
     }
 
-    // First monitor_cancel should succeed
-    status = hive_monitor_cancel(ref);
+    // First demonitor should succeed
+    status = hive_demonitor(ref);
     if (HIVE_FAILED(status)) {
-        TEST_FAIL("first monitor_cancel failed");
+        TEST_FAIL("first demonitor failed");
         hive_exit();
     }
-    TEST_PASS("first monitor_cancel succeeds");
+    TEST_PASS("first demonitor succeeds");
 
-    // Second monitor_cancel should fail or be no-op
-    status = hive_monitor_cancel(ref);
+    // Second demonitor should fail or be no-op
+    status = hive_demonitor(ref);
     if (HIVE_FAILED(status)) {
-        TEST_PASS("second monitor_cancel fails (already monitor_canceled)");
+        TEST_PASS("second demonitor fails (already demonitored)");
     } else {
-        TEST_PASS("second monitor_cancel is no-op");
+        TEST_PASS("second demonitor is no-op");
     }
 
     // Wait for target to exit
@@ -526,10 +525,10 @@ static void test9_monitor_pool_exhaustion(void *args,
 // ============================================================================
 
 static void (*test_funcs[])(void *, const hive_spawn_info_t *, size_t) = {
-    test1_monitor_actor,         test3_multi_monitor_actor,
-    test4_monitor_cancel_actor,  test5_coordinator,
-    test6_monitor_invalid,       test7_monitor_cancel_invalid,
-    test8_double_monitor_cancel, test9_monitor_pool_exhaustion,
+    test1_monitor_actor,    test3_multi_monitor_actor,
+    test4_demonitor_actor,  test5_coordinator,
+    test6_monitor_invalid,  test7_demonitor_invalid,
+    test8_double_demonitor, test9_monitor_pool_exhaustion,
 };
 
 #define NUM_TESTS (sizeof(test_funcs) / sizeof(test_funcs[0]))

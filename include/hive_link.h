@@ -12,11 +12,11 @@ typedef struct {
 
 // Bidirectional linking - both actors notified when either dies
 hive_status_t hive_link(actor_id_t target);
-hive_status_t hive_link_remove(actor_id_t target);
+hive_status_t hive_unlink(actor_id_t target);
 
 // Unidirectional monitoring - only monitor notified when target dies
 hive_status_t hive_monitor(actor_id_t target, uint32_t *out);
-hive_status_t hive_monitor_cancel(uint32_t id);
+hive_status_t hive_demonitor(uint32_t id);
 
 // Exit message helpers
 bool hive_is_exit_msg(const hive_message_t *msg);

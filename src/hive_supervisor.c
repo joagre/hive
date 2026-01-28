@@ -260,7 +260,7 @@ static hive_status_t spawn_all_children_two_phase(supervisor_state_t *sup) {
                            sup->children[i].name, HIVE_ERR_STR(status));
             // Rollback: cancel monitors and kill all children
             for (size_t j = 0; j < i; j++) {
-                hive_monitor_cancel(sup->child_states[j].monitor_id);
+                hive_demonitor(sup->child_states[j].monitor_id);
             }
             for (size_t j = 0; j < sup->num_children; j++) {
                 hive_kill(sup->child_states[j].id);
@@ -282,7 +282,7 @@ static void stop_child(supervisor_state_t *sup, size_t index) {
 
     if (state->running && state->id != ACTOR_ID_INVALID) {
         // Cancel monitor first (ignore errors - child may already be dead)
-        hive_monitor_cancel(state->monitor_id);
+        hive_demonitor(state->monitor_id);
 
         // Kill the child actor_t
         hive_kill(state->id);

@@ -627,9 +627,9 @@ See [examples/pilot/README.md](examples/pilot/README.md) for build instructions 
 ### Linking and Monitoring
 
 - `hive_link(target)` - Create bidirectional link
-- `hive_link_remove(target)` - Remove bidirectional link
+- `hive_unlink(target)` - Remove bidirectional link
 - `hive_monitor(target, out)` - Create unidirectional monitor
-- `hive_monitor_cancel(id)` - Cancel monitor
+- `hive_demonitor(id)` - Cancel monitor
 - `hive_is_exit_msg(msg)` - Check if message is exit notification
 - `hive_decode_exit(msg, out)` - Decode exit message into `hive_exit_msg_t` struct
 - `hive_exit_reason_str(reason)` - Convert exit reason to string ("NORMAL", "CRASH", etc.)
