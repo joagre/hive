@@ -172,13 +172,16 @@ Combine spawn-time defaults with runtime override capability. No API changes
 to pool-using functions - behavior is controlled per-actor.
 
 ```c
+typedef struct {
+    int32_t timeout_ms;  // 0 = try once (default), >0 = ms, -1 = infinite
+} hive_pool_config;
+
 // Set default at spawn time
 actor_config cfg = {
-    .priority = HIVE_PRIORITY_NORMAL,
+    .priority = HIVE_PRIORITY_NORMAL,  // Also used for pool wait ordering
     .stack_size = 8192,
     .pool_config = {
-        .timeout_ms = 1000,              // Block up to 1 second
-        .priority = HIVE_PRIORITY_NORMAL
+        .timeout_ms = 1000               // Block up to 1 second
     }
 };
 hive_spawn(my_actor, NULL, NULL, &cfg, &id);
@@ -187,10 +190,10 @@ hive_spawn(my_actor, NULL, NULL, &cfg, &id);
 hive_ipc_notify(to, tag, data, len);
 hive_bus_publish(bus, data, len);
 
-// Override temporarily for critical section
-hive_pool_config critical = { .timeout_ms = -1, .priority = HIVE_PRIORITY_CRITICAL };
-hive_pool_set_config(&critical);
-hive_ipc_notify(to, CRITICAL_TAG, data, len);
+// Override temporarily
+hive_pool_config blocking = { .timeout_ms = 5000 };
+hive_pool_set_config(&blocking);
+hive_ipc_notify(to, tag, data, len);
 hive_pool_set_config(NULL);  // Back to spawn default
 
 // Query current setting
@@ -198,16 +201,22 @@ hive_pool_config current;
 hive_pool_get_config(&current);
 ```
 
+**Note:** Pool wait queue priority uses the actor's scheduling priority
+(`actor_config.priority`). No separate pool priority - critical actors
+naturally get pool space first.
+
 **Pros:**
 - No boilerplate at call sites - API unchanged
 - Sensible defaults set once at spawn
 - Runtime override when needed for special cases
 - `NULL` to `hive_pool_set_config()` restores spawn default
 - No new function variants to maintain
+- Single priority system - actor priority used for pool wait ordering
+- Simple config struct - just `timeout_ms`
 
 **Cons:**
 - Hidden state (current pool config) affects behavior
-- Deadlock risk when timeout_ms != 0
+- Deadlock risk when timeout_ms != 0 (especially -1)
 - Requires scheduler wait queue implementation
 
 **Implementation:**
@@ -216,9 +225,13 @@ hive_pool_get_config(&current);
 - `hive_pool_set_config()` overrides for current actor
 - `hive_pool_set_config(NULL)` restores spawn default
 - `hive_pool_get_config()` returns current active config
-- Scheduler maintains wait queue, wakes highest priority waiter on pool free
+- Scheduler maintains wait queue (static pool, bounded by HIVE_MAX_ACTORS)
+- Wait queue ordered by actor's scheduling priority (CRITICAL > HIGH > NORMAL > LOW)
+- On pool slot freed, wake highest priority waiter first (FIFO within same priority)
 - Scheduler logs warning when actor blocks (rate-limited to avoid spam)
+- `hive_kill()` on blocked actor removes it from wait queue
 - Pool exhaustion is a design error - warnings make it visible
+- Supervisor child_spec must include pool_config for restarts
 
 **Hidden state is acceptable because:**
 - Default behavior = current (non-blocking) - no surprises for existing code
@@ -226,34 +239,27 @@ hive_pool_get_config(&current);
 - If user forgets they enabled blocking, that's their responsibility
 - Library code is unaffected unless caller explicitly enabled blocking
 
-### Option 6: Optional Parameter with Priority
+**Deadlock warning:**
+- `timeout_ms = -1` (infinite) is dangerous - can cause permanent deadlock
+- Deadlock = design error - pool is undersized
+- Always prefer finite timeouts in production
+
+### Option 6: Optional Parameter (Per-Call Override)
 
 Add an optional `hive_pool_config` parameter to all pool-using functions. If `NULL`,
-current behavior. If provided, controls blocking and message priority.
+use actor's default. If provided, override for this call only.
 
 ```c
-typedef enum {
-    HIVE_POOL_PRIORITY_LOW,
-    HIVE_POOL_PRIORITY_NORMAL,
-    HIVE_POOL_PRIORITY_HIGH,
-    HIVE_POOL_PRIORITY_CRITICAL
-} hive_pool_priority_t;
-
 typedef struct {
-    int32_t timeout_ms;            // 0 = try once (current behavior), >0 = ms, -1 = infinite
-    hive_pool_priority_t priority; // Message priority for pool allocation
+    int32_t timeout_ms;  // 0 = try once, >0 = ms, -1 = infinite
 } hive_pool_config;
 
-// Current behavior (NULL = non-blocking, returns HIVE_ERR_NOMEM)
+// Use actor's default pool config
 hive_ipc_notify(target, tag, data, len, NULL);
 
-// Block up to 1 second, normal priority
+// Override for this call only - block up to 1 second
 hive_pool_config cfg = { .timeout_ms = 1000 };
 hive_ipc_notify(target, tag, data, len, &cfg);
-
-// High priority message - gets pool space first when available
-hive_pool_config critical = { .timeout_ms = -1, .priority = HIVE_PRIORITY_CRITICAL };
-hive_ipc_notify(target, tag, data, len, &critical);
 ```
 
 **All affected functions:**
@@ -266,29 +272,16 @@ hive_bus_publish(bus, data, len, cfg);
 ```
 
 **Pros:**
-- Backward compatible (`NULL` = current behavior)
-- Explicit at call site - no hidden state
-- No new function variants to maintain
-- Per-call control over blocking and priority
-- Priority helps avoid starvation of critical messages
-- Prevents busy-loop anti-pattern on NOMEM
+- Per-call control when needed
+- Explicit at call site
 
 **Cons:**
-- API change (additional parameter)
-- Deadlock risk when `block = true`
-- Priority adds complexity to pool allocator
+- API change (additional parameter to all functions)
+- Boilerplate returns (must pass NULL everywhere)
+- Inconsistent with Option 5 approach
 
-**Priority semantics:**
-- When pool space becomes available, wake highest priority waiter first
-- Same priority = FIFO order
-- Prevents low-priority bulk messages from starving critical control messages
-
-**Implementation:**
-- Scheduler maintains a wait queue of actors blocked on pool exhaustion
-- Each entry stores: actor_id, priority, timeout deadline
-- When a pool slot is freed, scheduler scans wait queue for highest priority waiter
-- That actor is rescheduled and retries the pool allocation
-- Timed-out waiters are removed and return `HIVE_ERR_TIMEOUT`
+**Note:** Could be combined with Option 5 - actor default set at spawn,
+per-call override via parameter. But adds complexity.
 
 ## Comparison with Other Actor Systems
 
@@ -567,21 +560,33 @@ Option 5 solves this by:
 - Setting pool behavior once at spawn time (no per-call boilerplate)
 - Allowing runtime override for special cases
 - Keeping the existing API unchanged
+- Using actor priority for pool wait ordering (no new priority concept)
 - Making pool exhaustion visible via scheduler warnings
+
+**The design is simple:**
+```c
+typedef struct {
+    int32_t timeout_ms;  // 0 = try once (default), >0 = ms, -1 = infinite
+} hive_pool_config;
+```
+
+One field. Actor's scheduling priority determines pool wait order.
 
 **Trade-offs accepted:**
 - Hidden state (pool config) affects API behavior
 - Deadlock risk when blocking is enabled
-- Scheduler complexity (wait queue, priority-based wake-up)
+- Scheduler complexity (wait queue)
 
 **Mitigations:**
-- Scheduler logs warnings when actors block on pool exhaustion
-- Timeouts prevent infinite deadlocks (recommend against `timeout_ms = -1`)
-- Priority-based wake-up prevents starvation of critical messages
+- Default = current behavior (non-blocking) - backward compatible
+- Scheduler logs warnings when actors block (rate-limited)
+- Timeouts prevent infinite deadlocks (strongly discourage `timeout_ms = -1`)
+- Actor priority used for wake-up ordering - critical actors get pool first
+- `hive_kill()` removes blocked actors from wait queue
 - Documentation must clearly explain deadlock risks
 
 **For users who prefer explicit control:**
-- `pool_config.timeout_ms = 0` (or omit `pool_config`) preserves current behavior
+- Omit `pool_config` or set `timeout_ms = 0` - current behavior preserved
 - They can still handle NOMEM explicitly at each call site
 
 **Pool exhaustion is still a design smell** - but blocking with warnings is
