@@ -1,39 +1,34 @@
-# Build artifacts
+
+*~
+.#*
+\#*\#
+*.a
 build/
 build_*/
-examples/pilot/pilot
-examples/pilot/controllers/
-
-# Object files
-*.o
-*.a
-*.so
-
-# Dependency files
-*.d
-
-# Executables
-*.out
-
-# Debug files
-*.dSYM/
-*.su
-*.idb
-*.pdb
-
-# Core dumps
+# Build artifacts
 core
 core.*
-
-# Editor files
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-\#*\#
-.#*
-
-# OS files
+# Core dumps
+*.d
+# Debug files
+# Dependency files
 .DS_Store
+*.dSYM/
+# Editor files
+examples/pilot/controllers/
+examples/pilot/pilot
+# Executables
+*.idb
+.idea/
+local/
+*.o
+# Object files
+# OS files
+*.out
+*.pdb
+*.so
+*.su
+*.swo
+*.swp
 Thumbs.db
+.vscode/
