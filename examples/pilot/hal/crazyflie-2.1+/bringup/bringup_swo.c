@@ -22,6 +22,21 @@ void swo_init(void) {
     // Configure SysTick for 1ms ticks
     SysTick_Config(SystemCoreClock / 1000);
 
+    // Enable DBGMCU clock and trace output
+    RCC->APB2ENR |= RCC_APB2ENR_SYSCFGEN;
+    DBGMCU->CR |= DBGMCU_CR_TRACE_IOEN;
+
+    // Configure PB3 as SWO output (AF0 = TRACESWO)
+    RCC->AHB1ENR |= RCC_AHB1ENR_GPIOBEN;
+    // Set PB3 to alternate function mode
+    GPIOB->MODER &= ~GPIO_MODER_MODER3;
+    GPIOB->MODER |= GPIO_MODER_MODER3_1; // AF mode
+    // Set AF0 for PB3 (TRACESWO)
+    GPIOB->AFR[0] &= ~(0xF << (3 * 4)); // Clear AF bits for PB3
+    GPIOB->AFR[0] |= (0x0 << (3 * 4));  // AF0 = TRACESWO
+    // High speed output
+    GPIOB->OSPEEDR |= GPIO_OSPEEDER_OSPEEDR3;
+
     // Enable trace in core debug
     CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
 
@@ -155,6 +170,14 @@ void swo_printf(const char *fmt, ...) {
             while (*fmt >= '0' && *fmt <= '9') {
                 width = width * 10 + (*fmt - '0');
                 fmt++;
+            }
+
+            // Skip precision specifier (e.g., ".2" in "%.2f")
+            if (*fmt == '.') {
+                fmt++;
+                while (*fmt >= '0' && *fmt <= '9') {
+                    fmt++;
+                }
             }
 
             switch (*fmt) {

@@ -45,12 +45,21 @@ Crazyflie 2.1+          Debug Adapter          ST-Link V3
 Debug output uses SWO (Serial Wire Output) via the ITM (Instrumentation
 Trace Macrocell). This is a one-way output channel - no input is possible.
 
-1. Connect ST-Link V3 to PC via USB
+1. Connect ST-Link V2 or V3 to PC via USB
 2. Flash the firmware
-3. View output: `st-trace -c 168`
+3. View output: `./st-trace.sh`
 
-The `-c 168` parameter specifies the CPU clock frequency in MHz (168 MHz for
-the STM32F405). The SWO baud rate is automatically derived from this.
+The `st-trace.sh` script uses a locally built stlink-tools (the system
+version 1.8.0 has bugs with SWO trace). If you need to build it:
+
+```bash
+cd local/stlink
+mkdir build && cd build
+cmake -DCMAKE_INSTALL_PREFIX=../install ..
+make && make install
+```
+
+Alternatively, run manually: `st-trace --clock=168m --trace=2m`
 
 ## Building and Flashing
 
@@ -131,7 +140,7 @@ Scans I2C3 bus for all connected devices:
 | Address | Device | Required |
 |---------|--------|----------|
 | 0x18 | BMI088 Accelerometer | Yes |
-| 0x68 | BMI088 Gyroscope | Yes |
+| 0x69 | BMI088 Gyroscope (SDO=VDD) | Yes |
 | 0x77 | BMP388 Barometer | Yes |
 | 0x29 | VL53L1x ToF (Flow deck) | No |
 
@@ -141,7 +150,7 @@ Scans I2C3 bus for all connected devices:
 [I2C] Scanning I2C3 bus...
 [I2C] Found device at 0x18 (BMI088 Accel)
 [I2C] Found device at 0x29 (VL53L1x ToF) [Flow deck detected]
-[I2C] Found device at 0x68 (BMI088 Gyro)
+[I2C] Found device at 0x69 (BMI088 Gyro)
 [I2C] Found device at 0x77 (BMP388 Baro)
 [I2C] Scan complete: 4 devices found... OK
 ```
@@ -368,10 +377,11 @@ This is the most complex test, combining SPI with the SD card protocol.
 
 ### No output on SWO
 
-1. Ensure `st-trace -c 168` is running
+1. Use `./st-trace.sh` (system st-trace v1.8.0 has bugs)
 2. Verify SWO pin connected (pin 6 on debug header, pin 13 on 20-pin)
-3. Check CPU frequency matches `-c` parameter (168 for STM32F405)
+3. Try ST-Link V2 if V3 doesn't work (some V3 units have issues)
 4. Try resetting the target: `st-flash reset`
+5. If building st-trace locally, ensure libusb-dev is installed
 
 ### I2C devices not found
 

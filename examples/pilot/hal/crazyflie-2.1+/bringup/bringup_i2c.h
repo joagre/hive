@@ -11,7 +11,7 @@
 
 // Known I2C addresses on Crazyflie 2.1+
 #define I2C_ADDR_BMI088_ACCEL 0x18
-#define I2C_ADDR_BMI088_GYRO 0x68
+#define I2C_ADDR_BMI088_GYRO 0x69 // SDO=VDD on Crazyflie
 #define I2C_ADDR_BMP388 0x77
 #define I2C_ADDR_VL53L1X 0x29
 

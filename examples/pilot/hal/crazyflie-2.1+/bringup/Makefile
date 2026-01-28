@@ -38,7 +38,7 @@ TARGET = $(BUILD_DIR)/bringup
 # Compiler flags
 CFLAGS = -mcpu=cortex-m4 -mthumb -mfloat-abi=hard -mfpu=fpv4-sp-d16
 CFLAGS += -std=c11 -Wall -Wextra -Wpedantic
-CFLAGS += -O2 -g
+CFLAGS += -O0 -g
 CFLAGS += -ffunction-sections -fdata-sections
 CFLAGS += -ffreestanding -nostdlib
 CFLAGS += -I$(CMSIS_DIR)/Include

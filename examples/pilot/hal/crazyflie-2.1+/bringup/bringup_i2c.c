@@ -49,6 +49,21 @@ void i2c_init(void) {
     RCC->AHB1ENR |= RCC_AHB1ENR_GPIOAEN | RCC_AHB1ENR_GPIOCEN;
     RCC->APB1ENR |= RCC_APB1ENR_I2C3EN;
 
+    // Bus recovery: toggle SCL 9 times to release any stuck slave
+    // Configure PA8 (SCL) as GPIO output first
+    GPIOA->MODER &= ~GPIO_MODER_MODER8;
+    GPIOA->MODER |= GPIO_MODER_MODER8_0; // Output mode
+    GPIOA->OTYPER |= GPIO_OTYPER_OT_8;   // Open-drain
+    GPIOA->BSRR = GPIO_BSRR_BS_8;        // Start high
+    for (int i = 0; i < 9; i++) {
+        GPIOA->BSRR = GPIO_BSRR_BR_8; // SCL low
+        for (volatile int d = 0; d < 100; d++)
+            ;
+        GPIOA->BSRR = GPIO_BSRR_BS_8; // SCL high
+        for (volatile int d = 0; d < 100; d++)
+            ;
+    }
+
     // Reset I2C3
     RCC->APB1RSTR |= RCC_APB1RSTR_I2C3RST;
     RCC->APB1RSTR &= ~RCC_APB1RSTR_I2C3RST;
@@ -182,6 +197,8 @@ bool i2c_write(uint8_t addr, const uint8_t *data, size_t len) {
     }
 
     I2C3->CR1 |= I2C_CR1_STOP;
+    // Wait for STOP to complete (BUSY flag cleared)
+    i2c_wait_flag(&I2C3->SR2, I2C_SR2_BUSY, false);
     return true;
 
 error:
@@ -189,6 +206,7 @@ error:
         i2c_recover();
     }
     I2C3->CR1 |= I2C_CR1_STOP;
+    i2c_wait_flag(&I2C3->SR2, I2C_SR2_BUSY, false);
     return false;
 }
 
@@ -242,35 +260,36 @@ bool i2c_read(uint8_t addr, uint8_t *data, size_t len) {
         // Clear POS
         I2C3->CR1 &= ~I2C_CR1_POS;
     } else {
-        // N>2: Standard sequence
+        // N>2: Per RM0090 section 27.3.3
         (void)I2C3->SR2; // Clear ADDR
 
-        for (size_t i = 0; i < len; i++) {
-            if (i == len - 1) {
-                // Last byte: STOP already set after previous byte
-                if (!i2c_wait_flag(&I2C3->SR1, I2C_SR1_RXNE, true)) {
-                    goto error;
-                }
-                data[i] = (uint8_t)I2C3->DR;
-            } else if (i == len - 2) {
-                // Second to last: wait for BTF, clear ACK, set STOP, read both
-                if (!i2c_wait_flag(&I2C3->SR1, I2C_SR1_BTF, true)) {
-                    goto error;
-                }
-                I2C3->CR1 &= ~I2C_CR1_ACK;
-                I2C3->CR1 |= I2C_CR1_STOP;
-                data[i] = (uint8_t)I2C3->DR;
-                // Next iteration reads last byte
-            } else {
-                // Normal byte
-                if (!i2c_wait_flag(&I2C3->SR1, I2C_SR1_RXNE, true)) {
-                    goto error;
-                }
-                data[i] = (uint8_t)I2C3->DR;
+        // Read bytes 0 to N-3 normally
+        for (size_t i = 0; i < len - 2; i++) {
+            if (!i2c_wait_flag(&I2C3->SR1, I2C_SR1_RXNE, true)) {
+                goto error;
             }
+            data[i] = (uint8_t)I2C3->DR;
         }
+
+        // Wait for BTF (byte N-2 in DR, byte N-1 in shift register)
+        if (!i2c_wait_flag(&I2C3->SR1, I2C_SR1_BTF, true)) {
+            goto error;
+        }
+        // Clear ACK, set STOP
+        I2C3->CR1 &= ~I2C_CR1_ACK;
+        I2C3->CR1 |= I2C_CR1_STOP;
+        // Read DataN-2 (shifts DataN-1 to DR)
+        data[len - 2] = (uint8_t)I2C3->DR;
+        // Wait for DataN-1 to be ready
+        if (!i2c_wait_flag(&I2C3->SR1, I2C_SR1_RXNE, true)) {
+            goto error;
+        }
+        // Read DataN-1
+        data[len - 1] = (uint8_t)I2C3->DR;
     }
 
+    // Wait for STOP to complete (BUSY flag cleared)
+    i2c_wait_flag(&I2C3->SR2, I2C_SR2_BUSY, false);
     return true;
 
 error:
@@ -279,6 +298,7 @@ error:
     }
     I2C3->CR1 &= ~I2C_CR1_POS; // Ensure POS is cleared
     I2C3->CR1 |= I2C_CR1_STOP;
+    i2c_wait_flag(&I2C3->SR2, I2C_SR2_BUSY, false);
     return false;
 }
 
@@ -351,34 +371,67 @@ bool i2c_write_read(uint8_t addr, const uint8_t *write_data, size_t write_len,
         // Clear POS
         I2C3->CR1 &= ~I2C_CR1_POS;
     } else {
-        // N>2: Standard sequence
+        // N>2: Per RM0090 section 27.3.3
         (void)I2C3->SR2; // Clear ADDR
 
-        for (size_t i = 0; i < read_len; i++) {
-            if (i == read_len - 1) {
-                // Last byte: STOP already set after previous byte
-                if (!i2c_wait_flag(&I2C3->SR1, I2C_SR1_RXNE, true)) {
-                    goto error;
-                }
-                read_data[i] = (uint8_t)I2C3->DR;
-            } else if (i == read_len - 2) {
-                // Second to last: wait for BTF, clear ACK, set STOP, read
-                if (!i2c_wait_flag(&I2C3->SR1, I2C_SR1_BTF, true)) {
-                    goto error;
-                }
-                I2C3->CR1 &= ~I2C_CR1_ACK;
-                I2C3->CR1 |= I2C_CR1_STOP;
-                read_data[i] = (uint8_t)I2C3->DR;
-            } else {
-                // Normal byte
-                if (!i2c_wait_flag(&I2C3->SR1, I2C_SR1_RXNE, true)) {
-                    goto error;
-                }
-                read_data[i] = (uint8_t)I2C3->DR;
+        // Read bytes 0 to N-3 normally
+        for (size_t i = 0; i < read_len - 2; i++) {
+            if (!i2c_wait_flag(&I2C3->SR1, I2C_SR1_RXNE, true)) {
+                goto error;
             }
+            read_data[i] = (uint8_t)I2C3->DR;
         }
+
+        // Wait for BTF (byte N-2 in DR, byte N-1 in shift register)
+        if (!i2c_wait_flag(&I2C3->SR1, I2C_SR1_BTF, true)) {
+            goto error;
+        }
+        // Clear ACK, set STOP
+        I2C3->CR1 &= ~I2C_CR1_ACK;
+        I2C3->CR1 |= I2C_CR1_STOP;
+        // Read DataN-2 (shifts DataN-1 to DR)
+        read_data[read_len - 2] = (uint8_t)I2C3->DR;
+        // Wait for DataN-1 to be ready
+        if (!i2c_wait_flag(&I2C3->SR1, I2C_SR1_RXNE, true)) {
+            goto error;
+        }
+        // Read DataN-1
+        read_data[read_len - 1] = (uint8_t)I2C3->DR;
     }
 
+    // Wait for STOP bit to be cleared by hardware
+    if (!i2c_wait_flag(&I2C3->CR1, I2C_CR1_STOP, false)) {
+        // STOP didn't clear - do full software reset with bus recovery
+        I2C3->CR1 = 0; // Disable
+        RCC->APB1RSTR |= RCC_APB1RSTR_I2C3RST;
+        delay_us(10);
+        RCC->APB1RSTR &= ~RCC_APB1RSTR_I2C3RST;
+
+        // Bus recovery: toggle SCL 9 times while I2C is disabled
+        GPIOA->MODER &= ~GPIO_MODER_MODER8;
+        GPIOA->MODER |= GPIO_MODER_MODER8_0; // Output mode
+        GPIOA->BSRR = GPIO_BSRR_BS_8;        // Start high
+        for (int i = 0; i < 9; i++) {
+            GPIOA->BSRR = GPIO_BSRR_BR_8; // SCL low
+            delay_us(5);
+            GPIOA->BSRR = GPIO_BSRR_BS_8; // SCL high
+            delay_us(5);
+        }
+        // Reconfigure PA8 as AF
+        GPIOA->MODER &= ~GPIO_MODER_MODER8;
+        GPIOA->MODER |= GPIO_MODER_MODER8_1;
+        // Reconfigure PC9 as AF
+        GPIOC->MODER &= ~GPIO_MODER_MODER9;
+        GPIOC->MODER |= GPIO_MODER_MODER9_1;
+
+        // Re-configure I2C
+        I2C3->CR2 = 42;
+        I2C3->CCR = I2C_CCR_VALUE | I2C_CCR_FS;
+        I2C3->TRISE = I2C_TRISE_VALUE;
+        I2C3->CR1 = I2C_CR1_PE;
+    }
+    // Wait for BUSY flag cleared
+    i2c_wait_flag(&I2C3->SR2, I2C_SR2_BUSY, false);
     return true;
 
 error:
@@ -387,6 +440,8 @@ error:
     }
     I2C3->CR1 &= ~I2C_CR1_POS; // Ensure POS is cleared
     I2C3->CR1 |= I2C_CR1_STOP;
+    i2c_wait_flag(&I2C3->CR1, I2C_CR1_STOP, false);
+    i2c_wait_flag(&I2C3->SR2, I2C_SR2_BUSY, false);
     return false;
 }
 
