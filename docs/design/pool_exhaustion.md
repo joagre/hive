@@ -166,6 +166,57 @@ hive_ipc_notify_wait(target, tag, data, len, timeout);
 - Two ways to do the same thing
 - Must maintain parallel APIs
 
+### Option 5: Optional Parameter with Priority
+
+Add an optional `hive_pool_opts` parameter to all pool-using functions. If `NULL`,
+current behavior. If provided, controls blocking and message priority.
+
+```c
+typedef struct {
+    bool block;                    // Block if pool exhausted
+    int32_t timeout_ms;            // -1 = infinite, 0 = try once, >0 = ms
+    hive_priority_t priority;      // Message priority for pool allocation
+} hive_pool_opts;
+
+// Current behavior (NULL = non-blocking, returns HIVE_ERR_NOMEM)
+hive_ipc_notify(target, tag, data, len, NULL);
+
+// Block until pool space available, normal priority
+hive_pool_opts opts = { .block = true, .timeout_ms = 1000 };
+hive_ipc_notify(target, tag, data, len, &opts);
+
+// High priority message - gets pool space first when available
+hive_pool_opts critical = { .block = true, .priority = HIVE_PRIORITY_CRITICAL };
+hive_ipc_notify(target, tag, data, len, &critical);
+```
+
+**All affected functions:**
+```c
+hive_ipc_notify(to, tag, data, len, opts);
+hive_ipc_notify_ex(to, class, tag, data, len, opts);
+hive_ipc_request(to, req, len, reply, timeout, opts);
+hive_ipc_reply(request, data, len, opts);
+hive_bus_publish(bus, data, len, opts);
+```
+
+**Pros:**
+- Backward compatible (`NULL` = current behavior)
+- Explicit at call site - no hidden state
+- No new function variants to maintain
+- Per-call control over blocking and priority
+- Priority helps avoid starvation of critical messages
+- Prevents busy-loop anti-pattern on NOMEM
+
+**Cons:**
+- API change (additional parameter)
+- Deadlock risk when `block = true`
+- Priority adds complexity to pool allocator
+
+**Priority semantics:**
+- When pool space becomes available, wake highest priority waiter first
+- Same priority = FIFO order
+- Prevents low-priority bulk messages from starving critical control messages
+
 ## Comparison with Other Actor Systems
 
 | System | Mailbox Behavior |
@@ -432,7 +483,7 @@ Could be combined with caller-side blocking for complete solution.
 
 ## Conclusion
 
-**Recommendation: Stay with Position A (no blocking variants).**
+**Current recommendation: Position A (no blocking variants).**
 
 The current non-blocking API with explicit `HIVE_ERR_NOMEM` handling:
 - Stays true to actor model semantics
@@ -445,6 +496,12 @@ For backpressure, recommend:
 - Size pools for worst-case at design time
 - Handle NOMEM by dropping non-critical messages or failing fast
 
-If real-world usage shows strong demand for blocking behavior, Position B with
-`_wait` variants could be reconsidered, but the semantic tension with "notify"
-(fire-and-forget) should give us pause.
+**However**, Option 5 (optional parameter with priority) is worth considering:
+- Prevents the busy-loop anti-pattern when users handle NOMEM poorly
+- Backward compatible - `NULL` preserves current behavior
+- Priority-based wake-up prevents starvation of critical messages
+- Explicit at call site - no hidden state or semantic confusion
+
+The deadlock risk with `block = true` remains, but users who enable blocking
+are making an explicit choice and should understand the implications. This is
+arguably better than users implementing ad-hoc retry loops that may be worse.
