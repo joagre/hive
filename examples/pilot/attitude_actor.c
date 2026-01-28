@@ -67,11 +67,10 @@ void attitude_actor(void *args, const hive_spawn_info_t *siblings,
         hive_status_t status;
 
         // Block until state available
-        status =
-            hive_bus_read_wait(state->state_bus, &est, sizeof(est), &len, -1);
+        status = hive_bus_read(state->state_bus, &est, sizeof(est), &len,
+                               HIVE_TIMEOUT_INFINITE);
         if (HIVE_FAILED(status)) {
-            HIVE_LOG_ERROR("[ATT] bus read_wait failed: %s",
-                           HIVE_ERR_STR(status));
+            HIVE_LOG_ERROR("[ATT] bus read failed: %s", HIVE_ERR_STR(status));
             return;
         }
 
@@ -83,7 +82,8 @@ void attitude_actor(void *args, const hive_spawn_info_t *siblings,
         // Read attitude setpoints from position controller (non-blocking, use
         // last known)
         if (hive_bus_read(state->attitude_setpoint_bus, &new_attitude_sp,
-                          sizeof(new_attitude_sp), &len)
+                          sizeof(new_attitude_sp), &len,
+                          HIVE_TIMEOUT_NONBLOCKING)
                 .code == HIVE_OK) {
             attitude_sp = new_attitude_sp;
         }

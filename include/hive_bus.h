@@ -42,14 +42,12 @@ hive_status_t hive_bus_publish(bus_id_t bus, const void *data, size_t len);
 hive_status_t hive_bus_subscribe(bus_id_t bus);
 hive_status_t hive_bus_unsubscribe(bus_id_t bus);
 
-// Read entry (non-blocking)
-// Returns HIVE_ERR_WOULDBLOCK if no data available
+// Read entry
+// timeout_ms: HIVE_TIMEOUT_NONBLOCKING (0) returns HIVE_ERR_WOULDBLOCK if empty
+//             HIVE_TIMEOUT_INFINITE (-1) blocks forever
+//             positive value blocks up to timeout, returns HIVE_ERR_TIMEOUT
 hive_status_t hive_bus_read(bus_id_t bus, void *buf, size_t max_len,
-                            size_t *bytes_read);
-
-// Read with blocking
-hive_status_t hive_bus_read_wait(bus_id_t bus, void *buf, size_t max_len,
-                                 size_t *bytes_read, int32_t timeout_ms);
+                            size_t *bytes_read, int32_t timeout_ms);
 
 // Query bus state
 size_t hive_bus_entry_count(bus_id_t bus);

@@ -94,8 +94,8 @@ static void subscriber_actor(void *args, const hive_spawn_info_t *siblings,
         size_t actual_len;
 
         // Blocking read
-        status = hive_bus_read_wait(s_sensor_bus, &data, sizeof(data),
-                                    &actual_len, -1);
+        status = hive_bus_read(s_sensor_bus, &data, sizeof(data), &actual_len,
+                               HIVE_TIMEOUT_INFINITE);
         if (HIVE_FAILED(status)) {
             printf("%s: Failed to read: %s\n", name, HIVE_ERR_STR(status));
             break;

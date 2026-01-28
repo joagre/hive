@@ -78,7 +78,8 @@ static void test1_basic_pubsub(void *args, const hive_spawn_info_t *siblings,
     // Read data
     char buf[64];
     size_t actual_len;
-    status = hive_bus_read(bus, buf, sizeof(buf), &actual_len);
+    status = hive_bus_read(bus, buf, sizeof(buf), &actual_len,
+                           HIVE_TIMEOUT_NONBLOCKING);
     if (HIVE_FAILED(status)) {
         TEST_FAIL("hive_bus_read");
         hive_bus_unsubscribe(bus);
@@ -118,8 +119,7 @@ static void subscriber_actor(void *args, const hive_spawn_info_t *siblings,
     // Wait for data with timeout
     char buf[64];
     size_t actual_len;
-    status =
-        hive_bus_read_wait(s_shared_bus, buf, sizeof(buf), &actual_len, 500);
+    status = hive_bus_read(s_shared_bus, buf, sizeof(buf), &actual_len, 500);
 
     if (HIVE_SUCCEEDED(status)) {
         g_subscriber_received[id] = 1;
@@ -205,8 +205,8 @@ static void max_readers_subscriber(void *args,
     // Try to read
     char buf[64];
     size_t actual_len;
-    hive_status_t status = hive_bus_read_wait(s_max_readers_bus, buf,
-                                              sizeof(buf), &actual_len, 500);
+    hive_status_t status =
+        hive_bus_read(s_max_readers_bus, buf, sizeof(buf), &actual_len, 500);
 
     if (HIVE_SUCCEEDED(status)) {
         g_max_readers_success[id] = 1;
@@ -323,7 +323,7 @@ static void test4_ring_buffer_wrap(void *args,
     // First read should be "Message 3" (oldest surviving)
     char buf[64];
     size_t actual_len;
-    hive_bus_read(bus, buf, sizeof(buf), &actual_len);
+    hive_bus_read(bus, buf, sizeof(buf), &actual_len, HIVE_TIMEOUT_NONBLOCKING);
 
     if (strcmp(buf, "Message 3") == 0) {
         TEST_PASS("oldest entries evicted on buffer wrap");
@@ -357,7 +357,8 @@ static void test5_nonblocking_read(void *args,
     // Try to read from empty bus
     char buf[64];
     size_t actual_len;
-    hive_status_t status = hive_bus_read(bus, buf, sizeof(buf), &actual_len);
+    hive_status_t status = hive_bus_read(bus, buf, sizeof(buf), &actual_len,
+                                         HIVE_TIMEOUT_NONBLOCKING);
 
     if (status.code == HIVE_ERR_WOULDBLOCK) {
         TEST_PASS("empty bus returns HIVE_ERR_WOULDBLOCK");
@@ -391,7 +392,7 @@ static void test6_blocking_read_timeout(void *args,
     char buf[64];
     size_t actual_len;
     hive_status_t status =
-        hive_bus_read_wait(bus, buf, sizeof(buf), &actual_len, 100);
+        hive_bus_read(bus, buf, sizeof(buf), &actual_len, 100);
 
     if (status.code == HIVE_ERR_TIMEOUT) {
         TEST_PASS("blocking read times out on empty bus");
@@ -475,7 +476,8 @@ static void test8_invalid_operations(void *args,
     // Read from invalid bus
     char buf[64];
     size_t actual_len;
-    status = hive_bus_read(BUS_ID_INVALID, buf, sizeof(buf), &actual_len);
+    status = hive_bus_read(BUS_ID_INVALID, buf, sizeof(buf), &actual_len,
+                           HIVE_TIMEOUT_NONBLOCKING);
     if (HIVE_FAILED(status)) {
         TEST_PASS("read from invalid bus fails");
     } else {
@@ -528,7 +530,8 @@ static void test9_max_age_expiry(void *args, const hive_spawn_info_t *siblings,
     // Read immediately - should succeed
     char buf[64];
     size_t actual_len;
-    status = hive_bus_read(bus, buf, sizeof(buf), &actual_len);
+    status = hive_bus_read(bus, buf, sizeof(buf), &actual_len,
+                           HIVE_TIMEOUT_NONBLOCKING);
     if (HIVE_FAILED(status)) {
         TEST_FAIL("immediate read failed (expected success)");
         hive_bus_unsubscribe(bus);
@@ -546,7 +549,8 @@ static void test9_max_age_expiry(void *args, const hive_spawn_info_t *siblings,
     hive_ipc_recv(&msg, 150); // Wait 150ms (entry should expire at 100ms)
 
     // Try to read - should get WOULDBLOCK (entry expired)
-    status = hive_bus_read(bus, buf, sizeof(buf), &actual_len);
+    status = hive_bus_read(bus, buf, sizeof(buf), &actual_len,
+                           HIVE_TIMEOUT_NONBLOCKING);
     if (status.code == HIVE_ERR_WOULDBLOCK) {
         TEST_PASS("entry expired after max_age_ms");
     } else if (HIVE_SUCCEEDED(status)) {
@@ -622,8 +626,8 @@ static void test10_entry_count(void *args, const hive_spawn_info_t *siblings,
     // Read 2 entries
     char buf[64];
     size_t actual_len;
-    hive_bus_read(bus, buf, sizeof(buf), &actual_len);
-    hive_bus_read(bus, buf, sizeof(buf), &actual_len);
+    hive_bus_read(bus, buf, sizeof(buf), &actual_len, HIVE_TIMEOUT_NONBLOCKING);
+    hive_bus_read(bus, buf, sizeof(buf), &actual_len, HIVE_TIMEOUT_NONBLOCKING);
 
     // With max_readers=0 (default), entries persist until aged out or buffer wraps
     // So count should still be 5 (entries not consumed by reading)
@@ -745,7 +749,8 @@ static void test12_buffer_overflow_protection(void *args,
     memset(small_buf, 0, sizeof(small_buf));
     size_t actual_len = 0;
 
-    status = hive_bus_read(bus, small_buf, sizeof(small_buf), &actual_len);
+    status = hive_bus_read(bus, small_buf, sizeof(small_buf), &actual_len,
+                           HIVE_TIMEOUT_NONBLOCKING);
 
     // Check that we didn't overflow (buffer should be intact beyond our small_buf)
     // The implementation should either truncate or return error

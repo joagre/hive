@@ -69,11 +69,10 @@ void rate_actor(void *args, const hive_spawn_info_t *siblings,
         hive_status_t status;
 
         // Block until state available
-        status =
-            hive_bus_read_wait(state->state_bus, &est, sizeof(est), &len, -1);
+        status = hive_bus_read(state->state_bus, &est, sizeof(est), &len,
+                               HIVE_TIMEOUT_INFINITE);
         if (HIVE_FAILED(status)) {
-            HIVE_LOG_ERROR("[RATE] bus read_wait failed: %s",
-                           HIVE_ERR_STR(status));
+            HIVE_LOG_ERROR("[RATE] bus read failed: %s", HIVE_ERR_STR(status));
             return;
         }
 
@@ -84,13 +83,13 @@ void rate_actor(void *args, const hive_spawn_info_t *siblings,
 
         // Read thrust and rate setpoints (non-blocking, use last known)
         if (hive_bus_read(state->thrust_bus, &thrust_cmd, sizeof(thrust_cmd),
-                          &len)
+                          &len, HIVE_TIMEOUT_NONBLOCKING)
                 .code == HIVE_OK) {
             thrust = thrust_cmd.thrust;
         }
 
         if (hive_bus_read(state->rate_setpoint_bus, &new_rate_sp,
-                          sizeof(new_rate_sp), &len)
+                          sizeof(new_rate_sp), &len, HIVE_TIMEOUT_NONBLOCKING)
                 .code == HIVE_OK) {
             rate_sp = new_rate_sp;
         }

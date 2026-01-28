@@ -93,11 +93,10 @@ void estimator_actor(void *args, const hive_spawn_info_t *siblings,
         size_t len;
 
         // Block until sensor data available
-        status = hive_bus_read_wait(state->sensor_bus, &sensors,
-                                    sizeof(sensors), &len, -1);
+        status = hive_bus_read(state->sensor_bus, &sensors, sizeof(sensors),
+                               &len, HIVE_TIMEOUT_INFINITE);
         if (HIVE_FAILED(status)) {
-            HIVE_LOG_ERROR("[EST] bus read_wait failed: %s",
-                           HIVE_ERR_STR(status));
+            HIVE_LOG_ERROR("[EST] bus read failed: %s", HIVE_ERR_STR(status));
             return;
         }
 

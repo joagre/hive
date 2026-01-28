@@ -176,7 +176,7 @@ if (HIVE_FAILED(hive_bus_subscribe(state->sensor_bus))) {
 }
 ```
 
-**Hot path - blocking calls** (`hive_select`, `hive_bus_read_wait`, `hive_ipc_recv_match`):
+**Hot path - blocking calls** (`hive_select`, `hive_bus_read` with timeout, `hive_ipc_recv_match`):
 Log error and return. These failures indicate a fundamental runtime problem that the
 actor cannot recover from.
 

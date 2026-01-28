@@ -124,7 +124,8 @@ void telemetry_logger_actor(void *args, const hive_spawn_info_t *siblings,
 
         state_estimate_t tmp_state;
         if (HIVE_SUCCEEDED(hive_bus_read(state->state_bus, &tmp_state,
-                                         sizeof(tmp_state), &bytes_read))) {
+                                         sizeof(tmp_state), &bytes_read,
+                                         HIVE_TIMEOUT_NONBLOCKING))) {
             if (bytes_read == sizeof(state_estimate_t)) {
                 latest_state = tmp_state;
             }
@@ -132,7 +133,8 @@ void telemetry_logger_actor(void *args, const hive_spawn_info_t *siblings,
 
         sensor_data_t tmp_sensors;
         if (HIVE_SUCCEEDED(hive_bus_read(state->sensor_bus, &tmp_sensors,
-                                         sizeof(tmp_sensors), &bytes_read))) {
+                                         sizeof(tmp_sensors), &bytes_read,
+                                         HIVE_TIMEOUT_NONBLOCKING))) {
             if (bytes_read == sizeof(sensor_data_t)) {
                 latest_sensors = tmp_sensors;
             }
@@ -140,16 +142,17 @@ void telemetry_logger_actor(void *args, const hive_spawn_info_t *siblings,
 
         thrust_cmd_t tmp_thrust;
         if (HIVE_SUCCEEDED(hive_bus_read(state->thrust_bus, &tmp_thrust,
-                                         sizeof(tmp_thrust), &bytes_read))) {
+                                         sizeof(tmp_thrust), &bytes_read,
+                                         HIVE_TIMEOUT_NONBLOCKING))) {
             if (bytes_read == sizeof(thrust_cmd_t)) {
                 latest_thrust = tmp_thrust;
             }
         }
 
         position_target_t tmp_target;
-        if (HIVE_SUCCEEDED(hive_bus_read(state->position_target_bus,
-                                         &tmp_target, sizeof(tmp_target),
-                                         &bytes_read))) {
+        if (HIVE_SUCCEEDED(hive_bus_read(
+                state->position_target_bus, &tmp_target, sizeof(tmp_target),
+                &bytes_read, HIVE_TIMEOUT_NONBLOCKING))) {
             if (bytes_read == sizeof(position_target_t)) {
                 latest_target = tmp_target;
             }

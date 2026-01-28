@@ -441,20 +441,37 @@ hive_status_t hive_bus_unsubscribe(bus_id_t id) {
     return HIVE_SUCCESS;
 }
 
-// Read entry (non-blocking)
+// Read entry with optional blocking
 hive_status_t hive_bus_read(bus_id_t id, void *buf, size_t max_len,
-                            size_t *actual_len) {
+                            size_t *actual_len, int32_t timeout_ms) {
     if (!buf || !actual_len) {
         return HIVE_ERROR(HIVE_ERR_INVALID,
                           "NULL buffer or actual_len pointer");
     }
 
+    HIVE_REQUIRE_ACTOR_CONTEXT();
+
+    // Blocking path: use hive_select
+    if (timeout_ms != HIVE_TIMEOUT_NONBLOCKING) {
+        hive_select_source_t source = {.type = HIVE_SEL_BUS, .bus = id};
+        hive_select_result_t result;
+        hive_status_t s = hive_select(&source, 1, &result, timeout_ms);
+        if (HIVE_SUCCEEDED(s)) {
+            // Copy data to user buffer
+            size_t copy_len =
+                result.bus.len < max_len ? result.bus.len : max_len;
+            memcpy(buf, result.bus.data, copy_len);
+            *actual_len = copy_len;
+        }
+        return s;
+    }
+
+    // Non-blocking path: direct read
     bus_t *bus = find_bus(id);
     if (!bus) {
         return HIVE_ERROR(HIVE_ERR_INVALID, "Bus not found");
     }
 
-    HIVE_REQUIRE_ACTOR_CONTEXT();
     actor_t *current = hive_actor_current();
 
     int sub_idx = find_subscriber(bus, current->id);
@@ -533,29 +550,6 @@ hive_status_t hive_bus_read(bus_id_t id, void *buf, size_t max_len,
         return HIVE_ERROR(HIVE_ERR_TRUNCATED, "Data truncated to fit buffer");
     }
     return HIVE_SUCCESS;
-}
-
-// Read with blocking - wrapper around hive_select
-hive_status_t hive_bus_read_wait(bus_id_t id, void *buf, size_t max_len,
-                                 size_t *actual_len, int32_t timeout_ms) {
-    if (!buf || !actual_len) {
-        return HIVE_ERROR(HIVE_ERR_INVALID,
-                          "NULL buffer or actual_len pointer");
-    }
-
-    HIVE_REQUIRE_ACTOR_CONTEXT();
-
-    // Use hive_select with single bus source
-    hive_select_source_t source = {.type = HIVE_SEL_BUS, .bus = id};
-    hive_select_result_t result;
-    hive_status_t s = hive_select(&source, 1, &result, timeout_ms);
-    if (HIVE_SUCCEEDED(s)) {
-        // Copy data to user buffer
-        size_t copy_len = result.bus.len < max_len ? result.bus.len : max_len;
-        memcpy(buf, result.bus.data, copy_len);
-        *actual_len = copy_len;
-    }
-    return s;
 }
 
 // Query bus state

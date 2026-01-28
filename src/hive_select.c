@@ -28,7 +28,8 @@ static bool scan_sources(const hive_select_source_t *sources,
                 size_t actual_len = 0;
                 hive_status_t status =
                     hive_bus_read(sources[i].bus, s_bus_data_buffer,
-                                  sizeof(s_bus_data_buffer), &actual_len);
+                                  sizeof(s_bus_data_buffer), &actual_len,
+                                  HIVE_TIMEOUT_NONBLOCKING);
                 // Accept OK or TRUNCATED (data was read, possibly truncated)
                 if (HIVE_SUCCEEDED(status) ||
                     status.code == HIVE_ERR_TRUNCATED) {

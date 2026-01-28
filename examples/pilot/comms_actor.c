@@ -241,7 +241,8 @@ void comms_actor(void *args, const hive_spawn_info_t *siblings,
         size_t bytes_read;
         state_estimate_t tmp_state;
         if (HIVE_SUCCEEDED(hive_bus_read(state->state_bus, &tmp_state,
-                                         sizeof(tmp_state), &bytes_read))) {
+                                         sizeof(tmp_state), &bytes_read,
+                                         HIVE_TIMEOUT_NONBLOCKING))) {
             if (bytes_read == sizeof(state_estimate_t)) {
                 latest_state = tmp_state;
             }
@@ -249,7 +250,8 @@ void comms_actor(void *args, const hive_spawn_info_t *siblings,
 
         sensor_data_t tmp_sensors;
         if (HIVE_SUCCEEDED(hive_bus_read(state->sensor_bus, &tmp_sensors,
-                                         sizeof(tmp_sensors), &bytes_read))) {
+                                         sizeof(tmp_sensors), &bytes_read,
+                                         HIVE_TIMEOUT_NONBLOCKING))) {
             if (bytes_read == sizeof(sensor_data_t)) {
                 latest_sensors = tmp_sensors;
             }
@@ -257,7 +259,8 @@ void comms_actor(void *args, const hive_spawn_info_t *siblings,
 
         thrust_cmd_t tmp_thrust;
         if (HIVE_SUCCEEDED(hive_bus_read(state->thrust_bus, &tmp_thrust,
-                                         sizeof(tmp_thrust), &bytes_read))) {
+                                         sizeof(tmp_thrust), &bytes_read,
+                                         HIVE_TIMEOUT_NONBLOCKING))) {
             if (bytes_read == sizeof(thrust_cmd_t)) {
                 latest_thrust = tmp_thrust;
             }

@@ -321,7 +321,7 @@ hive_select(sources, 3, &result, -1);
 // result.ipc or result.bus contains the data
 ```
 
-**Wrapper relationship** - `hive_ipc_recv()`, `hive_ipc_recv_match()`, `hive_ipc_recv_matches()`, and `hive_bus_read_wait()` are all implemented as thin wrappers around `hive_select()`.
+**Wrapper relationship** - `hive_ipc_recv()`, `hive_ipc_recv_match()`, `hive_ipc_recv_matches()`, and `hive_bus_read()` (with timeout != 0) are all implemented as thin wrappers around `hive_select()`.
 
 ## Important Implementation Details
 

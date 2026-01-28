@@ -6,7 +6,7 @@
 
 Currently, actors must choose one blocking primitive at a time:
 - `hive_ipc_recv()` / `hive_ipc_recv_matches()` - wait for messages
-- `hive_bus_read_wait()` - wait for bus data
+- `hive_bus_read()` with timeout - wait for bus data
 
 This forces awkward patterns when an actor needs to respond to multiple event sources (e.g., timer ticks AND sensor bus data AND commands). A unified select would enable clean event loops.
 
@@ -20,7 +20,7 @@ The current `altitude_actor.c` shows the problem. It needs to:
 ```c
 while (1) {
     // Block until state available - LANDING command delayed while blocked!
-    hive_bus_read_wait(s_state_bus, &state, sizeof(state), &len, -1);
+    hive_bus_read(s_state_bus, &state, sizeof(state), &len, HIVE_TIMEOUT_INFINITE);
 
     // ... process state ...
 
@@ -292,7 +292,7 @@ This is the official approach - no separate implementations.
 hive_ipc_recv(&msg, -1);                    // Any message
 hive_ipc_recv_match(from, class, tag, ...); // Single filter
 hive_ipc_recv_matches(filters, n, ...);     // Multiple IPC filters
-hive_bus_read_wait(bus, &data, -1);         // Single bus
+hive_bus_read(bus, &data, len, &actual, -1);  // Single bus (with timeout)
 
 // The unified primitive:
 hive_select(sources, n, &result, -1);       // IPC + bus combined
@@ -352,17 +352,26 @@ hive_status_t hive_ipc_recv_matches(const hive_recv_filter_t *filters,
     return s;
 }
 
-hive_status_t hive_bus_read_wait(bus_id_t bus, void *buf, size_t max_len,
-                               size_t *actual_len, int32_t timeout_ms) {
-    hive_select_source_t source = {HIVE_SEL_BUS, .bus = bus};
-    hive_select_result_t result;
-    hive_status_t s = hive_select(&source, 1, &result, timeout_ms);
-    if (HIVE_SUCCEEDED(s)) {
-        size_t copy_len = result.bus.len < max_len ? result.bus.len : max_len;
-        memcpy(buf, result.bus.data, copy_len);
-        *actual_len = copy_len;
+// hive_bus_read() uses hive_select() internally when timeout is non-zero:
+hive_status_t hive_bus_read(bus_id_t bus, void *buf, size_t max_len,
+                            size_t *actual_len, int32_t timeout_ms) {
+    // ... validation ...
+
+    // Blocking path: use hive_select
+    if (timeout_ms != HIVE_TIMEOUT_NONBLOCKING) {
+        hive_select_source_t source = {HIVE_SEL_BUS, .bus = bus};
+        hive_select_result_t result;
+        hive_status_t s = hive_select(&source, 1, &result, timeout_ms);
+        if (HIVE_SUCCEEDED(s)) {
+            size_t copy_len = result.bus.len < max_len ? result.bus.len : max_len;
+            memcpy(buf, result.bus.data, copy_len);
+            *actual_len = copy_len;
+        }
+        return s;
     }
-    return s;
+
+    // Non-blocking path: direct read from ring buffer
+    // ...
 }
 ```
 
@@ -464,7 +473,7 @@ Implementation completed 2026-01-17:
 - [x] `src/hive_select.c` - Implementation
 - [x] `include/hive_actor.h` - Added `select_sources` and `select_source_count` fields
 - [x] `src/hive_ipc.c` - Rewrote `hive_ipc_recv`, `hive_ipc_recv_match`, `hive_ipc_recv_matches` as wrappers
-- [x] `src/hive_bus.c` - Rewrote `hive_bus_read_wait()` as wrapper, updated wake logic
+- [x] `src/hive_bus.c` - Updated `hive_bus_read()` to use `hive_select()` for blocking path
 
 ### Documentation
 - [x] `man/man3/hive_select.3` - New man page

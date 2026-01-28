@@ -1,7 +1,7 @@
 .\" Man page for bus pub/sub functions
 .TH HIVE_BUS 3 "January 2026" "Hive 1.0" "Actor Runtime Manual"
 .SH NAME
-hive_bus_create, hive_bus_destroy, hive_bus_publish, hive_bus_subscribe, hive_bus_unsubscribe, hive_bus_read, hive_bus_read_wait, hive_bus_entry_count \- publish-subscribe bus
+hive_bus_create, hive_bus_destroy, hive_bus_publish, hive_bus_subscribe, hive_bus_unsubscribe, hive_bus_read, hive_bus_entry_count \- publish-subscribe bus
 .SH SYNOPSIS
 .nf
 .B #include <hive_bus.h>
@@ -11,9 +11,8 @@ hive_bus_create, hive_bus_destroy, hive_bus_publish, hive_bus_subscribe, hive_bu
 .BI "hive_status_t hive_bus_publish(bus_id_t " bus ", const void *" data ", size_t " len ");"
 .BI "hive_status_t hive_bus_subscribe(bus_id_t " bus ");"
 .BI "hive_status_t hive_bus_unsubscribe(bus_id_t " bus ");"
-.BI "hive_status_t hive_bus_read(bus_id_t " bus ", void *" buf ", size_t " max_len ", size_t *" bytes_read ");"
-.BI "hive_status_t hive_bus_read_wait(bus_id_t " bus ", void *" buf ", size_t " max_len ","
-.BI "                               size_t *" bytes_read ", int32_t " timeout_ms ");"
+.BI "hive_status_t hive_bus_read(bus_id_t " bus ", void *" buf ", size_t " max_len ","
+.BI "                          size_t *" bytes_read ", int32_t " timeout_ms ");"
 .BI "size_t hive_bus_entry_count(bus_id_t " bus ");"
 .fi
 .SH DESCRIPTION
@@ -80,20 +79,21 @@ bytes are copied. The actual number of bytes read is stored in
 Each subscriber maintains independent read position; reading does not affect
 other subscribers.
 .PP
-.BR hive_bus_read_wait ()
-is the blocking variant. The
+The
 .I timeout_ms
 parameter controls blocking:
 .TP
-.B 0
+.B HIVE_TIMEOUT_NONBLOCKING (0)
 Return immediately with
 .B HIVE_ERR_WOULDBLOCK
 if no data.
 .TP
 .B positive value
-Block up to the specified milliseconds.
+Block up to the specified milliseconds, return
+.B HIVE_ERR_TIMEOUT
+if exceeded.
 .TP
-.B -1
+.B HIVE_TIMEOUT_INFINITE (-1)
 Block forever until data is available.
 .SS Retention Policies
 .TP
@@ -129,12 +129,11 @@ subscribers (for destroy).
 Message data pool exhausted (for publish) or subscriber table full (for subscribe).
 .TP
 .B HIVE_ERR_WOULDBLOCK
-No data available and timeout was 0 (for
-.BR hive_bus_read ()).
+No data available and timeout was
+.BR HIVE_TIMEOUT_NONBLOCKING .
 .TP
 .B HIVE_ERR_TIMEOUT
-No data received within timeout period (for
-.BR hive_bus_read_wait ()).
+No data received within timeout period (positive timeout value).
 .TP
 .B HIVE_ERR_TRUNCATED
 Data was read but truncated to fit the provided buffer. The
@@ -236,7 +235,7 @@ void display_actor(void *arg, const hive_spawn_info_t *siblings,
     for (int i = 0; i < 5; i++) {
         sensor_data_t data;
         size_t len;
-        hive_status_t s = hive_bus_read_wait(sensor_bus, &data, sizeof(data),
+        hive_status_t s = hive_bus_read(sensor_bus, &data, sizeof(data),
                                            &len, 5000);
         if (HIVE_FAILED(s)) {
             printf("Read failed: %s\\n", HIVE_ERR_STR(s));
@@ -256,7 +255,7 @@ void logger_actor(void *arg, const hive_spawn_info_t *siblings,
     for (int i = 0; i < 5; i++) {
         sensor_data_t data;
         size_t len;
-        hive_status_t s = hive_bus_read_wait(sensor_bus, &data, sizeof(data),
+        hive_status_t s = hive_bus_read(sensor_bus, &data, sizeof(data),
                                            &len, 5000);
         if (HIVE_FAILED(s)) break;
         printf("Logger: recorded temp=%.1f at tick %d\\n",
@@ -297,8 +296,8 @@ hive_bus_create(&cfg, &work_queue);
 /* Multiple workers subscribe; each job processed exactly once */
 .fi
 .SS Implementation Note
-The blocking function
-.BR hive_bus_read_wait ()
+When called with a non-zero timeout,
+.BR hive_bus_read ()
 is implemented as a thin wrapper around
 .BR hive_select (3),
 the unified event waiting primitive.

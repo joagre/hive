@@ -422,8 +422,9 @@ static void bus_subscriber(void *args, const hive_spawn_info_t *siblings,
         size_t len;
         hive_status_t status;
         // Wait for message to be available
-        while (HIVE_FAILED(
-            status = hive_bus_read(ctx->bus, buffer, sizeof(buffer), &len))) {
+        while (HIVE_FAILED(status =
+                               hive_bus_read(ctx->bus, buffer, sizeof(buffer),
+                                             &len, HIVE_TIMEOUT_NONBLOCKING))) {
             hive_yield();
         }
     }

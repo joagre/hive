@@ -307,7 +307,7 @@ When an actor calls a blocking API, the following contract applies:
 | `hive_ipc_recv_match()` | Matching message arrives or timeout |
 | `hive_ipc_recv_matches()` | Message matching any filter arrives or timeout |
 | `hive_ipc_request()` | Reply arrives or timeout |
-| `hive_bus_read_wait()` | Bus data available or timeout |
+| `hive_bus_read()` (with timeout) | Bus data available or timeout |
 | `hive_net_connect()` | Connection established or timeout |
 | `hive_net_accept()` | Incoming connection or timeout |
 | `hive_net_send()` | At least 1 byte sent or timeout |
@@ -316,7 +316,7 @@ When an actor calls a blocking API, the following contract applies:
 
 **Non-blocking variants** (return immediately, never yield):
 - `hive_ipc_recv()` with timeout = 0 -> returns `HIVE_ERR_WOULDBLOCK` if empty
-- `hive_bus_read()` -> returns `HIVE_ERR_WOULDBLOCK` if no data
+- `hive_bus_read()` with timeout = 0 -> returns `HIVE_ERR_WOULDBLOCK` if no data
 
 **Note** - File I/O (`hive_file_*`) is NOT in this list. See "Scheduler-Stalling Calls" below.
 
@@ -329,7 +329,7 @@ When an actor calls a blocking API, the following contract applies:
 - I/O readiness signaled (network socket becomes readable/writable)
 - Timer expires (for APIs with timeout)
 - Message arrives in mailbox (for `hive_ipc_recv()`, `hive_ipc_recv_match()`, `hive_ipc_recv_matches()`, `hive_ipc_request()`)
-- Bus data published (for `hive_bus_read_wait()`)
+- Bus data published (for `hive_bus_read()` with non-zero timeout)
 - **Important**: Mailbox arrival only unblocks actors blocked in IPC receive operations, not actors blocked on network I/O or bus read
 
 **Scheduling phase definition**

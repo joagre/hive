@@ -169,7 +169,7 @@ Tests unified event waiting (hive_select) API.
 **Tests (10 tests)**
 - Single IPC source (wildcard) - equivalent to hive_ipc_recv()
 - Single IPC source (filtered) - equivalent to hive_ipc_recv_match()
-- Single bus source - equivalent to hive_bus_read_wait()
+- Single bus source - equivalent to hive_bus_read() with timeout
 - Multi-source IPC + IPC (first matches)
 - Multi-source IPC + IPC (second matches)
 - Multi-source bus + bus

@@ -124,10 +124,10 @@ Actors run until they **yield** - there is no preemption. Operations that yield:
 | Yields (other actors run) | Returns immediately (no yield) |
 |---------------------------|-------------------------------|
 | `hive_yield()` | `hive_ipc_recv(..., 0)` (timeout=0) |
-| `hive_ipc_recv()` (timeout != 0) | `hive_bus_read()` |
+| `hive_ipc_recv()` (timeout != 0) | `hive_bus_read(..., 0)` (timeout=0) |
 | `hive_ipc_recv_match()` | `hive_ipc_notify()` |
 | `hive_ipc_request()` | `hive_bus_publish()` |
-| `hive_bus_read_wait()` | `hive_select(..., 0)` (timeout=0) |
+| `hive_bus_read()` (timeout != 0) | `hive_select(..., 0)` (timeout=0) |
 | `hive_select()` (timeout != 0) | |
 | `hive_net_*()` | |
 | `hive_exit()` | |
@@ -436,7 +436,8 @@ if (status.code == HIVE_ERR_NOMEM) {
 // Subscriber: consumer actor reads data
 sensor_reading received;
 size_t len;
-status = hive_bus_read_wait(sensor_bus, &received, sizeof(received), &len, -1);
+status = hive_bus_read(sensor_bus, &received, sizeof(received), &len,
+                       HIVE_TIMEOUT_INFINITE);
 if (HIVE_SUCCEEDED(status)) {
     printf("Temperature: %.1f\n", received.temperature);
 }
@@ -724,8 +725,7 @@ See `examples/pilot/Makefile.crazyflie-2.1+` for a complete example and [spec/ap
 - `hive_bus_subscribe(bus)` - Subscribe current actor to bus
 - `hive_bus_unsubscribe(bus)` - Unsubscribe current actor from bus
 - `hive_bus_publish(bus, data, len)` - Publish data to bus (non-blocking)
-- `hive_bus_read(bus, buf, len, bytes_read)` - Read next message (non-blocking)
-- `hive_bus_read_wait(bus, buf, len, bytes_read, timeout_ms)` - Read next message (blocking)
+- `hive_bus_read(bus, buf, len, bytes_read, timeout_ms)` - Read next message (timeout=0 non-blocking, timeout=-1 infinite)
 - `hive_bus_entry_count(bus)` - Get number of entries in bus
 
 ### Unified Event Waiting

@@ -58,17 +58,16 @@ void position_actor(void *args, const hive_spawn_info_t *siblings,
         hive_status_t status;
 
         // Block until state available
-        status =
-            hive_bus_read_wait(state->state_bus, &est, sizeof(est), &len, -1);
+        status = hive_bus_read(state->state_bus, &est, sizeof(est), &len,
+                               HIVE_TIMEOUT_INFINITE);
         if (HIVE_FAILED(status)) {
-            HIVE_LOG_ERROR("[POS] bus read_wait failed: %s",
-                           HIVE_ERR_STR(status));
+            HIVE_LOG_ERROR("[POS] bus read failed: %s", HIVE_ERR_STR(status));
             return;
         }
 
         // Read target from waypoint actor (non-blocking, use last known)
         if (hive_bus_read(state->position_target_bus, &new_target,
-                          sizeof(new_target), &len)
+                          sizeof(new_target), &len, HIVE_TIMEOUT_NONBLOCKING)
                 .code == HIVE_OK) {
             target = new_target;
         }

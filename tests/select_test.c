@@ -135,7 +135,7 @@ static void test2_ipc_filtered(void *args, const hive_spawn_info_t *siblings,
 }
 
 // ============================================================================
-// Test 3: Single bus source - equivalent to hive_bus_read_wait()
+// Test 3: Single bus source - equivalent to hive_bus_read() with timeout
 // ============================================================================
 
 static bus_id_t s_test_bus = BUS_ID_INVALID;

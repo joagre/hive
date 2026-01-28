@@ -128,7 +128,7 @@ void altitude_actor(void *args, const hive_spawn_info_t *siblings,
 
         // Read target altitude (non-blocking)
         if (hive_bus_read(state->position_target_bus, &target, sizeof(target),
-                          &len)
+                          &len, HIVE_TIMEOUT_NONBLOCKING)
                 .code == HIVE_OK) {
             target_altitude = target.z;
         }
