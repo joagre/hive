@@ -323,9 +323,21 @@ hive_status_t hive_bus_publish(bus_id_t id, const void *data, size_t len) {
         bus->count--;
     }
 
-    // Allocate from message pool and copy data
-    message_data_entry_t *msg_data = hive_pool_alloc(&g_message_pool_mgr);
-    if (!msg_data) {
+    // Check if current actor should block on pool exhaustion
+    actor_t *current = hive_actor_current();
+    bool should_block = current && current->pool_block;
+
+    // Allocate from message pool and copy data (with optional blocking)
+    message_data_entry_t *msg_data = NULL;
+    while (true) {
+        msg_data = hive_pool_alloc(&g_message_pool_mgr);
+        if (msg_data) {
+            break; // Allocation succeeded
+        }
+        if (should_block) {
+            hive_scheduler_pool_wait();
+            continue; // Retry after waking
+        }
         return HIVE_ERROR(HIVE_ERR_NOMEM, "Message pool exhausted");
     }
     memcpy(msg_data->data, data, len);

@@ -112,14 +112,50 @@ Quick reference for resource exhaustion and failure handling. See IPC and Bus se
 
 | Pool | Exhaustion Result | Blocking? | Auto-drop? |
 |------|-------------------|-----------|------------|
-| IPC message pool | `HIVE_ERR_NOMEM` returned | No | No |
-| IPC mailbox entry pool | `HIVE_ERR_NOMEM` returned | No | No |
-| Bus message pool | `HIVE_ERR_NOMEM` returned | No | No |
+| IPC message pool | `HIVE_ERR_NOMEM` returned | Optional* | No |
+| IPC mailbox entry pool | `HIVE_ERR_NOMEM` returned | Optional* | No |
+| Bus message pool | `HIVE_ERR_NOMEM` returned | Optional* | No |
 | Bus ring buffer full | Oldest entry evicted | No | Yes (oldest) |
 | Bus subscriber table | `HIVE_ERR_NOMEM` returned | No | No |
 | Timer pool | `HIVE_ERR_NOMEM` returned | No | No |
 
+*\*Optional blocking via `pool_block` configuration. See [Pool Blocking](#pool-blocking) below.*
+
 **Key insight** - IPC never auto-drops (caller must handle). Bus ring buffer auto-drops oldest entry.
+
+### Pool Blocking
+
+By default, pool exhaustion returns `HIVE_ERR_NOMEM` immediately. Actors can opt into **blocking behavior** where send operations yield (block) until pool space becomes available.
+
+**Configuration:**
+- **At spawn**: Set `hive_actor_config_t.pool_block = true`
+- **At runtime**: Call `hive_pool_set_block(HIVE_POOL_BLOCK)` or `hive_pool_set_block(HIVE_POOL_NO_BLOCK)`
+- **Query**: `hive_pool_get_block()` returns current effective setting
+
+**Behavior when enabled:**
+- `hive_ipc_notify()`, `hive_ipc_notify_ex()`, and `hive_bus_publish()` yield instead of returning `HIVE_ERR_NOMEM`
+- Actor is added to a **priority-ordered wait queue** (higher priority actors wake first)
+- Actor wakes when another actor frees a pool entry (message consumed or actor exits)
+
+**Warning:** Blocking on pool exhaustion can cause **deadlock** if all actors block without any actor freeing pool entries. Use with care - ensure receivers process messages promptly.
+
+### Reserved System Entries
+
+The runtime reserves `HIVE_RESERVED_SYSTEM_ENTRIES` (default: 16) pool entries for **system messages** (TIMER and EXIT). This ensures that:
+
+- **Timer messages** can always be delivered, even when user messages have exhausted the pool
+- **Exit notifications** (from links and monitors) can always be delivered
+
+**How it works:**
+- User messages (`HIVE_MSG_NOTIFY`, `HIVE_MSG_REQUEST`, `HIVE_MSG_REPLY`) cannot use the last 16 entries
+- System messages (`HIVE_MSG_TIMER`, `HIVE_MSG_EXIT`) can use any entry, including reserved ones
+- When the pool has only reserved entries remaining, user sends return `HIVE_ERR_NOMEM` but timers still fire
+
+**Configuration:**
+- `HIVE_RESERVED_SYSTEM_ENTRIES` in `hive_static_config.h` (default: 16)
+- Setting to 0 disables reservation (system and user messages share the full pool)
+
+**Design rationale:** System messages are critical for runtime correctness. A timer not firing or an exit notification not being delivered could cause actors to hang indefinitely waiting for events that will never arrive.
 
 ### Recommended Patterns
 
@@ -127,6 +163,7 @@ Quick reference for resource exhaustion and failure handling. See IPC and Bus se
 |---------|-------------|---------|
 | **Check and retry** | Transient exhaustion | `if (NOMEM) sleep_ms(10); retry();` |
 | **Backpressure** | Producer-consumer | Use `hive_ipc_request()` (blocks sender) |
+| **Pool blocking** | Simple producers | Set `pool_block = true` at spawn |
 | **Drop and continue** | Non-critical data | `if (NOMEM) log_warn(); return;` |
 | **Escalate** | Critical failure | `if (NOMEM) hive_exit(CRASH);` |
 

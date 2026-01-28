@@ -39,7 +39,8 @@ typedef struct {
     const char *name;         // for debugging, may be NULL
     bool        malloc_stack; // false = use static arena (default), true = malloc
     bool        auto_register;// auto-register name in registry
-} actor_config_t;
+    bool        pool_block;   // block on pool exhaustion (default: false)
+} hive_actor_config_t;
 ```
 
 ## Actor API
@@ -794,11 +795,37 @@ IPC uses two global pools shared by all actors:
 - **Mailbox entry pool**: `HIVE_MAILBOX_ENTRY_POOL_SIZE` (256 default)
 - **Message data pool**: `HIVE_MESSAGE_DATA_POOL_SIZE` (256 default)
 
-**When pools are exhausted**
+**Default behavior (`pool_block = false`)**
 - `hive_ipc_notify()` returns `HIVE_ERR_NOMEM` immediately
 - Send operation **does NOT block** waiting for space
 - Send operation **does NOT drop** messages automatically
 - Caller **must check** return value and handle failure
+
+**Blocking behavior (`pool_block = true`)**
+- Send operations **yield** (block) until pool space becomes available
+- Actor is added to a **priority-ordered wait queue** (higher priority actors wake first)
+- Actor wakes when another actor frees a pool entry
+- No `HIVE_ERR_NOMEM` returned - send always succeeds eventually
+
+**Configuring pool blocking**
+```c
+// At spawn time
+hive_actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+cfg.pool_block = true;
+hive_spawn(my_fn, NULL, NULL, &cfg, &id);
+
+// At runtime (within actor)
+hive_pool_set_block(HIVE_POOL_BLOCK);    // Enable blocking
+hive_pool_set_block(HIVE_POOL_NO_BLOCK); // Disable blocking
+hive_pool_set_block(HIVE_POOL_DEFAULT);  // Restore spawn default
+
+// Query current setting
+bool blocking = hive_pool_get_block();
+```
+
+**Warning**: Pool blocking can cause **deadlock** if all actors block without any actor freeing pool entries. Use with care.
+
+**Reserved system entries**: The runtime reserves `HIVE_RESERVED_SYSTEM_ENTRIES` (default: 16) pool entries for system messages (TIMER and EXIT). User messages return `HIVE_ERR_NOMEM` when only reserved entries remain, but timers and exit notifications can still be delivered. This prevents pool exhaustion from causing missed timer events or exit notifications.
 
 **No per-actor mailbox limit**: All actors share the global pools. A single actor can consume all available entries if receivers don't process messages.
 
@@ -806,9 +833,10 @@ IPC uses two global pools shared by all actors:
 - Size pools appropriately: `1.5x peak concurrent messages`
 - Check return values and implement retry logic or backpressure
 - Use `hive_ipc_request()` for natural backpressure (sender waits for reply)
+- Enable `pool_block` for simple producer actors
 - Ensure receivers process messages promptly
 
-**Backoff-retry example**
+**Backoff-retry example (when pool_block = false)**
 ```c
 hive_status_t status = hive_ipc_notify(target, HIVE_TAG_NONE, data, len);
 if (status.code == HIVE_ERR_NOMEM) {
@@ -1116,10 +1144,10 @@ The bus can encounter two types of resource limits:
 
 **1. Message Pool Exhaustion** (shared with IPC):
 - Bus uses the global `HIVE_MESSAGE_DATA_POOL_SIZE` pool (same as IPC)
-- When pool is exhausted, `hive_bus_publish()` returns `HIVE_ERR_NOMEM` immediately
-- Does NOT block waiting for space
-- Does NOT drop messages automatically in this case
-- Caller must check return value and handle failure
+- Default: `hive_bus_publish()` returns `HIVE_ERR_NOMEM` immediately
+- With `pool_block = true`: publish yields until pool space available (same as IPC)
+- Does NOT drop messages automatically when pool exhausted
+- Caller must check return value and handle failure (when `pool_block = false`)
 
 **2. Bus Ring Buffer Full** (per-bus limit):
 - Each bus has its own ring buffer sized via `max_entries` config

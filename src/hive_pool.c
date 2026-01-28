@@ -29,6 +29,22 @@ void *hive_pool_alloc(hive_pool_t *pool) {
     return NULL;
 }
 
+void *hive_pool_alloc_reserved(hive_pool_t *pool, size_t reserved,
+                               bool is_system) {
+    // For non-system messages, enforce reservation
+    if (!is_system) {
+        // Check if we would exceed the non-reserved portion
+        size_t available_for_user =
+            pool->capacity > reserved ? pool->capacity - reserved : 0;
+        if (pool->allocated >= available_for_user) {
+            return NULL; // Reserved entries not available to user messages
+        }
+    }
+
+    // System messages (or user messages with available space) can allocate
+    return hive_pool_alloc(pool);
+}
+
 void hive_pool_free(hive_pool_t *pool, void *entry) {
     if (!entry) {
         return;

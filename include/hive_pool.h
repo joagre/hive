@@ -27,6 +27,13 @@ void hive_pool_init(hive_pool_t *pool, void *entries, bool *used,
 // Returns NULL if pool is exhausted
 void *hive_pool_alloc(hive_pool_t *pool);
 
+// Allocate an entry respecting reserved entries
+// reserved: number of entries reserved for system use
+// is_system: if true, can use reserved entries; if false, cannot
+// Returns NULL if no entries available (respecting reservation)
+void *hive_pool_alloc_reserved(hive_pool_t *pool, size_t reserved,
+                               bool is_system);
+
 // Free an entry back to the pool
 // entry must have been allocated from this pool
 void hive_pool_free(hive_pool_t *pool, void *entry);

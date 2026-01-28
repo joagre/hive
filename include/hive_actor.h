@@ -84,6 +84,10 @@ typedef struct {
     link_entry_t *links;            // Bidirectional links to other actors
     monitor_entry_t *monitors;      // Actors we are monitoring (unidirectional)
     hive_exit_reason_t exit_reason; // Why this actor exited
+
+    // Pool exhaustion behavior
+    bool pool_block_default; // From hive_actor_config_t at spawn time
+    bool pool_block; // Effective value now (can be overridden at runtime)
 } actor_t;
 
 // Actor table - global storage for all actors

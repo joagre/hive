@@ -77,6 +77,14 @@
 #define HIVE_MAX_MESSAGE_SIZE 256
 #endif
 
+// Reserved pool entries for system messages (TIMER, EXIT)
+// These entries are only used when regular pool space is exhausted.
+// Guarantees timer and death notifications can be delivered even under
+// pool pressure from user messages.
+#ifndef HIVE_RESERVED_SYSTEM_ENTRIES
+#define HIVE_RESERVED_SYSTEM_ENTRIES 16
+#endif
+
 // -----------------------------------------------------------------------------
 // Bus Configuration
 // -----------------------------------------------------------------------------

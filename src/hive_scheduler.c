@@ -11,11 +11,22 @@
 #include "hive_log.h"
 #include "hive_internal.h"
 #include "hal/hive_hal_event.h"
+#include "hal/hive_hal_time.h"
 #include <stdbool.h>
 #include <stdint.h>
 
+// Rate limit for pool wait warnings (1 second)
+#define POOL_WAIT_WARN_INTERVAL_US 1000000
+
 // External function to get actor_t table
 extern actor_table_t *hive_actor_get_table(void);
+
+// Pool wait queue entry
+typedef struct {
+    actor_id_t actor;
+    hive_priority_level_t priority;
+    bool used;
+} pool_wait_entry_t;
 
 // Scheduler state
 static struct {
@@ -23,6 +34,11 @@ static struct {
     bool shutdown_requested;
     bool initialized;
     size_t last_run_idx[HIVE_PRIORITY_COUNT]; // Round-robin index per priority
+
+    // Pool wait queue (for blocking on pool exhaustion)
+    pool_wait_entry_t pool_wait_queue[HIVE_MAX_ACTORS];
+    size_t pool_wait_count;
+    uint64_t pool_wait_last_warn_us; // For rate-limited warnings
 } s_scheduler = {0};
 
 // Run a single actor_t: context switch, check stack, handle exit/yield
@@ -180,4 +196,96 @@ void hive_scheduler_yield(void) {
 
 bool hive_scheduler_should_stop(void) {
     return s_scheduler.shutdown_requested;
+}
+
+// =============================================================================
+// Pool Wait Queue Implementation
+// =============================================================================
+
+void hive_scheduler_pool_wait(void) {
+    actor_t *current = hive_actor_current();
+    if (!current) {
+        HIVE_LOG_ERROR("pool_wait called outside actor context");
+        return;
+    }
+
+    // Rate-limited warning
+    uint64_t now = hive_hal_get_time_us();
+    if (now - s_scheduler.pool_wait_last_warn_us >=
+        POOL_WAIT_WARN_INTERVAL_US) {
+        HIVE_LOG_WARN("Actor %u (%s) blocking on pool exhaustion", current->id,
+                      current->name ? current->name : "unnamed");
+        s_scheduler.pool_wait_last_warn_us = now;
+    }
+
+    // Find empty slot in wait queue (FIFO within priority)
+    for (size_t i = 0; i < HIVE_MAX_ACTORS; i++) {
+        if (!s_scheduler.pool_wait_queue[i].used) {
+            s_scheduler.pool_wait_queue[i].actor = current->id;
+            s_scheduler.pool_wait_queue[i].priority = current->priority;
+            s_scheduler.pool_wait_queue[i].used = true;
+            s_scheduler.pool_wait_count++;
+
+            HIVE_LOG_TRACE("Actor %u added to pool wait queue (count=%zu)",
+                           current->id, s_scheduler.pool_wait_count);
+
+            // Mark as waiting and yield
+            current->state = ACTOR_STATE_WAITING;
+            hive_scheduler_yield();
+            return;
+        }
+    }
+
+    // This should never happen (queue bounded by HIVE_MAX_ACTORS)
+    HIVE_LOG_ERROR("Pool wait queue full - this should never happen");
+}
+
+void hive_scheduler_pool_wake_one(void) {
+    if (s_scheduler.pool_wait_count == 0) {
+        return;
+    }
+
+    // Find highest priority waiter (FIFO within same priority)
+    size_t best_idx = SIZE_MAX;
+    hive_priority_level_t best_prio = HIVE_PRIORITY_COUNT;
+
+    for (size_t i = 0; i < HIVE_MAX_ACTORS; i++) {
+        if (s_scheduler.pool_wait_queue[i].used) {
+            hive_priority_level_t prio =
+                s_scheduler.pool_wait_queue[i].priority;
+            if (prio < best_prio) {
+                best_prio = prio;
+                best_idx = i;
+            }
+        }
+    }
+
+    if (best_idx == SIZE_MAX) {
+        return; // No waiters found (shouldn't happen if count > 0)
+    }
+
+    // Wake the waiter
+    actor_id_t actor_id = s_scheduler.pool_wait_queue[best_idx].actor;
+    s_scheduler.pool_wait_queue[best_idx].used = false;
+    s_scheduler.pool_wait_count--;
+
+    actor_t *a = hive_actor_get(actor_id);
+    if (a && a->state == ACTOR_STATE_WAITING) {
+        HIVE_LOG_TRACE("Waking actor %u from pool wait queue (count=%zu)",
+                       actor_id, s_scheduler.pool_wait_count);
+        a->state = ACTOR_STATE_READY;
+    }
+}
+
+void hive_scheduler_pool_wait_remove(actor_id_t id) {
+    for (size_t i = 0; i < HIVE_MAX_ACTORS; i++) {
+        if (s_scheduler.pool_wait_queue[i].used &&
+            s_scheduler.pool_wait_queue[i].actor == id) {
+            s_scheduler.pool_wait_queue[i].used = false;
+            s_scheduler.pool_wait_count--;
+            HIVE_LOG_TRACE("Removed actor %u from pool wait queue (count=%zu)",
+                           id, s_scheduler.pool_wait_count);
+            return;
+        }
+    }
 }

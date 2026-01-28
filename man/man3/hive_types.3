@@ -215,6 +215,7 @@ typedef struct {
     const char *name;         /* for debugging, may be NULL */
     bool        malloc_stack; /* false = arena (default), true = malloc */
     bool        auto_register;/* auto-register name in registry */
+    bool        pool_block;   /* block on pool exhaustion (default: false) */
 } hive_actor_config_t;
 
 #define HIVE_ACTOR_CONFIG_DEFAULT { \\
@@ -222,7 +223,8 @@ typedef struct {
     .priority = HIVE_PRIORITY_NORMAL, \\
     .name = NULL, \\
     .malloc_stack = false, \\
-    .auto_register = false \\
+    .auto_register = false, \\
+    .pool_block = false \\
 }
 .fi
 .PP
@@ -232,6 +234,13 @@ is true and
 .I name
 is set, the actor is automatically registered in the name registry at spawn.
 Spawn fails with HIVE_ERR_EXISTS if the name is already taken.
+.PP
+If
+.I pool_block
+is true, IPC and bus operations will block (yield) when message pools are
+exhausted instead of returning HIVE_ERR_NOMEM. This setting can be overridden
+at runtime using
+.BR hive_pool_set_block ().
 .SS Exit Reasons
 .TP
 .B HIVE_EXIT_NORMAL
@@ -317,6 +326,19 @@ typedef struct {
 Used by
 .BR hive_select (3)
 for unified event waiting.
+.SS Pool Block Mode
+.PP
+.nf
+typedef enum {
+    HIVE_POOL_NO_BLOCK, /* Force non-blocking (return NOMEM on exhaustion) */
+    HIVE_POOL_BLOCK,    /* Force blocking (yield until pool available) */
+    HIVE_POOL_DEFAULT   /* Restore spawn default */
+} hive_pool_block_t;
+.fi
+.PP
+Controls actor behavior when message pools are exhausted. See
+.BR hive_ipc (3)
+for details on pool exhaustion handling.
 .SH COMPILE-TIME CONFIGURATION
 All resource limits are defined in
 .I hive_static_config.h
@@ -360,6 +382,11 @@ Global pool of message data buffers.
 .TP
 .B HIVE_MAX_MESSAGE_SIZE (256)
 Maximum message size in bytes (includes 4-byte header, so 252 bytes payload).
+.TP
+.B HIVE_RESERVED_SYSTEM_ENTRIES (16)
+Pool entries reserved for system messages (TIMER and EXIT). User messages
+cannot use these entries, ensuring timer and exit notifications are delivered
+even under pool exhaustion. Set to 0 to disable reservation.
 .SS Link/Monitor Configuration
 .TP
 .B HIVE_LINK_ENTRY_POOL_SIZE (128)

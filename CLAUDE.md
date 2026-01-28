@@ -250,12 +250,21 @@ if (msg.class == HIVE_MSG_REQUEST) { ... }
 IPC uses global pools shared by all actors:
 - **Mailbox entry pool** - `HIVE_MAILBOX_ENTRY_POOL_SIZE` (256 default)
 - **Message data pool** - `HIVE_MESSAGE_DATA_POOL_SIZE` (256 default)
+- **Reserved system entries** - `HIVE_RESERVED_SYSTEM_ENTRIES` (16 default) reserved for TIMER and EXIT messages
 
-**When pools are exhausted**
+**Default behavior (`pool_block = false`)**:
 - `hive_ipc_notify()` and `hive_ipc_notify_ex()` return `HIVE_ERR_NOMEM` immediately
 - Send operation **does NOT block** waiting for space
 - Send operation **does NOT drop** messages automatically
 - Caller **must check** return value and handle failure (retry, backoff, or discard)
+
+**Blocking behavior (`pool_block = true`)**:
+- Enable at spawn: set `hive_actor_config_t.pool_block = true`
+- Override at runtime: `hive_pool_set_block(HIVE_POOL_BLOCK)` / `hive_pool_set_block(HIVE_POOL_NO_BLOCK)`
+- Query: `hive_pool_get_block()` returns current effective setting
+- When enabled, send operations **yield** (block) until pool space available
+- Actors are queued by priority (CRITICAL wakes first)
+- **Warning**: Can deadlock if all actors block without any freeing pool entries
 
 **Notes**
 - No per-actor mailbox limit - pools are shared globally
@@ -275,10 +284,10 @@ Bus shares the message data pool with IPC and has per-bus buffer limits:
 
 **Message Pool Exhaustion** (shared with IPC)
 - Bus uses the global `HIVE_MESSAGE_DATA_POOL_SIZE` pool (same as IPC)
-- When pool is exhausted, `hive_bus_publish()` returns `HIVE_ERR_NOMEM` immediately
-- Does NOT block waiting for space
-- Does NOT drop messages automatically in this case
-- Caller must check return value and handle failure
+- Default: `hive_bus_publish()` returns `HIVE_ERR_NOMEM` immediately
+- With `pool_block = true`: publish yields until pool space available (same as IPC)
+- Does NOT drop messages automatically when pool exhausted
+- Caller must check return value and handle failure (when pool_block = false)
 
 **Bus Ring Buffer Full** (per-bus limit)
 - Each bus has its own ring buffer sized via `max_entries` config
@@ -334,6 +343,7 @@ The runtime uses **compile-time configuration** for bounded, predictable memory 
 - `HIVE_MAX_BUSES`: Maximum concurrent buses (32)
 - `HIVE_MAILBOX_ENTRY_POOL_SIZE`: Mailbox entry pool (256)
 - `HIVE_MESSAGE_DATA_POOL_SIZE`: Message data pool (256)
+- `HIVE_RESERVED_SYSTEM_ENTRIES`: Reserved entries for TIMER/EXIT messages (16)
 - `HIVE_LINK_ENTRY_POOL_SIZE`: Link entry pool (128)
 - `HIVE_MONITOR_ENTRY_POOL_SIZE`: Monitor entry pool (128)
 - `HIVE_TIMER_ENTRY_POOL_SIZE`: Timer entry pool (64)

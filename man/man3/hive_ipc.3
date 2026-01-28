@@ -1,7 +1,7 @@
 .\" Man page for IPC functions
 .TH HIVE_IPC 3 "January 2026" "Hive 1.0" "Actor Runtime Manual"
 .SH NAME
-hive_ipc_notify, hive_ipc_notify_ex, hive_ipc_recv, hive_ipc_recv_match, hive_ipc_recv_matches, hive_ipc_request, hive_ipc_reply, hive_msg_is_timer, hive_ipc_pending, hive_ipc_count \- inter-process communication
+hive_ipc_notify, hive_ipc_notify_ex, hive_ipc_recv, hive_ipc_recv_match, hive_ipc_recv_matches, hive_ipc_request, hive_ipc_reply, hive_msg_is_timer, hive_ipc_pending, hive_ipc_count, hive_pool_set_block, hive_pool_get_block \- inter-process communication
 .SH SYNOPSIS
 .nf
 .B #include <hive_ipc.h>
@@ -20,6 +20,11 @@ hive_ipc_notify, hive_ipc_notify_ex, hive_ipc_recv, hive_ipc_recv_match, hive_ip
 .BI "bool hive_msg_is_timer(const hive_message_t *" msg ");"
 .BI "bool hive_ipc_pending(void);"
 .BI "size_t hive_ipc_count(void);"
+.PP
+.B #include <hive_runtime.h>
+.PP
+.BI "void hive_pool_set_block(hive_pool_block_t " mode ");"
+.BI "bool hive_pool_get_block(void);"
 .fi
 .SH DESCRIPTION
 These functions implement message passing between actors. Each actor has one
@@ -281,6 +286,8 @@ IPC uses global pools shared by all actors:
 .B HIVE_MESSAGE_DATA_POOL_SIZE
 (256 default) \- message payload buffers
 .PP
+.B "Default Behavior (pool_block = false):"
+.PP
 When pools are exhausted,
 .BR hive_ipc_notify ()
 and
@@ -299,6 +306,50 @@ if (s.code == HIVE_ERR_NOMEM) {
     /* Retry or handle failure */
 }
 .fi
+.PP
+.B "Blocking Behavior (pool_block = true):"
+.PP
+When
+.I pool_block
+is enabled (via spawn configuration or runtime API), send operations will
+.B yield
+(block) when pools are exhausted, waiting until pool space becomes available.
+The actor is added to a priority-ordered wait queue and woken when another
+actor frees a pool entry.
+.PP
+Enable at spawn time via
+.IR hive_actor_config_t :
+.PP
+.nf
+hive_actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+cfg.pool_block = true;
+hive_spawn(my_fn, NULL, NULL, &cfg, &id);
+.fi
+.PP
+Or override at runtime within the actor:
+.PP
+.nf
+hive_pool_set_block(HIVE_POOL_BLOCK);   /* Enable blocking */
+hive_pool_set_block(HIVE_POOL_NO_BLOCK); /* Disable blocking */
+hive_pool_set_block(HIVE_POOL_DEFAULT);  /* Restore spawn default */
+.fi
+.PP
+.BR hive_pool_get_block ()
+returns the current effective setting (true if blocking enabled).
+.PP
+.B "Warning:"
+Blocking on pool exhaustion can lead to deadlock if all actors block without
+any actor freeing pool entries. Use with care and ensure receivers process
+messages promptly.
+.PP
+.B "Reserved System Entries:"
+.br
+The runtime reserves
+.B HIVE_RESERVED_SYSTEM_ENTRIES
+(default: 16) pool entries for system messages (TIMER and EXIT). User messages
+cannot use these reserved entries, but timers and exit notifications can
+always be delivered even under pool exhaustion. This ensures critical runtime
+events are never blocked by user message pressure.
 .SS Target Death During Request
 .BR hive_ipc_request ()
 automatically detects target death by setting up a temporary monitor. If the

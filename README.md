@@ -83,6 +83,7 @@ See [spec/](spec/) for design details.
 - File I/O (POSIX on Linux, flash-backed on STM32 with optional SD card)
 - Logging (compile-time filtering, dual output: console + binary file)
 - Bus (pub-sub with retention policies)
+- Pool exhaustion handling (optional blocking with priority-ordered wakeup)
 
 ## Hive vs QP/C
 
@@ -263,11 +264,12 @@ int main(void) {
 
 ```c
 // Configure and spawn an actor
-actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
+hive_actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
 cfg.priority = HIVE_PRIORITY_NORMAL;  // 0=CRITICAL, 1=HIGH, 2=NORMAL, 3=LOW
 cfg.stack_size = 32 * 1024;           // 32KB stack
 cfg.malloc_stack = false;             // false=arena (default), true=malloc
 cfg.auto_register = false;            // true = auto-register name in registry
+cfg.pool_block = false;               // true = block on pool exhaustion
 
 int worker_id = 1;
 actor_id_t worker;
@@ -280,7 +282,7 @@ if (HIVE_FAILED(status)) {
 int data = 42;
 status = hive_ipc_notify(worker, HIVE_TAG_NONE, &data, sizeof(data));
 if (HIVE_FAILED(status)) {
-    // HIVE_ERR_NOMEM if pool exhausted
+    // HIVE_ERR_NOMEM if pool exhausted (when pool_block=false)
     // Notify does NOT block or drop - caller must handle error
 
     // Backoff and retry pattern:
@@ -288,6 +290,9 @@ if (HIVE_FAILED(status)) {
     hive_ipc_recv(&msg, 10);  // Backoff 10ms
     status = hive_ipc_notify(worker, HIVE_TAG_NONE, &data, sizeof(data));  // Retry
 }
+
+// Alternative: Use pool_block=true to yield on pool exhaustion
+// (sends always succeed eventually, but can deadlock if no one consumes)
 
 // Request/reply pattern (blocks until reply or timeout)
 hive_message_t reply;

@@ -1,6 +1,7 @@
 #include "hive_actor.h"
 #include "hive_static_config.h"
 #include "hive_internal.h"
+#include "hive_scheduler.h"
 #include "hive_log.h"
 #include <stdlib.h>
 #include <string.h>
@@ -239,6 +240,8 @@ actor_t *hive_actor_alloc(hive_actor_fn_t fn, void *args,
     a->state = ACTOR_STATE_READY;
     a->priority = cfg->priority;
     a->name = cfg->name;
+    a->pool_block_default = cfg->pool_block;
+    a->pool_block = cfg->pool_block;
     a->stack = stack;
     a->stack_size = stack_size;
     a->stack_is_malloced = is_malloced; // Track allocation method
@@ -293,6 +296,9 @@ void hive_actor_free(actor_t *a) {
 
     // Cleanup registry entries
     hive_registry_cleanup_actor(a->id);
+
+    // Remove from pool wait queue (if waiting on pool exhaustion)
+    hive_scheduler_pool_wait_remove(a->id);
 
     // Free stack
     if (a->stack) {

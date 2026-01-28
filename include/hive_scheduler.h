@@ -26,4 +26,26 @@ void hive_scheduler_yield(void);
 // Check if shutdown was requested
 bool hive_scheduler_should_stop(void);
 
+// =============================================================================
+// Pool Wait Queue (for pool exhaustion blocking)
+// =============================================================================
+// When an actor with pool_block=true encounters pool exhaustion, it is added
+// to the wait queue and yields. When pool space becomes available, the highest
+// priority waiter is woken.
+
+// Add current actor to pool wait queue and yield
+// Called when pool allocation fails and pool_block is true
+// Logs a rate-limited warning about blocking
+void hive_scheduler_pool_wait(void);
+
+// Wake highest priority waiter from pool wait queue (if any)
+// Called when a pool entry is freed
+// Waiters are woken in priority order (CRITICAL > HIGH > NORMAL > LOW)
+// FIFO within same priority level
+void hive_scheduler_pool_wake_one(void);
+
+// Remove an actor from pool wait queue (if present)
+// Called by hive_actor_kill() to clean up killed actors
+void hive_scheduler_pool_wait_remove(actor_id_t id);
+
 #endif // HIVE_SCHEDULER_H

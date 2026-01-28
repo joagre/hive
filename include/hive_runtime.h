@@ -71,6 +71,27 @@ bool hive_actor_alive(actor_id_t id);
 hive_status_t hive_actor_kill(actor_id_t target);
 
 // ============================================================================
+// Pool Exhaustion Behavior API
+// ============================================================================
+// Control whether the current actor blocks or returns HIVE_ERR_NOMEM when
+// pool resources (message data pool) are exhausted.
+//
+// Default behavior (pool_block=false): return HIVE_ERR_NOMEM immediately.
+// Blocking behavior (pool_block=true): yield until pool space available.
+//
+// Set at spawn time via hive_actor_config_t.pool_block, or override at runtime.
+
+// Override pool exhaustion behavior for current actor
+// HIVE_POOL_NO_BLOCK: Force non-blocking (return NOMEM on exhaustion)
+// HIVE_POOL_BLOCK: Force blocking (yield until pool available)
+// HIVE_POOL_DEFAULT: Restore spawn default
+void hive_pool_set_block(hive_pool_block_t mode);
+
+// Query current effective setting for current actor
+// Returns true if pool exhaustion will block, false if it returns NOMEM
+bool hive_pool_get_block(void);
+
+// ============================================================================
 // Name Registry API
 // ============================================================================
 // Actor naming. Actors can register themselves with a name, and other actors

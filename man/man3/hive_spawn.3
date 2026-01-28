@@ -79,6 +79,7 @@ typedef struct {
     const char *name;          /* for debugging, may be NULL */
     bool        malloc_stack;  /* false = arena, true = malloc */
     bool        auto_register; /* auto-register name in registry */
+    bool        pool_block;    /* block on pool exhaustion */
 } hive_actor_config_t;
 
 #define HIVE_ACTOR_CONFIG_DEFAULT { \\
@@ -86,7 +87,8 @@ typedef struct {
     .priority = HIVE_PRIORITY_NORMAL, \\
     .name = NULL, \\
     .malloc_stack = false, \\
-    .auto_register = false \\
+    .auto_register = false, \\
+    .pool_block = false \\
 }
 .fi
 .PP
@@ -96,6 +98,16 @@ is true and
 .I name
 is set, the actor is automatically registered in the name registry at spawn.
 Spawn fails with HIVE_ERR_EXISTS if the name is already taken.
+.PP
+If
+.I pool_block
+is true, IPC and bus operations will yield (block) when message pools are
+exhausted instead of returning HIVE_ERR_NOMEM. This can be overridden at
+runtime using
+.BR hive_pool_set_block ().
+See
+.BR hive_ipc (3)
+for details.
 .SS Priority Levels
 .TP
 .B HIVE_PRIORITY_CRITICAL (0)

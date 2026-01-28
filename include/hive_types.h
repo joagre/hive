@@ -98,13 +98,14 @@ typedef struct {
     const char *name;   // for debugging AND registry (if auto_register)
     bool malloc_stack;  // false = use static arena (default), true = malloc
     bool auto_register; // Register name in registry (requires name != NULL)
+    bool pool_block;    // false = return NOMEM (default), true = block on pool
 } hive_actor_config_t;
 
 // Default configuration
-#define HIVE_ACTOR_CONFIG_DEFAULT                                        \
-    {                                                                    \
-        .stack_size = 0, .priority = HIVE_PRIORITY_NORMAL, .name = NULL, \
-        .malloc_stack = false, .auto_register = false                    \
+#define HIVE_ACTOR_CONFIG_DEFAULT                                          \
+    {                                                                      \
+        .stack_size = 0, .priority = HIVE_PRIORITY_NORMAL, .name = NULL,   \
+        .malloc_stack = false, .auto_register = false, .pool_block = false \
     }
 
 // Message structure
@@ -131,6 +132,13 @@ typedef enum {
     HIVE_EXIT_CRASH_STACK, // Reserved for future MPU-based detection
     HIVE_EXIT_KILLED, // Actor was killed externally (reserved for future use)
 } hive_exit_reason_t;
+
+// Pool exhaustion blocking mode
+typedef enum {
+    HIVE_POOL_NO_BLOCK, // Force non-blocking (return NOMEM on exhaustion)
+    HIVE_POOL_BLOCK,    // Force blocking (yield until pool available)
+    HIVE_POOL_DEFAULT   // Restore spawn default
+} hive_pool_block_t;
 
 // -----------------------------------------------------------------------------
 // Select Types (for hive_select unified event API)

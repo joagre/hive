@@ -74,6 +74,8 @@ void hive_msg_pool_free(void *data) {
             (message_data_entry_t *)((char *)data -
                                      offsetof(message_data_entry_t, data));
         hive_pool_free(&g_message_pool_mgr, msg_data);
+        // Wake any actor waiting for pool space
+        hive_scheduler_pool_wake_one();
     }
 }
 
@@ -82,8 +84,10 @@ void hive_ipc_free_entry(mailbox_entry_t *entry) {
     if (!entry) {
         return;
     }
-    hive_msg_pool_free(entry->data);
+    hive_msg_pool_free(entry->data); // This wakes one waiter
     hive_pool_free(&g_mailbox_pool_mgr, entry);
+    // Wake another waiter for the mailbox entry pool
+    hive_scheduler_pool_wake_one();
 }
 
 // Check if a mailbox_t entry matches a single filter
@@ -279,17 +283,43 @@ hive_status_t hive_ipc_notify_internal(actor_id_t to, actor_id_t sender,
                           "Message exceeds HIVE_MAX_MESSAGE_SIZE");
     }
 
-    // Allocate mailbox_t entry from pool
-    mailbox_entry_t *entry = hive_pool_alloc(&g_mailbox_pool_mgr);
-    if (!entry) {
-        return HIVE_ERROR(HIVE_ERR_NOMEM, "Mailbox entry pool exhausted");
-    }
+    // Check if current actor should block on pool exhaustion
+    actor_t *current = hive_actor_current();
+    bool should_block = current && current->pool_block;
 
-    // Allocate message data from pool
-    message_data_entry_t *msg_data = hive_pool_alloc(&g_message_pool_mgr);
-    if (!msg_data) {
-        hive_pool_free(&g_mailbox_pool_mgr, entry);
-        return HIVE_ERROR(HIVE_ERR_NOMEM, "Message data pool exhausted");
+    // System messages (TIMER, EXIT) can use reserved pool entries
+    bool is_system_msg = (class == HIVE_MSG_TIMER || class == HIVE_MSG_EXIT);
+
+    mailbox_entry_t *entry = NULL;
+    message_data_entry_t *msg_data = NULL;
+
+    // Allocation loop - retries if blocking is enabled
+    while (true) {
+        // Allocate mailbox_t entry from pool (respecting reserved entries)
+        entry = hive_pool_alloc_reserved(
+            &g_mailbox_pool_mgr, HIVE_RESERVED_SYSTEM_ENTRIES, is_system_msg);
+        if (!entry) {
+            if (should_block && !is_system_msg) {
+                hive_scheduler_pool_wait();
+                continue; // Retry after waking
+            }
+            return HIVE_ERROR(HIVE_ERR_NOMEM, "Mailbox entry pool exhausted");
+        }
+
+        // Allocate message data from pool (respecting reserved entries)
+        msg_data = hive_pool_alloc_reserved(
+            &g_message_pool_mgr, HIVE_RESERVED_SYSTEM_ENTRIES, is_system_msg);
+        if (!msg_data) {
+            hive_pool_free(&g_mailbox_pool_mgr, entry);
+            if (should_block && !is_system_msg) {
+                hive_scheduler_pool_wait();
+                continue; // Retry after waking
+            }
+            return HIVE_ERROR(HIVE_ERR_NOMEM, "Message data pool exhausted");
+        }
+
+        // Both allocations succeeded
+        break;
     }
 
     // Build message: header + payload

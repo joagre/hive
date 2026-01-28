@@ -189,6 +189,17 @@ bus is destroyed, all its entries are freed.
 Bus shares the message data pool with IPC (HIVE_MESSAGE_DATA_POOL_SIZE). Heavy
 bus usage can starve IPC and vice versa. Size pools appropriately for your
 application's communication patterns.
+.PP
+When the message pool is exhausted,
+.BR hive_bus_publish ()
+returns
+.B HIVE_ERR_NOMEM
+by default. If the actor's
+.I pool_block
+setting is enabled, publish will block (yield) until pool space becomes
+available. See
+.BR hive_ipc (3)
+for details on pool blocking configuration.
 .SS Embedded Considerations
 .IP \(bu 2
 Zero heap allocation (static ring buffers and subscriber arrays)

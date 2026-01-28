@@ -186,6 +186,7 @@ hive_status_t hive_spawn(hive_actor_fn_t fn, hive_actor_init_fn_t init,
     actual_cfg.name = use_cfg->name;
     actual_cfg.malloc_stack = use_cfg->malloc_stack;
     actual_cfg.auto_register = use_cfg->auto_register;
+    actual_cfg.pool_block = use_cfg->pool_block;
     if (actual_cfg.stack_size == 0) {
         actual_cfg.stack_size = HIVE_DEFAULT_STACK_SIZE;
     }
@@ -414,4 +415,35 @@ void hive_registry_cleanup_actor(actor_id_t id) {
             s_registry_count--;
         }
     }
+}
+
+// =============================================================================
+// Pool Exhaustion Behavior API
+// =============================================================================
+
+void hive_pool_set_block(hive_pool_block_t mode) {
+    actor_t *current = hive_actor_current();
+    if (!current) {
+        return; // Not in actor context, ignore
+    }
+
+    switch (mode) {
+    case HIVE_POOL_NO_BLOCK:
+        current->pool_block = false;
+        break;
+    case HIVE_POOL_BLOCK:
+        current->pool_block = true;
+        break;
+    case HIVE_POOL_DEFAULT:
+        current->pool_block = current->pool_block_default;
+        break;
+    }
+}
+
+bool hive_pool_get_block(void) {
+    actor_t *current = hive_actor_current();
+    if (!current) {
+        return false; // Not in actor context, default to non-blocking
+    }
+    return current->pool_block;
 }
