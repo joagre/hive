@@ -456,59 +456,39 @@ Waits for battery voltage packet from nRF51.
 **Hardware**: USART6 at 1Mbaud
 - PC6: TX to NRF51
 - PC7: RX from NRF51
-- PA4: TXEN flow control (input, nRF51 drives LOW when not ready)
+- PA4: TXEN flow control (input, nRF51 signals when busy)
 
-**Implementation**: The bringup test uses DMA2 Stream 2 Channel 5 for USART6 RX
-in circular buffer mode, matching the approach used in the production HAL.
+**Implementation**: The bringup test uses DMA2 Stream 1 Channel 5 for USART6 RX
+in circular buffer mode, matching the approach used in the Bitcraze firmware.
 
-**Current Status: INVESTIGATION IN PROGRESS**
+**Syslink Activation Sequence**
 
-The test currently times out with 0 bytes received, even with DMA enabled.
-Diagnostic output shows:
-- DMA is correctly configured and enabled
-- USART receiver is enabled with DMA mode
-- NDTR register stays at 256 (no data received)
-- TXEN (PA4) stays LOW throughout the test
+The nRF51 requires explicit activation before it starts sending data to STM32:
 
-This is puzzling because:
-1. The nRF51 works correctly with cfclient (Bitcraze firmware)
-2. The USART and DMA configuration matches the official firmware
-3. The nRF51 should send battery packets at 100Hz automatically
+1. **OW_SCAN (0x20)** - Any valid syslink packet activates the `isSyslinkActive`
+   flag on the nRF51. We send OW_SCAN (one-wire scan) as a safe activation packet.
 
-**Possible causes under investigation**:
-1. Boot sequencing - nRF51 may expect specific STM32 behavior at startup
-2. The ST-Link debug connection may interfere with the UART lines
-3. The nRF51 may require initialization that the Bitcraze firmware provides
+2. **SYS_NRF_VERSION (0x30)** - Request nRF51 firmware version (optional, may
+   trigger a response packet).
 
-**Expected output (success)**
-```
-=== Phase 8: Radio Test ===
-[RADIO] Initializing syslink (USART6)... OK
-[RADIO] PA4 (TXEN) initial state: HIGH
-[RADIO] Waiting for battery packet...
-[RADIO] Battery voltage: 3.92V... OK
-```
+3. **PM_BATTERY_AUTOUPDATE (0x14)** - Enable automatic battery status updates.
+   This starts the 100Hz battery packets from nRF51 to STM32.
 
-**Expected output (current - timeout)**
+Without this activation sequence, the nRF51 will not send any data even though
+the USART and DMA are correctly configured.
+
+**Expected output**
 ```
 === Phase 8: Radio Test ===
 [RADIO] Initializing syslink (USART6)... OK
 [RADIO] PA4 (TXEN) initial state: LOW
-[RADIO] Sending wakeup packet to nRF51...
+[RADIO] Activating syslink...
+[RADIO]   Sending OW_SCAN (0x20)...
+[RADIO]   Sending SYS_NRF_VERSION (0x30)...
+[RADIO]   Sending PM_BATTERY_AUTOUPDATE (0x14)...
 [RADIO] Waiting for battery packet...
-[RADIO] 1s: 0 bytes, 0 packets
-[RADIO] 2s: 0 bytes, 0 packets
-...
-[RADIO] Timeout waiting for battery packet... FAIL
-[RADIO] Diagnostics: 0 bytes, 0 start1, 0 packets, 0 ckerr
-[RADIO] PA4 (TXEN) final state: LOW
-[RADIO] DMA CR=0x0A000501 NDTR=256 write_pos=0
-[RADIO] USART SR=0x00C0 CR1=0x200C CR3=0x0040
+[RADIO] Battery voltage: 3.67V... OK
 ```
-
-**Note**: A timeout here does NOT indicate hardware failure. The nRF51 is
-functioning (it controls power and LEDs, and works with cfclient). The root
-cause is still under investigation.
 
 ### Phase 9: Flash Storage
 
@@ -686,7 +666,7 @@ test runs (SWO output stops when SPI3 is initialized).
 | 5 | EEPROM (I2C1 write/verify) | PASS |
 | 6 | Deck Detection (Flow deck v2) | PASS |
 | 7 | Motors (TIM2/TIM4 PWM, all 4) | PASS |
-| 8 | Radio (USART6 syslink) | INVESTIGATING |
+| 8 | Radio (USART6 syslink, 3.67V) | PASS |
 | 9 | Flash Storage (273 KB/sec) | PASS |
 | 10 | SD Card (SPI3) | BLIND (SWO conflict) |
 
