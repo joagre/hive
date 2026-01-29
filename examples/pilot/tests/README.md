@@ -11,6 +11,7 @@ These tests are organized by what they validate:
 | `sensors_motors` | Pilot HAL | HAL API validation (sensors, motors, calibration) |
 | `flash` | Hive File API | Tests flash-backed `/log` via `hive_file_*()` |
 | `sd` | Hive File API | Tests SD-backed `/sd` via `hive_file_*()` |
+| `radio` | Pilot HAL + Hive | DMA-based syslink radio communication test |
 | `main` | Combined | Runs all applicable tests (Webots dummy pilot) |
 
 **Key distinction:**
@@ -118,6 +119,93 @@ make flash-crazyflie TEST=sd
 | LED on solid | All tests passed! |
 | Slow blink | Test failed (SD available but I/O error) |
 
+### radio
+
+Tests DMA-based syslink radio communication with Crazyradio PA/2.0.
+
+The Crazyflie communicates with the ground via the nRF51822 co-processor using
+the syslink protocol over USART6 at 1Mbaud. This test validates the DMA-based
+RX implementation required for reliable high-speed reception.
+
+**Requirements:**
+- Crazyradio PA or Crazyradio 2.0 USB dongle
+- Python 3 with cflib: `pip install cflib`
+
+**Build and flash:**
+```bash
+make PLATFORM=crazyflie TEST=radio
+make flash-crazyflie TEST=radio
+```
+
+**Run ground station (on laptop):**
+```bash
+python test_radio_ground.py [--uri URI] [--duration SECONDS]
+```
+
+**Test sequence (Crazyflie side):**
+1. Initialize HAL and Hive runtime
+2. Initialize DMA-based radio (`hal_radio_init()`)
+3. Wait for battery packet from nRF51 (proves DMA RX works)
+4. Wait for ground station connection (RADIO_RAW packet)
+5. Send telemetry packets at 10Hz for 30 seconds:
+   - Attitude packets (gyro, roll/pitch/yaw)
+   - Echo packets (sequence + data)
+6. Report TX/RX statistics
+
+**Test sequence (ground station):**
+1. Scan for Crazyflie (or use specified URI)
+2. Connect via Crazyradio
+3. Receive and decode telemetry packets
+4. Display real-time statistics
+
+**Packet types:**
+| Type | ID | Contents |
+|------|-----|----------|
+| Attitude | 0x01 | timestamp, gyro_xyz, roll/pitch/yaw |
+| Position | 0x02 | timestamp, altitude, velocities, thrust |
+| Echo | 0xE0 | sequence, data string |
+
+**LED feedback:**
+| Pattern | Meaning |
+|---------|---------|
+| 1 blink | Starting test |
+| 2 blinks | Radio initialized (DMA enabled) |
+| 3 blinks | Battery packet received |
+| 4 blinks | Ground station connected |
+| Fast blink | Sending/receiving packets |
+| LED on solid | Test complete (success) |
+| Slow blink | Error |
+
+**Example ground station output:**
+```
+============================================================
+  Radio Communication Test - Ground Station
+============================================================
+
+Scanning for Crazyflie...
+Found 1 Crazyflie(s):
+  [0] radio://0/80/2M/E7E7E7E7E7
+Connecting to radio://0/80/2M/E7E7E7E7E7...
+Connected!
+
+Receiving packets for 60 seconds...
+Press Ctrl+C to stop
+
+[ 30.0s] RX:   300 (att: 150 pos:   0 echo: 150) | R:+0.00 P:+0.00 Y:+1.50
+
+============================================================
+  TEST COMPLETE
+============================================================
+  Duration:     30.0 seconds
+  Total RX:     300
+  Attitude:     150
+  Position:     0
+  Echo:         150
+  Unknown:      0
+  Rate:         10.0 packets/sec
+============================================================
+```
+
 ### main (Combined Test Runner)
 
 Runs all applicable tests in sequence. Primarily intended for use as a
@@ -151,6 +239,7 @@ Runs all applicable tests in sequence. Primarily intended for use as a
 make PLATFORM=crazyflie TEST=sensors_motors
 make PLATFORM=crazyflie TEST=flash
 make PLATFORM=crazyflie TEST=sd
+make PLATFORM=crazyflie TEST=radio
 make PLATFORM=crazyflie TEST=main
 
 # Build all tests
@@ -160,6 +249,7 @@ make PLATFORM=crazyflie all-tests
 make flash-crazyflie TEST=sensors_motors
 make flash-crazyflie TEST=flash
 make flash-crazyflie TEST=sd
+make flash-crazyflie TEST=radio
 make flash-crazyflie TEST=main
 ```
 
@@ -178,16 +268,19 @@ make PLATFORM=webots TEST=sensors_motors
 Then copy `build_webots/test_main` (or `test_sensors_motors`) to a Webots
 controller directory.
 
-**Note:** `flash` and `sd` tests are Crazyflie-specific and test hardware
-that doesn't exist in simulation. The `main` test automatically skips them
-on Webots.
+**Note:** `flash`, `sd`, and `radio` tests are Crazyflie-specific. The `main`
+test automatically skips `flash` and `sd` on Webots. The `radio` test is not
+included in `main` since it requires external ground station hardware.
 
 ## Build System
 
 The Makefile automatically detects which tests need the Hive library:
 
 - `sensors_motors`: Links against pilot HAL only (`libhal.a`)
-- `flash`, `sd`, `main`: Links against Hive + pilot HAL (`libhive.a` + `libhal.a`)
+- `flash`, `sd`, `radio`, `main`: Links against Hive + pilot HAL (`libhive.a` + `libhal.a`)
+
+The `radio` test also requires `HAL_HAS_RADIO` to be defined and disables SD
+support to avoid linker conflicts.
 
 For the `main` test, individual test files are compiled as objects (with
 `-DTEST_MAIN_BUILD`) to exclude their standalone `main()` functions.
