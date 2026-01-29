@@ -40,7 +40,7 @@ X-configuration matching Bitcraze firmware:
         Rear
 ```
 
-**Motor mixing (in hal_webots.c)**
+**Motor mixing (in hal_motors.c)**
 
 Note: Pitch is negated before mixing to match Crazyflie coordinate frame.
 After this adjustment, the effective mixing is:
@@ -80,7 +80,13 @@ Build with custom level: `make SENSOR_NOISE=0`
 
 | File | Description |
 |------|-------------|
-| `hal_webots.c` | HAL implementation |
+| `hal_init.c` | init, cleanup, self_test, calibrate, arm, disarm, hal_step |
+| `hal_sensors.c` | hal_read_sensors (with noise simulation) |
+| `hal_motors.c` | hal_write_torque (with motor lag simulation) |
+| `hal_time.c` | hal_delay_ms, hal_get_time_ms |
+| `hal_led.c` | hal_led_on/off/toggle (no-op in simulation) |
+| `hal_debug.c` | hal_debug_init, hal_printf |
+| `hal_internal.h` | Shared state and configuration |
 | `hal_config.h` | Platform-specific PID gains and thrust |
 
 ## Configuration

@@ -131,7 +131,7 @@ if needed. The HAL just provides the primitive: "enable/disable motor output".
 ## Integration with Pilot
 
 This HAL links with `pilot.c` and the hive runtime. The platform API
-(`platform_crazyflie.h`) provides the same interface as the Webots HAL.
+(`platform.h`) provides the same interface as the Webots HAL.
 
 ## Hardware Overview
 
@@ -214,13 +214,13 @@ accidentally overwriting the log sector. Current firmware is ~63 KB.
                               |
                               v
 +---------------------------------------------------------------+
-|                     hal_crazyflie.c                           |
-|         (HAL Interface: hal_read_sensors, hal_write_torque)   |
+|                     HAL Interface                             |
+|   hal_init.c, hal_sensors.c, hal_motors.c, hal_syslink.c      |
 +---------------------------------------------------------------+
                               |
                               v
 +---------------------------------------------------------------+
-|                  platform_crazyflie.c                         |
+|                      platform.c                               |
 |        (Platform layer with I2C/SPI callbacks)                |
 +---------------------------------------------------------------+
                               |
@@ -249,10 +249,15 @@ accidentally overwriting the log sector. Current firmware is ~63 KB.
 
 | File | Description |
 |------|-------------|
-| `hal_crazyflie.c` | HAL interface (hal_read_sensors, hal_write_torque) |
-| `hal_radio.c` | Radio communication via syslink to nRF51822 |
+| `hal_init.c` | init, cleanup, self_test, calibrate, arm, disarm |
+| `hal_sensors.c` | hal_read_sensors (IMU, barometer, flow deck) |
+| `hal_motors.c` | hal_write_torque (mixer, PWM output) |
+| `hal_time.c` | hal_delay_ms, hal_get_time_ms |
+| `hal_led.c` | hal_led_on/off/toggle (status LED on PD2) |
+| `hal_debug.c` | hal_debug_init, hal_printf (SWO output) |
+| `hal_syslink.c` | ESB radio via syslink to nRF51822 |
 | `hal_config.h` | Platform-specific PID gains and thrust |
-| `platform_crazyflie.h/c` | Platform-specific sensor reading and motor control |
+| `platform.h/c` | Platform-specific sensor reading and motor control |
 
 ### Configuration
 
@@ -461,7 +466,7 @@ X-configuration quadcopter with brushed coreless motors:
 | M3 | rear-right | CCW | PA15 | TIM2_CH1 |
 | M4 | rear-left | CW | PB9 | TIM4_CH4 |
 
-**Motor mixing (in hal_crazyflie.c)**
+**Motor mixing (in hal_motors.c)**
 ```
 M1 = thrust - roll + pitch + yaw
 M2 = thrust + roll + pitch - yaw

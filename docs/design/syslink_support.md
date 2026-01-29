@@ -638,24 +638,25 @@ New functions in `hal/hal.h`:
 
 // Initialize syslink UART to nRF51.
 // Called by hal_init() on platforms with radio.
-int hal_radio_init(void);
+int hal_esb_init(void);
 
 // Send raw data over radio (max 31 bytes).
 // Returns 0 on success, -1 if flow control disallows TX.
-int hal_radio_send(const void *data, size_t len);
+int hal_esb_send(const void *data, size_t len);
 
 // Check if radio TX is permitted (flow control).
-bool hal_radio_tx_ready(void);
+bool hal_esb_tx_ready(void);
 
 // Poll for incoming radio data (call from main loop).
-void hal_radio_poll(void);
+void hal_esb_poll(void);
 
 // Register callback for incoming radio packets.
-typedef void (*hal_radio_rx_callback)(const void *data, size_t len);
-void hal_radio_set_rx_callback(hal_radio_rx_callback cb);
+typedef void (*hal_esb_rx_callback)(const void *data, size_t len, void *user_data);
+void hal_esb_set_rx_callback(hal_esb_rx_callback cb, void *user_data);
 
 // Get battery voltage (received via syslink PM_BATTERY).
-float hal_radio_get_battery(void);
+// Note: This is in the power interface, separate from ESB.
+float hal_power_get_battery(void);
 
 #endif // HAL_HAS_RADIO
 ```
@@ -666,13 +667,15 @@ The Crazyflie HAL implements these functions using syslink:
 
 ```
 examples/pilot/hal/crazyflie-2.1+/
-├── hal_crazyflie.c          # Existing: sensors, motors
-├── hal_radio.c              # NEW: syslink implementation
-├── platform_crazyflie.h     # Add syslink declarations
-└── Makefile                 # Add hal_radio.c, define HAL_HAS_RADIO
+├── hal_init.c               # Existing: init, cleanup, self_test, calibrate, arm, disarm
+├── hal_sensors.c            # Existing: hal_read_sensors
+├── hal_motors.c             # Existing: hal_write_torque
+├── hal_syslink.c            # Syslink implementation (ESB + power)
+├── platform.h               # Platform declarations
+└── Makefile                 # Add hal_syslink.c, define HAL_HAS_RADIO
 ```
 
-**hal_radio.c** contains the syslink state machine, UART driver, and flow
+**hal_syslink.c** contains the syslink state machine, UART driver, and flow
 control logic (see "Minimal Implementation for Hive" section above).
 
 ### Stubs for Other Platforms
@@ -680,24 +683,24 @@ control logic (see "Minimal Implementation for Hive" section above).
 Platforms without radio provide empty stubs or compile-time exclusion:
 
 ```c
-// hal/webots-crazyflie/hal_webots.c (simulation, no radio)
+// hal/webots-crazyflie/ (simulation, no radio)
 
 #ifdef HAL_HAS_RADIO
-// Not defined for this platform - radio functions excluded
+// Not defined for this platform - ESB functions excluded
 #endif
 ```
 
 Or with stubs if HAL_HAS_RADIO is defined globally:
 
 ```c
-// hal/webots-crazyflie/hal_webots.c (simulation stub)
+// Simulation stub (not used in webots-crazyflie)
 
-int hal_radio_init(void) { return 0; }
-int hal_radio_send(const void *data, size_t len) { return -1; }
-bool hal_radio_tx_ready(void) { return false; }
-void hal_radio_poll(void) { }
-void hal_radio_set_rx_callback(hal_radio_rx_callback cb) { }
-float hal_radio_get_battery(void) { return 0.0f; }
+int hal_esb_init(void) { return 0; }
+int hal_esb_send(const void *data, size_t len) { return -1; }
+bool hal_esb_tx_ready(void) { return false; }
+void hal_esb_poll(void) { }
+void hal_esb_set_rx_callback(hal_esb_rx_callback cb, void *user_data) { }
+float hal_power_get_battery(void) { return 0.0f; }
 ```
 
 ### Makefile Changes
@@ -708,8 +711,8 @@ float hal_radio_get_battery(void) { return 0.0f; }
 # Enable radio support
 CFLAGS += -DHAL_HAS_RADIO
 
-# Add radio source
-SRCS += hal_radio.c
+# Add syslink source
+SRCS += hal_syslink.c
 ```
 
 ### Usage in Actors
@@ -717,21 +720,21 @@ SRCS += hal_radio.c
 Actors use HAL functions directly, staying hardware-independent:
 
 ```c
-// telemetry_actor.c
+// comms_actor.c
 
 #include "hal/hal.h"
 
 #define PACKET_TYPE_TELEMETRY  0x01
 
-static void telemetry_actor(void *args, ...) {
+static void comms_actor(void *args, ...) {
     #ifdef HAL_HAS_RADIO
     // Send telemetry if radio available and flow control permits
-    if (hal_radio_tx_ready()) {
+    if (hal_esb_tx_ready()) {
         telemetry_packet_t pkt = {
             .type = PACKET_TYPE_TELEMETRY,
             // ... fill sensor data
         };
-        hal_radio_send(&pkt, sizeof(pkt));
+        hal_esb_send(&pkt, sizeof(pkt));
     }
     #endif
 }
@@ -745,7 +748,8 @@ After adding syslink, the HAL has three categories:
 |----------|-----------|---------|
 | **Lifecycle** | `hal_init`, `hal_cleanup`, `hal_calibrate`, `hal_arm`, `hal_disarm` | pilot.c |
 | **Sensors/Motors** | `hal_read_sensors`, `hal_write_torque` | sensor_actor, motor_actor |
-| **Radio** (new) | `hal_radio_init`, `hal_radio_send`, `hal_radio_tx_ready`, `hal_radio_poll`, `hal_radio_set_rx_callback`, `hal_radio_get_battery` | telemetry_actor, hive_log |
+| **ESB Radio** | `hal_esb_init`, `hal_esb_send`, `hal_esb_tx_ready`, `hal_esb_poll`, `hal_esb_set_rx_callback` | comms_actor |
+| **Power** | `hal_power_get_battery` | comms_actor |
 
 ---
 
