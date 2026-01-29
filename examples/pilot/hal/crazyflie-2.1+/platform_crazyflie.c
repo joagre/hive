@@ -23,8 +23,16 @@
 // Configuration
 // ----------------------------------------------------------------------------
 
-#define CALIBRATION_SAMPLES 500     // Gyro calibration samples
+// Calibration parameters (matching Bitcraze firmware)
+#define CALIBRATION_SAMPLES 512        // Gyro calibration samples
+#define GYRO_VARIANCE_THRESHOLD 100.0f // Max variance for stable gyro
+#define GYRO_CALIBRATION_TIMEOUT_MS \
+    1000                            // Min time between calibration attempts
 #define BARO_CALIBRATION_SAMPLES 50 // Barometer calibration samples
+#define ACCEL_SCALE_SAMPLES 200     // Accelerometer scale calibration samples
+
+// Startup delay (Bitcraze waits 1000ms for sensor power stabilization)
+#define SENSOR_STARTUP_DELAY_MS 1000
 
 // Conversion constants
 #define GRAVITY 9.80665f
@@ -36,11 +44,13 @@
 #define LED_PIN (1U << 2) // PD2 blue LED on Crazyflie
 #define LED_PORT GPIOD
 
-// I2C addresses
+// I2C addresses (I2C3 - on-board sensors)
 #define BMI08_ACCEL_I2C_ADDR 0x18 // BMI088 accelerometer
-#define BMI08_GYRO_I2C_ADDR 0x68  // BMI088 gyroscope
+#define BMI08_GYRO_I2C_ADDR 0x69  // BMI088 gyroscope (Bitcraze uses 0x69)
 #define BMP3_I2C_ADDR 0x77        // BMP388 barometer
-#define VL53L1X_I2C_ADDR 0x29     // VL53L1x ToF sensor
+
+// I2C addresses (I2C1 - expansion connector / Flow deck)
+#define VL53L1X_I2C_ADDR 0x29 // VL53L1x ToF sensor
 
 // I2C pins (I2C3) - used by BMI088, BMP388, VL53L1x
 #define I2C3_SCL_PIN 8 // PA8
@@ -65,6 +75,9 @@ static bool s_flow_deck_present = false;
 
 // Gyro bias (rad/s) - determined during calibration
 static float s_gyro_bias[3] = {0.0f, 0.0f, 0.0f};
+
+// Accelerometer scale factor - determined during calibration (1.0 = no correction)
+static float s_accel_scale = 1.0f;
 
 // Barometer reference pressure (Pa)
 static float s_ref_pressure = 0.0f;
@@ -407,6 +420,248 @@ static bool i2c3_read(uint8_t addr, uint8_t *data, uint16_t len) {
 }
 
 // ----------------------------------------------------------------------------
+// I2C1 Low-Level Interface (for VL53L1x on Flow deck)
+// ----------------------------------------------------------------------------
+
+// I2C1 pins: PB6 (SCL), PB7 (SDA)
+#define I2C1_SCL_PORT GPIOB
+#define I2C1_SCL_PIN_NUM 6
+#define I2C1_SDA_PORT GPIOB
+#define I2C1_SDA_PIN_NUM 7
+
+static bool s_i2c1_initialized = false;
+
+static bool i2c1_wait(volatile uint32_t *reg, uint32_t mask,
+                      uint32_t expected) {
+    uint32_t start = platform_get_time_us();
+    while ((*reg & mask) != expected) {
+        if ((platform_get_time_us() - start) > I2C_TIMEOUT_US) {
+            return false;
+        }
+    }
+    return true;
+}
+
+static bool i2c1_check_error(void) {
+    uint32_t sr1 = I2C1->SR1;
+    if (sr1 & (I2C_SR1_BERR | I2C_SR1_ARLO | I2C_SR1_AF | I2C_SR1_OVR)) {
+        I2C1->SR1 =
+            sr1 & ~(I2C_SR1_BERR | I2C_SR1_ARLO | I2C_SR1_AF | I2C_SR1_OVR);
+        return true;
+    }
+    return false;
+}
+
+static void i2c1_bus_recovery(void) {
+    I2C1->CR1 &= ~I2C_CR1_PE;
+
+    I2C1_SCL_PORT->MODER &= ~(3U << (I2C1_SCL_PIN_NUM * 2));
+    I2C1_SCL_PORT->MODER |= (1U << (I2C1_SCL_PIN_NUM * 2));
+    I2C1_SCL_PORT->OTYPER |= (1U << I2C1_SCL_PIN_NUM);
+
+    I2C1_SDA_PORT->MODER &= ~(3U << (I2C1_SDA_PIN_NUM * 2));
+
+    for (int i = 0; i < 9; i++) {
+        if (I2C1_SDA_PORT->IDR & (1U << I2C1_SDA_PIN_NUM)) {
+            break;
+        }
+        I2C1_SCL_PORT->ODR &= ~(1U << I2C1_SCL_PIN_NUM);
+        for (volatile int d = 0; d < 100; d++)
+            __NOP();
+        I2C1_SCL_PORT->ODR |= (1U << I2C1_SCL_PIN_NUM);
+        for (volatile int d = 0; d < 100; d++)
+            __NOP();
+    }
+
+    I2C1_SDA_PORT->MODER |= (1U << (I2C1_SDA_PIN_NUM * 2));
+    I2C1_SDA_PORT->OTYPER |= (1U << I2C1_SDA_PIN_NUM);
+    I2C1_SDA_PORT->ODR &= ~(1U << I2C1_SDA_PIN_NUM);
+    for (volatile int d = 0; d < 100; d++)
+        __NOP();
+    I2C1_SDA_PORT->ODR |= (1U << I2C1_SDA_PIN_NUM);
+    for (volatile int d = 0; d < 100; d++)
+        __NOP();
+
+    I2C1_SCL_PORT->MODER &= ~(3U << (I2C1_SCL_PIN_NUM * 2));
+    I2C1_SCL_PORT->MODER |= (2U << (I2C1_SCL_PIN_NUM * 2));
+    I2C1_SDA_PORT->MODER &= ~(3U << (I2C1_SDA_PIN_NUM * 2));
+    I2C1_SDA_PORT->MODER |= (2U << (I2C1_SDA_PIN_NUM * 2));
+
+    I2C1->CR1 |= I2C_CR1_PE;
+}
+
+static void i2c1_reset(void) {
+    I2C1->CR1 |= I2C_CR1_SWRST;
+    I2C1->CR1 &= ~I2C_CR1_SWRST;
+
+    I2C1->CR2 = 42;
+    I2C1->CCR = 35;
+    I2C1->TRISE = 13;
+    I2C1->CR1 = I2C_CR1_PE;
+}
+
+static void i2c1_init(void) {
+    if (s_i2c1_initialized)
+        return;
+
+    // Enable I2C1 clock
+    RCC->APB1ENR |= RCC_APB1ENR_I2C1EN;
+
+    // Configure I2C1 GPIO (PB6=SCL, PB7=SDA)
+    GPIOB->MODER &= ~(GPIO_MODER_MODER6 | GPIO_MODER_MODER7);
+    GPIOB->MODER |= GPIO_MODER_MODER6_1 | GPIO_MODER_MODER7_1; // AF mode
+    GPIOB->AFR[0] |= (4 << (6 * 4)) | (4 << (7 * 4));          // AF4 = I2C1
+    GPIOB->OTYPER |= GPIO_OTYPER_OT6 | GPIO_OTYPER_OT7;        // Open-drain
+    GPIOB->PUPDR |= GPIO_PUPDR_PUPDR6_0 | GPIO_PUPDR_PUPDR7_0; // Pull-up
+
+    i2c1_bus_recovery();
+
+    // Configure I2C1: 400 kHz (APB1 = 42 MHz)
+    I2C1->CR2 = 42;
+    I2C1->CCR = 35;
+    I2C1->TRISE = 13;
+    I2C1->CR1 = I2C_CR1_PE;
+
+    s_i2c1_initialized = true;
+}
+
+static bool i2c1_write(uint8_t addr, uint8_t *data, uint16_t len) {
+    i2c1_check_error();
+
+    if (!i2c1_wait(&I2C1->SR2, I2C_SR2_BUSY, 0)) {
+        i2c1_bus_recovery();
+        i2c1_reset();
+        return false;
+    }
+
+    I2C1->CR1 |= I2C_CR1_START;
+    if (!i2c1_wait(&I2C1->SR1, I2C_SR1_SB, I2C_SR1_SB)) {
+        I2C1->CR1 |= I2C_CR1_STOP;
+        return false;
+    }
+
+    I2C1->DR = addr << 1;
+    if (!i2c1_wait(&I2C1->SR1, I2C_SR1_ADDR, I2C_SR1_ADDR)) {
+        if (i2c1_check_error()) {
+            I2C1->CR1 |= I2C_CR1_STOP;
+            return false;
+        }
+        I2C1->CR1 |= I2C_CR1_STOP;
+        return false;
+    }
+    (void)I2C1->SR2;
+
+    for (uint16_t i = 0; i < len; i++) {
+        if (!i2c1_wait(&I2C1->SR1, I2C_SR1_TXE, I2C_SR1_TXE)) {
+            I2C1->CR1 |= I2C_CR1_STOP;
+            return false;
+        }
+        if (i2c1_check_error()) {
+            I2C1->CR1 |= I2C_CR1_STOP;
+            return false;
+        }
+        I2C1->DR = data[i];
+    }
+
+    if (!i2c1_wait(&I2C1->SR1, I2C_SR1_BTF, I2C_SR1_BTF)) {
+        I2C1->CR1 |= I2C_CR1_STOP;
+        return false;
+    }
+
+    I2C1->CR1 |= I2C_CR1_STOP;
+    return true;
+}
+
+static bool i2c1_read(uint8_t addr, uint8_t *data, uint16_t len) {
+    if (len == 0)
+        return false;
+
+    i2c1_check_error();
+
+    if (!i2c1_wait(&I2C1->SR2, I2C_SR2_BUSY, 0)) {
+        i2c1_bus_recovery();
+        i2c1_reset();
+        return false;
+    }
+
+    I2C1->CR1 |= I2C_CR1_ACK;
+
+    I2C1->CR1 |= I2C_CR1_START;
+    if (!i2c1_wait(&I2C1->SR1, I2C_SR1_SB, I2C_SR1_SB)) {
+        I2C1->CR1 |= I2C_CR1_STOP;
+        return false;
+    }
+
+    I2C1->DR = (addr << 1) | 1;
+    if (!i2c1_wait(&I2C1->SR1, I2C_SR1_ADDR, I2C_SR1_ADDR)) {
+        if (i2c1_check_error()) {
+            I2C1->CR1 |= I2C_CR1_STOP;
+            return false;
+        }
+        I2C1->CR1 |= I2C_CR1_STOP;
+        return false;
+    }
+
+    if (len == 1) {
+        I2C1->CR1 &= ~I2C_CR1_ACK;
+        (void)I2C1->SR2;
+        I2C1->CR1 |= I2C_CR1_STOP;
+
+        if (!i2c1_wait(&I2C1->SR1, I2C_SR1_RXNE, I2C_SR1_RXNE)) {
+            return false;
+        }
+        data[0] = I2C1->DR;
+        return true;
+    }
+
+    if (len == 2) {
+        I2C1->CR1 |= I2C_CR1_POS;
+        (void)I2C1->SR2;
+        I2C1->CR1 &= ~I2C_CR1_ACK;
+
+        if (!i2c1_wait(&I2C1->SR1, I2C_SR1_BTF, I2C_SR1_BTF)) {
+            I2C1->CR1 &= ~I2C_CR1_POS;
+            I2C1->CR1 |= I2C_CR1_STOP;
+            return false;
+        }
+
+        I2C1->CR1 |= I2C_CR1_STOP;
+        data[0] = I2C1->DR;
+        data[1] = I2C1->DR;
+
+        I2C1->CR1 &= ~I2C_CR1_POS;
+        return true;
+    }
+
+    (void)I2C1->SR2;
+
+    for (uint16_t i = 0; i < len; i++) {
+        if (i == len - 1) {
+            if (!i2c1_wait(&I2C1->SR1, I2C_SR1_RXNE, I2C_SR1_RXNE)) {
+                return false;
+            }
+            data[i] = I2C1->DR;
+        } else if (i == len - 2) {
+            if (!i2c1_wait(&I2C1->SR1, I2C_SR1_BTF, I2C_SR1_BTF)) {
+                I2C1->CR1 |= I2C_CR1_STOP;
+                return false;
+            }
+            I2C1->CR1 &= ~I2C_CR1_ACK;
+            I2C1->CR1 |= I2C_CR1_STOP;
+            data[i] = I2C1->DR;
+        } else {
+            if (!i2c1_wait(&I2C1->SR1, I2C_SR1_RXNE, I2C_SR1_RXNE)) {
+                I2C1->CR1 |= I2C_CR1_STOP;
+                return false;
+            }
+            data[i] = I2C1->DR;
+        }
+    }
+
+    return true;
+}
+
+// ----------------------------------------------------------------------------
 // SPI1 Low-Level Interface (for PMW3901)
 // ----------------------------------------------------------------------------
 
@@ -514,7 +769,7 @@ static void bmp3_delay_us(uint32_t period, void *intf_ptr) {
 }
 
 // ----------------------------------------------------------------------------
-// ST VL53L1x Callbacks
+// ST VL53L1x Callbacks (uses I2C1 - expansion connector)
 // ----------------------------------------------------------------------------
 
 static int vl53l1x_i2c_write(uint8_t dev_addr, uint16_t reg_addr,
@@ -524,7 +779,7 @@ static int vl53l1x_i2c_write(uint8_t dev_addr, uint16_t reg_addr,
     buf[1] = (uint8_t)(reg_addr & 0xFF);
     for (uint16_t i = 0; i < len; i++)
         buf[i + 2] = data[i];
-    if (!i2c3_write(dev_addr, buf, len + 2))
+    if (!i2c1_write(dev_addr, buf, len + 2))
         return -1;
     return 0;
 }
@@ -532,9 +787,9 @@ static int vl53l1x_i2c_write(uint8_t dev_addr, uint16_t reg_addr,
 static int vl53l1x_i2c_read(uint8_t dev_addr, uint16_t reg_addr, uint8_t *data,
                             uint16_t len) {
     uint8_t reg_buf[2] = {(uint8_t)(reg_addr >> 8), (uint8_t)(reg_addr & 0xFF)};
-    if (!i2c3_write(dev_addr, reg_buf, 2))
+    if (!i2c1_write(dev_addr, reg_buf, 2))
         return -1;
-    if (!i2c3_read(dev_addr, data, len))
+    if (!i2c1_read(dev_addr, data, len))
         return -1;
     return 0;
 }
@@ -642,10 +897,11 @@ static bool init_bmi08x(void) {
     if (rslt != BMI08_OK)
         return false;
 
-    // Configure accelerometer: +/-6g, 1600Hz ODR, normal mode
+    // Configure accelerometer (matching Bitcraze):
+    // +/-24g range, 1600Hz ODR, OSR4 (4x oversampling) bandwidth
     s_bmi08_dev.accel_cfg.odr = BMI08_ACCEL_ODR_1600_HZ;
-    s_bmi08_dev.accel_cfg.range = BMI088_ACCEL_RANGE_6G;
-    s_bmi08_dev.accel_cfg.bw = BMI08_ACCEL_BW_NORMAL;
+    s_bmi08_dev.accel_cfg.range = BMI088_ACCEL_RANGE_24G;
+    s_bmi08_dev.accel_cfg.bw = BMI08_ACCEL_BW_OSR4;
     s_bmi08_dev.accel_cfg.power = BMI08_ACCEL_PM_ACTIVE;
 
     rslt = bmi08a_set_power_mode(&s_bmi08_dev);
@@ -658,10 +914,11 @@ static bool init_bmi08x(void) {
     if (rslt != BMI08_OK)
         return false;
 
-    // Configure gyroscope: +/-2000 dps, 2000Hz ODR, normal mode
-    s_bmi08_dev.gyro_cfg.odr = BMI08_GYRO_BW_230_ODR_2000_HZ;
+    // Configure gyroscope (matching Bitcraze):
+    // +/-2000 dps, 1000Hz ODR, 116Hz bandwidth
+    s_bmi08_dev.gyro_cfg.odr = BMI08_GYRO_BW_116_ODR_1000_HZ;
     s_bmi08_dev.gyro_cfg.range = BMI08_GYRO_RANGE_2000_DPS;
-    s_bmi08_dev.gyro_cfg.bw = BMI08_GYRO_BW_230_ODR_2000_HZ;
+    s_bmi08_dev.gyro_cfg.bw = BMI08_GYRO_BW_116_ODR_1000_HZ;
     s_bmi08_dev.gyro_cfg.power = BMI08_GYRO_PM_NORMAL;
 
     rslt = bmi08g_set_power_mode(&s_bmi08_dev);
@@ -692,12 +949,26 @@ static bool init_bmp3(void) {
     if (rslt != BMP3_OK)
         return false;
 
-    // Configure settings: pressure + temperature enabled, 50Hz ODR, 4x oversampling
+    // Soft reset before configuration (matching Bitcraze)
+    rslt = bmp3_soft_reset(&s_bmp3_dev);
+    if (rslt != BMP3_OK)
+        return false;
+
+    platform_delay_ms(5);
+
+    // Re-initialize after soft reset
+    rslt = bmp3_init(&s_bmp3_dev);
+    if (rslt != BMP3_OK)
+        return false;
+
+    // Configure settings (matching Bitcraze):
+    // pressure + temperature enabled, 50Hz ODR
+    // 8x pressure oversampling, no temperature oversampling
     struct bmp3_settings settings = {0};
     settings.press_en = BMP3_ENABLE;
     settings.temp_en = BMP3_ENABLE;
-    settings.odr_filter.press_os = BMP3_OVERSAMPLING_4X;
-    settings.odr_filter.temp_os = BMP3_OVERSAMPLING_4X;
+    settings.odr_filter.press_os = BMP3_OVERSAMPLING_8X;
+    settings.odr_filter.temp_os = BMP3_NO_OVERSAMPLING;
     settings.odr_filter.odr = BMP3_ODR_50_HZ;
     settings.odr_filter.iir_filter = BMP3_IIR_FILTER_COEFF_3;
 
@@ -715,11 +986,17 @@ static bool init_bmp3(void) {
     if (rslt != BMP3_OK)
         return false;
 
+    // Delay before first read (matching Bitcraze)
+    platform_delay_ms(20);
+
     return true;
 }
 
 static bool init_vl53l1x(void) {
     int8_t rslt;
+
+    // Initialize I2C1 for VL53L1x (on expansion connector)
+    i2c1_init();
 
     // Initialize with platform callbacks
     rslt = vl53l1x_init(&s_vl53l1x_dev, &s_vl53l1x_platform);
@@ -742,17 +1019,18 @@ static bool init_vl53l1x(void) {
     if (rslt != 0)
         return false;
 
-    // Configure: short distance mode, 50ms timing budget
+    // Configure: short distance mode (good for indoor), 20ms timing budget
+    // (matching Bitcraze's faster update rate)
     rslt =
         vl53l1x_set_distance_mode(&s_vl53l1x_dev, VL53L1X_DISTANCE_MODE_SHORT);
     if (rslt != 0)
         return false;
 
-    rslt = vl53l1x_set_timing_budget(&s_vl53l1x_dev, VL53L1X_TIMING_50MS);
+    rslt = vl53l1x_set_timing_budget(&s_vl53l1x_dev, VL53L1X_TIMING_20MS);
     if (rslt != 0)
         return false;
 
-    rslt = vl53l1x_set_inter_measurement(&s_vl53l1x_dev, 55);
+    rslt = vl53l1x_set_inter_measurement(&s_vl53l1x_dev, 25);
     if (rslt != 0)
         return false;
 
@@ -784,7 +1062,10 @@ int platform_init(void) {
     // 1 blink = starting
     init_blink(1, 200, 200);
 
-    // Initialize I2C3 for BMI08x, BMP3, and VL53L1x
+    // Wait for sensor power stabilization (matching Bitcraze)
+    platform_delay_ms(SENSOR_STARTUP_DELAY_MS);
+
+    // Initialize I2C3 for BMI08x and BMP3 (on-board sensors)
     i2c3_init();
 
     // Initialize SPI1 for PMW3901 (Flow deck only)
@@ -865,13 +1146,14 @@ int platform_calibrate(void) {
     float accel_sum[3] = {0.0f, 0.0f, 0.0f};
     int accel_samples = 50;
 
+    // Accel scale: 24g range (matching Bitcraze)
+    float accel_scale = (24.0f * GRAVITY) / 32768.0f;
+
     for (int i = 0; i < accel_samples; i++) {
         if (bmi08a_get_data(&accel_data, &s_bmi08_dev) == BMI08_OK) {
-            // Convert to m/s^2 (6g range, 16-bit signed)
-            float scale = (6.0f * GRAVITY) / 32768.0f;
-            accel_sum[0] += accel_data.x * scale;
-            accel_sum[1] += accel_data.y * scale;
-            accel_sum[2] += accel_data.z * scale;
+            accel_sum[0] += accel_data.x * accel_scale;
+            accel_sum[1] += accel_data.y * accel_scale;
+            accel_sum[2] += accel_data.z * accel_scale;
         }
         platform_delay_ms(2);
     }
@@ -891,27 +1173,92 @@ int platform_calibrate(void) {
         init_blink(10, 50, 50); // Level warning
     }
 
-    // Gyro bias calibration
-    float gyro_sum[3] = {0.0f, 0.0f, 0.0f};
-    struct bmi08_sensor_data gyro_data;
+    // Gyro bias calibration with variance check (matching Bitcraze)
+    // Retry until variance is low enough (drone is stationary)
+    float gyro_scale = (2000.0f * M_PI / 180.0f) / 32768.0f;
+    bool gyro_bias_found = false;
+    int max_attempts = 10;
 
-    for (int i = 0; i < CALIBRATION_SAMPLES; i++) {
-        if (bmi08g_get_data(&gyro_data, &s_bmi08_dev) == BMI08_OK) {
-            // Convert to rad/s (2000 dps range, 16-bit signed)
-            float scale = (2000.0f * M_PI / 180.0f) / 32768.0f;
-            gyro_sum[0] += gyro_data.x * scale;
-            gyro_sum[1] += gyro_data.y * scale;
-            gyro_sum[2] += gyro_data.z * scale;
+    for (int attempt = 0; attempt < max_attempts && !gyro_bias_found;
+         attempt++) {
+        float gyro_sum[3] = {0.0f, 0.0f, 0.0f};
+        float gyro_sum_sq[3] = {0.0f, 0.0f, 0.0f};
+        struct bmi08_sensor_data gyro_data;
+
+        for (int i = 0; i < CALIBRATION_SAMPLES; i++) {
+            if (bmi08g_get_data(&gyro_data, &s_bmi08_dev) == BMI08_OK) {
+                float gx = gyro_data.x * gyro_scale;
+                float gy = gyro_data.y * gyro_scale;
+                float gz = gyro_data.z * gyro_scale;
+                gyro_sum[0] += gx;
+                gyro_sum[1] += gy;
+                gyro_sum[2] += gz;
+                gyro_sum_sq[0] += gx * gx;
+                gyro_sum_sq[1] += gy * gy;
+                gyro_sum_sq[2] += gz * gz;
+            }
+            if (i % 50 == 0) {
+                platform_led_toggle();
+            }
+            platform_delay_ms(1); // 1ms for ~1kHz sample rate
         }
-        if (i % 50 == 0) {
+
+        // Calculate mean and variance
+        float mean[3], variance[3];
+        for (int j = 0; j < 3; j++) {
+            mean[j] = gyro_sum[j] / CALIBRATION_SAMPLES;
+            variance[j] =
+                (gyro_sum_sq[j] / CALIBRATION_SAMPLES) - (mean[j] * mean[j]);
+            // Convert variance to match Bitcraze units (raw LSB^2)
+            variance[j] = variance[j] / (gyro_scale * gyro_scale);
+        }
+
+        // Check if variance is low enough (drone is stationary)
+        if (variance[0] < GYRO_VARIANCE_THRESHOLD &&
+            variance[1] < GYRO_VARIANCE_THRESHOLD &&
+            variance[2] < GYRO_VARIANCE_THRESHOLD) {
+            s_gyro_bias[0] = mean[0];
+            s_gyro_bias[1] = mean[1];
+            s_gyro_bias[2] = mean[2];
+            gyro_bias_found = true;
+        } else {
+            // Wait before retry
+            platform_delay_ms(GYRO_CALIBRATION_TIMEOUT_MS);
+        }
+    }
+
+    if (!gyro_bias_found) {
+        // Use last values even if variance was high
+        init_blink(5, 100, 100); // Warning: gyro not stable
+    }
+
+    // Accelerometer scale calibration (matching Bitcraze)
+    // Measures magnitude and computes scale factor
+    float accel_magnitude_sum = 0.0f;
+    int scale_samples = 0;
+
+    for (int i = 0; i < ACCEL_SCALE_SAMPLES; i++) {
+        if (bmi08a_get_data(&accel_data, &s_bmi08_dev) == BMI08_OK) {
+            float ax = accel_data.x * accel_scale;
+            float ay = accel_data.y * accel_scale;
+            float az = accel_data.z * accel_scale;
+            float magnitude = sqrtf(ax * ax + ay * ay + az * az);
+            accel_magnitude_sum += magnitude;
+            scale_samples++;
+        }
+        if (i % 20 == 0) {
             platform_led_toggle();
         }
         platform_delay_ms(2);
     }
 
-    s_gyro_bias[0] = gyro_sum[0] / CALIBRATION_SAMPLES;
-    s_gyro_bias[1] = gyro_sum[1] / CALIBRATION_SAMPLES;
-    s_gyro_bias[2] = gyro_sum[2] / CALIBRATION_SAMPLES;
+    if (scale_samples > 0) {
+        float avg_magnitude = accel_magnitude_sum / scale_samples;
+        // Scale factor: expected is GRAVITY, actual is avg_magnitude
+        if (avg_magnitude > 0.1f) {
+            s_accel_scale = GRAVITY / avg_magnitude;
+        }
+    }
 
     // Barometer reference calibration
     float pressure_sum = 0.0f;
@@ -970,11 +1317,11 @@ void platform_read_sensors(sensor_data_t *sensors) {
     // IMU - Accelerometer
     struct bmi08_sensor_data accel_data;
     if (bmi08a_get_data(&accel_data, &s_bmi08_dev) == BMI08_OK) {
-        // Convert to m/s^2 (6g range, 16-bit signed)
-        float scale = (6.0f * GRAVITY) / 32768.0f;
-        sensors->accel[0] = accel_data.x * scale;
-        sensors->accel[1] = accel_data.y * scale;
-        sensors->accel[2] = accel_data.z * scale;
+        // Convert to m/s^2 (24g range, 16-bit signed) with scale correction
+        float scale = (24.0f * GRAVITY) / 32768.0f;
+        sensors->accel[0] = accel_data.x * scale * s_accel_scale;
+        sensors->accel[1] = accel_data.y * scale * s_accel_scale;
+        sensors->accel[2] = accel_data.z * scale * s_accel_scale;
     }
 
     // IMU - Gyroscope
