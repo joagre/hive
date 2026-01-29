@@ -1,7 +1,13 @@
 // Motor PWM Driver Implementation for Crazyflie 2.1+
 //
-// Uses TIM2 for PWM generation on PA0-PA3.
-// Reference: STM32F405 Reference Manual, Crazyflie firmware (motors.c)
+// Uses TIM2 and TIM4 for PWM generation matching Bitcraze reference implementation.
+// Reference: https://github.com/bitcraze/crazyflie-firmware/blob/master/src/drivers/src/motors_def.c
+//
+// Motor pin mapping (Crazyflie 2.1+ hardware):
+//   M1: PA1,  TIM2_CH2
+//   M2: PB11, TIM2_CH4
+//   M3: PA15, TIM2_CH1
+//   M4: PB9,  TIM4_CH4
 
 #include "motors.h"
 #include "stm32f4xx.h"
@@ -13,15 +19,9 @@
 // PWM resolution (8-bit for compatibility with Crazyflie firmware)
 #define PWM_RESOLUTION 255
 
-// TIM2 runs at APB1*2 = 84 MHz (assuming 168 MHz system clock)
+// TIM2/TIM4 run at APB1*2 = 84 MHz (assuming 168 MHz system clock)
 // For 328 kHz PWM: 84 MHz / 256 = 328.125 kHz
 // For 50 kHz PWM: 84 MHz / 1680 = 50 kHz
-
-// Motor to channel mapping
-#define MOTOR_M1_CHANNEL TIM_CHANNEL_1 // PA0
-#define MOTOR_M2_CHANNEL TIM_CHANNEL_2 // PA1
-#define MOTOR_M3_CHANNEL TIM_CHANNEL_3 // PA2
-#define MOTOR_M4_CHANNEL TIM_CHANNEL_4 // PA3
 
 // ----------------------------------------------------------------------------
 // Static State
@@ -33,6 +33,7 @@ static motors_config_t s_config;
 static uint16_t s_pwm[MOTORS_COUNT] = {0, 0, 0, 0};
 
 // CCR register pointers for direct access
+// Index: 0=M1, 1=M2, 2=M3, 3=M4
 static volatile uint32_t *s_ccr[MOTORS_COUNT];
 
 // ----------------------------------------------------------------------------
@@ -50,42 +51,64 @@ static inline uint16_t float_to_pwm(float value) {
 }
 
 // ----------------------------------------------------------------------------
-// GPIO and Timer Initialization
+// GPIO Initialization
 // ----------------------------------------------------------------------------
 
 static void gpio_init(void) {
-    // Enable GPIOA clock
-    RCC->AHB1ENR |= RCC_AHB1ENR_GPIOAEN;
+    // Enable GPIO clocks
+    RCC->AHB1ENR |= RCC_AHB1ENR_GPIOAEN | RCC_AHB1ENR_GPIOBEN;
 
-    // Configure PA0-PA3 as alternate function (AF1 = TIM2)
-    // MODER: 10 = alternate function
-    GPIOA->MODER &= ~(GPIO_MODER_MODER0 | GPIO_MODER_MODER1 |
-                      GPIO_MODER_MODER2 | GPIO_MODER_MODER3);
-    GPIOA->MODER |= (GPIO_MODER_MODER0_1 | GPIO_MODER_MODER1_1 |
-                     GPIO_MODER_MODER2_1 | GPIO_MODER_MODER3_1);
+    // ========================================================================
+    // PA1 - M1 (TIM2_CH2, AF1)
+    // ========================================================================
+    GPIOA->MODER &= ~GPIO_MODER_MODER1;
+    GPIOA->MODER |= GPIO_MODER_MODER1_1;      // Alternate function
+    GPIOA->OSPEEDR |= GPIO_OSPEEDER_OSPEEDR1; // High speed
+    GPIOA->PUPDR &= ~GPIO_PUPDR_PUPDR1;       // No pull
+    GPIOA->AFR[0] &= ~(0xFU << (1 * 4));
+    GPIOA->AFR[0] |= (1U << (1 * 4)); // AF1 = TIM2
 
-    // High speed output
-    GPIOA->OSPEEDR |= (GPIO_OSPEEDER_OSPEEDR0 | GPIO_OSPEEDER_OSPEEDR1 |
-                       GPIO_OSPEEDER_OSPEEDR2 | GPIO_OSPEEDER_OSPEEDR3);
+    // ========================================================================
+    // PA15 - M3 (TIM2_CH1, AF1)
+    // ========================================================================
+    GPIOA->MODER &= ~GPIO_MODER_MODER15;
+    GPIOA->MODER |= GPIO_MODER_MODER15_1;      // Alternate function
+    GPIOA->OSPEEDR |= GPIO_OSPEEDER_OSPEEDR15; // High speed
+    GPIOA->PUPDR &= ~GPIO_PUPDR_PUPDR15;       // No pull
+    // PA15 uses AFRH (AFR[1]), pin 15 is index 7 in AFRH
+    GPIOA->AFR[1] &= ~(0xFU << ((15 - 8) * 4));
+    GPIOA->AFR[1] |= (1U << ((15 - 8) * 4)); // AF1 = TIM2
 
-    // No pull-up/pull-down
-    GPIOA->PUPDR &= ~(GPIO_PUPDR_PUPDR0 | GPIO_PUPDR_PUPDR1 |
-                      GPIO_PUPDR_PUPDR2 | GPIO_PUPDR_PUPDR3);
+    // ========================================================================
+    // PB11 - M2 (TIM2_CH4, AF1)
+    // ========================================================================
+    GPIOB->MODER &= ~GPIO_MODER_MODER11;
+    GPIOB->MODER |= GPIO_MODER_MODER11_1;      // Alternate function
+    GPIOB->OSPEEDR |= GPIO_OSPEEDER_OSPEEDR11; // High speed
+    GPIOB->PUPDR &= ~GPIO_PUPDR_PUPDR11;       // No pull
+    // PB11 uses AFRH (AFR[1]), pin 11 is index 3 in AFRH
+    GPIOB->AFR[1] &= ~(0xFU << ((11 - 8) * 4));
+    GPIOB->AFR[1] |= (1U << ((11 - 8) * 4)); // AF1 = TIM2
 
-    // Set alternate function to AF1 (TIM2) for PA0-PA3
-    // AFRL handles pins 0-7
-    GPIOA->AFR[0] &= ~(GPIO_AFRL_AFRL0 | GPIO_AFRL_AFRL1 | GPIO_AFRL_AFRL2 |
-                       GPIO_AFRL_AFRL3);
-    GPIOA->AFR[0] |=
-        (1 << (0 * 4)) | (1 << (1 * 4)) | (1 << (2 * 4)) | (1 << (3 * 4));
+    // ========================================================================
+    // PB9 - M4 (TIM4_CH4, AF2)
+    // ========================================================================
+    GPIOB->MODER &= ~GPIO_MODER_MODER9;
+    GPIOB->MODER |= GPIO_MODER_MODER9_1;      // Alternate function
+    GPIOB->OSPEEDR |= GPIO_OSPEEDER_OSPEEDR9; // High speed
+    GPIOB->PUPDR &= ~GPIO_PUPDR_PUPDR9;       // No pull
+    // PB9 uses AFRH (AFR[1]), pin 9 is index 1 in AFRH
+    GPIOB->AFR[1] &= ~(0xFU << ((9 - 8) * 4));
+    GPIOB->AFR[1] |= (2U << ((9 - 8) * 4)); // AF2 = TIM4
 }
 
-static void timer_init(void) {
-    // Enable TIM2 clock
-    RCC->APB1ENR |= RCC_APB1ENR_TIM2EN;
+// ----------------------------------------------------------------------------
+// Timer Initialization
+// ----------------------------------------------------------------------------
 
-    // Stop timer during configuration
-    TIM2->CR1 = 0;
+static void timer_init(void) {
+    // Enable timer clocks
+    RCC->APB1ENR |= RCC_APB1ENR_TIM2EN | RCC_APB1ENR_TIM4EN;
 
     // Calculate prescaler and period for desired frequency
     // APB1 timer clock = 84 MHz (assuming 168 MHz system, APB1 prescaler = 4)
@@ -101,36 +124,66 @@ static void timer_init(void) {
         period = 239;
     }
 
+    // ========================================================================
+    // TIM2 Configuration (M1=CH2, M2=CH4, M3=CH1)
+    // ========================================================================
+    TIM2->CR1 = 0; // Stop timer during configuration
     TIM2->PSC = prescaler;
     TIM2->ARR = period;
 
-    // Configure all 4 channels for PWM mode 1
+    // Configure channels for PWM mode 1 with preload
+    // CH1 (M3), CH2 (M1): CCMR1
     // OC1M = 110 (PWM mode 1), OC1PE = 1 (preload enable)
-    TIM2->CCMR1 = (6 << TIM_CCMR1_OC1M_Pos) | TIM_CCMR1_OC1PE |
-                  (6 << TIM_CCMR1_OC2M_Pos) | TIM_CCMR1_OC2PE;
-    TIM2->CCMR2 = (6 << TIM_CCMR2_OC3M_Pos) | TIM_CCMR2_OC3PE |
-                  (6 << TIM_CCMR2_OC4M_Pos) | TIM_CCMR2_OC4PE;
+    TIM2->CCMR1 = (6 << TIM_CCMR1_OC1M_Pos) | TIM_CCMR1_OC1PE | // CH1 = M3
+                  (6 << TIM_CCMR1_OC2M_Pos) | TIM_CCMR1_OC2PE;  // CH2 = M1
 
-    // Enable outputs (CC1E, CC2E, CC3E, CC4E)
-    TIM2->CCER = TIM_CCER_CC1E | TIM_CCER_CC2E | TIM_CCER_CC3E | TIM_CCER_CC4E;
+    // CH4 (M2): CCMR2
+    TIM2->CCMR2 = (6 << TIM_CCMR2_OC4M_Pos) | TIM_CCMR2_OC4PE; // CH4 = M2
 
-    // Initialize all compare values to 0 (motors off)
-    TIM2->CCR1 = 0;
-    TIM2->CCR2 = 0;
-    TIM2->CCR3 = 0;
-    TIM2->CCR4 = 0;
+    // Enable outputs (CC1E, CC2E, CC4E)
+    TIM2->CCER = TIM_CCER_CC1E | TIM_CCER_CC2E | TIM_CCER_CC4E;
 
-    // Set up CCR pointers for direct access
-    s_ccr[0] = &TIM2->CCR1;
-    s_ccr[1] = &TIM2->CCR2;
-    s_ccr[2] = &TIM2->CCR3;
-    s_ccr[3] = &TIM2->CCR4;
+    // Initialize compare values to 0 (motors off)
+    TIM2->CCR1 = 0; // M3
+    TIM2->CCR2 = 0; // M1
+    TIM2->CCR4 = 0; // M2
 
     // Auto-reload preload enable
     TIM2->CR1 = TIM_CR1_ARPE;
 
     // Generate update event to load prescaler
     TIM2->EGR = TIM_EGR_UG;
+
+    // ========================================================================
+    // TIM4 Configuration (M4=CH4)
+    // ========================================================================
+    TIM4->CR1 = 0; // Stop timer during configuration
+    TIM4->PSC = prescaler;
+    TIM4->ARR = period;
+
+    // Configure CH4 for PWM mode 1 with preload
+    TIM4->CCMR2 = (6 << TIM_CCMR2_OC4M_Pos) | TIM_CCMR2_OC4PE; // CH4 = M4
+
+    // Enable output (CC4E)
+    TIM4->CCER = TIM_CCER_CC4E;
+
+    // Initialize compare value to 0 (motor off)
+    TIM4->CCR4 = 0; // M4
+
+    // Auto-reload preload enable
+    TIM4->CR1 = TIM_CR1_ARPE;
+
+    // Generate update event to load prescaler
+    TIM4->EGR = TIM_EGR_UG;
+
+    // ========================================================================
+    // Set up CCR pointers for direct access
+    // Motor index: 0=M1, 1=M2, 2=M3, 3=M4
+    // ========================================================================
+    s_ccr[0] = &TIM2->CCR2; // M1 = TIM2_CH2
+    s_ccr[1] = &TIM2->CCR4; // M2 = TIM2_CH4
+    s_ccr[2] = &TIM2->CCR1; // M3 = TIM2_CH1
+    s_ccr[3] = &TIM4->CCR4; // M4 = TIM4_CH4
 }
 
 // ----------------------------------------------------------------------------
@@ -169,8 +222,9 @@ void motors_arm(void) {
         // Ensure motors are at zero before arming
         motors_stop();
 
-        // Enable timer
+        // Enable both timers
         TIM2->CR1 |= TIM_CR1_CEN;
+        TIM4->CR1 |= TIM_CR1_CEN;
 
         s_armed = true;
     }
@@ -180,8 +234,9 @@ void motors_disarm(void) {
     if (s_armed) {
         motors_stop();
 
-        // Disable timer
+        // Disable both timers
         TIM2->CR1 &= ~TIM_CR1_CEN;
+        TIM4->CR1 &= ~TIM_CR1_CEN;
 
         s_armed = false;
     }
@@ -223,17 +278,19 @@ void motors_stop(void) {
 
 void motors_emergency_stop(void) {
     // Immediately stop all motors
-    TIM2->CCR1 = 0;
-    TIM2->CCR2 = 0;
-    TIM2->CCR3 = 0;
-    TIM2->CCR4 = 0;
+    TIM2->CCR1 = 0; // M3
+    TIM2->CCR2 = 0; // M1
+    TIM2->CCR4 = 0; // M2
+    TIM4->CCR4 = 0; // M4
 
     for (int i = 0; i < MOTORS_COUNT; i++) {
         s_pwm[i] = 0;
     }
 
-    // Disable timer
+    // Disable both timers
     TIM2->CR1 &= ~TIM_CR1_CEN;
+    TIM4->CR1 &= ~TIM_CR1_CEN;
+
     s_armed = false;
 }
 

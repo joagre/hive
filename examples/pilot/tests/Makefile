@@ -62,7 +62,7 @@ HIVE_SRC_DIR = $(HIVE_ROOT)/src
 TEST ?= sensors_motors
 
 # Tests that require libhive.a (use Hive file API or logging)
-HIVE_TESTS = flash sd radio main
+HIVE_TESTS = sensors_motors flash sd radio main
 
 # ==============================================================================
 # Crazyflie 2.1+ Build

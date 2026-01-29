@@ -1,7 +1,7 @@
 // Motor PWM Driver for Crazyflie 2.1+
 //
-// TIM2 PWM output for 4 brushed coreless motors.
-// Crazyflie uses PA0-PA3 for motor control.
+// TIM2/TIM4 PWM output for 4 brushed coreless motors.
+// Pin mapping matches Bitcraze reference implementation.
 //
 // Motor layout (X-configuration, viewed from above):
 //
@@ -13,11 +13,11 @@
 //      M4(CW)  M3(CCW)
 //          Rear
 //
-// Channel mapping:
-//   M1 (front-left, CCW):  TIM2_CH1 (PA0)
-//   M2 (front-right, CW):  TIM2_CH2 (PA1)
-//   M3 (rear-right, CCW):  TIM2_CH3 (PA2)
-//   M4 (rear-left, CW):    TIM2_CH4 (PA3)
+// Channel mapping (Bitcraze reference):
+//   M1 (front-left, CCW):  TIM2_CH2 (PA1)
+//   M2 (front-right, CW):  TIM2_CH4 (PB11)
+//   M3 (rear-right, CCW):  TIM2_CH1 (PA15)
+//   M4 (rear-left, CW):    TIM4_CH4 (PB9)
 
 #ifndef MOTORS_H
 #define MOTORS_H
