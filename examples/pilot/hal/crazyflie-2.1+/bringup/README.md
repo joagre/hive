@@ -94,6 +94,11 @@ not I2C3 (on-board sensors). This is a common source of confusion.
 
 ### Stock Firmware Reference
 
+**The Bitcraze crazyflie-firmware repository is the normative truth for this
+platform.** When in doubt about initialization sequences, sensor configuration,
+or hardware behavior, refer to the Bitcraze firmware implementation at:
+https://github.com/bitcraze/crazyflie-firmware
+
 The file `crazflie_firmware_log.txt` contains console output from the stock
 Bitcraze firmware (captured via cfclient). Useful reference values:
 
@@ -109,6 +114,23 @@ Bitcraze firmware (captured via cfclient). Useful reference values:
 
 The log also shows FreeRTOS task stack usage which may be useful for sizing
 actor stacks in the Hive pilot firmware.
+
+### VL53L1x I2C Address Note
+
+The VL53L1x ToF sensor has a default I2C address of **0x29**, but the Bitcraze
+firmware reassigns it to avoid conflicts when multiple ranging decks are used.
+The address is stored in the sensor's volatile memory and persists until power
+cycle, but some boards may have NVM that persists the address change.
+
+**Important**: The bringup firmware scans for VL53L1x at multiple addresses:
+- 0x29 (default)
+- 0x6A (observed on some units)
+- 0x30-0x32 (Bitcraze reassignment range)
+- 0x52 (alternative address)
+
+If you've previously run the Bitcraze firmware, the VL53L1x may be at a
+different address. The bringup code will find it automatically by checking the
+model ID register (0x010F) which should return 0xEACC for VL53L1x.
 
 ## Building and Flashing
 

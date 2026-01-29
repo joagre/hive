@@ -22,11 +22,6 @@ make clean    # Remove build artifacts
 This HAL links with `pilot.c` and the hive runtime. The platform API
 (`platform_crazyflie.h`) provides the same interface as the Webots HAL.
 
-Build the complete firmware from `examples/pilot/`:
-```bash
-make -f Makefile.crazyflie-2.1+
-```
-
 ## Hardware Overview
 
 | Component | Part Number | Interface | Description |
@@ -85,14 +80,15 @@ The STM32F405RG has 1 MB flash organized in sectors of varying sizes:
 | 9-11 | 384 KB | 0x080A0000 | Reserved |
 
 **Firmware region** - Sectors 0-7 (512 KB) - Limited by linker script
-**Data region** - Sector 8 (128 KB) - Flight log written during flight
+**Data region** - Sector 8 (128 KB) - Possible flight log during flight. The SD
+card and/or radio is a better log solution though.
 
 The linker script (`stm32f405_flash.ld`) limits firmware to 512 KB to prevent
 accidentally overwriting the log sector. Current firmware is ~63 KB.
 
 **Log file lifecycle**
 1. `hive_log_file_open("/log")` erases sector 8 (takes ~1 second)
-2. Writes go to an 8 KB ring buffer, flushed to flash periodically
+2. Writes to an 8 KB ring buffer, flushed to flash periodically
 3. `hive_log_file_close()` flushes remaining data
 4. After flight, download via radio using `ground_station.py --download-log`
 

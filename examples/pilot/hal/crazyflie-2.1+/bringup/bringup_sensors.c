@@ -63,6 +63,7 @@ static struct {
 } bmp388_calib_t;
 
 static bool s_flow_deck_present = false;
+static uint8_t s_vl53l1x_addr = 0; // Detected VL53L1x I2C address
 
 // Simple delay
 static void delay_us(uint32_t us) {
@@ -138,11 +139,109 @@ void spi_init(void) {
     SPI1->CR1 |= SPI_CR1_SPE;                 // Enable
 }
 
+// VL53L1x boot status register
+#define VL53L1X_FIRMWARE_STATUS_REG 0x00E5
+
 void sensors_init(void) {
     // Check if Flow deck is present (VL53L1x responds on I2C1 - expansion connector)
     // Note: VL53L1x is on I2C1 (PB6/PB7), not I2C3 (PA8/PC9)
     i2c1_init();
-    s_flow_deck_present = i2c1_probe(I2C1_ADDR_VL53L1X);
+
+    // VL53L1x needs time to boot after power-on (can take up to 1.2 seconds)
+    // Per ST documentation, poll FIRMWARE__SYSTEM_STATUS until bit 0 = 1
+    swo_puts("[INIT] Waiting for VL53L1x boot (up to 1.5s)...\n");
+
+    // First, scan I2C1 bus to see what addresses respond
+    swo_puts("[INIT] Scanning I2C1 bus for devices:\n");
+    int found_count = 0;
+    for (uint8_t addr = 0x08; addr < 0x78; addr++) {
+        if (i2c1_probe(addr)) {
+            swo_printf("[INIT]   Found device at 0x%02X", addr);
+            // Try to identify the device by reading common ID registers
+            if (addr == 0x29 || addr == 0x52) {
+                // VL53L1x uses 16-bit registers, model ID at 0x010F
+                uint8_t id[2];
+                if (i2c1_read_regs16(addr, 0x010F, id, 2)) {
+                    swo_printf(" (VL53L1x? model=0x%02X%02X)", id[0], id[1]);
+                }
+            } else if (addr >= 0x50 && addr <= 0x57) {
+                swo_printf(" (EEPROM range)");
+            } else {
+                // Try reading VL53L1x model ID (16-bit register 0x010F)
+                uint8_t id16[2];
+                if (i2c1_read_regs16(addr, 0x010F, id16, 2)) {
+                    uint16_t model = (uint16_t)(id16[0] << 8 | id16[1]);
+                    if (model == 0xEACC) {
+                        swo_printf(" (VL53L1x! model=0x%04X)", model);
+                    } else {
+                        swo_printf(" (16bit[0x010F]=0x%04X)", model);
+                    }
+                }
+                // Try reading register 0x00 (common chip ID location)
+                uint8_t id = 0;
+                if (i2c1_read_reg(addr, 0x00, &id)) {
+                    swo_printf(" (reg[0x00]=0x%02X)", id);
+                }
+                // Also try 0x0F (WHO_AM_I for many sensors)
+                if (i2c1_read_reg(addr, 0x0F, &id)) {
+                    swo_printf(" (reg[0x0F]=0x%02X)", id);
+                }
+            }
+            swo_puts("\n");
+            found_count++;
+        }
+    }
+    swo_printf("[INIT] I2C1 scan complete: %d device(s) found\n", found_count);
+
+    // Now look for VL53L1x at any address (it may have been reprogrammed)
+    // Check common addresses: 0x29 (default), 0x30-0x3F (Bitcraze range), 0x6A (observed)
+    bool vl53l1x_found = false;
+    uint8_t vl53l1x_addr = 0;
+
+    // First check default address
+    uint8_t addrs_to_check[] = {0x29, 0x6A, 0x30, 0x31, 0x32, 0x52};
+    for (size_t i = 0; i < sizeof(addrs_to_check); i++) {
+        uint8_t addr = addrs_to_check[i];
+        if (i2c1_probe(addr)) {
+            // Check if it's a VL53L1x by reading model ID
+            uint8_t id[2];
+            if (i2c1_read_regs16(addr, 0x010F, id, 2)) {
+                uint16_t model = (uint16_t)(id[0] << 8 | id[1]);
+                if (model == 0xEACC) {
+                    swo_printf(
+                        "[INIT] VL53L1x found at 0x%02X (model=0x%04X)\n", addr,
+                        model);
+                    vl53l1x_addr = addr;
+                    s_vl53l1x_addr = addr; // Store for later use
+                    vl53l1x_found = true;
+                    break;
+                }
+            }
+        }
+    }
+
+    // If found, wait for boot
+    if (vl53l1x_found) {
+        for (int attempt = 0; attempt < 30; attempt++) {
+            uint8_t boot_status = 0;
+            if (i2c1_read_reg16(vl53l1x_addr, VL53L1X_FIRMWARE_STATUS_REG,
+                                &boot_status)) {
+                if (boot_status & 0x01) {
+                    swo_printf(
+                        "[INIT] VL53L1x booted (attempt %d, status=0x%02X)\n",
+                        attempt + 1, boot_status);
+                    break;
+                }
+            }
+            delay_ms(50);
+        }
+    }
+
+    s_flow_deck_present = vl53l1x_found;
+
+    if (!vl53l1x_found) {
+        swo_puts("[INIT] VL53L1x not detected on I2C1\n");
+    }
     swo_puts("[INIT] Flow deck probe done\n");
 
     // Initialize BMI088 accelerometer
@@ -228,14 +327,14 @@ bool sensor_test_baro_id(uint8_t *chip_id) {
 }
 
 bool sensor_test_tof_id(uint16_t *model_id) {
-    if (!s_flow_deck_present) {
+    if (!s_flow_deck_present || s_vl53l1x_addr == 0) {
         *model_id = 0;
         return false;
     }
 
     uint8_t id[2];
-    // VL53L1x is on I2C1 (expansion connector)
-    if (!i2c1_read_regs16(I2C1_ADDR_VL53L1X, VL53L1X_MODEL_ID_REG, id, 2)) {
+    // VL53L1x is on I2C1 (expansion connector) - use detected address
+    if (!i2c1_read_regs16(s_vl53l1x_addr, VL53L1X_MODEL_ID_REG, id, 2)) {
         return false;
     }
 
@@ -349,15 +448,15 @@ bool sensor_read_baro(baro_data_t *data) {
 }
 
 bool sensor_read_tof(uint16_t *range_mm) {
-    if (!s_flow_deck_present) {
+    if (!s_flow_deck_present || s_vl53l1x_addr == 0) {
         return false;
     }
 
     // Read range result (simplified - real driver needs full init sequence)
     // For bringup, just verify we can read something
-    // VL53L1x is on I2C1 (expansion connector)
+    // VL53L1x is on I2C1 (expansion connector) - use detected address
     uint8_t data[2];
-    if (!i2c1_read_regs16(I2C1_ADDR_VL53L1X, 0x0096, data, 2)) {
+    if (!i2c1_read_regs16(s_vl53l1x_addr, 0x0096, data, 2)) {
         return false;
     }
 
