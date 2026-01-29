@@ -1,6 +1,6 @@
-// Hardware Abstraction Layer - TCP I/O Template
+// Hardware Abstraction Layer - TCP Template
 //
-// This file provides a documented template for TCP I/O functions.
+// This file provides a documented template for TCP functions.
 // Copy to src/hal/<platform>/hive_hal_tcp.c and implement.
 //
 // Compile with HIVE_ENABLE_TCP=1 to enable.

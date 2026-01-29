@@ -15,7 +15,7 @@ typedef enum {
 // Forward declarations
 typedef struct timer_entry_t timer_entry_t;
 
-// TCP I/O request data
+// TCP request data
 typedef struct {
     int fd;
     void *buf;
@@ -29,7 +29,7 @@ typedef struct io_source_t {
     io_source_type_t type;
     union {
         timer_entry_t *timer; // Timer event
-        tcp_io_data_t tcp;    // TCP I/O event
+        tcp_io_data_t tcp;    // TCP event
         int wakeup;           // Wakeup signal
     } data;
 } io_source_t;

@@ -1,4 +1,4 @@
-// Hardware Abstraction Layer - TCP I/O
+// Hardware Abstraction Layer - TCP
 //
 // Abstracts platform-specific socket operations:
 // - Linux: BSD sockets

@@ -164,7 +164,7 @@ help:
 	@echo "  PLATFORM=stm32    - STM32 ARM Cortex-M (requires cross-compiler)"
 	@echo ""
 	@echo "Feature toggles (set to 0 to disable):"
-	@echo "  ENABLE_TCP=1      - TCP I/O (default: 1 on linux, 0 on stm32)"
+	@echo "  ENABLE_TCP=1      - TCP (default: 1 on linux, 0 on stm32)"
 	@echo "  ENABLE_FILE=1     - File I/O (default: 1)"
 	@echo "  ENABLE_SD=1       - SD card support via FatFS (stm32 only, default: 0)"
 	@echo ""

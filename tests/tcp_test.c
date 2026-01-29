@@ -872,7 +872,7 @@ static void run_all_tests(void *args, const hive_spawn_info_t *siblings,
 }
 
 int main(void) {
-    printf("=== TCP I/O (hive_tcp) Test Suite ===\n");
+    printf("=== TCP (hive_tcp) Test Suite ===\n");
 
     hive_status_t status = hive_init();
     if (HIVE_FAILED(status)) {

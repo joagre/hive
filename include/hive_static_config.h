@@ -12,7 +12,7 @@
 // -----------------------------------------------------------------------------
 // Enable/disable optional subsystems. Set to 0 to disable.
 
-// TCP I/O subsystem (BSD sockets on Linux, lwIP on STM32)
+// TCP subsystem (BSD sockets on Linux, lwIP on STM32)
 #ifndef HIVE_ENABLE_TCP
 #define HIVE_ENABLE_TCP 1
 #endif
@@ -135,7 +135,7 @@
 // -----------------------------------------------------------------------------
 
 // Size of io_source_t pool for tracking pending I/O operations in event loop
-// Each pending TCP I/O operation consumes one io_source_t until completed
+// Each pending TCP operation consumes one io_source_t until completed
 // Defined in hive_io_source.h: HIVE_IO_SOURCE_POOL_SIZE = 128
 
 // -----------------------------------------------------------------------------

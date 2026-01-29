@@ -14,7 +14,7 @@ All resource limits are defined at compile-time and require recompilation to cha
 
 ```c
 // Feature toggles (set to 0 to disable)
-#define HIVE_ENABLE_TCP 1                     // TCP I/O subsystem
+#define HIVE_ENABLE_TCP 1                     // TCP subsystem
 #define HIVE_ENABLE_FILE 1                    // File I/O subsystem
 #define HIVE_ENABLE_SD 0                      // SD card support (STM32 only, requires FatFS)
 
@@ -168,7 +168,7 @@ Exit notifications (steps 2-3 above) are enqueued in recipient mailboxes **durin
    - Example: If B's mailbox contains [M1, M2] when A's death is processed, B receives: M1 -> M2 -> EXIT(A)
 
 2. **No global ordering guarantee**
-   - The runtime does NOT guarantee ordering relative to concurrent events (timers, TCP I/O)
+   - The runtime does NOT guarantee ordering relative to concurrent events (timers, TCP)
    - If death processing and other enqueues occur in the same scheduling phase, ordering depends on processing order
    - Example: If A dies and a timer fires for B in the same phase, the order of EXIT(A) vs timer tick in B's mailbox depends on event dispatch order
 
@@ -374,7 +374,7 @@ timerfd_settime(tfd, 0, &its, NULL);
 struct epoll_event ev = {.events = EPOLLIN, .data.ptr = timer_source};
 epoll_ctl(epoll_fd, EPOLL_CTL_ADD, tfd, &ev);
 
-// TCP I/O - add socket to epoll when would block
+// TCP - add socket to epoll when would block
 int sock = socket(AF_INET, SOCK_STREAM, 0);
 fcntl(sock, F_SETFL, O_NONBLOCK);
 struct epoll_event ev = {.events = EPOLLIN, .data.ptr = net_source};
@@ -394,7 +394,7 @@ if (no_runnable_actors) {
             // expirations may be > 1 for periodic timers (coalesced)
             // We send ONE tick message regardless of count
         }
-        dispatch_io_event(source);  // Handle timer tick or TCP I/O
+        dispatch_io_event(source);  // Handle timer tick or TCP
     }
 }
 ```
@@ -439,7 +439,7 @@ if (no_runnable_actors) {
 - **Single-threaded event loop**: All I/O is multiplexed in the scheduler thread
 - **Non-blocking I/O registration**: Timers create timerfds, TCP operations register sockets with epoll
 - **Event dispatching**: epoll_wait returns when any I/O source becomes ready
-- **Immediate handling**: Timer ticks and TCP I/O are processed immediately when ready
+- **Immediate handling**: Timer ticks and TCP are processed immediately when ready
 
 ### Event Loop Guarantees
 
@@ -497,7 +497,7 @@ include/hal/
   hive_hal_timer.h     - Timer operations (6 functions)
   hive_hal_context.h   - Context switching (1 function + struct)
   hive_hal_file.h      - File I/O (8 functions, optional)
-  hive_hal_tcp.h       - TCP I/O (10 functions, optional)
+  hive_hal_tcp.h       - TCP (10 functions, optional)
   hive_mount.h         - Mount table types (backend enum, function declarations)
 ```
 
@@ -535,7 +535,7 @@ Platform-independent wrappers call HAL functions:
 - `hive_scheduler.c` - Unified scheduler (calls HAL event functions)
 - `hive_timer.c` - Timer wrapper (calls HAL timer functions)
 - `hive_file.c` - File I/O wrapper (calls HAL file functions)
-- `hive_tcp.c` - TCP I/O wrapper (calls HAL TCP functions)
+- `hive_tcp.c` - TCP wrapper (calls HAL TCP functions)
 
 ### Porting Guide
 
@@ -544,7 +544,7 @@ Templates for new ports are in `src/hal/template/`:
 - `hive_hal_event.c` - Event loop primitives
 - `hive_hal_timer.c` - Timer HAL implementation
 - `hive_hal_file.c` - File I/O (optional)
-- `hive_hal_tcp.c` - TCP I/O (optional)
+- `hive_hal_tcp.c` - TCP (optional)
 - `hive_hal_context_defs.h` - Context struct template
 - `hive_hal_context.c` - Context init template
 - `hive_context.S` - Assembly template

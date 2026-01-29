@@ -1,7 +1,7 @@
-.\" Man page for TCP I/O functions
+.\" Man page for TCP functions
 .TH HIVE_TCP 3 "January 2026" "Hive 1.0" "Actor Runtime Manual"
 .SH NAME
-hive_tcp_listen, hive_tcp_accept, hive_tcp_connect, hive_tcp_close, hive_tcp_recv, hive_tcp_send \- non-blocking TCP I/O
+hive_tcp_listen, hive_tcp_accept, hive_tcp_connect, hive_tcp_close, hive_tcp_recv, hive_tcp_send \- non-blocking TCP
 .SH SYNOPSIS
 .nf
 .B #include <hive_tcp.h>
@@ -14,12 +14,12 @@ hive_tcp_listen, hive_tcp_accept, hive_tcp_connect, hive_tcp_close, hive_tcp_rec
 .BI "hive_status_t hive_tcp_send(int " fd ", const void *" buf ", size_t " len ", size_t *" bytes_written ", int32_t " timeout_ms ");"
 .fi
 .SH DESCRIPTION
-These functions provide non-blocking TCP I/O for actors. All operations
+These functions provide non-blocking TCP for actors. All operations
 integrate with the runtime's event loop (epoll on Linux),
 allowing other actors to run while waiting for TCP events.
 .PP
 .B Note:
-TCP I/O is currently only available on Linux. STM32 support is not yet implemented.
+TCP is currently only available on Linux. STM32 support is not yet implemented.
 .SS Server Operations
 .BR hive_tcp_listen ()
 creates a listening socket bound to
@@ -141,7 +141,7 @@ because DNS resolution is blocking and would stall the scheduler. Resolve
 hostnames before calling, or use static IP addresses.
 .SS Non-Blocking Integration
 All blocking TCP operations use the scheduler's epoll event loop. While an
-actor waits for TCP I/O, other actors continue running. This is cooperative:
+actor waits for TCP, other actors continue running. This is cooperative:
 the waiting actor yields automatically.
 .SS Partial Reads/Writes
 .BR hive_tcp_recv ()
@@ -205,7 +205,7 @@ O(1) epoll registration/deregistration
 .IP \(bu 2
 Suitable for telemetry, ground station links, and protocol handlers
 .SS Safety-Critical Note
-TCP I/O has unbounded latency. For flight-critical systems:
+TCP has unbounded latency. For flight-critical systems:
 .IP \(bu 2
 Use timeouts to bound worst-case blocking
 .IP \(bu 2

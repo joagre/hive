@@ -1761,7 +1761,7 @@ This is not a BSD socket replacement. SSL/TLS, UDP, socket options, and scatter/
 I/O are intentionally omitted. For advanced networking, extend the HAL or use external
 libraries with dedicated I/O actors.
 
-Non-blocking TCP I/O with blocking wrappers.
+Non-blocking TCP with blocking wrappers.
 
 ```c
 // Socket management

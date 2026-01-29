@@ -160,7 +160,7 @@ be implemented efficiently on resource-constrained targets.
 .SS Blocking Behavior (Critical)
 File I/O is
 .B completely synchronous
-and blocks the scheduler. Unlike TCP I/O which integrates with epoll, file
+and blocks the scheduler. Unlike TCP which integrates with epoll, file
 operations cannot be made non-blocking on Linux (regular files ignore O_NONBLOCK).
 .PP
 While a file operation is in progress:
@@ -169,7 +169,7 @@ While a file operation is in progress:
 .IP \(bu 2
 Timers may fire late
 .IP \(bu 2
-TCP I/O is delayed
+TCP is delayed
 .SS Safety-Critical Usage
 For autopilot and other safety-critical applications, restrict file I/O to:
 .IP \(bu 2

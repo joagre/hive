@@ -26,7 +26,7 @@ static io_source_t s_io_source_pool[HIVE_IO_SOURCE_POOL_SIZE];
 static bool s_io_source_used[HIVE_IO_SOURCE_POOL_SIZE];
 static hive_pool_t s_io_source_pool_mgr;
 
-// TCP I/O subsystem state
+// TCP subsystem state
 static struct {
     bool initialized;
 } s_tcp = {0};
@@ -116,7 +116,7 @@ void hive_tcp_handle_event(io_source_t *source) {
     hive_pool_free(&s_io_source_pool_mgr, source);
 }
 
-// Initialize TCP I/O subsystem
+// Initialize TCP subsystem
 hive_status_t hive_tcp_init(void) {
     HIVE_INIT_GUARD(s_tcp.initialized);
 
@@ -134,7 +134,7 @@ hive_status_t hive_tcp_init(void) {
     return HIVE_SUCCESS;
 }
 
-// Cleanup TCP I/O subsystem
+// Cleanup TCP subsystem
 void hive_tcp_cleanup(void) {
     HIVE_CLEANUP_GUARD(s_tcp.initialized);
 
@@ -197,7 +197,7 @@ static hive_status_t try_or_wait(int fd, uint32_t hal_events, int operation,
 
     // When we resume, check for timeout
     hive_status_t timeout_status = hive_mailbox_handle_timeout(
-        current, timeout_timer, "TCP I/O operation timed out");
+        current, timeout_timer, "TCP operation timed out");
     if (HIVE_FAILED(timeout_status)) {
         // Timeout occurred - cleanup event registration
         hive_hal_event_unregister(fd);
@@ -214,7 +214,7 @@ hive_status_t hive_tcp_listen(uint16_t port, int *out) {
         return HIVE_ERROR(HIVE_ERR_INVALID, "NULL out pointer");
     }
 
-    HIVE_REQUIRE_INIT(s_tcp.initialized, "TCP I/O");
+    HIVE_REQUIRE_INIT(s_tcp.initialized, "TCP");
 
     // Create socket (HAL sets it to non-blocking and SO_REUSEADDR)
     int fd;
@@ -246,7 +246,7 @@ hive_status_t hive_tcp_accept(int listen_fd, int *out, int32_t timeout_ms) {
         return HIVE_ERROR(HIVE_ERR_INVALID, "NULL out pointer");
     }
 
-    HIVE_REQUIRE_INIT(s_tcp.initialized, "TCP I/O");
+    HIVE_REQUIRE_INIT(s_tcp.initialized, "TCP");
 
     HIVE_REQUIRE_ACTOR_CONTEXT();
     actor_t *current = hive_actor_current();
@@ -284,7 +284,7 @@ hive_status_t hive_tcp_connect(const char *ip, uint16_t port, int *out,
         return HIVE_ERROR(HIVE_ERR_INVALID, "NULL ip or out pointer");
     }
 
-    HIVE_REQUIRE_INIT(s_tcp.initialized, "TCP I/O");
+    HIVE_REQUIRE_INIT(s_tcp.initialized, "TCP");
 
     HIVE_REQUIRE_ACTOR_CONTEXT();
     actor_t *current = hive_actor_current();
@@ -336,7 +336,7 @@ hive_status_t hive_tcp_recv(int fd, void *buf, size_t len, size_t *bytes_read,
                           "NULL buffer or bytes_read pointer");
     }
 
-    HIVE_REQUIRE_INIT(s_tcp.initialized, "TCP I/O");
+    HIVE_REQUIRE_INIT(s_tcp.initialized, "TCP");
 
     HIVE_REQUIRE_ACTOR_CONTEXT();
     actor_t *current = hive_actor_current();
@@ -373,7 +373,7 @@ hive_status_t hive_tcp_send(int fd, const void *buf, size_t len,
                           "NULL buffer or bytes_written pointer");
     }
 
-    HIVE_REQUIRE_INIT(s_tcp.initialized, "TCP I/O");
+    HIVE_REQUIRE_INIT(s_tcp.initialized, "TCP");
 
     HIVE_REQUIRE_ACTOR_CONTEXT();
     actor_t *current = hive_actor_current();

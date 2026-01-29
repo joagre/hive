@@ -143,7 +143,7 @@ void hive_mailbox_add_entry(actor_t *recipient, mailbox_entry_t *entry);
 
 // Check for timeout message in mailbox and dequeue if present
 // Returns HIVE_ERR_TIMEOUT if timeout occurred, otherwise cancels timer and
-// returns HIVE_SUCCESS Used by: IPC recv, TCP I/O, bus
+// returns HIVE_SUCCESS Used by: IPC recv, TCP, bus
 hive_status_t hive_mailbox_handle_timeout(actor_t *current,
                                           timer_id_t timeout_timer,
                                           const char *operation);

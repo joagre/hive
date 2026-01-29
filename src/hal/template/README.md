@@ -153,7 +153,7 @@ hive_status_t hive_hal_file_mount_available(const char *path);
 **Implementation notes**
 - `mount_available`: Check if mount point for path is ready (useful for removable media like SD cards). Return `HIVE_OK` if ready, `HIVE_ERR_INVALID` if no mount for path, `HIVE_ERR_IO` if mount exists but backend unavailable.
 
-### TCP I/O (10 functions, HIVE_ENABLE_TCP=1) - `hive_hal_tcp.c`
+### TCP (10 functions, HIVE_ENABLE_TCP=1) - `hive_hal_tcp.c`
 
 ```c
 hive_status_t hive_hal_tcp_init(void);
@@ -197,7 +197,7 @@ See `src/hal/linux/`:
 - `hive_hal_event.c` - Event system (epoll)
 - `hive_hal_timer.c` - Timer HAL (timerfd + simulation mode)
 - `hive_hal_file.c` - File I/O (POSIX)
-- `hive_hal_tcp.c` - TCP I/O (BSD sockets)
+- `hive_hal_tcp.c` - TCP (BSD sockets)
 - `hive_hal_context.c` - x86-64 context init
 - `hive_context_x86_64.S` - x86-64 context switch
 - `hive_hal_context_defs.h` - x86-64 context struct

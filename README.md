@@ -64,7 +64,7 @@ See [spec/](spec/) for design details.
 
 **Hive favors boundedness and inspectability over fairness and throughput** (single-threaded, fixed pools, no time-slicing).
 
-**Platforms** - x86-64 Linux (fully implemented), STM32/ARM Cortex-M bare metal (TCP I/O not yet supported)
+**Platforms** - x86-64 Linux (fully implemented), STM32/ARM Cortex-M bare metal (TCP not yet supported)
 
 ## Features
 
@@ -79,7 +79,7 @@ See [spec/](spec/) for design details.
 - Supervision (restart strategies, intensity limiting, child specs)
 - Exit notifications with exit reasons (normal, crash, killed)
 - Timers (one-shot and periodic with timerfd/epoll)
-- TCP I/O (non-blocking TCP via event loop)
+- TCP (non-blocking via event loop)
 - File I/O (POSIX on Linux, flash-backed on STM32 with optional SD card)
 - Logging (compile-time filtering, dual output: console + binary file)
 - Bus (pub-sub with retention policies)
@@ -356,7 +356,7 @@ if (hive_msg_is_timer(&msg) && msg.tag == periodic) {
 hive_timer_cancel(periodic);
 ```
 
-### File and TCP I/O
+### File and TCP
 
 ```c
 // File I/O (blocks until complete - use LOW priority actors for file work)
@@ -720,7 +720,7 @@ no JSON - just compile-time filtered levels with binary file output for space ef
 
 **Binary log format** - 12-byte header + text payload. Use `tools/decode_log.py` to decode.
 
-### TCP I/O
+### TCP
 
 Intentionally minimal TCP interface for actor-based networking. Not a BSD socket replacement.
 
@@ -801,7 +801,7 @@ include/hal/
   hive_hal_timer.h     - Timer operations (6 functions)
   hive_hal_context.h   - Context switching (2 functions + struct)
   hive_hal_file.h      - File I/O (9 functions, optional)
-  hive_hal_tcp.h       - TCP I/O (11 functions, optional)
+  hive_hal_tcp.h       - TCP (11 functions, optional)
 
 src/hal/
   linux/               - Linux implementation (epoll, POSIX)
@@ -812,7 +812,7 @@ src/hal/
 **Platform-independent wrappers** (in `src/`):
 - `hive_timer.c` - Timer wrapper (calls HAL timer functions)
 - `hive_file.c` - File I/O wrapper (calls HAL file functions)
-- `hive_tcp.c` - TCP I/O wrapper (calls HAL TCP functions)
+- `hive_tcp.c` - TCP wrapper (calls HAL TCP functions)
 
 **Minimum port** - ~16 C functions + 1 assembly function + 1 struct definition
 
@@ -948,7 +948,7 @@ man hive_link      # Linking and monitoring
 man hive_timer     # Timers
 man hive_bus       # Pub-sub bus
 man hive_select    # Unified event waiting
-man hive_tcp       # TCP I/O
+man hive_tcp       # TCP
 man hive_file       # File I/O
 man hive_supervisor # Supervision
 man hive_types      # Types and compile-time configuration
@@ -966,5 +966,5 @@ Third-party components included in this project have their own licenses document
 
 ## Future Work
 
-- STM32: TCP I/O (lwIP integration)
+- STM32: TCP (lwIP integration)
 - MPU-based stack guard pages for hardware-guaranteed overflow detection

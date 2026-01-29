@@ -1,6 +1,6 @@
-// Hardware Abstraction Layer - Linux TCP I/O Implementation
+// Hardware Abstraction Layer - Linux TCP Implementation
 //
-// TCP I/O uses BSD sockets.
+// TCP uses BSD sockets.
 
 #include "hive_static_config.h"
 

@@ -367,7 +367,7 @@ When an actor calls a blocking API, the following contract applies:
 - Timer expires (for APIs with timeout)
 - Message arrives in mailbox (for `hive_ipc_recv()`, `hive_ipc_recv_match()`, `hive_ipc_recv_matches()`, `hive_ipc_request()`)
 - Bus data published (for `hive_bus_read()` with non-zero timeout)
-- **Important**: Mailbox arrival only unblocks actors blocked in IPC receive operations, not actors blocked on TCP I/O or bus read
+- **Important**: Mailbox arrival only unblocks actors blocked in IPC receive operations, not actors blocked on TCP or bus read
 
 **Scheduling phase definition**
 
@@ -380,7 +380,7 @@ A scheduling phase consists of one iteration of the scheduler loop:
 
 **Event drain order within a phase**
 
-When `epoll_wait()` returns multiple ready events (timers and TCP I/O), they are processed in **array index order** as returned by the kernel. This order is deterministic for a given set of ready file descriptors but is not controllable by the runtime.
+When `epoll_wait()` returns multiple ready events (timers and TCP), they are processed in **array index order** as returned by the kernel. This order is deterministic for a given set of ready file descriptors but is not controllable by the runtime.
 
 For each event:
 - **Timer event (timerfd)**: Read timerfd, send timer tick message to actor's mailbox, wake actor
@@ -397,7 +397,7 @@ For each event:
 Each blocking TCP request has an implicit state: `PENDING` -> `COMPLETED` or `TIMED_OUT`.
 
 **State transitions**
-- Request starts in `PENDING` when actor blocks on TCP I/O with timeout
+- Request starts in `PENDING` when actor blocks on TCP with timeout
 - First event processed transitions state out of `PENDING`; subsequent events for same request are **ignored without side effects**
 
 **Tie-break rule (deadline check at wake time)**
@@ -412,7 +412,7 @@ Each blocking TCP request has an implicit state: `PENDING` -> `COMPLETED` or `TI
 - If timeout **before** I/O ready: Actor wakes, deadline reached, return timeout (no I/O attempted)
 - If both fire in **same** `epoll_wait()`: Actor wakes, deadline check determines outcome (I/O not performed if timed out)
 
-**Request serialization (TCP I/O only)**
+**Request serialization (TCP only)**
 - Applies to: `hive_tcp_accept()`, `hive_tcp_connect()`, `hive_tcp_recv()`, `hive_tcp_send()` with timeouts
 - Constraint: **One outstanding TCP request per actor** (enforced by actor blocking)
 - When timeout occurs: epoll registration cleaned up, any late readiness signal is ignored

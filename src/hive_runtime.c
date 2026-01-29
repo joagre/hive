@@ -62,7 +62,7 @@ hive_status_t hive_init(void) {
 #endif
 
 #if HIVE_ENABLE_TCP
-    // Initialize TCP I/O subsystem
+    // Initialize TCP subsystem
     status = hive_tcp_init();
     if (HIVE_FAILED(status)) {
 #if HIVE_ENABLE_FILE

@@ -418,7 +418,7 @@ To prioritize time-sensitive data, place those sources earlier in the array.
 
 ## Design Decisions
 
-### TCP I/O
+### TCP
 
 Intentionally excluded for now. Reasons:
 - TCP uses fd-based semantics (different from IPC/bus)

@@ -31,7 +31,7 @@ Man pages available:
 - `hive_timer(3)` - One-shot and periodic timers
 - `hive_bus(3)` - Publish-subscribe bus
 - `hive_select(3)` - Unified event waiting (IPC + bus)
-- `hive_tcp(3)` - Non-blocking TCP I/O
+- `hive_tcp(3)` - Non-blocking TCP
 - `hive_file(3)` - Synchronous file I/O
 - `hive_types(3)` - Types, constants, compile-time configuration
 
@@ -429,7 +429,7 @@ include/hal/
   hive_hal_timer.h     - Timer operations (6 functions)
   hive_hal_context.h   - Context switching (2 functions + struct)
   hive_hal_file.h      - File I/O (9 functions, optional)
-  hive_hal_tcp.h       - TCP I/O (11 functions, optional)
+  hive_hal_tcp.h       - TCP (11 functions, optional)
 
 src/hal/
   linux/               - Linux implementation (epoll, POSIX)

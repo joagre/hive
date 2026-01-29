@@ -1,6 +1,6 @@
-// Hardware Abstraction Layer - STM32 TCP I/O Implementation
+// Hardware Abstraction Layer - STM32 TCP Implementation
 //
-// TCP I/O stubs (future lwIP support).
+// TCP stubs (future lwIP support).
 
 #include "hive_static_config.h"
 
