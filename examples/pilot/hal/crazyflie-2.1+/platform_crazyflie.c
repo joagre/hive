@@ -232,7 +232,7 @@ static void i2c3_reset(void) {
 
     // Reconfigure
     I2C3->CR2 = 42;
-    I2C3->CCR = 35;
+    I2C3->CCR = 35 | I2C_CCR_FS;
     I2C3->TRISE = 13;
     I2C3->CR1 = I2C_CR1_PE;
 }
@@ -257,12 +257,12 @@ static void i2c3_init(void) {
     // Bus recovery in case bus is stuck from previous run
     i2c3_bus_recovery();
 
-    // Configure I2C3: 400 kHz
-    // APB1 = 42 MHz
-    I2C3->CR2 = 42;         // FREQ = 42 MHz
-    I2C3->CCR = 35;         // CCR for 400 kHz
-    I2C3->TRISE = 13;       // Maximum rise time
-    I2C3->CR1 = I2C_CR1_PE; // Enable I2C
+    // Configure I2C3: 400 kHz fast mode
+    // APB1 = 42 MHz, CCR = 42MHz / (3 * 400kHz) = 35
+    I2C3->CR2 = 42;              // FREQ = 42 MHz
+    I2C3->CCR = 35 | I2C_CCR_FS; // CCR for 400 kHz, fast mode enabled
+    I2C3->TRISE = 13;            // Maximum rise time
+    I2C3->CR1 = I2C_CR1_PE;      // Enable I2C
 }
 
 static bool i2c3_write(uint8_t addr, uint8_t *data, uint16_t len) {
@@ -498,7 +498,7 @@ static void i2c1_reset(void) {
     I2C1->CR1 &= ~I2C_CR1_SWRST;
 
     I2C1->CR2 = 42;
-    I2C1->CCR = 35;
+    I2C1->CCR = 35 | I2C_CCR_FS;
     I2C1->TRISE = 13;
     I2C1->CR1 = I2C_CR1_PE;
 }
@@ -519,9 +519,9 @@ static void i2c1_init(void) {
 
     i2c1_bus_recovery();
 
-    // Configure I2C1: 400 kHz (APB1 = 42 MHz)
+    // Configure I2C1: 400 kHz fast mode (APB1 = 42 MHz)
     I2C1->CR2 = 42;
-    I2C1->CCR = 35;
+    I2C1->CCR = 35 | I2C_CCR_FS;
     I2C1->TRISE = 13;
     I2C1->CR1 = I2C_CR1_PE;
 
