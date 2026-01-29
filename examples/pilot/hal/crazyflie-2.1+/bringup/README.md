@@ -47,7 +47,18 @@ Trace Macrocell). This is a one-way output channel - no input is possible.
 
 1. Connect ST-Link V2 or V3 to PC via USB
 2. Flash the firmware
-3. View output: `./st-trace.sh`
+3. View output: `make trace` (or `./st-trace.sh`)
+
+The trace runs with a **70-second timeout** by default, which is enough for
+all bringup phases including the motor test delays. After the timeout, trace
+output stops automatically.
+
+**Timeout options:**
+```bash
+make trace              # 70s timeout (recommended for full test)
+./st-trace.sh -t 30     # 30s timeout (quick test)
+./st-trace.sh -t 0      # No timeout (Ctrl-C to stop)
+```
 
 The `st-trace.sh` script uses a locally built stlink-tools (the system
 version 1.8.0 has bugs with SWO trace). If you need to build it:
@@ -169,11 +180,13 @@ make
 # Flash using ST-Link
 make flash
 
+# View SWO trace output (70s timeout covers all phases)
+make trace
+
 # Or manually:
 st-flash write build/bringup.bin 0x08000000
-
-# Reset to start
 st-flash reset
+./st-trace.sh -t 0   # No timeout
 ```
 
 ## Bring-Up Sequence
@@ -705,3 +718,4 @@ The following tests are planned but not yet implemented:
 | `bringup_deck.c/h` | Expansion deck detection (1-Wire) |
 | `bringup_leds.c/h` | LED test (blue status, red motor LEDs) |
 | `Makefile` | Build system |
+| `st-trace.sh` | SWO trace viewer with timeout (default 70s) |
