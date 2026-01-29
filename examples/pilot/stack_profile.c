@@ -9,9 +9,18 @@
 #if HIVE_STACK_WATERMARK
 
 #include "hive_actor.h"
+#include "hive_log.h"
 #include "hive_runtime.h"
-#include <stdio.h>
 #include <string.h>
+
+#ifdef HIVE_PLATFORM_STM32
+// On STM32, use HIVE_LOG for output
+#define PROFILE_PRINT(...) HIVE_LOG_INFO(__VA_ARGS__)
+#else
+// On Linux/Webots, use stderr
+#include <stdio.h>
+#define PROFILE_PRINT(...) fprintf(stderr, __VA_ARGS__)
+#endif
 
 // Storage for actors that exit before report (e.g., flight_manager)
 #define MAX_CAPTURED 4
@@ -30,7 +39,7 @@ static void print_actor_stack(actor_id_t id, const char *name,
     const char *n = name ? name : "(unnamed)";
     float pct =
         stack_size > 0 ? 100.0f * (float)used / (float)stack_size : 0.0f;
-    fprintf(stderr, "%-15s %8zu %8zu %5.1f%%\n", n, stack_size, used, pct);
+    PROFILE_PRINT("%-15s %8zu %8zu %5.1f%%\n", n, stack_size, used, pct);
 }
 
 void stack_profile_capture(const char *name) {
@@ -59,10 +68,10 @@ bool stack_profile_check(void) {
         return false;
     }
 
-    fprintf(stderr, "\n=== Stack Usage Report ===\n");
-    fprintf(stderr, "%-15s %8s %8s %6s\n", "Actor", "Size", "Used", "Usage");
-    fprintf(stderr, "%-15s %8s %8s %6s\n", "---------------", "--------",
-            "--------", "------");
+    PROFILE_PRINT("\n=== Stack Usage Report ===\n");
+    PROFILE_PRINT("%-15s %8s %8s %6s\n", "Actor", "Size", "Used", "Usage");
+    PROFILE_PRINT("%-15s %8s %8s %6s\n", "---------------", "--------",
+                  "--------", "------");
 
     // Print live actors
     hive_actor_stack_usage_all(print_actor_stack);
@@ -73,7 +82,7 @@ bool stack_profile_check(void) {
                           s_captured[i].used);
     }
 
-    fprintf(stderr, "==========================\n\n");
+    PROFILE_PRINT("==========================\n\n");
 
     s_report_requested = false;
     return true;

@@ -36,8 +36,9 @@
 
 #include <stdbool.h>
 #include <stdint.h>
-#include <stdio.h>
 #include <string.h>
+
+#include "printf.h" // Use lib/printf (snprintf_) on STM32
 
 // ============================================================================
 // Test Configuration
@@ -238,8 +239,8 @@ static void run_communication_test(void) {
                         .type = PACKET_TYPE_ECHO,
                         .sequence = sequence,
                     };
-                    snprintf((char *)pkt.data, sizeof(pkt.data), "SEQ=%u",
-                             sequence);
+                    snprintf_((char *)pkt.data, sizeof(pkt.data), "SEQ=%u",
+                              sequence);
 
                     if (hal_radio_send(&pkt, sizeof(pkt)) == 0) {
                         tx_success++;
