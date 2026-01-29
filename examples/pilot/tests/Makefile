@@ -255,6 +255,14 @@ WEBOTS_LIB = $(WEBOTS_HOME)/lib/controller
 # HAL directory
 HAL_DIR = $(PILOT_DIR)/hal/webots-crazyflie
 
+# HAL source files
+HAL_SRCS = $(HAL_DIR)/hal_init.c \
+           $(HAL_DIR)/hal_sensors.c \
+           $(HAL_DIR)/hal_motors.c \
+           $(HAL_DIR)/hal_time.c \
+           $(HAL_DIR)/hal_led.c \
+           $(HAL_DIR)/hal_debug.c
+
 # Compiler
 CC = gcc
 CFLAGS = -std=c11 -Wall -Wextra -O2 -g
@@ -328,9 +336,9 @@ $(BUILD_DIR_WB)/test_sensors_motors.o: test_sensors_motors.c | $(BUILD_DIR_WB)
 	@echo "CC test_sensors_motors.c (object)"
 	@$(CC) $(CFLAGS) -DTEST_MAIN_BUILD -c $< -o $@
 
-$(TARGET): test_main.c $(TEST_MAIN_OBJS) $(HAL_DIR)/hal_webots.c $(HIVE_LIB) | $(BUILD_DIR_WB)
+$(TARGET): test_main.c $(TEST_MAIN_OBJS) $(HAL_SRCS) $(HIVE_LIB) | $(BUILD_DIR_WB)
 	@echo "CC test_main.c (Webots - combined)"
-	@$(CC) $(CFLAGS) test_main.c $(TEST_MAIN_OBJS) $(HAL_DIR)/hal_webots.c $(HIVE_LIB) $(LDFLAGS) $(LDLIBS) -o $@
+	@$(CC) $(CFLAGS) test_main.c $(TEST_MAIN_OBJS) $(HAL_SRCS) $(HIVE_LIB) $(LDFLAGS) $(LDLIBS) -o $@
 
 else ifeq ($(NEEDS_HIVE),)
 # sensors_motors standalone
@@ -339,7 +347,7 @@ webots: check-webots $(TARGET)
 	@echo "Built: $(TARGET)"
 	@echo "Copy to controllers/test_$(TEST)/ and run in Webots"
 
-$(TARGET): test_$(TEST).c $(HAL_DIR)/hal_webots.c | $(BUILD_DIR_WB)
+$(TARGET): test_$(TEST).c $(HAL_SRCS) | $(BUILD_DIR_WB)
 	@echo "CC test_$(TEST).c (Webots - HAL only)"
 	@$(CC) $(CFLAGS) $^ $(LDFLAGS) $(LDLIBS) -o $@
 
@@ -350,9 +358,9 @@ webots: check-webots $(HIVE_LIB) $(TARGET)
 	@echo "Built: $(TARGET)"
 	@echo "Note: flash and sd tests are Crazyflie-specific"
 
-$(TARGET): test_$(TEST).c $(HAL_DIR)/hal_webots.c $(HIVE_LIB) | $(BUILD_DIR_WB)
+$(TARGET): test_$(TEST).c $(HAL_SRCS) $(HIVE_LIB) | $(BUILD_DIR_WB)
 	@echo "CC test_$(TEST).c (Webots - HAL + Hive)"
-	@$(CC) $(CFLAGS) test_$(TEST).c $(HAL_DIR)/hal_webots.c $(HIVE_LIB) $(LDFLAGS) $(LDLIBS) -o $@
+	@$(CC) $(CFLAGS) test_$(TEST).c $(HAL_SRCS) $(HIVE_LIB) $(LDFLAGS) $(LDLIBS) -o $@
 
 endif
 

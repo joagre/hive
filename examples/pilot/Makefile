@@ -88,7 +88,12 @@ PILOT_SRCS := pilot.c pid.c stack_profile.c \
 	sensor_actor.c estimator_actor.c altitude_actor.c waypoint_actor.c \
 	position_actor.c attitude_actor.c rate_actor.c motor_actor.c \
 	flight_manager_actor.c telemetry_logger_actor.c \
-	hal/webots-crazyflie/hal_webots.c \
+	hal/webots-crazyflie/hal_init.c \
+	hal/webots-crazyflie/hal_sensors.c \
+	hal/webots-crazyflie/hal_motors.c \
+	hal/webots-crazyflie/hal_time.c \
+	hal/webots-crazyflie/hal_led.c \
+	hal/webots-crazyflie/hal_debug.c \
 	fusion/complementary_filter.c fusion/altitude_kf.c
 
 PILOT_OBJS := $(PILOT_SRCS:.c=.o)
