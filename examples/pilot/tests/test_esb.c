@@ -21,8 +21,8 @@
  *   - Slow blink: Error
  *
  * Usage:
- *   make PLATFORM=crazyflie TEST=syslink
- *   make flash-crazyflie TEST=syslink
+ *   make PLATFORM=crazyflie TEST=esb
+ *   make flash-crazyflie TEST=esb
  *
  * Ground station test (Python):
  *   import cflib
@@ -275,7 +275,7 @@ static void run_communication_test(void) {
 // Main Test Entry Point
 // ============================================================================
 
-int test_syslink_run(bool standalone) {
+int test_esb_run(bool standalone) {
     int result = 0;
 
     if (standalone) {
@@ -361,11 +361,11 @@ done:
 }
 
 // ============================================================================
-// Standalone Main (when built as TEST=syslink)
+// Standalone Main (when built as TEST=esb)
 // ============================================================================
 
 #ifndef TEST_MAIN_BUILD
 int main(void) {
-    return test_syslink_run(true);
+    return test_esb_run(true);
 }
 #endif
