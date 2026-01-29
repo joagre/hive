@@ -12,7 +12,7 @@ These tests are organized by what they validate:
 | `thrust` | Pilot HAL | Thrust calibration (find HAL_BASE_THRUST for hover) |
 | `flash` | Hive File API | Tests flash-backed `/log` via `hive_file_*()` |
 | `sd` | Hive File API | Tests SD-backed `/sd` via `hive_file_*()` |
-| `radio` | Pilot HAL + Hive | DMA-based syslink radio communication test |
+| `syslink` | Pilot HAL + Hive | DMA-based syslink radio communication test |
 | `main` | Combined | Runs all applicable tests (Webots dummy pilot) |
 
 **Key distinction:**
@@ -195,7 +195,7 @@ make flash-crazyflie TEST=sd
 | LED on solid | All tests passed! |
 | Slow blink | Test failed (SD available but I/O error) |
 
-### radio
+### syslink
 
 Tests DMA-based syslink radio communication with Crazyradio PA/2.0.
 
@@ -209,8 +209,8 @@ RX implementation required for reliable high-speed reception.
 
 **Build and flash:**
 ```bash
-make PLATFORM=crazyflie TEST=radio
-make flash-crazyflie TEST=radio
+make PLATFORM=crazyflie TEST=syslink
+make flash-crazyflie TEST=syslink
 ```
 
 **Run ground station (on laptop):**
@@ -316,7 +316,7 @@ make PLATFORM=crazyflie TEST=sensors_motors
 make PLATFORM=crazyflie TEST=thrust
 make PLATFORM=crazyflie TEST=flash
 make PLATFORM=crazyflie TEST=sd
-make PLATFORM=crazyflie TEST=radio
+make PLATFORM=crazyflie TEST=syslink
 make PLATFORM=crazyflie TEST=main
 
 # Build all tests
@@ -327,7 +327,7 @@ make flash-crazyflie TEST=sensors_motors
 make flash-crazyflie TEST=thrust
 make flash-crazyflie TEST=flash
 make flash-crazyflie TEST=sd
-make flash-crazyflie TEST=radio
+make flash-crazyflie TEST=syslink
 make flash-crazyflie TEST=main
 
 # Thrust test with custom value
@@ -349,8 +349,8 @@ make PLATFORM=webots TEST=sensors_motors
 Then copy `build_webots/test_main` (or `test_sensors_motors`) to a Webots
 controller directory.
 
-**Note:** `flash`, `sd`, and `radio` tests are Crazyflie-specific. The `main`
-test automatically skips `flash` and `sd` on Webots. The `radio` test is not
+**Note:** `flash`, `sd`, and `syslink` tests are Crazyflie-specific. The `main`
+test automatically skips `flash` and `sd` on Webots. The `syslink` test is not
 included in `main` since it requires external ground station hardware.
 
 ## Build System
@@ -358,9 +358,9 @@ included in `main` since it requires external ground station hardware.
 The Makefile automatically detects which tests need the Hive library:
 
 - `sensors_motors`: Links against pilot HAL only (`libhal.a`)
-- `flash`, `sd`, `radio`, `main`: Links against Hive + pilot HAL (`libhive.a` + `libhal.a`)
+- `flash`, `sd`, `syslink`, `main`: Links against Hive + pilot HAL (`libhive.a` + `libhal.a`)
 
-The `radio` test also requires `HAL_HAS_RADIO` to be defined and disables SD
+The `syslink` test also requires `HAL_HAS_RADIO` to be defined and disables SD
 support to avoid linker conflicts.
 
 For the `main` test, individual test files are compiled as objects (with

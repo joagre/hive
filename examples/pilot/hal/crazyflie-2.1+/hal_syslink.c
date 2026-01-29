@@ -1,4 +1,4 @@
-// Crazyflie 2.1+ Radio HAL - Syslink Implementation with DMA
+// Crazyflie 2.1+ HAL - Syslink
 //
 // Implements radio communication via syslink protocol to the nRF51822.
 // The nRF51 handles ESB radio protocol to Crazyradio PA on the ground.
@@ -15,7 +15,7 @@
 // Blocking: Each send blocks for ~370us (37 bytes at 1Mbaud).
 // Run telemetry actor at LOW priority to avoid affecting control loops.
 
-#include "platform_crazyflie.h"
+#include "platform.h"
 #include "stm32f4xx.h"
 #include <stdbool.h>
 #include <string.h>

@@ -1,12 +1,12 @@
-// Crazyflie 2.1+ Bring-Up - Radio (Syslink) Test
+// Crazyflie 2.1+ Bring-Up - Syslink Test
 //
 // USART6 at 1Mbaud to nRF51822
 //   PC6 - TX
 //   PC7 - RX
 //   PA4 - TXEN (flow control)
 
-#ifndef BRINGUP_RADIO_H
-#define BRINGUP_RADIO_H
+#ifndef BRINGUP_SYSLINK_H
+#define BRINGUP_SYSLINK_H
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -28,4 +28,4 @@ bool radio_has_battery_data(void);
 // Returns true if battery packet received within timeout
 bool radio_run_test(int timeout_ms);
 
-#endif // BRINGUP_RADIO_H
+#endif // BRINGUP_SYSLINK_H

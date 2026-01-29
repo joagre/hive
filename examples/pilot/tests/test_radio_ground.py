@@ -2,7 +2,7 @@
 """
 Radio Communication Test - Ground Station
 
-Tests DMA-based syslink radio communication with Crazyflie running test_radio.
+Tests DMA-based syslink radio communication with Crazyflie running test_syslink.
 
 Requirements:
     pip install cflib
@@ -16,7 +16,7 @@ The script will:
     3. Receive and decode telemetry packets
     4. Display statistics
 
-Packet types (matching test_radio.c):
+Packet types (matching test_syslink.c):
     0x01: Attitude (gyro, roll/pitch/yaw)
     0x02: Position (altitude, velocities, thrust)
     0xE0: Echo test packet
@@ -38,7 +38,7 @@ except ImportError:
     sys.exit(1)
 
 
-# Packet types (must match test_radio.c)
+# Packet types (must match test_syslink.c)
 PACKET_TYPE_ATTITUDE = 0x01
 PACKET_TYPE_POSITION = 0x02
 PACKET_TYPE_ECHO = 0xE0

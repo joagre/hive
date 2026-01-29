@@ -61,9 +61,14 @@ ASFLAGS = $(MCU) -g
 # Source files - platform
 C_SOURCES = \
     debug_swo.c \
-    hal_crazyflie.c \
-    hal_radio.c \
-    platform_crazyflie.c \
+    hal_init.c \
+    hal_sensors.c \
+    hal_motors.c \
+    hal_time.c \
+    hal_led.c \
+    hal_debug.c \
+    hal_syslink.c \
+    platform.c \
     motors.c \
     spi_ll_sd.c \
     syscalls.c \

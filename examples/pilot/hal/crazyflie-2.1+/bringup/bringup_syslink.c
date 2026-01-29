@@ -1,8 +1,8 @@
-// Crazyflie 2.1+ Bring-Up - Radio (Syslink) Test
+// Crazyflie 2.1+ Bring-Up - Syslink Test
 //
 // Uses DMA for reliable reception at 1Mbaud (same as production HAL)
 
-#include "bringup_radio.h"
+#include "bringup_syslink.h"
 #include "bringup_swo.h"
 #include "stm32f4xx.h"
 #include <string.h>

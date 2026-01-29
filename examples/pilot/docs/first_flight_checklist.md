@@ -71,7 +71,7 @@ Power on and let it calibrate (keep still and level during calibration).
 If motor response is **inverted**, check:
 - Motor wiring (swap wires to reverse direction)
 - Motor position (M1-M4 in correct corners)
-- Mixer signs in `hal_crazyflie.c`
+- Mixer signs in `hal_motors.c`
 
 ---
 

@@ -3,7 +3,7 @@
 // Implements the platform interface using direct STM32F405 peripheral access
 // and vendor sensor drivers (Bosch BMI08x, Bosch BMP3, ST VL53L1x, Bitcraze PMW3901).
 
-#include "platform_crazyflie.h"
+#include "platform.h"
 #include "hal_config.h"
 #include "stm32f4xx.h"
 #include "motors.h"

@@ -2,10 +2,10 @@
 //
 // Provides the platform interface for the Crazyflie 2.1+ hardware.
 // This layer ties together all the sensor drivers and implements
-// the common platform API used by hal_crazyflie.c.
+// the common platform API used by the hal_*.c files.
 
-#ifndef PLATFORM_CRAZYFLIE_H
-#define PLATFORM_CRAZYFLIE_H
+#ifndef PLATFORM_H
+#define PLATFORM_H
 
 #include "types.h"
 #include <stdint.h>
@@ -86,4 +86,4 @@ void platform_led_on(void);
 void platform_led_off(void);
 void platform_led_toggle(void);
 
-#endif // PLATFORM_CRAZYFLIE_H
+#endif // PLATFORM_H

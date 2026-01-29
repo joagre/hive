@@ -6,7 +6,7 @@
 #   make PLATFORM=crazyflie TEST=sensors_motors   # Build sensor/motor test
 #   make PLATFORM=crazyflie TEST=flash            # Build flash storage test
 #   make PLATFORM=crazyflie TEST=sd               # Build SD card test
-#   make PLATFORM=crazyflie TEST=radio            # Build radio communication test
+#   make PLATFORM=crazyflie TEST=syslink            # Build syslink communication test
 #   make PLATFORM=crazyflie TEST=main             # Build combined test runner
 #   make PLATFORM=crazyflie all-tests             # Build all tests
 #   make PLATFORM=webots TEST=main                # Build for Webots (dummy pilot)
@@ -18,7 +18,7 @@
 #   thrust         - Thrust calibration test (find HAL_BASE_THRUST)
 #   flash          - Hive file API test with flash backend (/log)
 #   sd             - Hive file API test with SD backend (/sd)
-#   radio          - DMA-based syslink radio communication test
+#   syslink        - DMA-based syslink radio communication test
 #   main           - Combined test runner (all applicable tests)
 
 # Default target shows help
@@ -42,7 +42,7 @@ help:
 	@echo "  thrust          - Thrust calibration (find HAL_BASE_THRUST)"
 	@echo "  flash           - Hive file API test (flash backend)"
 	@echo "  sd              - Hive file API test (SD backend)"
-	@echo "  radio           - DMA-based radio communication test"
+	@echo "  syslink         - DMA-based syslink communication test"
 	@echo "  main            - Combined test runner (Webots dummy pilot)"
 	@echo ""
 	@echo "Examples:"
@@ -65,7 +65,7 @@ HIVE_SRC_DIR = $(HIVE_ROOT)/src
 TEST ?= sensors_motors
 
 # Tests that require libhive.a (use Hive file API or logging)
-HIVE_TESTS = sensors_motors thrust flash sd radio main
+HIVE_TESTS = sensors_motors thrust flash sd syslink main
 
 # ==============================================================================
 # Crazyflie 2.1+ Build
@@ -120,7 +120,7 @@ HIVE_CFLAGS += '-DHIVE_STACK_ARENA_SIZE=(16*1024)'
 include $(HAL_DIR)/hive_board_config.mk
 
 # Radio test needs HAL_HAS_RADIO and doesn't need SD
-ifeq ($(TEST),radio)
+ifeq ($(TEST),syslink)
 CFLAGS += -DHAL_HAS_RADIO
 ENABLE_SD = 0
 endif
@@ -207,7 +207,7 @@ all-tests:
 	@$(MAKE) PLATFORM=crazyflie TEST=thrust
 	@$(MAKE) PLATFORM=crazyflie TEST=flash
 	@$(MAKE) PLATFORM=crazyflie TEST=sd
-	@$(MAKE) PLATFORM=crazyflie TEST=radio
+	@$(MAKE) PLATFORM=crazyflie TEST=syslink
 	@$(MAKE) PLATFORM=crazyflie TEST=main
 
 $(BUILD_DIR_CF):

@@ -1,5 +1,5 @@
 /**
- * Radio Communication Test
+ * Syslink Communication Test
  *
  * Tests the DMA-based syslink radio communication with Crazyradio PA/2.0.
  *
@@ -21,8 +21,8 @@
  *   - Slow blink: Error
  *
  * Usage:
- *   make PLATFORM=crazyflie TEST=radio
- *   make flash-crazyflie TEST=radio
+ *   make PLATFORM=crazyflie TEST=syslink
+ *   make flash-crazyflie TEST=syslink
  *
  * Ground station test (Python):
  *   import cflib
@@ -275,7 +275,7 @@ static void run_communication_test(void) {
 // Main Test Entry Point
 // ============================================================================
 
-int test_radio_run(bool standalone) {
+int test_syslink_run(bool standalone) {
     int result = 0;
 
     if (standalone) {
@@ -361,11 +361,11 @@ done:
 }
 
 // ============================================================================
-// Standalone Main (when built as TEST=radio)
+// Standalone Main (when built as TEST=syslink)
 // ============================================================================
 
 #ifndef TEST_MAIN_BUILD
 int main(void) {
-    return test_radio_run(true);
+    return test_syslink_run(true);
 }
 #endif

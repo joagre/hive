@@ -18,7 +18,7 @@ SRCS = bringup_main.c \
        bringup_i2c3.c \
        bringup_sensors.c \
        bringup_motors.c \
-       bringup_radio.c \
+       bringup_syslink.c \
        bringup_flash.c \
        bringup_sd.c \
        bringup_eeprom.c \

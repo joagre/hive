@@ -711,7 +711,7 @@ The following tests are planned but not yet implemented:
 | `bringup_i2c3.c/h` | I2C3 bus scan and communication (on-board sensors: BMI088, BMP388) |
 | `bringup_sensors.c/h` | Sensor chip ID and data readout |
 | `bringup_motors.c/h` | Motor PWM test (TIM2/TIM4) with rotation verification |
-| `bringup_radio.c/h` | Syslink radio test (USART6) |
+| `bringup_syslink.c/h` | Syslink radio test (USART6) |
 | `bringup_flash.c/h` | Internal flash storage test (sector 8) |
 | `bringup_sd.c/h` | SD card test via SPI3 (Micro SD Card Deck) |
 | `bringup_eeprom.c/h` | Configuration EEPROM test (I2C1) |

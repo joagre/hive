@@ -11,7 +11,7 @@
 #include "bringup_i2c3.h"
 #include "bringup_leds.h"
 #include "bringup_motors.h"
-#include "bringup_radio.h"
+#include "bringup_syslink.h"
 #include "bringup_sd.h"
 #include "bringup_sensors.h"
 #include "bringup_swo.h"
