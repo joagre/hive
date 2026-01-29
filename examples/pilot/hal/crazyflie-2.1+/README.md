@@ -31,6 +31,43 @@ Key learnings from the Bitcraze implementation:
 - The VL53L1x I2C address may be reprogrammed from 0x29 to 0x6A
 - Deck EEPROM detection uses the NRF51 1-Wire bus, not STM32 GPIO
 - Syslink communication at 1Mbaud requires DMA for reliable operation
+- Motor pins use TIM2 (M1, M2, M3) and TIM4 (M4), not all on TIM2
+
+## Design Decisions: Polling vs DMA/Interrupts
+
+This HAL uses a mix of polling and DMA, chosen based on timing requirements:
+
+| Peripheral | Bitcraze Reference | This HAL | Rationale |
+|------------|-------------------|----------|-----------|
+| **Radio (UART 1Mbaud)** | DMA | DMA | Required - polling causes overrun at 1Mbaud |
+| **Motors (PWM)** | Timer hardware | Timer hardware | Same - no CPU involvement for PWM output |
+| **I2C sensors** | Interrupt + DMA | Polling | Acceptable - see analysis below |
+| **SPI sensors** | Varies | Polling | Acceptable - short transactions |
+
+### I2C Polling Analysis
+
+The sensor actor is the timer-driven "heartbeat" that publishes to the bus and
+wakes up the control pipeline. It runs at high priority, not in the background.
+This means I2C polling time is part of the critical path.
+
+**Timing budget at 500Hz control rate:**
+- Total cycle time: 2.0 ms
+- I2C sensor read (BMI088 + BMP388): ~0.5 ms (25% of budget)
+- Remaining for estimator + controller + mixer: ~1.5 ms
+
+**Why polling is acceptable:**
+1. 1.5 ms is sufficient for Kalman filter + PID loops on Cortex-M4F with FPU
+2. Simpler code = fewer bugs during initial flight testing
+3. No race conditions or interrupt priority issues
+4. Easier to debug with deterministic execution
+
+**When to consider DMA/interrupts:**
+- Control rate > 1kHz (budget shrinks to 1ms, I2C alone takes half)
+- Adding more I2C sensors (flow deck sensors, additional IMUs)
+- Profiling shows I2C is the bottleneck
+
+**Current recommendation:** Keep polling for initial flight testing. Optimize
+later if profiling shows it's needed.
 
 ## Integration with Pilot
 
@@ -47,7 +84,7 @@ This HAL links with `pilot.c` and the hive runtime. The platform API
 | Flow sensor | PMW3901 | SPI1 | Optical flow (Flow deck v2) |
 | ToF sensor | VL53L1x | I2C1 | Height measurement (Flow deck v2, addr: 0x29) |
 | SD card | Micro SD | SPI3 | Optional Micro SD Card Deck |
-| Motors | 7x16mm | TIM2 PWM | Brushed coreless, x4 |
+| Motors | 7x16mm | TIM2/TIM4 PWM | Brushed coreless, x4 |
 | Radio | nRF51822 | USART6 | Syslink to Crazyradio PA |
 | LED | Blue | PD2 | Status indicator |
 
@@ -228,12 +265,12 @@ PA7  - SPI1_MOSI
 PB4  - PMW3901_CS (Flow deck v2, DECK_GPIO_IO3)
 ```
 
-### TIM2 PWM (Motors)
+### TIM2/TIM4 PWM (Motors)
 ```
-PA0  - TIM2_CH1 (M1, front-left, CCW)
-PA1  - TIM2_CH2 (M2, front-right, CW)
-PA2  - TIM2_CH3 (M3, rear-right, CCW)
-PA3  - TIM2_CH4 (M4, rear-left, CW)
+PA1  - TIM2_CH2 (M1, front-left, CCW)
+PB11 - TIM2_CH4 (M2, front-right, CW)
+PA15 - TIM2_CH1 (M3, rear-right, CCW)
+PB9  - TIM4_CH4 (M4, rear-left, CW)
 ```
 
 ### USART6 (nRF51 Syslink)
@@ -356,14 +393,14 @@ X-configuration quadcopter with brushed coreless motors:
              Rear
 ```
 
-**Motor to pin mapping**
+**Motor to pin mapping (Bitcraze reference)**
 
-| Motor | Position | Rotation | Pin |
-|-------|----------|----------|-----|
-| M1 | front-left | CCW | PA0 (TIM2_CH1) |
-| M2 | front-right | CW | PA1 (TIM2_CH2) |
-| M3 | rear-right | CCW | PA2 (TIM2_CH3) |
-| M4 | rear-left | CW | PA3 (TIM2_CH4) |
+| Motor | Position | Rotation | Pin | Timer |
+|-------|----------|----------|-----|-------|
+| M1 | front-left | CCW | PA1 | TIM2_CH2 |
+| M2 | front-right | CW | PB11 | TIM2_CH4 |
+| M3 | rear-right | CCW | PA15 | TIM2_CH1 |
+| M4 | rear-left | CW | PB9 | TIM4_CH4 |
 
 **Motor mixing (in hal_crazyflie.c)**
 ```
