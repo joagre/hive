@@ -32,10 +32,10 @@ make -f Makefile.crazyflie-2.1+
 | Component | Part Number | Interface | Description |
 |-----------|-------------|-----------|-------------|
 | MCU | STM32F405RG | - | ARM Cortex-M4, 168 MHz, DSP+FPU |
-| IMU | BMI088 | I2C3 | 6-axis accel + gyro (addr: 0x18/0x68) |
+| IMU | BMI088 | I2C3 | 6-axis accel + gyro (addr: 0x18/0x69) |
 | Barometer | BMP388 | I2C3 | Pressure/altitude (addr: 0x77) |
 | Flow sensor | PMW3901 | SPI1 | Optical flow (Flow deck v2) |
-| ToF sensor | VL53L1x | I2C3 | Height measurement (Flow deck v2) |
+| ToF sensor | VL53L1x | I2C1 | Height measurement (Flow deck v2, addr: 0x29) |
 | SD card | Micro SD | SPI3 | Optional Micro SD Card Deck |
 | Motors | 7x16mm | TIM2 PWM | Brushed coreless, x4 |
 | Radio | nRF51822 | USART6 | Syslink to Crazyradio PA |
@@ -49,13 +49,13 @@ make -f Makefile.crazyflie-2.1+
 - Hardware FPU for fast sensor fusion
 - 8 MHz HSE crystal
 
-**Sensors**
-- BMI088: 16-bit accel (+/-24g) + 16-bit gyro (+/-2000 dps) on I2C3 (addr: 0x18/0x68)
-- BMP388: 24-bit barometer on I2C3 (addr: 0x77)
+**Sensors (On-board, I2C3)**
+- BMI088: 16-bit accel (+/-24g) + 16-bit gyro (+/-2000 dps) (addr: 0x18/0x69)
+- BMP388: 24-bit barometer (addr: 0x77)
 
-**Optional Flow Deck v2**
-- PMW3901: Optical flow sensor (80x80 pixels)
-- VL53L1x: Time-of-Flight ranging (up to 4m)
+**Optional Flow Deck v2 (Expansion connector)**
+- PMW3901: Optical flow sensor on SPI1 (80x80 pixels)
+- VL53L1x: Time-of-Flight ranging on I2C1 (addr: 0x29, up to 4m)
 
 **Motors**
 - Type: Brushed coreless, 7x16mm
@@ -191,14 +191,21 @@ Uses official vendor APIs for reliability. All under permissive licenses
 
 ## Pin Mapping
 
-### I2C3 (BMI088, BMP388, VL53L1x)
+### I2C3 (On-board sensors: BMI088, BMP388)
 ```
 PA8  - I2C3_SCL
 PC9  - I2C3_SDA
 
 BMI088 Accelerometer: 0x18
-BMI088 Gyroscope: 0x68
+BMI088 Gyroscope: 0x69
 BMP388 Barometer: 0x77
+```
+
+### I2C1 (Expansion connector: VL53L1x on Flow deck)
+```
+PB6  - I2C1_SCL
+PB7  - I2C1_SDA
+
 VL53L1x ToF: 0x29
 ```
 
@@ -347,6 +354,43 @@ M4 = thrust - roll - pitch - yaw
 
 **To reverse motor direction** - Swap the two motor wires at the connector.
 
+## Sensor Configuration
+
+The sensor configuration matches the Bitcraze crazyflie-firmware for compatibility:
+
+**BMI088 IMU**
+| Parameter | Value |
+|-----------|-------|
+| Accel range | +/-24g |
+| Accel ODR | 1600 Hz |
+| Accel bandwidth | OSR4 (4x oversampling) |
+| Gyro range | +/-2000 dps |
+| Gyro ODR | 1000 Hz |
+| Gyro bandwidth | 116 Hz |
+
+**BMP388 Barometer**
+| Parameter | Value |
+|-----------|-------|
+| Pressure oversampling | 8x |
+| Temperature oversampling | None |
+| ODR | 50 Hz |
+| IIR filter coefficient | 3 |
+
+**VL53L1x ToF (Flow deck)**
+| Parameter | Value |
+|-----------|-------|
+| Distance mode | Short |
+| Timing budget | 20 ms |
+| Inter-measurement | 25 ms |
+
+**Startup sequence**
+1. 1000 ms delay for sensor power stabilization
+2. Initialize I2C3 (on-board sensors)
+3. Initialize SPI1 (PMW3901)
+4. Initialize BMI088 with soft reset
+5. Initialize BMP388 with soft reset
+6. Initialize Flow deck sensors on I2C1 (if present)
+
 ## Self-Test
 
 After initialization, `hal_self_test()` verifies all sensors respond:
@@ -358,12 +402,13 @@ Returns `true` if all required sensors pass, `false` otherwise.
 
 ## Calibration
 
-Before flight, `hal_calibrate()` performs:
+Before flight, `hal_calibrate()` performs (matching Bitcraze firmware):
 
 1. **Level check** - Verify accelerometer reads approximately level (warns if tilted >6 deg)
-2. **Gyro bias** - Average 500 samples while stationary
-3. **Barometer reference** - Average 50 samples for ground level
-4. **Height offset** (Flow deck only) - Measure ground clearance for accurate height
+2. **Gyro bias** - Average 512 samples with variance check; retries until drone is stationary
+3. **Accelerometer scale** - Average 200 samples to compute magnitude-based scale correction
+4. **Barometer reference** - Average 50 samples for ground level
+5. **Height offset** (Flow deck only) - Measure ground clearance for accurate height
 
 **Important** - Keep the drone still and level on a flat surface during calibration!
 
