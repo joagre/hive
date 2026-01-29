@@ -658,6 +658,9 @@ See [examples/pilot/README.md](examples/pilot/README.md) for build instructions 
 
 ### File I/O
 
+Intentionally minimal file interface - cross-platform abstraction for embedded constraints.
+Omits seek, stat, readdir, mkdir, unlink by design (lowest common denominator across platforms).
+
 - `hive_file_open(path, flags, mode, out)` - Open file
 - `hive_file_close(fd)` - Close file
 - `hive_file_read(fd, buf, len, bytes_read)` - Read from file

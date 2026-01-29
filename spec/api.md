@@ -1843,6 +1843,12 @@ while (total < len) {
 
 ## File API
 
+**Intentionally minimal by design.** The file API is a cross-platform abstraction
+designed for embedded constraints. It provides only basic operations that work on both
+Linux and bare-metal embedded targets. seek/lseek, stat, readdir, mkdir, unlink, and
+other POSIX functions are intentionally omitted - they reflect the lowest common
+denominator across platforms where flash-backed virtual files may not support them.
+
 File I/O operations.
 
 > **Note** - File I/O is synchronous and briefly pauses the scheduler. This is fine for short operations - use `LOW` priority actors for file work. See [Scheduler-Stalling Calls](design.md#scheduler-stalling-calls) for details.

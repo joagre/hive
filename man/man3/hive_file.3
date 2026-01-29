@@ -136,6 +136,27 @@ NULL argument or file I/O subsystem not initialized.
 .B HIVE_ERR_IO
 POSIX I/O error (errno-based message: "No such file", "Permission denied", etc.).
 .SH NOTES
+.SS Minimal by Design
+The file API is intentionally minimal - a cross-platform abstraction designed
+for embedded constraints. It provides only basic operations that work on both
+Linux and bare-metal embedded targets.
+.PP
+.B Intentionally omitted:
+.IP \(bu 2
+seek/lseek (use pread/pwrite instead)
+.IP \(bu 2
+stat/fstat (no file metadata)
+.IP \(bu 2
+readdir/opendir (no directory listing)
+.IP \(bu 2
+mkdir/rmdir/unlink (no file or directory management)
+.IP \(bu 2
+truncate, rename, chmod, mmap
+.PP
+These omissions reflect the lowest common denominator across platforms. On
+embedded targets with flash-backed virtual files, many of these operations are
+either impossible or would require complex emulation. The API provides what can
+be implemented efficiently on resource-constrained targets.
 .SS Blocking Behavior (Critical)
 File I/O is
 .B completely synchronous
