@@ -318,53 +318,60 @@ Tests the AT24C64 configuration EEPROM on I2C1 (separate bus from sensors).
 
 ### Phase 6: Deck Detection
 
-Detects expansion decks via the 1-Wire bit-banged interface. Each deck
-contains a DS28E05 EEPROM with vendor/product identification.
+Detects expansion decks by probing for deck-specific sensors. The deck EEPROM
+(DS28E05) is connected to the NRF51 processor, not the STM32, so direct 1-Wire
+access is not possible without DMA-based syslink communication.
 
-**Hardware**: 1-Wire interface on PC11
+**Detection Method**: Sensor probing (indirect)
 
-| Test | Description |
-|------|-------------|
-| OW Init | Initializes 1-Wire GPIO (open-drain with pull-up) |
-| Presence | Sends reset pulse, checks for presence response |
-| ROM Read | Reads 8-byte ROM ID from deck EEPROM |
-| Memory Read | Reads VID/PID from deck memory |
+| Deck | Detection Method |
+|------|------------------|
+| Flow deck v2 | VL53L1x (I2C1) + PMW3901 (SPI1) present |
+| Z-ranger deck | VL53L1x (I2C1) present, no PMW3901 |
+| Other decks | Not detected (would require syslink DMA) |
+
+**Why not 1-Wire?**
+
+The deck EEPROM is on NRF51 GPIO 8, not STM32 PC11. Reading the EEPROM requires
+syslink commands to the NRF51, but syslink at 1Mbaud causes UART overrun errors
+without DMA. See "Deck Detection Architecture" section above.
 
 **Known Bitcraze Decks (VID=0xBC)**
 
-| PID | Deck Name |
-|-----|-----------|
-| 0x01 | LED ring deck |
-| 0x06 | Loco positioning deck |
-| 0x08 | Micro SD card deck |
-| 0x09 | Flow deck |
-| 0x0A | Flow deck v2 |
-| 0x0C | Z-ranger deck |
-| 0x0F | Z-ranger deck v2 |
-| 0x10 | Lighthouse deck |
-| 0x12 | AI deck |
+| PID | Deck Name | Bringup Detection |
+|-----|-----------|-------------------|
+| 0x01 | LED ring deck | Not detected |
+| 0x06 | Loco positioning deck | Not detected |
+| 0x08 | Micro SD card deck | Not detected (use Phase 10) |
+| 0x09 | Flow deck | VL53L1x + PMW3901 |
+| 0x0A | Flow deck v2 | VL53L1x + PMW3901 |
+| 0x0C | Z-ranger deck | VL53L1x only |
+| 0x0F | Z-ranger deck v2 | VL53L1x only |
+| 0x10 | Lighthouse deck | Not detected |
+| 0x12 | AI deck | Not detected |
 
-**Expected output (deck present)**
+**Expected output (Flow deck present)**
 ```
 === Phase 6: Deck Detection ===
-[DECK] 1-Wire interface (PC11)
-[DECK] Initializing 1-Wire... OK
-[DECK] Checking for deck presence... Deck detected!
-[DECK] Reading deck ROM ID... OK
-[DECK]   ROM ID: 42-00-00-0A-BC-83-29-6E
-[DECK] Reading deck identity... OK
+[DECK] Note: Deck EEPROM is on NRF51 1-Wire bus
+[DECK] Syslink at 1Mbaud requires DMA (not implemented)
+[DECK] Using I2C/SPI sensor detection as proxy
+[DECK] Checking for deck sensors...
+[DECK] VL53L1x + PMW3901 detected in Phase 4 = Flow deck present
 [DECK]   VID: 0xBC (Bitcraze)
-[DECK]   PID: 0x0A
-[DECK]   Name: Flow deck v2
+[DECK]   PID: 0x0A (inferred from sensors)
+[DECK]   Name: Flow deck v2 (inferred)
 [DECK] Detected 1 deck(s)
 ```
 
 **Expected output (no deck)**
 ```
 === Phase 6: Deck Detection ===
-[DECK] 1-Wire interface (PC11)
-[DECK] Initializing 1-Wire... OK
-[DECK] Checking for deck presence... No deck detected
+[DECK] Note: Deck EEPROM is on NRF51 1-Wire bus
+[DECK] Syslink at 1Mbaud requires DMA (not implemented)
+[DECK] Using I2C/SPI sensor detection as proxy
+[DECK] Checking for deck sensors...
+[DECK] No deck-specific sensors detected
 [DECK] (This is normal if no expansion deck is attached)
 ```
 
@@ -401,13 +408,40 @@ The test requires user confirmation before starting motors.
 Tests USART serial communication with the nRF51822 via syslink protocol.
 Waits for battery voltage packet from nRF51.
 
-**Expected output**
+**Hardware**: USART6 at 1Mbaud
+- PC6: TX to NRF51
+- PC7: RX from NRF51
+- PA4: TXEN flow control (input with pull-up)
+
+**Known Limitation**: This test often times out because syslink at 1Mbaud
+requires DMA/interrupt-driven UART for reliable communication. The simple
+polling approach used in bringup causes UART overrun errors, losing bytes.
+
+The Bitcraze firmware uses:
+- DMA for UART TX/RX
+- EXTI interrupts for TXEN flow control
+- FreeRTOS tasks for packet processing
+
+**Expected output (success - rare without DMA)**
 ```
 === Phase 8: Radio Test ===
 [RADIO] Initializing syslink (USART6)... OK
 [RADIO] Waiting for battery packet...
 [RADIO] Battery voltage: 3.92V... OK
 ```
+
+**Expected output (timeout - common)**
+```
+=== Phase 8: Radio Test ===
+[RADIO] Initializing syslink (USART6)... OK
+[RADIO] Waiting for battery packet...
+[RADIO] Timeout waiting for battery packet... FAIL
+```
+
+**Note**: A timeout here does NOT indicate hardware failure. The NRF51 is
+functioning (it controls power and LEDs). The timeout is due to the polling-based
+UART implementation not being fast enough for 1Mbaud. The full pilot firmware
+will need proper DMA-based syslink for reliable radio communication.
 
 ### Phase 9: Flash Storage
 
