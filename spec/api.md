@@ -1755,6 +1755,12 @@ void orchestrator(void *args, const hive_spawn_info_t *siblings, size_t sibling_
 
 ## TCP API
 
+**Intentionally minimal by design.** The TCP API provides only the core operations
+needed for actor-based TCP communication: listen, accept, connect, close, recv, send.
+This is not a BSD socket replacement. SSL/TLS, UDP, socket options, and scatter/gather
+I/O are intentionally omitted. For advanced networking, extend the HAL or use external
+libraries with dedicated I/O actors.
+
 Non-blocking TCP I/O with blocking wrappers.
 
 ```c

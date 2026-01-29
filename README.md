@@ -716,12 +716,16 @@ See `examples/pilot/Makefile.crazyflie-2.1+` for a complete example and [spec/ap
 
 ### TCP I/O
 
+Intentionally minimal TCP interface for actor-based networking. Not a BSD socket replacement.
+
 - `hive_tcp_listen(port, out)` - Create TCP listening socket (backlog hardcoded to 5)
 - `hive_tcp_accept(listen_fd, out, timeout_ms)` - Accept incoming connection
 - `hive_tcp_connect(ip, port, out, timeout_ms)` - Connect to remote server (numeric IPv4 only)
 - `hive_tcp_send(fd, buf, len, bytes_written, timeout_ms)` - Send data
 - `hive_tcp_recv(fd, buf, len, bytes_read, timeout_ms)` - Receive data
 - `hive_tcp_close(fd)` - Close socket
+
+Omits SSL/TLS, UDP, socket options by design. See `man hive_tcp` for rationale.
 
 ### Bus (Pub-Sub)
 

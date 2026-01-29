@@ -113,6 +113,26 @@ Operation did not complete within timeout period.
 .B HIVE_ERR_NOMEM
 I/O source pool exhausted (HIVE_IO_SOURCE_POOL_SIZE).
 .SH NOTES
+.SS Minimal by Design
+The TCP API is intentionally minimal. It provides only the core operations needed
+for actor-based TCP communication: listen, accept, connect, close, recv, send.
+.PP
+This is
+.B not
+a full BSD socket replacement. The following are intentionally omitted:
+.IP \(bu 2
+SSL/TLS (use a dedicated TLS library with I/O actors)
+.IP \(bu 2
+UDP/multicast (different I/O patterns, may be added later)
+.IP \(bu 2
+Socket options (SO_REUSEADDR is set automatically; others require HAL extension)
+.IP \(bu 2
+Scatter/gather I/O (use multiple send/recv calls)
+.IP \(bu 2
+Out-of-band data
+.PP
+For advanced networking requirements, extend the HAL or use external libraries
+with dedicated I/O actors.
 .SS No DNS Resolution
 .BR hive_tcp_connect ()
 requires numeric IPv4 addresses (e.g., "192.168.1.1"). Hostnames are
