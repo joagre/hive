@@ -157,7 +157,6 @@ bool eeprom_test_read_verify(uint32_t *time_ms) {
 bool eeprom_run_test(eeprom_test_results_t *results) {
     memset(results, 0, sizeof(*results));
 
-    swo_puts("\n=== EEPROM Test ===\n");
     swo_puts("[EEPROM] Configuration EEPROM (I2C1: PB6=SCL, PB7=SDA)\n");
 
     // Initialize I2C1

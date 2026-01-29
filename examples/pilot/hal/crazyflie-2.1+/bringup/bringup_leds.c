@@ -167,7 +167,6 @@ bool led_run_test(led_test_results_t *results) {
     results->red_m3_tested = false;
     results->red_m4_tested = false;
 
-    swo_puts("\n=== LED Test ===\n");
     swo_puts("[LED] Testing all controllable LEDs\n");
     swo_puts("[LED] Watch the Crazyflie for LED activity\n");
 

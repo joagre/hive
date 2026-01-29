@@ -574,7 +574,6 @@ bool sd_test_read_verify(uint32_t *time_ms) {
 bool sd_run_test(sd_test_results_t *results) {
     memset(results, 0, sizeof(*results));
 
-    swo_puts("\n=== SD Card Test ===\n");
     swo_puts("[SD] Micro SD Card Deck (SPI3)\n");
     swo_puts("[SD] Pins: PB3=SCK, PB4=MISO, PB5=MOSI, PB6=CS\n");
 

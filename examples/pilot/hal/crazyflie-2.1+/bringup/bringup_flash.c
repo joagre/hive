@@ -243,7 +243,6 @@ bool flash_test_read_verify(uint32_t *bytes_read, uint32_t *time_ms) {
 }
 
 bool flash_run_test(flash_test_results_t *results) {
-    swo_puts("\n=== Flash Storage Test ===\n");
     swo_printf("[FLASH] Test sector: %d (0x%08X, %u KB)\n", FLASH_LOG_SECTOR,
                FLASH_LOG_BASE, FLASH_LOG_SIZE / 1024);
     swo_puts("[FLASH] WARNING: This will erase existing log data!\n");

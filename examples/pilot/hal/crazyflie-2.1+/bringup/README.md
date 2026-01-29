@@ -354,7 +354,6 @@ without DMA. See "Deck Detection Architecture" section above.
 ```
 === Phase 6: Deck Detection ===
 [DECK] Note: Deck EEPROM is on NRF51 1-Wire bus
-[DECK] Syslink at 1Mbaud requires DMA (not implemented)
 [DECK] Using I2C/SPI sensor detection as proxy
 [DECK] Checking for deck sensors...
 [DECK] VL53L1x + PMW3901 detected in Phase 4 = Flow deck present
@@ -368,7 +367,6 @@ without DMA. See "Deck Detection Architecture" section above.
 ```
 === Phase 6: Deck Detection ===
 [DECK] Note: Deck EEPROM is on NRF51 1-Wire bus
-[DECK] Syslink at 1Mbaud requires DMA (not implemented)
 [DECK] Using I2C/SPI sensor detection as proxy
 [DECK] Checking for deck sensors...
 [DECK] No deck-specific sensors detected
