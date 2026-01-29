@@ -7,6 +7,7 @@
 #include "hal_config.h"
 #include "stm32f4xx.h"
 #include "motors.h"
+#include "debug_swo.h"
 
 // Vendor drivers
 #include "vendor/bosch/bmi08x/bmi08x.h"
@@ -866,8 +867,11 @@ void platform_led_toggle(void) {
     LED_PORT->ODR ^= LED_PIN;
 }
 
-// Blink LED n times (for init feedback)
-static void init_blink(int n, int on_ms, int off_ms) {
+// Blink LED n times (for init feedback) with SWO message
+static void init_blink(int n, int on_ms, int off_ms, const char *msg) {
+    if (msg) {
+        debug_swo_printf("[INIT] %s (%d blinks)\n", msg, n);
+    }
     for (int i = 0; i < n; i++) {
         platform_led_on();
         platform_delay_ms(on_ms);
@@ -878,7 +882,8 @@ static void init_blink(int n, int on_ms, int off_ms) {
 }
 
 // Slow blink forever (error indicator)
-static void error_blink_forever(void) {
+static void error_blink_forever(const char *msg) {
+    debug_swo_printf("[FATAL] %s - halted\n", msg);
     while (1) {
         platform_led_toggle();
         platform_delay_ms(500);
@@ -1093,89 +1098,155 @@ int platform_init(void) {
     // Initialize GPIO (LED)
     gpio_init();
 
-    // 1 blink = starting
-    init_blink(1, 200, 200);
+    init_blink(1, 200, 200, "Starting platform init");
 
     // Wait for sensor power stabilization (matching Bitcraze)
+    debug_swo_printf("[INIT] Waiting %dms for sensor power...\n",
+                     SENSOR_STARTUP_DELAY_MS);
     platform_delay_ms(SENSOR_STARTUP_DELAY_MS);
 
     // Initialize I2C3 for BMI08x and BMP3 (on-board sensors)
+    debug_swo_printf("[INIT] I2C3 init (on-board sensors)...\n");
     i2c3_init();
 
     // Initialize SPI1 for PMW3901 (Flow deck only)
+    debug_swo_printf("[INIT] SPI1 init (Flow deck)...\n");
     spi1_init();
 
     // Initialize BMI08x IMU
+    debug_swo_printf("[INIT] BMI088 IMU init...\n");
     if (!init_bmi08x()) {
-        init_blink(3, 100, 100); // 3 fast blinks = IMU failed
-        error_blink_forever();
+        init_blink(3, 100, 100, "BMI088 IMU init FAILED");
+        error_blink_forever("BMI088 IMU init failed");
     }
 
-    // 2 blinks = IMU OK
-    init_blink(2, 200, 200);
+    init_blink(2, 200, 200, "BMI088 IMU OK");
 
     // Initialize BMP3 barometer
+    debug_swo_printf("[INIT] BMP388 barometer init...\n");
     if (!init_bmp3()) {
-        init_blink(4, 100, 100); // 4 fast blinks = baro failed
-        error_blink_forever();
+        init_blink(4, 100, 100, "BMP388 barometer init FAILED");
+        error_blink_forever("BMP388 barometer init failed");
     }
 
     // Initialize motors
+    debug_swo_printf("[INIT] Motors init...\n");
     if (!motors_init(NULL)) {
-        init_blink(5, 100, 100); // 5 fast blinks = motors failed
-        error_blink_forever();
+        init_blink(5, 100, 100, "Motors init FAILED");
+        error_blink_forever("Motors init failed");
     }
 
     // Try to initialize Flow deck (optional)
+    debug_swo_printf("[INIT] Checking for Flow deck...\n");
     s_flow_deck_present = false;
     if (init_pmw3901()) {
         if (init_vl53l1x()) {
             s_flow_deck_present = true;
+            debug_swo_printf("[INIT] Flow deck detected (PMW3901 + VL53L1x)\n");
         }
+    }
+    if (!s_flow_deck_present) {
+        debug_swo_printf("[INIT] No Flow deck detected (optional)\n");
     }
 
     s_initialized = true;
     s_calibrated = false;
     s_armed = false;
 
-    // 3 blinks = all init complete
-    init_blink(3, 200, 200);
+    init_blink(3, 200, 200, "Platform init complete");
 
     return 0;
 }
 
 bool platform_self_test(void) {
     if (!s_initialized) {
+        debug_swo_printf("[TEST] Self-test called before init!\n");
         return false;
     }
 
-    // Test BMI08x: read chip IDs
+    debug_swo_printf("[TEST] Starting self-test...\n");
+
+    // Test BMI08x: verify chip IDs
+    debug_swo_printf("[TEST] BMI088 accel chip ID: 0x%02X (expected 0x%02X)\n",
+                     s_bmi08_dev.accel_chip_id, BMI088_ACCEL_CHIP_ID);
     if (s_bmi08_dev.accel_chip_id != BMI088_ACCEL_CHIP_ID) {
-        init_blink(6, 100, 100);
-        return false;
-    }
-    if (s_bmi08_dev.gyro_chip_id != BMI08_GYRO_CHIP_ID) {
-        init_blink(6, 100, 100);
+        init_blink(6, 100, 100, "BMI088 accel chip ID MISMATCH");
         return false;
     }
 
-    // Test BMP3: read chip ID
+    debug_swo_printf("[TEST] BMI088 gyro chip ID: 0x%02X (expected 0x%02X)\n",
+                     s_bmi08_dev.gyro_chip_id, BMI08_GYRO_CHIP_ID);
+    if (s_bmi08_dev.gyro_chip_id != BMI08_GYRO_CHIP_ID) {
+        init_blink(6, 100, 100, "BMI088 gyro chip ID MISMATCH");
+        return false;
+    }
+
+    // Test BMP3: verify chip ID
+    debug_swo_printf(
+        "[TEST] BMP3xx chip ID: 0x%02X (expected 0x%02X or 0x%02X)\n",
+        s_bmp3_dev.chip_id, BMP3_CHIP_ID, BMP390_CHIP_ID);
     if (s_bmp3_dev.chip_id != BMP3_CHIP_ID &&
         s_bmp3_dev.chip_id != BMP390_CHIP_ID) {
-        init_blink(7, 100, 100);
+        init_blink(7, 100, 100, "BMP3xx chip ID MISMATCH");
         return false;
     }
 
+    // BMI088 gyroscope built-in self-test (matching Bitcraze)
+    debug_swo_printf("[TEST] BMI088 gyro built-in self-test...\n");
+    int8_t rslt = bmi08g_perform_selftest(&s_bmi08_dev);
+    if (rslt != BMI08_OK) {
+        init_blink(8, 100, 100, "BMI088 gyro self-test FAILED");
+        return false;
+    }
+    debug_swo_printf("[TEST] BMI088 gyro self-test OK\n");
+
+    // Re-initialize gyro after self-test (self-test changes config)
+    debug_swo_printf("[TEST] Re-initializing gyro after self-test...\n");
+    platform_delay_ms(50);
+    s_bmi08_dev.gyro_cfg.odr = BMI08_GYRO_BW_116_ODR_1000_HZ;
+    s_bmi08_dev.gyro_cfg.range = BMI08_GYRO_RANGE_2000_DPS;
+    s_bmi08_dev.gyro_cfg.bw = BMI08_GYRO_BW_116_ODR_1000_HZ;
+    s_bmi08_dev.gyro_cfg.power = BMI08_GYRO_PM_NORMAL;
+    bmi08g_set_power_mode(&s_bmi08_dev);
+    platform_delay_ms(30);
+    bmi08g_set_meas_conf(&s_bmi08_dev);
+
+    // BMI088 accelerometer built-in self-test (matching Bitcraze)
+    debug_swo_printf("[TEST] BMI088 accel built-in self-test...\n");
+    rslt = bmi08xa_perform_selftest(&s_bmi08_dev);
+    if (rslt != BMI08_OK) {
+        init_blink(9, 100, 100, "BMI088 accel self-test FAILED");
+        return false;
+    }
+    debug_swo_printf("[TEST] BMI088 accel self-test OK\n");
+
+    // Re-initialize accel after self-test (self-test changes config)
+    debug_swo_printf("[TEST] Re-initializing accel after self-test...\n");
+    platform_delay_ms(50);
+    s_bmi08_dev.accel_cfg.odr = BMI08_ACCEL_ODR_1600_HZ;
+    s_bmi08_dev.accel_cfg.range = BMI088_ACCEL_RANGE_24G;
+    s_bmi08_dev.accel_cfg.bw = BMI08_ACCEL_BW_OSR4;
+    s_bmi08_dev.accel_cfg.power = BMI08_ACCEL_PM_ACTIVE;
+    bmi08a_set_power_mode(&s_bmi08_dev);
+    platform_delay_ms(10);
+    bmi08a_set_meas_conf(&s_bmi08_dev);
+
+    debug_swo_printf("[TEST] All self-tests passed\n");
     // Flow deck sensors are optional
     return true;
 }
 
 int platform_calibrate(void) {
     if (!s_initialized) {
+        debug_swo_printf("[CAL] Calibrate called before init!\n");
         return -1;
     }
 
+    debug_swo_printf("[CAL] Starting calibration...\n");
+    debug_swo_printf("[CAL] Keep drone LEVEL and STATIONARY\n");
+
     // Accelerometer level check
+    debug_swo_printf("[CAL] Checking level (50 samples)...\n");
     struct bmi08_sensor_data accel_data;
     float accel_sum[3] = {0.0f, 0.0f, 0.0f};
     int accel_samples = 50;
@@ -1196,6 +1267,10 @@ int platform_calibrate(void) {
                           accel_sum[1] / accel_samples,
                           accel_sum[2] / accel_samples};
 
+    debug_swo_printf("[CAL] Accel avg: X=%.2f Y=%.2f Z=%.2f m/s^2\n",
+                     (double)accel_avg[0], (double)accel_avg[1],
+                     (double)accel_avg[2]);
+
     // Check if level: X and Y should be near 0, Z should be near -9.8 m/s^2
     float xy_tolerance = 1.0f;
     float z_expected = -GRAVITY;
@@ -1204,17 +1279,26 @@ int platform_calibrate(void) {
     if (fabsf(accel_avg[0]) > xy_tolerance ||
         fabsf(accel_avg[1]) > xy_tolerance ||
         fabsf(accel_avg[2] - z_expected) > z_tolerance) {
-        init_blink(10, 50, 50); // Level warning
+        init_blink(10, 50, 50, "WARNING: Drone not level!");
+    } else {
+        debug_swo_printf("[CAL] Level check OK\n");
     }
 
     // Gyro bias calibration with variance check (matching Bitcraze)
     // Retry until variance is low enough (drone is stationary)
+    debug_swo_printf("[CAL] Gyro bias calibration (%d samples)...\n",
+                     CALIBRATION_SAMPLES);
     float gyro_scale = (2000.0f * M_PI / 180.0f) / 32768.0f;
     bool gyro_bias_found = false;
     int max_attempts = 10;
 
     for (int attempt = 0; attempt < max_attempts && !gyro_bias_found;
          attempt++) {
+        if (attempt > 0) {
+            debug_swo_printf("[CAL] Gyro variance too high, retry %d/%d...\n",
+                             attempt + 1, max_attempts);
+        }
+
         float gyro_sum[3] = {0.0f, 0.0f, 0.0f};
         float gyro_sum_sq[3] = {0.0f, 0.0f, 0.0f};
         struct bmi08_sensor_data gyro_data;
@@ -1255,7 +1339,14 @@ int platform_calibrate(void) {
             s_gyro_bias[1] = mean[1];
             s_gyro_bias[2] = mean[2];
             gyro_bias_found = true;
+            debug_swo_printf("[CAL] Gyro bias: X=%.4f Y=%.4f Z=%.4f rad/s\n",
+                             (double)s_gyro_bias[0], (double)s_gyro_bias[1],
+                             (double)s_gyro_bias[2]);
         } else {
+            debug_swo_printf(
+                "[CAL] Variance: X=%.1f Y=%.1f Z=%.1f (max=%.1f)\n",
+                (double)variance[0], (double)variance[1], (double)variance[2],
+                (double)GYRO_VARIANCE_THRESHOLD);
             // Wait before retry
             platform_delay_ms(GYRO_CALIBRATION_TIMEOUT_MS);
         }
@@ -1263,11 +1354,14 @@ int platform_calibrate(void) {
 
     if (!gyro_bias_found) {
         // Use last values even if variance was high
-        init_blink(5, 100, 100); // Warning: gyro not stable
+        init_blink(5, 100, 100,
+                   "WARNING: Gyro not stable, using best estimate");
     }
 
     // Accelerometer scale calibration (matching Bitcraze)
     // Measures magnitude and computes scale factor
+    debug_swo_printf("[CAL] Accel scale calibration (%d samples)...\n",
+                     ACCEL_SCALE_SAMPLES);
     float accel_magnitude_sum = 0.0f;
     int scale_samples = 0;
 
@@ -1292,9 +1386,13 @@ int platform_calibrate(void) {
         if (avg_magnitude > 0.1f) {
             s_accel_scale = GRAVITY / avg_magnitude;
         }
+        debug_swo_printf("[CAL] Accel scale factor: %.4f\n",
+                         (double)s_accel_scale);
     }
 
     // Barometer reference calibration
+    debug_swo_printf("[CAL] Baro reference calibration (%d samples)...\n",
+                     BARO_CALIBRATION_SAMPLES);
     float pressure_sum = 0.0f;
     struct bmp3_data baro_data;
 
@@ -1310,9 +1408,12 @@ int platform_calibrate(void) {
     }
 
     s_ref_pressure = pressure_sum / BARO_CALIBRATION_SAMPLES;
+    debug_swo_printf("[CAL] Baro reference: %.1f Pa (%.1f hPa)\n",
+                     (double)s_ref_pressure, (double)(s_ref_pressure / 100.0f));
 
     // VL53L1x height offset calibration (if Flow deck present)
     if (s_flow_deck_present) {
+        debug_swo_printf("[CAL] VL53L1x height offset calibration...\n");
         uint32_t height_sum = 0;
         int height_samples = 0;
         int height_attempts = 20;
@@ -1340,10 +1441,13 @@ int platform_calibrate(void) {
         if (height_samples > 0) {
             s_height_offset_mm = (uint16_t)(height_sum / height_samples);
         }
+        debug_swo_printf("[CAL] VL53L1x height offset: %u mm\n",
+                         s_height_offset_mm);
     }
 
     platform_led_off();
     s_calibrated = true;
+    debug_swo_printf("[CAL] Calibration complete\n");
     return 0;
 }
 
@@ -1477,13 +1581,18 @@ void platform_write_motors(const motor_cmd_t *cmd) {
 
 void platform_arm(void) {
     if (s_initialized && s_calibrated) {
+        debug_swo_printf("[ARM] Motors ARMED\n");
         motors_arm();
         s_armed = true;
         platform_led_on();
+    } else {
+        debug_swo_printf("[ARM] Cannot arm: init=%d cal=%d\n", s_initialized,
+                         s_calibrated);
     }
 }
 
 void platform_disarm(void) {
+    debug_swo_printf("[ARM] Motors DISARMED\n");
     motors_disarm();
     s_armed = false;
     platform_led_off();

@@ -66,11 +66,11 @@ void hal_read_sensors(sensor_data_t *sensors) {
 //      M4(CW)  M3(CCW)
 //          Rear
 //
-// Channel mapping:
-//   M1 (front-left, CCW):  TIM2_CH1 (PA0)
-//   M2 (front-right, CW):  TIM2_CH2 (PA1)
-//   M3 (rear-right, CCW):  TIM2_CH3 (PA2)
-//   M4 (rear-left, CW):    TIM2_CH4 (PA3)
+// Channel mapping (Bitcraze reference):
+//   M1 (front-left, CCW):  TIM2_CH2 (PA1)
+//   M2 (front-right, CW):  TIM2_CH4 (PB11)
+//   M3 (rear-right, CCW):  TIM2_CH1 (PA15)
+//   M4 (rear-left, CW):    TIM4_CH4 (PB9)
 //
 // Mixer equations (standard X-quad):
 //   M1 = thrust - roll + pitch + yaw  (front-left, CCW)
