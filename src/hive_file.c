@@ -5,7 +5,7 @@
 // - Argument validation
 //
 // Actual I/O operations are delegated to platform-specific HAL implementations:
-// - Linux: POSIX file I/O (in hive_hal_linux.c)
+// - Linux: POSIX file I/O (in hive_hal_file.c)
 // - STM32: Flash-backed virtual files (in hive_hal_file_stm32.c)
 
 #include "hive_file.h"

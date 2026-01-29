@@ -287,7 +287,7 @@ bool hive_hal_udp_poll(void) {
 UDP event integration is trivial compared to TCP:
 
 ```c
-// In hive_hal.c - event wait function
+// In hive_hal_event.c - event wait function
 void hive_hal_event_wait(int timeout_ms) {
     uint64_t deadline = hive_hal_get_time_us() + timeout_ms * 1000;
 

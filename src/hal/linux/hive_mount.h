@@ -1,7 +1,7 @@
 // Linux Mount Table - Internal Header
 //
 // Defines the Linux-specific mount structure.
-// Included by both hive_mounts.c and hive_hal_linux.c.
+// Included by both hive_mounts.c and hive_hal_file.c.
 
 #ifndef HIVE_MOUNT_LINUX_H
 #define HIVE_MOUNT_LINUX_H

@@ -325,7 +325,7 @@ Without SD: ~0.5 KB flash overhead for mount table.
 ### POSIX Backend (Linux)
 
 ```c
-// src/hal/linux/hive_hal.c
+// src/hal/linux/hive_hal_file.c
 
 hive_status_t hive_hal_file_open(const char *path, int flags, int mode,
                                  int *out) {
@@ -516,7 +516,7 @@ src/
     hive_file.c              # Unified wrapper (unchanged)
     hal/
         linux/
-            hive_hal.c              # Main HAL (includes file I/O)
+            hive_hal_file.c         # File I/O HAL
             hive_mounts.c           # Linux mount config
             hive_mount_linux.h      # Linux mount structure
         stm32/
