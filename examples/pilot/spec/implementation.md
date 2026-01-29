@@ -37,7 +37,7 @@ Code is split into focused modules:
 | `pid.c/h` | Reusable PID controller |
 | `types.h` | Portable data types |
 | `config.h` | Configuration constants (timing, thresholds) |
-| `math_utils.h` | Math macros (CLAMPF, LPF, NORMALIZE_ANGLE) |
+| `math_utils.h` | Math utilities (CLAMPF, LPF macros, normalize_angle) |
 | `notifications.h` | IPC notification tags (NOTIFY_FLIGHT_START, etc.) |
 | `flight_profiles.h` | Waypoint definitions per flight profile |
 | `tools/*.py` | PID tuning and telemetry analysis tools |

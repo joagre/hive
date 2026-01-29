@@ -7,7 +7,7 @@
 //   - Crazyflie: comms_actor sends radio telemetry at 100Hz
 //   - Webots: telemetry_logger_actor writes CSV at 25Hz
 //
-// Actor list (10-12 actors depending on platform):
+// Actor list (10-11 actors depending on platform):
 //
 //   sensor_actor          - Reads raw sensors via HAL -> sensor bus
 //   estimator_actor       - Complementary filter fusion -> state bus
@@ -327,8 +327,8 @@ int main(void) {
     }
     (void)supervisor;
 
-    // Log actor count (9 flight actors + optional comms + 1 supervisor)
-#ifdef HAL_HAS_RADIO
+    // Log actor count (9 flight actors + optional telemetry + 1 supervisor)
+#if defined(HAL_HAS_RADIO) || ENABLE_TELEMETRY_LOG
     HIVE_LOG_INFO("11 actors spawned (10 children + 1 supervisor)");
 #else
     HIVE_LOG_INFO("10 actors spawned (9 children + 1 supervisor)");

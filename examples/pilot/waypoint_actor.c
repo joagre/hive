@@ -42,7 +42,7 @@ static bool check_arrival(const waypoint_t *wp, const state_estimate_t *est) {
     float dy = wp->y - est->y;
     float dist_xy = sqrtf(dx * dx + dy * dy);
     float alt_err = fabsf(wp->z - est->altitude);
-    float yaw_err = fabsf(NORMALIZE_ANGLE(wp->yaw - est->yaw));
+    float yaw_err = fabsf(normalize_angle(wp->yaw - est->yaw));
     float vel = sqrtf(est->x_velocity * est->x_velocity +
                       est->y_velocity * est->y_velocity);
 

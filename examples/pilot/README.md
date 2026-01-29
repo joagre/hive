@@ -470,7 +470,7 @@ doesn't affect flight-critical control loops and won't trigger restarts if it fa
 | `include/config.h` | Configuration constants (timing, thresholds, bus config) |
 | `include/pilot_buses.h` | Bus handle struct passed to actors |
 | `include/pid.h` | PID controller interface |
-| `include/math_utils.h` | Math macros (CLAMPF, LPF, NORMALIZE_ANGLE) |
+| `include/math_utils.h` | Math utilities (CLAMPF, LPF macros, normalize_angle) |
 | `include/notifications.h` | IPC notification tags (NOTIFY_FLIGHT_START, etc.) |
 | `include/flight_profiles.h` | Waypoint definitions per flight profile |
 

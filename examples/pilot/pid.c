@@ -50,6 +50,6 @@ float pid_update(pid_state_t *pid, float setpoint, float measurement,
 
 float pid_update_angle(pid_state_t *pid, float setpoint, float measurement,
                        float dt) {
-    float error = NORMALIZE_ANGLE(setpoint - measurement);
+    float error = normalize_angle(setpoint - measurement);
     return pid_update_internal(pid, error, dt);
 }

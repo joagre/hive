@@ -19,14 +19,12 @@
 #define M_PI_F 3.14159265f     // pi as float
 
 // Normalize angle to [-pi, pi] range
-#define NORMALIZE_ANGLE(a)       \
-    ({                           \
-        float _a = (a);          \
-        while (_a > M_PI_F)      \
-            _a -= 2.0f * M_PI_F; \
-        while (_a < -M_PI_F)     \
-            _a += 2.0f * M_PI_F; \
-        _a;                      \
-    })
+static inline float normalize_angle(float a) {
+    while (a > M_PI_F)
+        a -= 2.0f * M_PI_F;
+    while (a < -M_PI_F)
+        a += 2.0f * M_PI_F;
+    return a;
+}
 
 #endif // PILOT_MATH_UTILS_H

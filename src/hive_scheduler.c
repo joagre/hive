@@ -213,7 +213,8 @@ void hive_scheduler_pool_wait(void) {
     uint64_t now = hive_hal_get_time_us();
     if (now - s_scheduler.pool_wait_last_warn_us >=
         POOL_WAIT_WARN_INTERVAL_US) {
-        HIVE_LOG_WARN("Actor %u (%s) blocking on pool exhaustion", current->id,
+        HIVE_LOG_WARN("Actor %u (%s) blocking on pool exhaustion",
+                      (unsigned)current->id,
                       current->name ? current->name : "unnamed");
         s_scheduler.pool_wait_last_warn_us = now;
     }
