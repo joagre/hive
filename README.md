@@ -696,6 +696,9 @@ See `examples/pilot/Makefile.crazyflie-2.1+` for a complete example and [spec/ap
 
 ### Logging
 
+Intentionally minimal logging optimized for embedded. No log rotation, no remote/syslog,
+no JSON - just compile-time filtered levels with binary file output for space efficiency.
+
 - `HIVE_LOG_TRACE(fmt, ...)` - Verbose tracing (compile out with `-DHIVE_LOG_LEVEL=HIVE_LOG_LEVEL_DEBUG`)
 - `HIVE_LOG_DEBUG(fmt, ...)` - Debug information
 - `HIVE_LOG_INFO(fmt, ...)` - General information (default level)

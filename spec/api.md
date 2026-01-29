@@ -2029,6 +2029,11 @@ hive_file_close(fd);
 
 ## Logging API
 
+**Intentionally minimal by design.** Optimized for embedded systems with limited resources.
+Provides compile-time level filtering and dual output (console + binary file). Intentionally
+omits log rotation, remote logging (syslog), structured formats (JSON), per-module levels,
+and runtime level changes. Binary format maximizes space efficiency on flash storage.
+
 Structured logging with compile-time level filtering and dual output (console + file).
 
 ### Log Levels
