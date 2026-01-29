@@ -188,35 +188,98 @@ bool motors_run_test(void) {
     }
 
     swo_puts("[MOTOR] Starting motor test...\n");
+    swo_puts("\n");
+    swo_puts("[MOTOR] Motor layout (X-config, viewed from above):\n");
+    swo_puts("[MOTOR]\n");
+    swo_puts("[MOTOR]           FRONT\n");
+    swo_puts("[MOTOR]       M1(CCW)  M2(CW)\n");
+    swo_puts("[MOTOR]           +--+\n");
+    swo_puts("[MOTOR]           |  |\n");
+    swo_puts("[MOTOR]           +--+\n");
+    swo_puts("[MOTOR]       M4(CW)  M3(CCW)\n");
+    swo_puts("[MOTOR]           REAR\n");
+    swo_puts("[MOTOR]\n");
+    swo_puts("[MOTOR] CCW = Counter-clockwise (viewed from above)\n");
+    swo_puts("[MOTOR] CW  = Clockwise (viewed from above)\n");
+    swo_puts("\n");
 
     motors_arm();
 
-    // Test each motor
+    // Test each motor individually with rotation verification
     for (int i = 0; i < MOTOR_COUNT; i++) {
         const motor_info_t *info = motor_get_info((motor_id_t)i);
 
-        swo_printf("[MOTOR] Spinning %s (%s, %s) at 10%%...", info->name,
-                   info->position, info->rotation);
+        swo_puts("----------------------------------------\n");
+        swo_printf("[MOTOR] Testing %s (%s)\n", info->name, info->position);
+        swo_printf("[MOTOR] Expected rotation: %s\n", info->rotation);
+        swo_puts("[MOTOR] Press ENTER to spin, 's' to skip this motor...\n");
 
-        motor_set((motor_id_t)i, 0.10f);
-        delay_ms(1000);
+        c = swo_getc_timeout(30000);
+        if (c == 's' || c == 'S') {
+            swo_printf("[MOTOR] %s skipped\n", info->name);
+            continue;
+        }
+        if (c < 0) {
+            swo_puts("[MOTOR] Timeout - aborting test\n");
+            motors_disarm();
+            return false;
+        }
+
+        // Slow ramp up so rotation direction is clearly visible
+        swo_printf("[MOTOR] Ramping up %s...\n", info->name);
+        for (int pct = 5; pct <= 15; pct += 2) {
+            motor_set((motor_id_t)i, pct / 100.0f);
+            delay_ms(300);
+        }
+
+        swo_printf("[MOTOR] %s spinning at 15%% - verify %s rotation\n",
+                   info->name, info->rotation);
+        swo_puts("[MOTOR] Press 'y' if correct, 'n' if wrong, ENTER to "
+                 "continue...\n");
+
+        c = swo_getc_timeout(10000);
+
+        // Ramp down
+        for (int pct = 15; pct >= 0; pct -= 3) {
+            motor_set((motor_id_t)i, pct / 100.0f);
+            delay_ms(100);
+        }
         motor_set((motor_id_t)i, 0.0f);
+
+        if (c == 'n' || c == 'N') {
+            swo_printf("[MOTOR] !!! %s rotation INCORRECT - check wiring !!!\n",
+                       info->name);
+        } else if (c == 'y' || c == 'Y') {
+            swo_printf("[MOTOR] %s rotation confirmed OK\n", info->name);
+        } else {
+            swo_printf("[MOTOR] %s test complete\n", info->name);
+        }
+
         delay_ms(500);
-
-        swo_puts(" OK\n");
     }
 
-    // Test all motors together at low power
-    swo_puts("[MOTOR] Spinning all motors at 8%...");
-    for (int i = 0; i < MOTOR_COUNT; i++) {
-        motor_set((motor_id_t)i, 0.08f);
+    swo_puts("----------------------------------------\n");
+    swo_puts("[MOTOR] Individual tests complete\n");
+    swo_puts("\n");
+
+    // Test all motors together
+    swo_puts(
+        "[MOTOR] Press ENTER to spin all motors together, 's' to skip...\n");
+    c = swo_getc_timeout(30000);
+
+    if (c != 's' && c != 'S' && c >= 0) {
+        swo_puts("[MOTOR] Spinning all motors at 10%...\n");
+        for (int i = 0; i < MOTOR_COUNT; i++) {
+            motor_set((motor_id_t)i, 0.10f);
+        }
+        delay_ms(2000);
+        motors_stop();
+        swo_puts("[MOTOR] All motors stopped\n");
     }
-    delay_ms(1500);
-    motors_stop();
-    swo_puts(" OK\n");
 
     motors_disarm();
 
-    swo_puts("[MOTOR] All motors tested... OK\n");
+    swo_puts("\n");
+    swo_puts("[MOTOR] Motor test complete\n");
     return true;
 }
