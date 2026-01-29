@@ -11,6 +11,11 @@
 //
 // Blocking: Each send blocks for ~370us (37 bytes at 1Mbaud).
 // Run telemetry actor at LOW priority to avoid affecting control loops.
+//
+// LIMITATION: Uses polling for UART RX. At 1Mbaud, this may cause overrun
+// errors if not polled frequently enough. The Bitcraze firmware uses DMA
+// for reliable communication. Consider DMA implementation if packet loss
+// is observed. TX is less affected since we control the timing.
 
 #include "platform_crazyflie.h"
 #include "stm32f4xx.h"
@@ -92,10 +97,11 @@ static void uart_init(void) {
     GPIOC->AFR[0] |= (8U << (6 * 4)) | (8U << (7 * 4)); // AF8 = USART6
     GPIOC->OSPEEDR |= GPIO_OSPEEDER_OSPEEDR6 | GPIO_OSPEEDER_OSPEEDR7;
 
-    // Configure PA4 (TXEN) as input with pull-down
+    // Configure PA4 (TXEN) as input with pull-up
+    // TXEN high = nRF51 ready to receive (matching Bitcraze firmware)
     GPIOA->MODER &= ~GPIO_MODER_MODER4; // Input mode
     GPIOA->PUPDR &= ~GPIO_PUPDR_PUPDR4;
-    GPIOA->PUPDR |= GPIO_PUPDR_PUPDR4_1; // Pull-down
+    GPIOA->PUPDR |= GPIO_PUPDR_PUPDR4_0; // Pull-up
 
     // Configure USART6: 1Mbaud, 8N1
     SYSLINK_USART->CR1 = 0; // Disable USART first
