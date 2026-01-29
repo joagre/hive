@@ -1,4 +1,4 @@
-// Crazyflie 2.1+ Radio HAL - Syslink Implementation
+// Crazyflie 2.1+ Radio HAL - Syslink Implementation with DMA
 //
 // Implements radio communication via syslink protocol to the nRF51822.
 // The nRF51 handles ESB radio protocol to Crazyradio PA on the ground.
@@ -6,16 +6,14 @@
 // UART: USART6 at 1Mbaud (PC6=TX, PC7=RX)
 // Flow control: PA4 (TXEN) indicates nRF51 ready to receive
 //
+// RX uses DMA2 Stream 2 in circular buffer mode for reliable reception
+// at 1Mbaud. TX uses polling (we control timing, so no overrun risk).
+//
 // Protocol: After receiving one RADIO_RAW packet from nRF51, we may send one.
 // The nRF51 periodically sends empty packets to enable TX.
 //
 // Blocking: Each send blocks for ~370us (37 bytes at 1Mbaud).
 // Run telemetry actor at LOW priority to avoid affecting control loops.
-//
-// LIMITATION: Uses polling for UART RX. At 1Mbaud, this may cause overrun
-// errors if not polled frequently enough. The Bitcraze firmware uses DMA
-// for reliable communication. Consider DMA implementation if packet loss
-// is observed. TX is less affected since we control the timing.
 
 #include "platform_crazyflie.h"
 #include "stm32f4xx.h"
@@ -50,6 +48,20 @@
 #define SYSLINK_TXEN_PIN 4 // PA4 (flow control from nRF51)
 
 // ----------------------------------------------------------------------------
+// DMA Configuration
+// ----------------------------------------------------------------------------
+
+// DMA2 Stream 2, Channel 5 = USART6_RX
+// Circular buffer mode for continuous reception
+#define DMA_RX_STREAM DMA2_Stream2
+#define DMA_RX_CHANNEL 5
+#define DMA_RX_BUFFER_SIZE 256 // Must be power of 2 for efficient wrap handling
+
+// DMA RX circular buffer
+static uint8_t s_dma_rx_buffer[DMA_RX_BUFFER_SIZE];
+static volatile uint32_t s_dma_rx_read_pos = 0;
+
+// ----------------------------------------------------------------------------
 // State
 // ----------------------------------------------------------------------------
 
@@ -57,9 +69,11 @@ static volatile bool s_initialized = false;
 static volatile bool s_tx_allowed = false;
 static volatile float s_battery_voltage = 0.0f;
 
-// RX callback
-typedef void (*radio_rx_callback_t)(const void *data, size_t len);
+// RX callback with user data
+typedef void (*radio_rx_callback_t)(const void *data, size_t len,
+                                    void *user_data);
 static radio_rx_callback_t s_rx_callback = NULL;
+static void *s_rx_callback_user_data = NULL;
 
 // RX state machine
 typedef enum {
@@ -80,7 +94,51 @@ static uint8_t s_rx_index;
 static uint8_t s_rx_ck_a, s_rx_ck_b;
 
 // ----------------------------------------------------------------------------
-// Low-Level UART
+// DMA Initialization
+// ----------------------------------------------------------------------------
+
+static void dma_rx_init(void) {
+    // Enable DMA2 clock
+    RCC->AHB1ENR |= RCC_AHB1ENR_DMA2EN;
+
+    // Disable stream before configuration
+    DMA_RX_STREAM->CR &= ~DMA_SxCR_EN;
+    while (DMA_RX_STREAM->CR & DMA_SxCR_EN)
+        ; // Wait for disable
+
+    // Clear all interrupt flags for Stream 2
+    // Stream 2 uses LIFCR (low interrupt flag clear register)
+    DMA2->LIFCR = DMA_LIFCR_CTCIF2 | DMA_LIFCR_CHTIF2 | DMA_LIFCR_CTEIF2 |
+                  DMA_LIFCR_CDMEIF2 | DMA_LIFCR_CFEIF2;
+
+    // Configure DMA stream
+    // - Channel 5 (bits 27:25)
+    // - Circular mode (CIRC)
+    // - Memory increment (MINC)
+    // - Peripheral to memory (DIR = 00)
+    // - Byte size for both (MSIZE = 00, PSIZE = 00)
+    DMA_RX_STREAM->CR = (DMA_RX_CHANNEL << DMA_SxCR_CHSEL_Pos) | // Channel 5
+                        DMA_SxCR_CIRC | // Circular mode
+                        DMA_SxCR_MINC;  // Memory increment
+
+    // Peripheral address (USART6 data register)
+    DMA_RX_STREAM->PAR = (uint32_t)&SYSLINK_USART->DR;
+
+    // Memory address (our buffer)
+    DMA_RX_STREAM->M0AR = (uint32_t)s_dma_rx_buffer;
+
+    // Number of data items
+    DMA_RX_STREAM->NDTR = DMA_RX_BUFFER_SIZE;
+
+    // Enable the stream
+    DMA_RX_STREAM->CR |= DMA_SxCR_EN;
+
+    // Reset read position
+    s_dma_rx_read_pos = 0;
+}
+
+// ----------------------------------------------------------------------------
+// Low-Level UART with DMA
 // ----------------------------------------------------------------------------
 
 static void uart_init(void) {
@@ -106,8 +164,11 @@ static void uart_init(void) {
     // Configure USART6: 1Mbaud, 8N1
     SYSLINK_USART->CR1 = 0; // Disable USART first
     SYSLINK_USART->BRR = SYSLINK_BAUD_DIV;
-    SYSLINK_USART->CR2 = 0; // 1 stop bit
-    SYSLINK_USART->CR3 = 0; // No flow control (we handle TXEN manually)
+    SYSLINK_USART->CR2 = 0;              // 1 stop bit
+    SYSLINK_USART->CR3 = USART_CR3_DMAR; // Enable DMA for RX
+
+    // Initialize DMA before enabling USART
+    dma_rx_init();
 
     // Enable USART, TX, RX
     SYSLINK_USART->CR1 = USART_CR1_UE | USART_CR1_TE | USART_CR1_RE;
@@ -119,16 +180,15 @@ static inline void uart_putc(uint8_t c) {
     SYSLINK_USART->DR = c;
 }
 
-static inline bool uart_rxne(void) {
-    return (SYSLINK_USART->SR & USART_SR_RXNE) != 0;
-}
-
-static inline uint8_t uart_getc(void) {
-    return (uint8_t)SYSLINK_USART->DR;
-}
-
 static inline bool txen_ready(void) {
     return (GPIOA->IDR & (1U << SYSLINK_TXEN_PIN)) != 0;
+}
+
+// Get current DMA write position in buffer
+static inline uint32_t dma_get_write_pos(void) {
+    // NDTR counts down from buffer size
+    // Write position = buffer_size - NDTR
+    return DMA_RX_BUFFER_SIZE - DMA_RX_STREAM->NDTR;
 }
 
 // ----------------------------------------------------------------------------
@@ -183,7 +243,7 @@ static void syslink_process_packet(void) {
 
         // Pass to application if callback registered and data present
         if (s_rx_callback && s_rx_length > 0) {
-            s_rx_callback(s_rx_data, s_rx_length);
+            s_rx_callback(s_rx_data, s_rx_length, s_rx_callback_user_data);
         }
         break;
 
@@ -268,6 +328,7 @@ int hal_radio_init(void) {
     s_tx_allowed = false;
     s_rx_state = RX_START1;
     s_rx_callback = NULL;
+    s_rx_callback_user_data = NULL;
     s_battery_voltage = 0.0f;
     s_initialized = true;
 
@@ -301,15 +362,28 @@ void hal_radio_poll(void) {
         return;
     }
 
-    // Process all available bytes
-    while (uart_rxne()) {
-        uint8_t byte = uart_getc();
+    // Get current DMA write position
+    uint32_t write_pos = dma_get_write_pos();
+    uint32_t read_pos = s_dma_rx_read_pos;
+
+    // Process all bytes between read and write positions
+    while (read_pos != write_pos) {
+        uint8_t byte = s_dma_rx_buffer[read_pos];
         syslink_rx_byte(byte);
+
+        // Advance read position with wrap
+        read_pos = (read_pos + 1) & (DMA_RX_BUFFER_SIZE - 1);
     }
+
+    // Update read position
+    s_dma_rx_read_pos = read_pos;
 }
 
-void hal_radio_set_rx_callback(void (*callback)(const void *data, size_t len)) {
+void hal_radio_set_rx_callback(void (*callback)(const void *data, size_t len,
+                                                void *user_data),
+                               void *user_data) {
     s_rx_callback = callback;
+    s_rx_callback_user_data = user_data;
 }
 
 float hal_radio_get_battery(void) {
