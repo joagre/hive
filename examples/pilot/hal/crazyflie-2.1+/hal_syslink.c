@@ -322,7 +322,7 @@ static void syslink_rx_byte(uint8_t byte) {
 // Public API
 // ----------------------------------------------------------------------------
 
-int hal_radio_init(void) {
+int hal_esb_init(void) {
     uart_init();
 
     s_tx_allowed = false;
@@ -335,7 +335,7 @@ int hal_radio_init(void) {
     return 0;
 }
 
-int hal_radio_send(const void *data, size_t len) {
+int hal_esb_send(const void *data, size_t len) {
     if (!s_initialized) {
         return -1;
     }
@@ -353,11 +353,11 @@ int hal_radio_send(const void *data, size_t len) {
     return syslink_send(SYSLINK_RADIO_RAW, data, len);
 }
 
-bool hal_radio_tx_ready(void) {
+bool hal_esb_tx_ready(void) {
     return s_initialized && s_tx_allowed;
 }
 
-void hal_radio_poll(void) {
+void hal_esb_poll(void) {
     if (!s_initialized) {
         return;
     }
@@ -379,13 +379,13 @@ void hal_radio_poll(void) {
     s_dma_rx_read_pos = read_pos;
 }
 
-void hal_radio_set_rx_callback(void (*callback)(const void *data, size_t len,
-                                                void *user_data),
-                               void *user_data) {
+void hal_esb_set_rx_callback(void (*callback)(const void *data, size_t len,
+                                              void *user_data),
+                             void *user_data) {
     s_rx_callback = callback;
     s_rx_callback_user_data = user_data;
 }
 
-float hal_radio_get_battery(void) {
+float hal_power_get_battery(void) {
     return s_battery_voltage;
 }

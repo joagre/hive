@@ -108,38 +108,49 @@ void hal_debug_init(void);
 void hal_printf(const char *fmt, ...);
 
 // ----------------------------------------------------------------------------
-// Radio Interface (optional, for telemetry)
+// ESB Radio Interface (optional, for telemetry)
+// ----------------------------------------------------------------------------
+// Enhanced ShockBurst (ESB) is the 2.4GHz protocol used by Crazyradio.
+// On Crazyflie, implemented via syslink to nRF51 (see hal_syslink.c).
+
+#ifdef HAL_HAS_RADIO
+
+// Initialize ESB radio.
+// Returns 0 on success, -1 on error.
+int hal_esb_init(void);
+
+// Send data over ESB.
+// Returns 0 on success, -1 on error (not ready or too large).
+// Max payload: 31 bytes (ESB packet limit).
+int hal_esb_send(const void *data, size_t len);
+
+// Check if ESB is ready to send.
+// ESB is half-duplex: can only TX after receiving from ground.
+bool hal_esb_tx_ready(void);
+
+// Poll for incoming ESB packets.
+// Call periodically to process RX data.
+void hal_esb_poll(void);
+
+// Register callback for received ESB data.
+// Callback is called from hal_esb_poll() context.
+// user_data is passed back to callback for context.
+void hal_esb_set_rx_callback(void (*callback)(const void *data, size_t len,
+                                              void *user_data),
+                             void *user_data);
+
+#endif // HAL_HAS_RADIO
+
+// ----------------------------------------------------------------------------
+// Power Interface (optional)
 // ----------------------------------------------------------------------------
 
 #ifdef HAL_HAS_RADIO
 
-// Initialize radio hardware.
-// Returns 0 on success, -1 on error.
-int hal_radio_init(void);
-
-// Send data over radio.
-// Returns 0 on success, -1 on error (not ready or too large).
-// Max payload: 31 bytes (ESB limit).
-int hal_radio_send(const void *data, size_t len);
-
-// Check if radio is ready to send.
-// Flow control: can only send after receiving a packet from ground.
-bool hal_radio_tx_ready(void);
-
-// Poll for incoming radio packets.
-// Call periodically to process RX data.
-void hal_radio_poll(void);
-
-// Register callback for received radio data.
-// Callback is called from hal_radio_poll() context.
-// user_data is passed back to callback for context.
-void hal_radio_set_rx_callback(void (*callback)(const void *data, size_t len,
-                                                void *user_data),
-                               void *user_data);
-
-// Get battery voltage from power management packets.
-// Returns 0.0 if not yet received.
-float hal_radio_get_battery(void);
+// Get battery voltage.
+// On Crazyflie: received via syslink from nRF51 power management.
+// Returns 0.0 if not yet available.
+float hal_power_get_battery(void);
 
 #endif // HAL_HAS_RADIO
 

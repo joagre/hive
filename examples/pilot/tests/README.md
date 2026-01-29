@@ -220,7 +220,7 @@ python test_radio_ground.py [--uri URI] [--duration SECONDS]
 
 **Test sequence (Crazyflie side):**
 1. Initialize HAL and Hive runtime
-2. Initialize DMA-based radio (`hal_radio_init()`)
+2. Initialize DMA-based ESB radio (`hal_esb_init()`)
 3. Wait for battery packet from nRF51 (proves DMA RX works)
 4. Wait for ground station connection (RADIO_RAW packet)
 5. Send telemetry packets at 10Hz for 30 seconds:

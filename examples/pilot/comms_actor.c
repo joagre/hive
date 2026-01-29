@@ -189,13 +189,13 @@ void comms_actor(void *args, const hive_spawn_info_t *siblings,
     comms_state_t *state = args;
 
     // Initialize radio
-    if (hal_radio_init() != 0) {
+    if (hal_esb_init() != 0) {
         HIVE_LOG_ERROR("[COMMS] Radio init failed");
         return; // No hive_exit() - supervisor sees CRASH
     }
 
     // Register RX callback for ground station commands
-    hal_radio_set_rx_callback(radio_rx_callback, state);
+    hal_esb_set_rx_callback(radio_rx_callback, state);
 
     HIVE_LOG_INFO("[COMMS] Radio initialized");
 
@@ -235,7 +235,7 @@ void comms_actor(void *args, const hive_spawn_info_t *siblings,
         state->tick_count++;
 
         // Poll radio for incoming packets (maintains flow control)
-        hal_radio_poll();
+        hal_esb_poll();
 
         // Read latest bus data (non-blocking)
         size_t bytes_read;
@@ -267,7 +267,7 @@ void comms_actor(void *args, const hive_spawn_info_t *siblings,
         }
 
         // Check if radio is ready (flow control)
-        if (!hal_radio_tx_ready()) {
+        if (!hal_esb_tx_ready()) {
             continue; // Skip this cycle, try again next tick
         }
 
@@ -291,7 +291,7 @@ void comms_actor(void *args, const hive_spawn_info_t *siblings,
                     .type = PACKET_LOG_DONE,
                     .total_chunks = state->log_sequence,
                 };
-                hal_radio_send(&done, sizeof(done));
+                hal_esb_send(&done, sizeof(done));
 
                 // Close file and return to flight mode
                 hive_file_close(state->log_fd);
@@ -306,7 +306,7 @@ void comms_actor(void *args, const hive_spawn_info_t *siblings,
                            LOG_CHUNK_DATA_SIZE - bytes_read);
                 }
 
-                hal_radio_send(&chunk, sizeof(chunk));
+                hal_esb_send(&chunk, sizeof(chunk));
                 state->log_offset += bytes_read;
                 state->log_sequence++;
             }
@@ -326,7 +326,7 @@ void comms_actor(void *args, const hive_spawn_info_t *siblings,
                     .pitch = float_to_i16(latest_state.pitch, SCALE_ANGLE),
                     .yaw = float_to_i16(latest_state.yaw, SCALE_ANGLE),
                 };
-                hal_radio_send(&pkt, sizeof(pkt));
+                hal_esb_send(&pkt, sizeof(pkt));
             } else {
                 // Send position/altitude packet
                 telemetry_position_t pkt = {
@@ -339,7 +339,7 @@ void comms_actor(void *args, const hive_spawn_info_t *siblings,
                     .vy = float_to_i16(latest_state.y_velocity, SCALE_VEL),
                     .thrust = float_to_u16(latest_thrust.thrust),
                 };
-                hal_radio_send(&pkt, sizeof(pkt));
+                hal_esb_send(&pkt, sizeof(pkt));
             }
 
             // Alternate packet type

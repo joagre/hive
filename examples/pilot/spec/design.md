@@ -244,7 +244,7 @@ graph TB
     subgraph HAL["HARDWARE ABSTRACTION LAYER (hal/)"]
         ReadSensors[hal_read_sensors]
         WriteTorque[hal_write_torque]
-        RadioTx[hal_radio_send]
+        RadioTx[hal_esb_send]
     end
 
     subgraph RUNTIME["ACTOR RUNTIME"]

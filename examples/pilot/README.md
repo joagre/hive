@@ -145,7 +145,8 @@ Hardware Abstraction Layer (HAL) provides platform independence:
 - `hal_arm()`, `hal_disarm()` - motor enable/disable
 - `hal_read_sensors()` - reads sensors (called by sensor_actor)
 - `hal_write_torque()` - writes motors with mixing (called by motor_actor)
-- `hal_radio_*()` - radio telemetry (Crazyflie only, called by comms_actor)
+- `hal_esb_*()` - ESB radio telemetry (Crazyflie only, called by comms_actor)
+- `hal_power_get_battery()` - battery voltage (Crazyflie only)
 - `hal_step()` - advance simulation (Webots only)
 - `hal_debug_init()`, `hal_printf()` - debug output
 - `hal_delay_ms()`, `hal_get_time_ms()` - timing utilities

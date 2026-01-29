@@ -5,7 +5,7 @@
  *
  * Test sequence:
  *   1. Initialize HAL and Hive runtime
- *   2. Initialize radio (hal_radio_init)
+ *   2. Initialize radio (hal_esb_init)
  *   3. Wait for battery packet (proves RX works)
  *   4. Wait for ground station connection (RADIO_RAW packet)
  *   5. Send telemetry packets when TX allowed
@@ -149,9 +149,9 @@ static bool wait_for_battery(void) {
     uint32_t start = hal_get_time_ms();
 
     while ((hal_get_time_ms() - start) < BATTERY_TIMEOUT_MS) {
-        hal_radio_poll();
+        hal_esb_poll();
 
-        float voltage = hal_radio_get_battery();
+        float voltage = hal_power_get_battery();
         if (voltage > 0.1f) {
             s_state.battery_received = true;
             HIVE_LOG_INFO("[RADIO] Battery: %.2fV", voltage);
@@ -172,7 +172,7 @@ static bool wait_for_connection(void) {
     uint32_t start = hal_get_time_ms();
 
     while ((hal_get_time_ms() - start) < CONNECTION_TIMEOUT_MS) {
-        hal_radio_poll();
+        hal_esb_poll();
 
         if (s_state.ground_connected) {
             HIVE_LOG_INFO("[RADIO] Ground station connected!");
@@ -206,13 +206,13 @@ static void run_communication_test(void) {
         uint32_t now = hal_get_time_ms();
 
         // Poll for incoming packets
-        hal_radio_poll();
+        hal_esb_poll();
 
         // Send telemetry at regular intervals
         if ((now - last_tx) >= TELEMETRY_INTERVAL_MS) {
             last_tx = now;
 
-            if (hal_radio_tx_ready()) {
+            if (hal_esb_tx_ready()) {
                 // Alternate between attitude and position packets
                 if (sequence % 2 == 0) {
                     test_attitude_t pkt = {
@@ -226,7 +226,7 @@ static void run_communication_test(void) {
                         .yaw = (int16_t)(sequence * 100),
                     };
 
-                    if (hal_radio_send(&pkt, sizeof(pkt)) == 0) {
+                    if (hal_esb_send(&pkt, sizeof(pkt)) == 0) {
                         tx_success++;
                         s_state.tx_count++;
                         hal_led_toggle();
@@ -242,7 +242,7 @@ static void run_communication_test(void) {
                     snprintf_((char *)pkt.data, sizeof(pkt.data), "SEQ=%u",
                               sequence);
 
-                    if (hal_radio_send(&pkt, sizeof(pkt)) == 0) {
+                    if (hal_esb_send(&pkt, sizeof(pkt)) == 0) {
                         tx_success++;
                         s_state.tx_count++;
                         hal_led_toggle();
@@ -259,7 +259,7 @@ static void run_communication_test(void) {
         if ((now - start) % 5000 < 10) {
             HIVE_LOG_INFO("[RADIO] TX: %lu/%lu, RX: %lu, Battery: %.2fV",
                           tx_success, tx_success + tx_fail, s_state.rx_count,
-                          hal_radio_get_battery());
+                          hal_power_get_battery());
         }
 
         hal_delay_ms(1);
@@ -268,7 +268,7 @@ static void run_communication_test(void) {
     HIVE_LOG_INFO("[RADIO] Test complete!");
     HIVE_LOG_INFO("[RADIO] TX success: %lu, TX fail: %lu", tx_success, tx_fail);
     HIVE_LOG_INFO("[RADIO] RX count: %lu", s_state.rx_count);
-    HIVE_LOG_INFO("[RADIO] Final battery: %.2fV", hal_radio_get_battery());
+    HIVE_LOG_INFO("[RADIO] Final battery: %.2fV", hal_power_get_battery());
 }
 
 // ============================================================================
@@ -303,14 +303,14 @@ int test_syslink_run(bool standalone) {
 
     // Initialize radio
     HIVE_LOG_INFO("[RADIO] Initializing radio...");
-    if (hal_radio_init() != 0) {
+    if (hal_esb_init() != 0) {
         HIVE_LOG_ERROR("[RADIO] Radio init failed!");
         result = -1;
         goto done;
     }
 
     // Register RX callback
-    hal_radio_set_rx_callback(radio_rx_callback, NULL);
+    hal_esb_set_rx_callback(radio_rx_callback, NULL);
 
     HIVE_LOG_INFO("[RADIO] Radio initialized (DMA RX enabled)");
 

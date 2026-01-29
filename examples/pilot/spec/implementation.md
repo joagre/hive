@@ -124,11 +124,14 @@ void hal_read_sensors(sensor_data_t *sensors);
 // Motor interface (called by motor_actor)
 void hal_write_torque(const torque_cmd_t *cmd);
 
-// Radio interface (called by comms_actor, HAL_HAS_RADIO only)
-int hal_radio_init(void);
-int hal_radio_send(const void *data, size_t len);
-bool hal_radio_tx_ready(void);
-void hal_radio_poll(void);
+// ESB radio interface (called by comms_actor, HAL_HAS_RADIO only)
+int hal_esb_init(void);
+int hal_esb_send(const void *data, size_t len);
+bool hal_esb_tx_ready(void);
+void hal_esb_poll(void);
+
+// Power interface (HAL_HAS_RADIO only)
+float hal_power_get_battery(void);
 
 // Simulation time (only for SIMULATED_TIME builds)
 bool hal_step(void);  // Advance simulation, returns false when done
@@ -137,7 +140,7 @@ bool hal_step(void);  // Advance simulation, returns false when done
 Actors use the HAL directly - no function pointers needed:
 - `sensor_actor.c` calls `hal_read_sensors()`
 - `motor_actor.c` calls `hal_write_torque()`
-- `comms_actor.c` calls `hal_radio_*()` (Crazyflie only)
+- `comms_actor.c` calls `hal_esb_*()` (Crazyflie only)
 
 ### Startup Sequence
 
@@ -197,7 +200,7 @@ All actor code is platform-independent. Actors use:
 | `rate_actor.c/h` | Bus API only |
 | `motor_actor.c/h` | HAL (hal_write_torque) + IPC + bus API |
 | `flight_manager_actor.c/h` | IPC only (no bus) |
-| `comms_actor.c/h` | HAL (hal_radio_*) + bus API (Crazyflie only) |
+| `comms_actor.c/h` | HAL (hal_esb_*, hal_power_*) + bus API (Crazyflie only) |
 | `pid.c/h` | Pure C, no runtime deps |
 | `types.h` | Data structures |
 | `config.h` | Tuning parameters |
