@@ -442,12 +442,14 @@ src/hal/
 **Platform-specific files**
 | Category | Linux | STM32 |
 |----------|-------|-------|
-| Main HAL | `hal/linux/hive_hal.c` | `hal/stm32/hive_hal.c` |
+| Time HAL | `hal/linux/hive_hal_time.c` | `hal/stm32/hive_hal_time.c` |
+| Event HAL | `hal/linux/hive_hal_event.c` | `hal/stm32/hive_hal_event.c` |
 | Timer HAL | `hal/linux/hive_hal_timer.c` | `hal/stm32/hive_hal_timer.c` |
+| File HAL | `hal/linux/hive_hal_file.c` | `hal/stm32/hive_hal_file.c` |
+| TCP HAL | `hal/linux/hive_hal_tcp.c` | `hal/stm32/hive_hal_tcp.c` |
 | Context init | `hal/linux/hive_hal_context.c` | `hal/stm32/hive_hal_context.c` |
 | Context switch | `hal/linux/hive_context_x86_64.S` | `hal/stm32/hive_context_arm_cm.S` |
 | Context struct | `hal/linux/hive_hal_context_defs.h` | `hal/stm32/hive_hal_context_defs.h` |
-| File HAL | (in main HAL) | `hal/stm32/hive_hal_file.c` |
 
 **Platform-independent files**
 - `hive_scheduler.c` - Unified scheduler (calls HAL event functions)

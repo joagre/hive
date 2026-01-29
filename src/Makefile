@@ -106,10 +106,10 @@ ifeq ($(PLATFORM),linux)
   SRCS := $(HIVE_CORE_SRCS) $(HIVE_HAL_LINUX_SRCS)
   ASM_SRCS := $(HIVE_HAL_LINUX_ASM)
   ifeq ($(ENABLE_TCP),1)
-    SRCS += $(HIVE_TCP_SRCS)
+    SRCS += $(HIVE_TCP_SRCS) $(HIVE_HAL_LINUX_TCP_SRCS)
   endif
   ifeq ($(ENABLE_FILE),1)
-    SRCS += $(HIVE_FILE_SRCS)
+    SRCS += $(HIVE_FILE_SRCS) $(HIVE_HAL_LINUX_FILE_SRCS)
   endif
 
 else ifeq ($(PLATFORM),stm32)
@@ -120,6 +120,9 @@ else ifeq ($(PLATFORM),stm32)
     SRCS += $(BOARD_MOUNTS_SRC)
   else
     SRCS += $(HIVE_HAL_STM32_SRCS)
+  endif
+  ifeq ($(ENABLE_TCP),1)
+    SRCS += $(HIVE_TCP_SRCS) $(HIVE_HAL_STM32_TCP_SRCS)
   endif
   ifeq ($(ENABLE_FILE),1)
     SRCS += $(HIVE_FILE_SRCS) $(HIVE_HAL_STM32_FILE_SRCS)
