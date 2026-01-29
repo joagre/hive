@@ -379,28 +379,69 @@ without DMA. See "Deck Detection Architecture" section above.
 
 **WARNING: REMOVE PROPELLERS BEFORE THIS TEST!**
 
-Tests timer-based PWM output. Spins each motor individually at low power
-(10%) for 1 second.
+Tests timer-based PWM output. Each motor is tested individually with user
+confirmation of rotation direction (CW/CCW).
 
-| Motor | Position | Rotation | Pin |
-|-------|----------|----------|-----|
-| M1 | Front-left | CCW | PA0 |
-| M2 | Front-right | CW | PA1 |
-| M3 | Rear-right | CCW | PA2 |
-| M4 | Rear-left | CW | PA3 |
+**Motor layout (X-config, viewed from above):**
+```
+         FRONT
+     M1(CCW)  M2(CW)
+         +--+
+         |  |
+         +--+
+     M4(CW)  M3(CCW)
+         REAR
+```
 
-The test requires user confirmation before starting motors.
+**Motor to pin mapping (Bitcraze reference):**
+
+| Motor | Position | Rotation | Pin | Timer |
+|-------|----------|----------|-----|-------|
+| M1 | Front-left | CCW | PA1 | TIM2_CH2 |
+| M2 | Front-right | CW | PB11 | TIM2_CH4 |
+| M3 | Rear-right | CCW | PA15 | TIM2_CH1 |
+| M4 | Rear-left | CW | PB9 | TIM4_CH4 |
+
+The test:
+1. Shows motor layout diagram with expected rotations
+2. Prompts before spinning each motor
+3. Slowly ramps up so rotation direction is clearly visible
+4. Asks user to confirm rotation ('y' = correct, 'n' = wrong)
+5. Reports warning if rotation is incorrect
 
 **Expected output**
 ```
 === Phase 7: Motor Test ===
-[MOTOR] !!! REMOVE PROPELLERS !!!
+[MOTOR] !!! WARNING: REMOVE PROPELLERS !!!
 [MOTOR] Press ENTER to continue or 's' to skip...
-[MOTOR] Spinning M1 (front-left, CCW) at 10%... OK
-[MOTOR] Spinning M2 (front-right, CW) at 10%... OK
-[MOTOR] Spinning M3 (rear-right, CCW) at 10%... OK
-[MOTOR] Spinning M4 (rear-left, CW) at 10%... OK
-[MOTOR] All motors tested... OK
+
+[MOTOR] Motor layout (X-config, viewed from above):
+[MOTOR]           FRONT
+[MOTOR]       M1(CCW)  M2(CW)
+[MOTOR]           +--+
+[MOTOR]           |  |
+[MOTOR]           +--+
+[MOTOR]       M4(CW)  M3(CCW)
+[MOTOR]           REAR
+
+----------------------------------------
+[MOTOR] Testing M1 (front-left)
+[MOTOR] Expected rotation: CCW
+[MOTOR] Press ENTER to spin, 's' to skip this motor...
+[MOTOR] Ramping up M1...
+[MOTOR] M1 spinning at 15% - verify CCW rotation
+[MOTOR] Press 'y' if correct, 'n' if wrong, ENTER to continue...
+[MOTOR] M1 rotation confirmed OK
+----------------------------------------
+... (repeat for M2, M3, M4) ...
+----------------------------------------
+[MOTOR] Individual tests complete
+
+[MOTOR] Press ENTER to spin all motors together, 's' to skip...
+[MOTOR] Spinning all motors at 10%...
+[MOTOR] All motors stopped
+
+[MOTOR] Motor test complete
 ```
 
 ### Phase 8: Radio (Syslink)
@@ -642,7 +683,7 @@ The following tests are planned but not yet implemented:
 | `bringup_i2c1.c/h` | I2C1 bus communication (expansion connector: EEPROM, VL53L1x) |
 | `bringup_i2c3.c/h` | I2C3 bus scan and communication (on-board sensors: BMI088, BMP388) |
 | `bringup_sensors.c/h` | Sensor chip ID and data readout |
-| `bringup_motors.c/h` | Motor PWM test (TIM2) |
+| `bringup_motors.c/h` | Motor PWM test (TIM2/TIM4) with rotation verification |
 | `bringup_radio.c/h` | Syslink radio test (USART6) |
 | `bringup_flash.c/h` | Internal flash storage test (sector 8) |
 | `bringup_sd.c/h` | SD card test via SPI3 (Micro SD Card Deck) |
