@@ -114,10 +114,11 @@ void radio_init(void) {
     GPIOC->AFR[0] |= (8U << (6 * 4)) | (8U << (7 * 4)); // AF8 = USART6
     GPIOC->OSPEEDR |= GPIO_OSPEEDER_OSPEEDR6 | GPIO_OSPEEDER_OSPEEDR7;
 
-    // Configure PA4 (TXEN) as input with pull-down
+    // Configure PA4 (TXEN) as input with pull-up
+    // NRF51 uses this for flow control - HIGH = ready to receive
     GPIOA->MODER &= ~GPIO_MODER_MODER4;
     GPIOA->PUPDR &= ~GPIO_PUPDR_PUPDR4;
-    GPIOA->PUPDR |= GPIO_PUPDR_PUPDR4_1; // Pull-down
+    GPIOA->PUPDR |= GPIO_PUPDR_PUPDR4_0; // Pull-up (bit 0 = pull-up)
 
     // Configure USART6: 1Mbaud, 8N1
     USART6->CR1 = 0;

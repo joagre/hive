@@ -17,6 +17,21 @@ make          # Build libhal.a
 make clean    # Remove build artifacts
 ```
 
+## Reference Implementation
+
+**The Bitcraze crazyflie-firmware repository is the normative truth for this platform.**
+
+When implementing sensor drivers, initialization sequences, or hardware behavior,
+always refer to the Bitcraze firmware as the authoritative reference:
+- https://github.com/bitcraze/crazyflie-firmware (STM32 main firmware)
+- https://github.com/bitcraze/crazyflie2-nrf-firmware (NRF51 power management firmware)
+
+Key learnings from the Bitcraze implementation:
+- Sensor configuration (BMI088, BMP388, VL53L1x, PMW3901) matches their settings
+- The VL53L1x I2C address may be reprogrammed from 0x29 to 0x6A
+- Deck EEPROM detection uses the NRF51 1-Wire bus, not STM32 GPIO
+- Syslink communication at 1Mbaud requires DMA for reliable operation
+
 ## Integration with Pilot
 
 This HAL links with `pilot.c` and the hive runtime. The platform API
@@ -227,6 +242,16 @@ PC6  - USART6_TX
 PC7  - USART6_RX
 PA4  - TXEN (flow control from nRF51)
 ```
+
+**Note**: The nRF51 handles multiple functions via syslink:
+- Radio communication (Crazyradio PA)
+- Power management and battery monitoring
+- **Deck EEPROM detection** (1-Wire on NRF51 GPIO 8, NOT STM32 PC11)
+
+Deck detection requires sending syslink commands to the NRF51:
+- `SYSLINK_OW_SCAN (0x20)` - Get number of detected decks
+- `SYSLINK_OW_GETINFO (0x21)` - Get deck serial number
+- `SYSLINK_OW_READ (0x22)` - Read deck EEPROM (VID/PID)
 
 ### SPI3 (Micro SD Card Deck)
 ```
@@ -540,11 +565,31 @@ Without SD (`ENABLE_SD=0`): Only ~0.5 KB flash overhead for mount table.
 | Speed | Fast (internal flash) | Slower (SPI interface) |
 | Capacity | 128 KB (sector 8) | Card dependent (GB) |
 
+## Bringup Tests
+
+The `bringup/` directory contains standalone firmware for hardware verification.
+Run these tests before the full pilot firmware to verify each hardware component
+works correctly. See `bringup/README.md` for details.
+
+```bash
+cd bringup
+make && make flash
+./st-trace.sh  # View test output
+```
+
 ## Resources
 
+**Bitcraze Reference (normative truth)**
+- [Crazyflie Firmware](https://github.com/bitcraze/crazyflie-firmware) - STM32 main firmware
+- [NRF51 Firmware](https://github.com/bitcraze/crazyflie2-nrf-firmware) - Power management firmware
+- [Syslink Protocol](https://www.bitcraze.io/documentation/repository/crazyflie2-nrf-firmware/master/protocols/syslink/)
+
+**Hardware Documentation**
 - [Crazyflie 2.1 Product Page](https://www.bitcraze.io/products/crazyflie-2-1/)
 - [Flow deck v2](https://www.bitcraze.io/products/flow-deck-v2/)
 - [Micro SD Card Deck](https://www.bitcraze.io/products/micro-sd-card-deck/)
+
+**Sensor Datasheets**
 - [BMI088 Datasheet](https://www.bosch-sensortec.com/products/motion-sensors/imus/bmi088/)
 - [BMP388 Datasheet](https://www.bosch-sensortec.com/products/environmental-sensors/pressure-sensors/bmp388/)
 - [PMW3901 Datasheet](https://www.pixart.com/products-detail/10/PMW3901MB-TXQT)

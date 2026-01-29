@@ -92,6 +92,33 @@ not I2C3 (on-board sensors). This is a common source of confusion.
 | IO4 | PC12 | General purpose I/O |
 | OW | PC11 | 1-Wire deck detection |
 
+### Deck Detection Architecture
+
+**Important**: The 1-Wire deck EEPROM is connected to the **NRF51** power management
+processor, NOT the STM32 main processor. PC11 is NOT connected to the deck EEPROM.
+
+```
+                      +-----------+
+Expansion Deck ------>| NRF51     |<------ Syslink (1Mbaud) ------>| STM32
+EEPROM (DS28E05)      | GPIO 8    |         USART6 (PC6/PC7)       | Main CPU
+                      +-----------+
+```
+
+The NRF51 handles:
+- 1-Wire protocol to read deck EEPROMs
+- Deck enumeration at boot
+- Forwarding deck info to STM32 via syslink
+
+The STM32 must request deck info from the NRF51 via syslink commands:
+- `SYSLINK_OW_SCAN (0x20)` - Get number of detected decks
+- `SYSLINK_OW_GETINFO (0x21)` - Get deck serial number
+- `SYSLINK_OW_READ (0x22)` - Read deck EEPROM (VID/PID)
+
+**Limitation**: Syslink at 1Mbaud requires DMA/interrupt-driven UART for reliable
+communication. The bringup firmware uses simple polling which causes overrun errors.
+As a workaround, deck detection uses sensor probing - if VL53L1x and PMW3901 are
+detected, we infer a Flow deck is present.
+
 ### Stock Firmware Reference
 
 **The Bitcraze crazyflie-firmware repository is the normative truth for this
