@@ -17,7 +17,7 @@ The Hardware Abstraction Layer (HAL) isolates platform-specific code so that por
 | Context | `hive_context.S` | 1 function | Yes |
 | Context | `hive_hal_context_defs.h` | 1 struct | Yes |
 | File I/O | `hive_hal_file.c` | 9 functions | Optional |
-| TCP | `hive_hal_tcp.c` | 10 functions | Optional |
+| TCP | `hive_hal_tcp.c` | 11 functions | Optional |
 
 **Minimum port** - ~16 functions + 1 assembly function + 1 struct definition
 

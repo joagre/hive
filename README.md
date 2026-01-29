@@ -12,7 +12,7 @@
 
 **Supervision** - Supervisors can restart crashed actors with clean state. Fault isolation without taking down the system.
 
-**Portable** - Develop and debug on Linux, deploy to STM32. Same actor code, same behavior. The HAL is ~15 functions to port to new hardware.
+**Portable** - Develop and debug on Linux, deploy to STM32. Same actor code, same behavior. The HAL is ~16 functions to port to new hardware.
 
 **No RTOS dependency** - Hive is the runtime. No FreeRTOS, no Zephyr, no vendor SDK lock-in.
 
@@ -787,11 +787,11 @@ The runtime uses a HAL to isolate platform-specific code. Porters implement HAL 
 ```
 include/hal/
   hive_hal_time.h      - Time + critical sections (3 functions)
-  hive_hal_event.h     - Event loop primitives (5 functions)
+  hive_hal_event.h     - Event loop primitives (6 functions)
   hive_hal_timer.h     - Timer operations (6 functions)
-  hive_hal_context.h   - Context switching (1 function + struct)
-  hive_hal_file.h      - File I/O (8 functions, optional)
-  hive_hal_tcp.h       - TCP I/O (10 functions, optional)
+  hive_hal_context.h   - Context switching (2 functions + struct)
+  hive_hal_file.h      - File I/O (9 functions, optional)
+  hive_hal_tcp.h       - TCP I/O (11 functions, optional)
 
 src/hal/
   linux/               - Linux implementation (epoll, POSIX)
@@ -804,7 +804,7 @@ src/hal/
 - `hive_file.c` - File I/O wrapper (calls HAL file functions)
 - `hive_tcp.c` - TCP I/O wrapper (calls HAL TCP functions)
 
-**Minimum port** - ~15 C functions + 1 assembly function + 1 struct definition
+**Minimum port** - ~16 C functions + 1 assembly function + 1 struct definition
 
 See `src/hal/template/README.md` for the complete porting guide.
 

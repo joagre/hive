@@ -509,10 +509,10 @@ include/hal/
 | Event | `init`, `cleanup`, `poll`, `wait`, `register`, `unregister` | Yes |
 | Timer | `init`, `cleanup`, `create`, `cancel`, `get_time`, `advance_time` | Yes |
 | Context | `init` (C), `switch` (asm) | Yes |
-| File | `init`, `cleanup`, `open`, `close`, `read`, `pread`, `write`, `pwrite`, `sync`, `mount_available` | Optional |
+| File | `init`, `cleanup`, `open`, `close`, `read`, `pread`, `write`, `pwrite`, `sync` | Optional |
 | TCP | `init`, `cleanup`, `socket`, `bind`, `listen`, `accept`, `connect`, `connect_check`, `close`, `recv`, `send` | Optional |
 
-**Minimum port** - ~15 C functions + 1 assembly function + 1 struct definition
+**Minimum port** - ~16 C functions + 1 assembly function + 1 struct definition
 
 ### Platform-Specific Source Files
 
