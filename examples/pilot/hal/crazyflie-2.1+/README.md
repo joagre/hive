@@ -265,7 +265,7 @@ accidentally overwriting the log sector. Current firmware is ~63 KB.
 ### Vendor Drivers (vendor/)
 
 Uses official vendor APIs for reliability. All under permissive licenses
-(BSD-3-Clause or MIT). See `THIRD_PARTY_LICENSES.md` for details.
+(BSD-3-Clause or MIT). See top-level `THIRD_PARTY_LICENSES` for details.
 
 | Directory | Driver | License | Description |
 |-----------|--------|---------|-------------|
