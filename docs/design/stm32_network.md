@@ -47,7 +47,7 @@ For embedded telemetry applications, **UDP is the pragmatic choice**:
 │  hive_udp.c / hive_tcp.c (platform-independent)                │
 │  Async operation management, timeouts, actor wakeup             │
 ├─────────────────────────────────────────────────────────────────┤
-│  HAL: hive_hal_udp_stm32.c / hive_hal_tcp_stm32.c              │
+│  HAL: hive_hal_udp.c / hive_hal_tcp.c                          │
 │  lwIP wrapper (Raw API for UDP, Socket API for TCP)            │
 ├─────────────────────────────────────────────────────────────────┤
 │  lwIP (IP stack)                                                │
@@ -112,7 +112,7 @@ hive_status_t hive_hal_udp_recvfrom(int handle, void *buf, size_t buflen,
 
 ## UDP HAL Implementation (lwIP Raw API)
 
-### File: `src/hal/stm32/hive_hal_udp_stm32.c`
+### File: `src/hal/stm32/hive_hal_udp.c`
 
 ```c
 #include "hal/hive_hal_udp.h"
@@ -397,7 +397,7 @@ The existing `hive_hal_tcp.h` defines the TCP API (10 functions):
 
 ## TCP HAL Implementation
 
-### File: `src/hal/stm32/hive_hal_tcp_stm32.c`
+### File: `src/hal/stm32/hive_hal_tcp.c`
 
 ```c
 #include "hal/hive_hal_tcp.h"
@@ -721,8 +721,8 @@ lib/lwip/                        # lwIP source (git submodule or copy)
   src/include/
 
 src/hal/stm32/
-  hive_hal_udp_stm32.c          # UDP HAL (raw API)
-  hive_hal_tcp_stm32.c          # TCP HAL (socket API)
+  hive_hal_udp.c                # UDP HAL (raw API)
+  hive_hal_tcp.c                # TCP HAL (socket API)
   ethernetif.c                   # Board-specific ETH<->lwIP glue
   ethernetif.h
 ```

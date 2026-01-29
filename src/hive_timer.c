@@ -7,8 +7,8 @@
 //
 // Actual timer operations are delegated to platform-specific HAL
 // implementations:
-// - Linux: timerfd + epoll (in hive_hal_timer_linux.c)
-// - STM32: Software timer wheel (in hive_hal_timer_stm32.c)
+// - Linux: timerfd + epoll (in hive_hal_timer.c)
+// - STM32: Software timer wheel (in hive_hal_timer.c)
 
 #include "hive_timer.h"
 #include "hive_internal.h"

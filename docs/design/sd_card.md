@@ -225,7 +225,7 @@ const hive_mount_t *hive_mount_find(const char *path, size_t *prefix_len) {
 - **Linux:** Use POSIX fds directly (no encoding). Backend is always POSIX.
 - **STM32:** Encode backend type in fd for dispatch.
 
-STM32 fd encoding (defined in `hive_mount_stm32.h`):
+STM32 fd encoding (defined in `hive_mount.h`):
 
 ```c
 // fd layout: [backend:4][index:12]
@@ -518,11 +518,11 @@ src/
         linux/
             hive_hal_file.c         # File I/O HAL
             hive_mounts.c           # Linux mount config
-            hive_mount_linux.h      # Linux mount structure
+            hive_mount.h            # Linux mount structure
         stm32/
             hive_hal_file.c         # Multi-backend dispatch + flash/SD backends
             hive_mounts.c           # Default STM32 mounts
-            hive_mount_stm32.h      # STM32 mount structure + FD encoding
+            hive_mount.h            # STM32 mount structure + FD encoding
             spi_sd.c                # SPI SD protocol driver
             spi_sd.h                # SPI SD driver interface
             spi_ll.h                # Low-level SPI interface (board implements)

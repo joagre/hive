@@ -128,7 +128,7 @@ hive_status_t hive_mount_available(const char *path) {
 
 #if HIVE_ENABLE_SD
     case HIVE_BACKEND_SD: {
-        // Check if SD card is available (defined in hive_hal_file_stm32.c)
+        // Check if SD card is available (defined in hive_hal_file.c)
         extern hive_status_t sd_check_available(const hive_mount_t *mount);
         return sd_check_available(mount);
     }

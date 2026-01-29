@@ -1,7 +1,7 @@
 // STM32 Mount Table - Internal Header
 //
 // Defines the STM32-specific mount structure with flash and SD configurations.
-// Included by both hive_mounts.c and hive_hal_file_stm32.c.
+// Included by both hive_mounts.c and hive_hal_file.c.
 
 #ifndef HIVE_MOUNT_STM32_H
 #define HIVE_MOUNT_STM32_H
