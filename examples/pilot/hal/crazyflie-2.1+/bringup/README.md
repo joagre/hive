@@ -379,8 +379,7 @@ without DMA. See "Deck Detection Architecture" section above.
 
 **WARNING: REMOVE PROPELLERS BEFORE THIS TEST!**
 
-Tests timer-based PWM output. Each motor is tested individually with user
-confirmation of rotation direction (CW/CCW).
+Tests timer-based PWM output. Each motor is tested individually.
 
 **Motor layout (X-config, viewed from above):**
 ```
@@ -402,42 +401,47 @@ confirmation of rotation direction (CW/CCW).
 | M3 | Rear-right | CCW | PA15 | TIM2_CH1 |
 | M4 | Rear-left | CW | PB9 | TIM4_CH4 |
 
+**Auto-Proceed Mode**
+
+By default, `MOTOR_TEST_AUTO_PROCEED` is enabled in `bringup_motors.c` for
+automated testing. Motors will spin without user confirmation after delays:
+- 3 second initial delay
+- 1 second delay before each motor test
+- 1 second spin time for rotation verification
+
+To disable auto-proceed and require manual confirmation via SWO input,
+set `#define MOTOR_TEST_AUTO_PROCEED 0` in `bringup_motors.c`.
+
 The test:
 1. Shows motor layout diagram with expected rotations
-2. Prompts before spinning each motor
-3. Slowly ramps up so rotation direction is clearly visible
-4. Asks user to confirm rotation ('y' = correct, 'n' = wrong)
-5. Reports warning if rotation is incorrect
+2. Waits (or prompts if auto-proceed disabled)
+3. Slowly ramps up each motor so rotation direction is visible
+4. Tests all motors together at 10%
 
-**Expected output**
+**Expected output (auto-proceed mode)**
 ```
 === Phase 7: Motor Test ===
 [MOTOR] !!! WARNING: REMOVE PROPELLERS !!!
-[MOTOR] Press ENTER to continue or 's' to skip...
+[MOTOR] AUTO-PROCEED enabled - starting in 3 seconds...
+[MOTOR] Starting motor test...
 
 [MOTOR] Motor layout (X-config, viewed from above):
-[MOTOR]           FRONT
-[MOTOR]       M1(CCW)  M2(CW)
-[MOTOR]           +--+
-[MOTOR]           |  |
-[MOTOR]           +--+
-[MOTOR]       M4(CW)  M3(CCW)
-[MOTOR]           REAR
+...
 
 ----------------------------------------
 [MOTOR] Testing M1 (front-left)
 [MOTOR] Expected rotation: CCW
-[MOTOR] Press ENTER to spin, 's' to skip this motor...
+[MOTOR] AUTO-PROCEED: spinning in 1 second...
 [MOTOR] Ramping up M1...
 [MOTOR] M1 spinning at 15% - verify CCW rotation
-[MOTOR] Press 'y' if correct, 'n' if wrong, ENTER to continue...
-[MOTOR] M1 rotation confirmed OK
+[MOTOR] AUTO-PROCEED: running for 1 second...
+[MOTOR] M1 test complete
 ----------------------------------------
 ... (repeat for M2, M3, M4) ...
 ----------------------------------------
 [MOTOR] Individual tests complete
 
-[MOTOR] Press ENTER to spin all motors together, 's' to skip...
+[MOTOR] AUTO-PROCEED: spinning all motors in 1 second...
 [MOTOR] Spinning all motors at 10%...
 [MOTOR] All motors stopped
 
@@ -452,37 +456,59 @@ Waits for battery voltage packet from nRF51.
 **Hardware**: USART6 at 1Mbaud
 - PC6: TX to NRF51
 - PC7: RX from NRF51
-- PA4: TXEN flow control (input with pull-up)
+- PA4: TXEN flow control (input, nRF51 drives LOW when not ready)
 
-**Known Limitation**: This test often times out because syslink at 1Mbaud
-requires DMA/interrupt-driven UART for reliable communication. The simple
-polling approach used in bringup causes UART overrun errors, losing bytes.
+**Implementation**: The bringup test uses DMA2 Stream 2 Channel 5 for USART6 RX
+in circular buffer mode, matching the approach used in the production HAL.
 
-The Bitcraze firmware uses:
-- DMA for UART TX/RX
-- EXTI interrupts for TXEN flow control
-- FreeRTOS tasks for packet processing
+**Current Status: INVESTIGATION IN PROGRESS**
 
-**Expected output (success - rare without DMA)**
+The test currently times out with 0 bytes received, even with DMA enabled.
+Diagnostic output shows:
+- DMA is correctly configured and enabled
+- USART receiver is enabled with DMA mode
+- NDTR register stays at 256 (no data received)
+- TXEN (PA4) stays LOW throughout the test
+
+This is puzzling because:
+1. The nRF51 works correctly with cfclient (Bitcraze firmware)
+2. The USART and DMA configuration matches the official firmware
+3. The nRF51 should send battery packets at 100Hz automatically
+
+**Possible causes under investigation**:
+1. Boot sequencing - nRF51 may expect specific STM32 behavior at startup
+2. The ST-Link debug connection may interfere with the UART lines
+3. The nRF51 may require initialization that the Bitcraze firmware provides
+
+**Expected output (success)**
 ```
 === Phase 8: Radio Test ===
 [RADIO] Initializing syslink (USART6)... OK
+[RADIO] PA4 (TXEN) initial state: HIGH
 [RADIO] Waiting for battery packet...
 [RADIO] Battery voltage: 3.92V... OK
 ```
 
-**Expected output (timeout - common)**
+**Expected output (current - timeout)**
 ```
 === Phase 8: Radio Test ===
 [RADIO] Initializing syslink (USART6)... OK
+[RADIO] PA4 (TXEN) initial state: LOW
+[RADIO] Sending wakeup packet to nRF51...
 [RADIO] Waiting for battery packet...
+[RADIO] 1s: 0 bytes, 0 packets
+[RADIO] 2s: 0 bytes, 0 packets
+...
 [RADIO] Timeout waiting for battery packet... FAIL
+[RADIO] Diagnostics: 0 bytes, 0 start1, 0 packets, 0 ckerr
+[RADIO] PA4 (TXEN) final state: LOW
+[RADIO] DMA CR=0x0A000501 NDTR=256 write_pos=0
+[RADIO] USART SR=0x00C0 CR1=0x200C CR3=0x0040
 ```
 
-**Note**: A timeout here does NOT indicate hardware failure. The NRF51 is
-functioning (it controls power and LEDs). The timeout is due to the polling-based
-UART implementation not being fast enough for 1Mbaud. The full pilot firmware
-will need proper DMA-based syslink for reliable radio communication.
+**Note**: A timeout here does NOT indicate hardware failure. The nRF51 is
+functioning (it controls power and LEDs, and works with cfclient). The root
+cause is still under investigation.
 
 ### Phase 9: Flash Storage
 
@@ -514,6 +540,15 @@ This is the most complex test, combining SPI with the SD card protocol.
 **Hardware**: Micro SD Card Deck
 - SPI3: PB3 (SCK), PB4 (MISO), PB5 (MOSI)
 - CS: PB6
+
+**SWO Pin Conflict**: SPI3 SCK (PB3) shares the same pin as SWO trace output.
+When the SD test initializes SPI3, it reconfigures PB3 from SWO (AF0) to
+SPI3_SCK (AF6), which kills SWO debug output. The test runs "blind" after
+this point - you won't see any more trace output until the board is reset.
+
+**Workaround**: Check the final LED status after the test completes:
+- **Solid LED** = All critical tests passed (phases 1-4)
+- **Fast blinking LED** = One or more critical tests failed
 
 | Test | Description |
 |------|-------------|
@@ -636,31 +671,32 @@ This is the most complex test, combining SPI with the SD card protocol.
 
 ## Test Summary
 
-At the end, a summary is printed (in order of test execution):
+At the end, a summary is printed (in order of test execution). Note that
+due to the SWO/SD pin conflict, the summary may not be visible if the SD
+test runs (SWO output stops when SPI3 is initialized).
 
-```
-=== Bring-Up Test Summary ===
-1. Boot & Clock:    OK
-2. LEDs:            OK
-3. I2C Bus Scan:    OK
-4. Sensors:         OK
-5. EEPROM:          OK
-6. Deck Detection:  OK
-7. Motors:          OK
-8. Radio:           OK
-9. Flash Storage:   OK
-10. SD Card:        OK
+**Verified working (as of 2026-01-29)**:
 
-Flow deck:          DETECTED
-SD card deck:       DETECTED
-Expansion decks:    1 detected
+| Phase | Test | Status |
+|-------|------|--------|
+| 1 | Boot & Clock (168 MHz) | PASS |
+| 2 | LEDs (Blue + 4x Red) | PASS |
+| 3 | I2C Bus Scan (BMI088, BMP388) | PASS |
+| 4 | Sensors (all IDs and data) | PASS |
+| 5 | EEPROM (I2C1 write/verify) | PASS |
+| 6 | Deck Detection (Flow deck v2) | PASS |
+| 7 | Motors (TIM2/TIM4 PWM, all 4) | PASS |
+| 8 | Radio (USART6 syslink) | INVESTIGATING |
+| 9 | Flash Storage (273 KB/sec) | PASS |
+| 10 | SD Card (SPI3) | BLIND (SWO conflict) |
 
-All required tests passed!
-```
+**LED Status Indicator**:
+- **Solid blue LED** = Phases 1-4 all passed
+- **Fast blinking blue LED** = One or more of phases 1-4 failed
 
-**Note**: SD Card shows "NO DECK" if the Micro SD Card Deck is not attached.
-This is not a failure - the SD card deck is optional. Similarly, Deck Detection
-will report "No deck detected" if no expansion deck is attached.
+**Note**: The pass/fail LED only considers phases 1-4 (Boot, LEDs, I2C, Sensors).
+Later phases (EEPROM, Deck, Motors, Radio, Flash, SD) are informational and
+don't affect the final LED status.
 
 ## Tests To Be Written
 

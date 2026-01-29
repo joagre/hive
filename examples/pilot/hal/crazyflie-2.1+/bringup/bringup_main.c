@@ -333,8 +333,8 @@ int main(void) {
     // Phase 6: Deck Detection (1-Wire on PC11)
     s_deck_ok = test_deck();
 
-    // Phase 7: Motors - SKIPPED (requires user confirmation, use 's' to skip)
-    // s_motors_ok = test_motors();
+    // Phase 7: Motors
+    s_motors_ok = test_motors();
 
     // Phase 8: Radio (Syslink to nRF51)
     s_radio_ok = test_radio();

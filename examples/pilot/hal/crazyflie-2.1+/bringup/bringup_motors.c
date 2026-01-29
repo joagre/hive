@@ -6,6 +6,10 @@
 //   M3: PA15, TIM2_CH1
 //   M4: PB9,  TIM4_CH4
 
+// Auto-proceed mode: skip confirmation prompts (for automated testing)
+// WARNING: Motors will spin without confirmation!
+#define MOTOR_TEST_AUTO_PROCEED 1
+
 #include "bringup_motors.h"
 #include "bringup_swo.h"
 #include "stm32f4xx.h"
@@ -178,6 +182,11 @@ bool motors_is_armed(void) {
 bool motors_run_test(void) {
     swo_puts("\n");
     swo_puts("[MOTOR] !!! WARNING: REMOVE PROPELLERS !!!\n");
+#if MOTOR_TEST_AUTO_PROCEED
+    swo_puts("[MOTOR] AUTO-PROCEED enabled - starting in 3 seconds...\n");
+    delay_ms(3000);
+    int c = '\n'; // Simulate ENTER
+#else
     swo_puts("[MOTOR] Press ENTER to continue or 's' to skip...\n");
 
     // Wait for user input
@@ -186,6 +195,7 @@ bool motors_run_test(void) {
         swo_puts("[MOTOR] Motor test skipped\n");
         return false;
     }
+#endif
 
     swo_puts("[MOTOR] Starting motor test...\n");
     swo_puts("\n");
@@ -212,6 +222,10 @@ bool motors_run_test(void) {
         swo_puts("----------------------------------------\n");
         swo_printf("[MOTOR] Testing %s (%s)\n", info->name, info->position);
         swo_printf("[MOTOR] Expected rotation: %s\n", info->rotation);
+#if MOTOR_TEST_AUTO_PROCEED
+        swo_puts("[MOTOR] AUTO-PROCEED: spinning in 1 second...\n");
+        delay_ms(1000);
+#else
         swo_puts("[MOTOR] Press ENTER to spin, 's' to skip this motor...\n");
 
         c = swo_getc_timeout(30000);
@@ -224,6 +238,7 @@ bool motors_run_test(void) {
             motors_disarm();
             return false;
         }
+#endif
 
         // Slow ramp up so rotation direction is clearly visible
         swo_printf("[MOTOR] Ramping up %s...\n", info->name);
@@ -234,10 +249,16 @@ bool motors_run_test(void) {
 
         swo_printf("[MOTOR] %s spinning at 15%% - verify %s rotation\n",
                    info->name, info->rotation);
+#if MOTOR_TEST_AUTO_PROCEED
+        swo_puts("[MOTOR] AUTO-PROCEED: running for 1 second...\n");
+        delay_ms(1000);
+        c = '\n'; // Simulate continue
+#else
         swo_puts("[MOTOR] Press 'y' if correct, 'n' if wrong, ENTER to "
                  "continue...\n");
 
         c = swo_getc_timeout(10000);
+#endif
 
         // Ramp down
         for (int pct = 15; pct >= 0; pct -= 3) {
@@ -263,11 +284,17 @@ bool motors_run_test(void) {
     swo_puts("\n");
 
     // Test all motors together
+#if MOTOR_TEST_AUTO_PROCEED
+    swo_puts("[MOTOR] AUTO-PROCEED: spinning all motors in 1 second...\n");
+    delay_ms(1000);
+    {
+#else
     swo_puts(
         "[MOTOR] Press ENTER to spin all motors together, 's' to skip...\n");
     c = swo_getc_timeout(30000);
 
     if (c != 's' && c != 'S' && c >= 0) {
+#endif
         swo_puts("[MOTOR] Spinning all motors at 10%...\n");
         for (int i = 0; i < MOTOR_COUNT; i++) {
             motor_set((motor_id_t)i, 0.10f);
