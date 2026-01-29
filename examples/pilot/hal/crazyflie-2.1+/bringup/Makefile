@@ -58,7 +58,7 @@ LDFLAGS += -specs=nosys.specs
 LDFLAGS += -lm
 
 # Targets
-.PHONY: all clean flash reset
+.PHONY: all clean flash reset trace
 
 all: $(TARGET).elf $(TARGET).hex $(TARGET).bin
 	@echo ""
@@ -99,6 +99,9 @@ flash: $(TARGET).bin
 reset:
 	st-flash reset
 
+trace: $(TARGET).bin
+	./st-trace.sh
+
 # Help
 help:
 	@echo "Crazyflie 2.1+ Bring-Up Test"
@@ -108,9 +111,10 @@ help:
 	@echo "  clean   - Remove build artifacts"
 	@echo "  flash   - Flash to device via ST-Link"
 	@echo "  reset   - Reset device via ST-Link"
+	@echo "  trace   - View SWO output (70s timeout, covers all phases)"
 	@echo ""
 	@echo "Usage:"
 	@echo "  1. make"
 	@echo "  2. make flash"
-	@echo "  3. View SWO output: st-trace -c 168"
+	@echo "  3. make trace (or: ./st-trace.sh -t 0 for no timeout)"
 	@echo "  4. Press reset or: make reset"
