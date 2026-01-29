@@ -160,4 +160,9 @@ uint8_t spi_ll_xfer(uint8_t data) {
     return (uint8_t)SPI3->DR;
 }
 
+#else
+
+// Avoid empty translation unit warning when SD is disabled
+typedef int spi_ll_sd_unused;
+
 #endif // HIVE_ENABLE_SD
