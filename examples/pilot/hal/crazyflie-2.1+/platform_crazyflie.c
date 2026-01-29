@@ -50,7 +50,10 @@
 #define BMP3_I2C_ADDR 0x77        // BMP388 barometer
 
 // I2C addresses (I2C1 - expansion connector / Flow deck)
-#define VL53L1X_I2C_ADDR 0x29 // VL53L1x ToF sensor
+// Note: VL53L1x default is 0x29, but Bitcraze firmware may reassign it
+// We scan multiple addresses to find it
+#define VL53L1X_I2C_ADDR_DEFAULT 0x29
+#define VL53L1X_MODEL_ID 0xEACC
 
 // I2C pins (I2C3) - used by BMI088, BMP388, VL53L1x
 #define I2C3_SCL_PIN 8 // PA8
@@ -804,6 +807,18 @@ static const vl53l1x_platform_t s_vl53l1x_platform = {
     .delay_ms = vl53l1x_delay_ms,
 };
 
+// Probe for VL53L1x at a specific address by reading model ID
+// Returns true if VL53L1x found at this address
+static bool vl53l1x_probe_address(uint8_t addr) {
+    // Read model ID register (0x010F) - should return 0xEACC for VL53L1x
+    uint8_t id[2];
+    if (vl53l1x_i2c_read(addr, 0x010F, id, 2) != 0) {
+        return false;
+    }
+    uint16_t model_id = (uint16_t)(id[0] << 8) | id[1];
+    return (model_id == VL53L1X_MODEL_ID);
+}
+
 // ----------------------------------------------------------------------------
 // Bitcraze PMW3901 Callbacks
 // ----------------------------------------------------------------------------
@@ -998,10 +1013,29 @@ static bool init_vl53l1x(void) {
     // Initialize I2C1 for VL53L1x (on expansion connector)
     i2c1_init();
 
+    // Scan for VL53L1x at known addresses
+    // The Bitcraze firmware may reassign from default 0x29 to avoid conflicts
+    static const uint8_t addrs_to_scan[] = {0x29, 0x6A, 0x30, 0x31, 0x32, 0x52};
+    uint8_t found_addr = 0;
+
+    for (size_t i = 0; i < sizeof(addrs_to_scan); i++) {
+        if (vl53l1x_probe_address(addrs_to_scan[i])) {
+            found_addr = addrs_to_scan[i];
+            break;
+        }
+    }
+
+    if (found_addr == 0) {
+        return false; // VL53L1x not found at any known address
+    }
+
     // Initialize with platform callbacks
     rslt = vl53l1x_init(&s_vl53l1x_dev, &s_vl53l1x_platform);
     if (rslt != 0)
         return false;
+
+    // Override with discovered address (driver defaults to 0x29)
+    s_vl53l1x_dev.i2c_address = found_addr;
 
     // Wait for boot
     uint8_t boot_state = 0;
