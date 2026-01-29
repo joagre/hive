@@ -15,6 +15,7 @@
 #
 # Tests:
 #   sensors_motors - HAL API validation (sensors, motors, calibration)
+#   thrust         - Thrust calibration test (find HAL_BASE_THRUST)
 #   flash          - Hive file API test with flash backend (/log)
 #   sd             - Hive file API test with SD backend (/sd)
 #   radio          - DMA-based syslink radio communication test
@@ -38,6 +39,7 @@ help:
 	@echo ""
 	@echo "Available tests:"
 	@echo "  sensors_motors  - HAL API validation (sensors, motors)"
+	@echo "  thrust          - Thrust calibration (find HAL_BASE_THRUST)"
 	@echo "  flash           - Hive file API test (flash backend)"
 	@echo "  sd              - Hive file API test (SD backend)"
 	@echo "  radio           - DMA-based radio communication test"
@@ -45,9 +47,10 @@ help:
 	@echo ""
 	@echo "Examples:"
 	@echo "  make PLATFORM=crazyflie TEST=sensors_motors"
-	@echo "  make PLATFORM=crazyflie TEST=flash"
+	@echo "  make PLATFORM=crazyflie TEST=thrust"
+	@echo "  make PLATFORM=crazyflie TEST=thrust CFLAGS+='-DTHRUST_TEST_VALUE=0.40f'"
 	@echo "  make install-webots"
-	@echo "  make flash-crazyflie TEST=flash"
+	@echo "  make flash-crazyflie TEST=thrust"
 
 # Build directories
 BUILD_DIR_CF = build_crazyflie
@@ -62,7 +65,7 @@ HIVE_SRC_DIR = $(HIVE_ROOT)/src
 TEST ?= sensors_motors
 
 # Tests that require libhive.a (use Hive file API or logging)
-HIVE_TESTS = sensors_motors flash sd radio main
+HIVE_TESTS = sensors_motors thrust flash sd radio main
 
 # ==============================================================================
 # Crazyflie 2.1+ Build
@@ -201,6 +204,7 @@ endif
 
 all-tests:
 	@$(MAKE) PLATFORM=crazyflie TEST=sensors_motors
+	@$(MAKE) PLATFORM=crazyflie TEST=thrust
 	@$(MAKE) PLATFORM=crazyflie TEST=flash
 	@$(MAKE) PLATFORM=crazyflie TEST=sd
 	@$(MAKE) PLATFORM=crazyflie TEST=radio

@@ -9,6 +9,7 @@ These tests are organized by what they validate:
 | Test | API Used | Description |
 |------|----------|-------------|
 | `sensors_motors` | Pilot HAL | HAL API validation (sensors, motors, calibration) |
+| `thrust` | Pilot HAL | Thrust calibration (find HAL_BASE_THRUST for hover) |
 | `flash` | Hive File API | Tests flash-backed `/log` via `hive_file_*()` |
 | `sd` | Hive File API | Tests SD-backed `/sd` via `hive_file_*()` |
 | `radio` | Pilot HAL + Hive | DMA-based syslink radio communication test |
@@ -63,6 +64,81 @@ Validates the complete pilot HAL API stack.
 | Medium blink | Motors running |
 | 6 blinks | Motor test done |
 | LED on solid | All tests passed! |
+
+### thrust
+
+Calibrates the base thrust value needed for hover.
+
+The `HAL_BASE_THRUST` parameter in `hal_config.h` must be calibrated for each
+Crazyflie based on battery charge and weight. This test helps find the correct
+value by running motors at a specified thrust level.
+
+**Calibration procedure:**
+1. Start with `THRUST_TEST_VALUE=0.30f`
+2. Build and flash the test
+3. Place Crazyflie on flat surface
+4. Observe during 5-second motor run:
+   - **No movement:** increase thrust by 0.02
+   - **Light on skids:** correct value found!
+   - **Lifts off:** decrease thrust by 0.01
+5. Update `HAL_BASE_THRUST` in `hal/crazyflie-2.1+/hal_config.h`
+
+**Usage:**
+```bash
+# Default thrust (0.35)
+make PLATFORM=crazyflie TEST=thrust
+make flash-crazyflie TEST=thrust
+
+# Custom thrust value
+make PLATFORM=crazyflie TEST=thrust CFLAGS+='-DTHRUST_TEST_VALUE=0.40f'
+make flash-crazyflie TEST=thrust
+```
+
+**Safety:**
+- REMOVE PROPELLERS for initial testing!
+- Once props are on, test in a safe area with clearance
+- Keep hands clear - motors spin at significant speed
+- Test runs for 5 seconds then stops automatically
+
+**LED feedback:**
+| Pattern | Meaning |
+|---------|---------|
+| 2 blinks | Init complete, starting calibration |
+| 3 blinks | Calibration done, motors starting in 3 seconds |
+| Slow blink | Motors running at test thrust |
+| LED on solid | Test complete |
+
+**Example output:**
+```
+========================================
+  Thrust Calibration Test
+========================================
+Test thrust: 0.38 (38%)
+Duration: 5000 ms
+Running self-test...
+Self-test PASSED
+Calibrating sensors (keep still and level)...
+Calibration done
+Motors starting in 3 seconds...
+Place drone on flat surface NOW!
+  3...
+  2...
+  1...
+MOTORS STARTING at 0.38 thrust!
+Running at 0.38 thrust... 1000 ms / 5000 ms
+Running at 0.38 thrust... 2000 ms / 5000 ms
+Running at 0.38 thrust... 3000 ms / 5000 ms
+Running at 0.38 thrust... 4000 ms / 5000 ms
+========================================
+  Test complete!
+========================================
+Tested thrust: 0.38
+Observations:
+  - No movement: increase to 0.40
+  - Light on skids: GOOD! Use 0.38 as HAL_BASE_THRUST
+  - Lifted off: decrease to 0.37
+Update hal/crazyflie-2.1+/hal_config.h with found value
+```
 
 ### flash
 
@@ -237,6 +313,7 @@ Runs all applicable tests in sequence. Primarily intended for use as a
 ```bash
 # Build specific test
 make PLATFORM=crazyflie TEST=sensors_motors
+make PLATFORM=crazyflie TEST=thrust
 make PLATFORM=crazyflie TEST=flash
 make PLATFORM=crazyflie TEST=sd
 make PLATFORM=crazyflie TEST=radio
@@ -247,10 +324,14 @@ make PLATFORM=crazyflie all-tests
 
 # Flash specific test
 make flash-crazyflie TEST=sensors_motors
+make flash-crazyflie TEST=thrust
 make flash-crazyflie TEST=flash
 make flash-crazyflie TEST=sd
 make flash-crazyflie TEST=radio
 make flash-crazyflie TEST=main
+
+# Thrust test with custom value
+make PLATFORM=crazyflie TEST=thrust CFLAGS+='-DTHRUST_TEST_VALUE=0.40f'
 ```
 
 ### Webots Simulation
