@@ -69,6 +69,65 @@ This means I2C polling time is part of the critical path.
 **Current recommendation:** Keep polling for initial flight testing. Optimize
 later if profiling shows it's needed.
 
+## Design Decisions: HAL vs Application Responsibilities
+
+This HAL intentionally omits certain features that Bitcraze implements, because
+they belong at the application level rather than the HAL:
+
+### Low-Pass Filters
+
+**Bitcraze:** Applies 2nd-order Butterworth filters in the sensor driver (80Hz
+gyro cutoff, 30Hz accel cutoff).
+
+**This HAL:** Provides raw sensor data without filtering.
+
+**Rationale:** The pilot firmware uses a Kalman filter for state estimation,
+which inherently filters sensor noise as part of its prediction/update cycle.
+Adding filters in the HAL would:
+- Double-filter the data, adding latency without benefit
+- Make the Kalman filter's noise model inaccurate
+- Hide sensor characteristics from the estimator
+
+If filtering is needed for a different application (e.g., complementary filter),
+it should be implemented in that application, not the HAL.
+
+### Supervisor / Arming State Machine
+
+**Bitcraze:** Complex supervisor module with state machine:
+- Pre-flight checks state
+- Armed state
+- Flying state
+- Tumble detection
+- Emergency stop
+- Commander watchdog (500ms warning, 2000ms shutdown)
+- Crash recovery
+
+**This HAL:** Simple arming in `hal_arm()`:
+- Checks `initialized` flag
+- Checks `calibrated` flag
+- Enables motor PWM output
+
+**Rationale:** Flight safety logic belongs in the application layer, not HAL:
+- Tumble detection requires attitude estimation (application has this)
+- Commander watchdog depends on command source (radio, autonomous, etc.)
+- Emergency stop policy is application-specific
+- State machine complexity doesn't belong in hardware abstraction
+
+The pilot firmware should implement these checks in its own supervisor actor
+if needed. The HAL just provides the primitive: "enable/disable motor output".
+
+### What hal_arm() Checks
+
+| Check | HAL | Application Should Add |
+|-------|-----|------------------------|
+| Hardware initialized | ✓ | - |
+| Sensors calibrated | ✓ | - |
+| Attitude valid | - | ✓ (estimator converged) |
+| Not tumbled | - | ✓ (roll/pitch < threshold) |
+| Battery OK | - | ✓ (voltage > minimum) |
+| Command source valid | - | ✓ (radio link, autonomous) |
+| Watchdog not expired | - | ✓ (recent setpoint) |
+
 ## Integration with Pilot
 
 This HAL links with `pilot.c` and the hive runtime. The platform API
