@@ -52,10 +52,34 @@ The following may be added after initial flight testing:
 - **Accelerometer sanity check**: Motors off if acceleration readings are implausible
 - **Sensor timeout**: Motors off if no sensor updates within expected interval
 
+#### Bitcraze Supervisor Features (Reference)
+
+The [Bitcraze crazyflie-firmware supervisor](https://github.com/bitcraze/crazyflie-firmware/blob/master/src/modules/src/supervisor.c)
+implements additional safety features that could be added as a supervisor actor:
+
+| Feature | Description | Priority |
+|---------|-------------|----------|
+| **Arming state machine** | Explicit states: PreFlightChecks → Armed → Flying → Landed | Medium |
+| **Commander watchdog** | Warning at 500ms, motor shutoff at 2000ms without setpoint | High |
+| **Tumble detection** | Configurable tilt threshold + duration before declaring tumbled | Medium |
+| **Crash detection** | Detect crashed state, require explicit recovery command | Low |
+| **Emergency stop** | External signal or parameter to immediately stop motors | High |
+| **Estimator health** | Check Kalman filter covariance within bounds | Medium |
+
+**Implementation approach**: These would be implemented in a dedicated supervisor
+actor (not in HAL) that:
+1. Subscribes to sensor_bus and state_bus
+2. Monitors attitude, rates, and estimator health
+3. Can override motor commands via motor_bus or direct IPC
+4. Manages arming state transitions
+
+The current pilot has basic cutoffs in altitude_actor.c (attitude >45°, altitude >2m).
+A supervisor actor would centralize these checks and add the additional features above.
+
 ### Missing Safety Features (Production Requirements)
 
 - **Geofence**: No boundary limits - drone can fly away indefinitely
-- **Battery monitoring**: No low-voltage warning or auto-land
+- **Battery monitoring**: No low-voltage warning or auto-land (requires syslink to NRF51)
 - **Arming/disarming**: No safety switch to prevent accidental motor start
 - **Pre-flight checks**: No sensor validation before takeoff
 - **Communication loss**: No failsafe if telemetry link drops
