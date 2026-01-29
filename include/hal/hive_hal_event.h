@@ -32,7 +32,7 @@ hive_status_t hive_hal_event_init(void);
 void hive_hal_event_cleanup(void);
 
 // Poll for pending events without blocking.
-// Dispatches any ready events (timer, network, etc.)
+// Dispatches any ready events (timer, TCP, etc.)
 // Linux: epoll_wait with timeout=0
 // STM32: Process pending software timers
 void hive_hal_event_poll(void);

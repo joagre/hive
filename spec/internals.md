@@ -14,7 +14,7 @@ All resource limits are defined at compile-time and require recompilation to cha
 
 ```c
 // Feature toggles (set to 0 to disable)
-#define HIVE_ENABLE_NET 1                     // Network I/O subsystem
+#define HIVE_ENABLE_TCP 1                     // TCP I/O subsystem
 #define HIVE_ENABLE_FILE 1                    // File I/O subsystem
 #define HIVE_ENABLE_SD 0                      // SD card support (STM32 only, requires FatFS)
 
@@ -42,7 +42,7 @@ All resource limits are defined at compile-time and require recompilation to cha
 #define HIVE_MAX_SD_FILES 4                   // Max concurrent open files on SD card
 ```
 
-Feature toggles can also be set via Makefile: `make ENABLE_NET=0 ENABLE_FILE=0` or `make ENABLE_SD=1`.
+Feature toggles can also be set via Makefile: `make ENABLE_TCP=0 ENABLE_FILE=0` or `make ENABLE_SD=1`.
 
 All runtime structures are **statically allocated** based on these limits. Actor stacks use a static arena allocator by default (configurable via `actor_config_t.malloc_stack` for malloc). This ensures:
 - Bounded memory footprint (calculable at link time)
@@ -168,7 +168,7 @@ Exit notifications (steps 2-3 above) are enqueued in recipient mailboxes **durin
    - Example: If B's mailbox contains [M1, M2] when A's death is processed, B receives: M1 -> M2 -> EXIT(A)
 
 2. **No global ordering guarantee**
-   - The runtime does NOT guarantee ordering relative to concurrent events (timers, network I/O)
+   - The runtime does NOT guarantee ordering relative to concurrent events (timers, TCP I/O)
    - If death processing and other enqueues occur in the same scheduling phase, ordering depends on processing order
    - Example: If A dies and a timer fires for B in the same phase, the order of EXIT(A) vs timer tick in B's mailbox depends on event dispatch order
 
@@ -241,7 +241,7 @@ procedure hive_run():
                     read(timerfd, &expirations, 8)  # Clear level-triggered, get count
                     send_timer_tick(source.owner)   # One tick regardless of count
                     wake_actor(source.owner)
-                elif source.type == NETWORK:
+                elif source.type == TCP:
                     perform_io_operation(source)  # recv/send partial, connect checks SO_ERROR
                     wake_actor(source.owner)
 ```
@@ -374,7 +374,7 @@ timerfd_settime(tfd, 0, &its, NULL);
 struct epoll_event ev = {.events = EPOLLIN, .data.ptr = timer_source};
 epoll_ctl(epoll_fd, EPOLL_CTL_ADD, tfd, &ev);
 
-// Network I/O - add socket to epoll when would block
+// TCP I/O - add socket to epoll when would block
 int sock = socket(AF_INET, SOCK_STREAM, 0);
 fcntl(sock, F_SETFL, O_NONBLOCK);
 struct epoll_event ev = {.events = EPOLLIN, .data.ptr = net_source};
@@ -394,7 +394,7 @@ if (no_runnable_actors) {
             // expirations may be > 1 for periodic timers (coalesced)
             // We send ONE tick message regardless of count
         }
-        dispatch_io_event(source);  // Handle timer tick or network I/O
+        dispatch_io_event(source);  // Handle timer tick or TCP I/O
     }
 }
 ```
@@ -404,14 +404,14 @@ if (no_runnable_actors) {
 // Interrupt handlers set flags
 volatile uint32_t pending_events = 0;
 #define EVENT_TIMER   (1 << 0)
-#define EVENT_NETWORK (1 << 1)
+#define EVENT_TCP (1 << 1)
 
 void SysTick_Handler(void) {
     pending_events |= EVENT_TIMER;
 }
 
 void ETH_IRQHandler(void) {
-    pending_events |= EVENT_NETWORK;
+    pending_events |= EVENT_TCP;
 }
 
 // Scheduler waits when no actors are ready
@@ -427,9 +427,9 @@ if (no_runnable_actors) {
         pending_events &= ~EVENT_TIMER;
         handle_timer_event();
     }
-    if (pending_events & EVENT_NETWORK) {
-        pending_events &= ~EVENT_NETWORK;
-        handle_network_event();
+    if (pending_events & EVENT_TCP) {
+        pending_events &= ~EVENT_TCP;
+        handle_tcp_event();
     }
 }
 ```
@@ -437,9 +437,9 @@ if (no_runnable_actors) {
 ### Semantics
 
 - **Single-threaded event loop**: All I/O is multiplexed in the scheduler thread
-- **Non-blocking I/O registration**: Timers create timerfds, network operations register sockets with epoll
+- **Non-blocking I/O registration**: Timers create timerfds, TCP operations register sockets with epoll
 - **Event dispatching**: epoll_wait returns when any I/O source becomes ready
-- **Immediate handling**: Timer ticks and network I/O are processed immediately when ready
+- **Immediate handling**: Timer ticks and TCP I/O are processed immediately when ready
 
 ### Event Loop Guarantees
 
@@ -485,7 +485,7 @@ The runtime uses a Hardware Abstraction Layer (HAL) to isolate platform-specific
 | Context switch | x86-64 asm | ARM Cortex-M asm |
 | Event notification | epoll | WFI + interrupt flags |
 | Timer | timerfd + epoll | Software timer wheel (SysTick/TIM) |
-| Network | Non-blocking BSD sockets + epoll | Stubs (future lwIP support) |
+| TCP | Non-blocking BSD sockets + epoll | Stubs (future lwIP support) |
 | File | Synchronous POSIX | Flash-backed virtual files + optional SD card via FatFS |
 
 ### HAL Headers
@@ -497,7 +497,7 @@ include/hal/
   hive_hal_timer.h     - Timer operations (6 functions)
   hive_hal_context.h   - Context switching (1 function + struct)
   hive_hal_file.h      - File I/O (8 functions, optional)
-  hive_hal_net.h       - Network I/O (10 functions, optional)
+  hive_hal_tcp.h       - TCP I/O (10 functions, optional)
   hive_mount.h         - Mount table types (backend enum, function declarations)
 ```
 
@@ -510,7 +510,7 @@ include/hal/
 | Timer | `init`, `cleanup`, `create`, `cancel`, `get_time`, `advance_time` | Yes |
 | Context | `init` (C), `switch` (asm) | Yes |
 | File | `init`, `cleanup`, `open`, `close`, `read`, `pread`, `write`, `pwrite`, `sync`, `mount_available` | Optional |
-| Network | `init`, `cleanup`, `socket`, `bind`, `listen`, `accept`, `connect`, `connect_check`, `close`, `recv`, `send` | Optional |
+| TCP | `init`, `cleanup`, `socket`, `bind`, `listen`, `accept`, `connect`, `connect_check`, `close`, `recv`, `send` | Optional |
 
 **Minimum port** - ~15 C functions + 1 assembly function + 1 struct definition
 
@@ -520,12 +520,12 @@ Platform implementations live in `src/hal/<platform>/`:
 
 | Component | Linux | STM32 |
 |-----------|-------|-------|
-| Main HAL | `hal/linux/hive_hal_linux.c` | `hal/stm32/hive_hal_stm32.c` |
-| Timer HAL | `hal/linux/hive_hal_timer_linux.c` | `hal/stm32/hive_hal_timer_stm32.c` |
-| Context init | `hal/linux/hive_hal_context_linux.c` | `hal/stm32/hive_hal_context_stm32.c` |
+| Main HAL | `hal/linux/hive_hal.c` | `hal/stm32/hive_hal.c` |
+| Timer HAL | `hal/linux/hive_hal_timer.c` | `hal/stm32/hive_hal_timer.c` |
+| Context init | `hal/linux/hive_hal_context.c` | `hal/stm32/hive_hal_context.c` |
 | Context switch | `hal/linux/hive_context_x86_64.S` | `hal/stm32/hive_context_arm_cm.S` |
 | Context struct | `hal/linux/hive_hal_context_defs.h` | `hal/stm32/hive_hal_context_defs.h` |
-| File HAL | (in main HAL) | `hal/stm32/hive_hal_file_stm32.c` |
+| File HAL | (in main HAL) | `hal/stm32/hive_hal_file.c` |
 | Mount table | `hal/linux/hive_mounts.c` | `hal/stm32/hive_mounts.c` (or board-specific) |
 | SD card driver | N/A | `hal/stm32/spi_sd.c` (conditional, `HIVE_ENABLE_SD`) |
 
@@ -533,16 +533,16 @@ Platform-independent wrappers call HAL functions:
 - `hive_scheduler.c` - Unified scheduler (calls HAL event functions)
 - `hive_timer.c` - Timer wrapper (calls HAL timer functions)
 - `hive_file.c` - File I/O wrapper (calls HAL file functions)
-- `hive_net.c` - Network I/O wrapper (calls HAL network functions)
+- `hive_tcp.c` - TCP I/O wrapper (calls HAL TCP functions)
 
 ### Porting Guide
 
 Templates for new ports are in `src/hal/template/`:
-- `hive_hal_template.c` - Documented HAL implementation template
-- `hive_hal_timer_template.c` - Timer HAL implementation template
+- `hive_hal.c` - Documented HAL implementation template
+- `hive_hal_timer.c` - Timer HAL implementation template
 - `hive_hal_context_defs.h` - Context struct template
-- `hive_hal_context_template.c` - Context init template
-- `hive_context_template.S` - Assembly template
+- `hive_hal_context.c` - Context init template
+- `hive_context.S` - Assembly template
 - `README.md` - Complete porting guide
 
 ### Building for Different Platforms
@@ -555,10 +555,10 @@ make PLATFORM=linux            # Explicit
 # STM32 (requires ARM cross-compiler)
 make PLATFORM=stm32 CC=arm-none-eabi-gcc
 
-# Feature toggles (disable network and file I/O)
-make ENABLE_NET=0 ENABLE_FILE=0
+# Feature toggles (disable TCP and file I/O)
+make ENABLE_TCP=0 ENABLE_FILE=0
 
-# STM32 defaults to ENABLE_NET=0 ENABLE_FILE=1 ENABLE_SD=0
+# STM32 defaults to ENABLE_TCP=0 ENABLE_FILE=1 ENABLE_SD=0
 ```
 
 Platform selection sets `HIVE_PLATFORM_LINUX` or `HIVE_PLATFORM_STM32` preprocessor defines.

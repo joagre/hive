@@ -1,5 +1,5 @@
 #include "hive_runtime.h"
-#include "hive_net.h"
+#include "hive_tcp.h"
 #include "hive_ipc.h"
 #include "hive_timer.h"
 #include "hive_link.h"
@@ -49,7 +49,7 @@ static void server_actor(void *args, const hive_spawn_info_t *siblings,
     (void)client;
 
     // Listen on port
-    hive_status_t status = hive_net_listen(TEST_PORT, &g_listen_fd);
+    hive_status_t status = hive_tcp_listen(TEST_PORT, &g_listen_fd);
     if (HIVE_FAILED(status)) {
         printf("    Server: listen failed: %s\n",
                status.msg ? status.msg : "unknown");
@@ -60,11 +60,11 @@ static void server_actor(void *args, const hive_spawn_info_t *siblings,
 
     // Accept connection with timeout
     status =
-        hive_net_accept(g_listen_fd, &g_accepted_fd, 2000); // 2 second timeout
+        hive_tcp_accept(g_listen_fd, &g_accepted_fd, 2000); // 2 second timeout
     if (HIVE_FAILED(status)) {
         printf("    Server: accept failed: %s\n",
                status.msg ? status.msg : "unknown");
-        hive_net_close(g_listen_fd);
+        hive_tcp_close(g_listen_fd);
         hive_exit();
     }
 
@@ -72,19 +72,19 @@ static void server_actor(void *args, const hive_spawn_info_t *siblings,
     char buf[64] = {0};
     size_t received = 0;
     status =
-        hive_net_recv(g_accepted_fd, buf, sizeof(buf) - 1, &received, 2000);
+        hive_tcp_recv(g_accepted_fd, buf, sizeof(buf) - 1, &received, 2000);
     if (HIVE_FAILED(status)) {
         printf("    Server: recv failed: %s\n",
                status.msg ? status.msg : "unknown");
     } else {
         // Echo back
         size_t sent = 0;
-        hive_net_send(g_accepted_fd, buf, received, &sent, 2000);
+        hive_tcp_send(g_accepted_fd, buf, received, &sent, 2000);
     }
 
     // Cleanup
-    hive_net_close(g_accepted_fd);
-    hive_net_close(g_listen_fd);
+    hive_tcp_close(g_accepted_fd);
+    hive_tcp_close(g_listen_fd);
     hive_exit();
 }
 
@@ -107,7 +107,7 @@ static void client_actor(void *args, const hive_spawn_info_t *siblings,
 
     // Connect to server
     int fd = -1;
-    hive_status_t status = hive_net_connect("127.0.0.1", TEST_PORT, &fd, 2000);
+    hive_status_t status = hive_tcp_connect("127.0.0.1", TEST_PORT, &fd, 2000);
     if (HIVE_FAILED(status)) {
         printf("    Client: connect failed: %s\n",
                status.msg ? status.msg : "unknown");
@@ -119,24 +119,24 @@ static void client_actor(void *args, const hive_spawn_info_t *siblings,
     // Send data
     const char *data = "Hello Server!";
     size_t sent = 0;
-    status = hive_net_send(fd, data, strlen(data), &sent, 2000);
+    status = hive_tcp_send(fd, data, strlen(data), &sent, 2000);
     if (HIVE_FAILED(status)) {
         printf("    Client: send failed: %s\n",
                status.msg ? status.msg : "unknown");
-        hive_net_close(fd);
+        hive_tcp_close(fd);
         hive_exit();
     }
 
     // Receive echo
     char buf[64] = {0};
     size_t received = 0;
-    status = hive_net_recv(fd, buf, sizeof(buf) - 1, &received, 2000);
+    status = hive_tcp_recv(fd, buf, sizeof(buf) - 1, &received, 2000);
     if (HIVE_FAILED(status)) {
         printf("    Client: recv failed: %s\n",
                status.msg ? status.msg : "unknown");
     }
 
-    hive_net_close(fd);
+    hive_tcp_close(fd);
     hive_exit();
 }
 
@@ -195,7 +195,7 @@ static void echo_server_actor(void *args, const hive_spawn_info_t *siblings,
     (void)sibling_count;
 
     int listen_fd = -1;
-    hive_status_t status = hive_net_listen(TEST_PORT + 1, &listen_fd);
+    hive_status_t status = hive_tcp_listen(TEST_PORT + 1, &listen_fd);
     if (HIVE_FAILED(status)) {
         hive_exit();
     }
@@ -203,14 +203,14 @@ static void echo_server_actor(void *args, const hive_spawn_info_t *siblings,
     g_server_ready = true;
 
     int conn_fd = -1;
-    status = hive_net_accept(listen_fd, &conn_fd, 2000);
+    status = hive_tcp_accept(listen_fd, &conn_fd, 2000);
     if (HIVE_FAILED(status)) {
-        hive_net_close(listen_fd);
+        hive_tcp_close(listen_fd);
         hive_exit();
     }
 
     // Receive and store
-    status = hive_net_recv(conn_fd, s_received_data,
+    status = hive_tcp_recv(conn_fd, s_received_data,
                            sizeof(s_received_data) - 1, &g_received_len, 2000);
 
     // Echo back with modification
@@ -218,11 +218,11 @@ static void echo_server_actor(void *args, const hive_spawn_info_t *siblings,
         char reply[128];
         snprintf(reply, sizeof(reply), "Echo: %.60s", s_received_data);
         size_t sent = 0;
-        hive_net_send(conn_fd, reply, strlen(reply), &sent, 2000);
+        hive_tcp_send(conn_fd, reply, strlen(reply), &sent, 2000);
     }
 
-    hive_net_close(conn_fd);
-    hive_net_close(listen_fd);
+    hive_tcp_close(conn_fd);
+    hive_tcp_close(listen_fd);
     hive_exit();
 }
 
@@ -246,7 +246,7 @@ static void echo_client_actor(void *args, const hive_spawn_info_t *siblings,
 
     int fd = -1;
     hive_status_t status =
-        hive_net_connect("127.0.0.1", TEST_PORT + 1, &fd, 2000);
+        hive_tcp_connect("127.0.0.1", TEST_PORT + 1, &fd, 2000);
     if (HIVE_FAILED(status)) {
         hive_exit();
     }
@@ -254,17 +254,17 @@ static void echo_client_actor(void *args, const hive_spawn_info_t *siblings,
     // Send test message
     const char *data = "TestMessage";
     size_t sent = 0;
-    hive_net_send(fd, data, strlen(data), &sent, 2000);
+    hive_tcp_send(fd, data, strlen(data), &sent, 2000);
 
     // Receive reply
     size_t received = 0;
-    status = hive_net_recv(fd, s_echo_reply, sizeof(s_echo_reply) - 1,
+    status = hive_tcp_recv(fd, s_echo_reply, sizeof(s_echo_reply) - 1,
                            &received, 2000);
     if (HIVE_SUCCEEDED(status)) {
         g_echo_received = true;
     }
 
-    hive_net_close(fd);
+    hive_tcp_close(fd);
     hive_exit();
 }
 
@@ -321,7 +321,7 @@ static void test3_accept_timeout(void *args, const hive_spawn_info_t *siblings,
     printf("\nTest 3: Accept timeout\n");
 
     int listen_fd = -1;
-    hive_status_t status = hive_net_listen(TEST_PORT + 2, &listen_fd);
+    hive_status_t status = hive_tcp_listen(TEST_PORT + 2, &listen_fd);
     if (HIVE_FAILED(status)) {
         TEST_FAIL("listen failed");
         hive_exit();
@@ -329,18 +329,18 @@ static void test3_accept_timeout(void *args, const hive_spawn_info_t *siblings,
 
     // Accept with short timeout (no client will connect)
     int conn_fd = -1;
-    status = hive_net_accept(listen_fd, &conn_fd, 100); // 100ms timeout
+    status = hive_tcp_accept(listen_fd, &conn_fd, 100); // 100ms timeout
 
     if (status.code == HIVE_ERR_TIMEOUT) {
         TEST_PASS("accept times out when no connection");
     } else if (HIVE_FAILED(status)) {
         TEST_PASS("accept returns error when no connection");
     } else {
-        hive_net_close(conn_fd);
+        hive_tcp_close(conn_fd);
         TEST_FAIL("accept should timeout");
     }
 
-    hive_net_close(listen_fd);
+    hive_tcp_close(listen_fd);
     hive_exit();
 }
 
@@ -358,12 +358,12 @@ static void test4_connect_invalid(void *args, const hive_spawn_info_t *siblings,
     int fd = -1;
     // Try to connect to an address that should fail quickly
     hive_status_t status =
-        hive_net_connect("127.0.0.1", 1, &fd, 500); // Port 1 typically fails
+        hive_tcp_connect("127.0.0.1", 1, &fd, 500); // Port 1 typically fails
 
     if (HIVE_FAILED(status)) {
         TEST_PASS("connect to invalid port fails");
     } else {
-        hive_net_close(fd);
+        hive_tcp_close(fd);
         TEST_FAIL("connect should fail");
     }
 
@@ -383,7 +383,7 @@ static void test5_short_timeout_accept(void *args,
     printf("\nTest 5: Short timeout accept\n");
 
     int listen_fd = -1;
-    hive_status_t status = hive_net_listen(TEST_PORT + 3, &listen_fd);
+    hive_status_t status = hive_tcp_listen(TEST_PORT + 3, &listen_fd);
     if (HIVE_FAILED(status)) {
         TEST_FAIL("listen failed");
         hive_exit();
@@ -391,18 +391,18 @@ static void test5_short_timeout_accept(void *args,
 
     // Short timeout accept (10ms - should timeout quickly)
     int conn_fd = -1;
-    status = hive_net_accept(listen_fd, &conn_fd, 10);
+    status = hive_tcp_accept(listen_fd, &conn_fd, 10);
 
     if (status.code == HIVE_ERR_TIMEOUT) {
         TEST_PASS("short timeout accept returns quickly");
     } else if (HIVE_FAILED(status)) {
         TEST_PASS("short timeout accept returns error when no connection");
     } else {
-        hive_net_close(conn_fd);
+        hive_tcp_close(conn_fd);
         TEST_FAIL("accept should timeout");
     }
 
-    hive_net_close(listen_fd);
+    hive_tcp_close(listen_fd);
     hive_exit();
 }
 
@@ -419,14 +419,14 @@ static void test6_close_reuse(void *args, const hive_spawn_info_t *siblings,
 
     // First listen
     int listen_fd1 = -1;
-    hive_status_t status = hive_net_listen(TEST_PORT + 4, &listen_fd1);
+    hive_status_t status = hive_tcp_listen(TEST_PORT + 4, &listen_fd1);
     if (HIVE_FAILED(status)) {
         TEST_FAIL("first listen failed");
         hive_exit();
     }
 
     // Close
-    status = hive_net_close(listen_fd1);
+    status = hive_tcp_close(listen_fd1);
     if (HIVE_FAILED(status)) {
         TEST_FAIL("close failed");
         hive_exit();
@@ -434,12 +434,12 @@ static void test6_close_reuse(void *args, const hive_spawn_info_t *siblings,
 
     // Listen again on same port (with SO_REUSEADDR this should work)
     int listen_fd2 = -1;
-    status = hive_net_listen(TEST_PORT + 4, &listen_fd2);
+    status = hive_tcp_listen(TEST_PORT + 4, &listen_fd2);
     if (HIVE_FAILED(status)) {
         // This might fail if SO_REUSEADDR isn't set - that's ok
         TEST_PASS("port reuse (may require TIME_WAIT)");
     } else {
-        hive_net_close(listen_fd2);
+        hive_tcp_close(listen_fd2);
         TEST_PASS("close and reuse port works");
     }
 
@@ -462,7 +462,7 @@ static void test7_nonblocking_accept(void *args,
     printf("\nTest 7: Non-blocking accept (timeout=0)\n");
 
     int listen_fd = -1;
-    hive_status_t status = hive_net_listen(TEST_PORT + 5, &listen_fd);
+    hive_status_t status = hive_tcp_listen(TEST_PORT + 5, &listen_fd);
     if (HIVE_FAILED(status)) {
         TEST_FAIL("listen failed");
         hive_exit();
@@ -471,7 +471,7 @@ static void test7_nonblocking_accept(void *args,
     // Non-blocking accept (timeout=0) - should return immediately
     int conn_fd = -1;
     uint64_t start = time_ms();
-    status = hive_net_accept(listen_fd, &conn_fd, 0);
+    status = hive_tcp_accept(listen_fd, &conn_fd, 0);
     uint64_t elapsed = time_ms() - start;
 
     if (status.code == HIVE_ERR_WOULDBLOCK) {
@@ -490,11 +490,11 @@ static void test7_nonblocking_accept(void *args,
                status.msg ? status.msg : "unknown");
         TEST_FAIL("unexpected error from non-blocking accept");
     } else {
-        hive_net_close(conn_fd);
+        hive_tcp_close(conn_fd);
         TEST_FAIL("non-blocking accept should not succeed without connection");
     }
 
-    hive_net_close(listen_fd);
+    hive_tcp_close(listen_fd);
     hive_exit();
 }
 
@@ -511,7 +511,7 @@ static void test8_recv_timeout(void *args, const hive_spawn_info_t *siblings,
 
     // Create a connection to ourselves
     int listen_fd = -1;
-    hive_status_t status = hive_net_listen(TEST_PORT + 6, &listen_fd);
+    hive_status_t status = hive_tcp_listen(TEST_PORT + 6, &listen_fd);
     if (HIVE_FAILED(status)) {
         TEST_FAIL("listen failed");
         hive_exit();
@@ -519,20 +519,20 @@ static void test8_recv_timeout(void *args, const hive_spawn_info_t *siblings,
 
     // Connect to ourselves
     int client_fd = -1;
-    status = hive_net_connect("127.0.0.1", TEST_PORT + 6, &client_fd, 1000);
+    status = hive_tcp_connect("127.0.0.1", TEST_PORT + 6, &client_fd, 1000);
     if (HIVE_FAILED(status)) {
         TEST_FAIL("connect failed");
-        hive_net_close(listen_fd);
+        hive_tcp_close(listen_fd);
         hive_exit();
     }
 
     // Accept the connection
     int server_fd = -1;
-    status = hive_net_accept(listen_fd, &server_fd, 1000);
+    status = hive_tcp_accept(listen_fd, &server_fd, 1000);
     if (HIVE_FAILED(status)) {
         TEST_FAIL("accept failed");
-        hive_net_close(client_fd);
-        hive_net_close(listen_fd);
+        hive_tcp_close(client_fd);
+        hive_tcp_close(listen_fd);
         hive_exit();
     }
 
@@ -540,7 +540,7 @@ static void test8_recv_timeout(void *args, const hive_spawn_info_t *siblings,
     char buf[64];
     size_t received = 0;
     uint64_t start = time_ms();
-    status = hive_net_recv(server_fd, buf, sizeof(buf), &received,
+    status = hive_tcp_recv(server_fd, buf, sizeof(buf), &received,
                            100); // 100ms timeout
     uint64_t elapsed = time_ms() - start;
 
@@ -554,9 +554,9 @@ static void test8_recv_timeout(void *args, const hive_spawn_info_t *siblings,
         TEST_FAIL("recv should timeout when no data sent");
     }
 
-    hive_net_close(server_fd);
-    hive_net_close(client_fd);
-    hive_net_close(listen_fd);
+    hive_tcp_close(server_fd);
+    hive_tcp_close(client_fd);
+    hive_tcp_close(listen_fd);
     hive_exit();
 }
 
@@ -574,26 +574,26 @@ static void test9_nonblocking_recv(void *args,
 
     // Create a connection to ourselves
     int listen_fd = -1;
-    hive_status_t status = hive_net_listen(TEST_PORT + 7, &listen_fd);
+    hive_status_t status = hive_tcp_listen(TEST_PORT + 7, &listen_fd);
     if (HIVE_FAILED(status)) {
         TEST_FAIL("listen failed");
         hive_exit();
     }
 
     int client_fd = -1;
-    status = hive_net_connect("127.0.0.1", TEST_PORT + 7, &client_fd, 1000);
+    status = hive_tcp_connect("127.0.0.1", TEST_PORT + 7, &client_fd, 1000);
     if (HIVE_FAILED(status)) {
         TEST_FAIL("connect failed");
-        hive_net_close(listen_fd);
+        hive_tcp_close(listen_fd);
         hive_exit();
     }
 
     int server_fd = -1;
-    status = hive_net_accept(listen_fd, &server_fd, 1000);
+    status = hive_tcp_accept(listen_fd, &server_fd, 1000);
     if (HIVE_FAILED(status)) {
         TEST_FAIL("accept failed");
-        hive_net_close(client_fd);
-        hive_net_close(listen_fd);
+        hive_tcp_close(client_fd);
+        hive_tcp_close(listen_fd);
         hive_exit();
     }
 
@@ -601,7 +601,7 @@ static void test9_nonblocking_recv(void *args,
     char buf[64];
     size_t received = 0;
     uint64_t start = time_ms();
-    status = hive_net_recv(server_fd, buf, sizeof(buf), &received, 0);
+    status = hive_tcp_recv(server_fd, buf, sizeof(buf), &received, 0);
     uint64_t elapsed = time_ms() - start;
 
     if (status.code == HIVE_ERR_WOULDBLOCK) {
@@ -620,9 +620,9 @@ static void test9_nonblocking_recv(void *args,
         TEST_FAIL("non-blocking recv should not succeed without data");
     }
 
-    hive_net_close(server_fd);
-    hive_net_close(client_fd);
-    hive_net_close(listen_fd);
+    hive_tcp_close(server_fd);
+    hive_tcp_close(client_fd);
+    hive_tcp_close(listen_fd);
     hive_exit();
 }
 
@@ -640,33 +640,33 @@ static void test10_nonblocking_send(void *args,
 
     // Create a connection to ourselves
     int listen_fd = -1;
-    hive_status_t status = hive_net_listen(TEST_PORT + 8, &listen_fd);
+    hive_status_t status = hive_tcp_listen(TEST_PORT + 8, &listen_fd);
     if (HIVE_FAILED(status)) {
         TEST_FAIL("listen failed");
         hive_exit();
     }
 
     int client_fd = -1;
-    status = hive_net_connect("127.0.0.1", TEST_PORT + 8, &client_fd, 1000);
+    status = hive_tcp_connect("127.0.0.1", TEST_PORT + 8, &client_fd, 1000);
     if (HIVE_FAILED(status)) {
         TEST_FAIL("connect failed");
-        hive_net_close(listen_fd);
+        hive_tcp_close(listen_fd);
         hive_exit();
     }
 
     int server_fd = -1;
-    status = hive_net_accept(listen_fd, &server_fd, 1000);
+    status = hive_tcp_accept(listen_fd, &server_fd, 1000);
     if (HIVE_FAILED(status)) {
         TEST_FAIL("accept failed");
-        hive_net_close(client_fd);
-        hive_net_close(listen_fd);
+        hive_tcp_close(client_fd);
+        hive_tcp_close(listen_fd);
         hive_exit();
     }
 
     // Non-blocking send should succeed if buffer is not full
     const char *data = "test";
     size_t sent = 0;
-    status = hive_net_send(client_fd, data, strlen(data), &sent, 0);
+    status = hive_tcp_send(client_fd, data, strlen(data), &sent, 0);
 
     if (HIVE_SUCCEEDED(status) && sent > 0) {
         TEST_PASS("non-blocking send succeeds with available buffer");
@@ -677,9 +677,9 @@ static void test10_nonblocking_send(void *args,
         TEST_FAIL("unexpected error from non-blocking send");
     }
 
-    hive_net_close(server_fd);
-    hive_net_close(client_fd);
-    hive_net_close(listen_fd);
+    hive_tcp_close(server_fd);
+    hive_tcp_close(client_fd);
+    hive_tcp_close(listen_fd);
     hive_exit();
 }
 
@@ -700,7 +700,7 @@ static void test11_connect_timeout(void *args,
     int fd = -1;
     uint64_t start = time_ms();
     hive_status_t status =
-        hive_net_connect("10.255.255.1", 12345, &fd, 200); // 200ms timeout
+        hive_tcp_connect("10.255.255.1", 12345, &fd, 200); // 200ms timeout
     uint64_t elapsed = time_ms() - start;
 
     if (status.code == HIVE_ERR_TIMEOUT) {
@@ -717,7 +717,7 @@ static void test11_connect_timeout(void *args,
             TEST_FAIL("connect took too long");
         }
     } else {
-        hive_net_close(fd);
+        hive_tcp_close(fd);
         TEST_FAIL("connect should not succeed to non-routable address");
     }
 
@@ -740,7 +740,7 @@ static void blocked_recv_actor(void *args, const hive_spawn_info_t *siblings,
     // Block on recv - will never complete because no one sends
     char buf[64];
     size_t received = 0;
-    hive_net_recv(fd, buf, sizeof(buf), &received, 5000); // 5 second timeout
+    hive_tcp_recv(fd, buf, sizeof(buf), &received, 5000); // 5 second timeout
 
     // Should not reach here if we're killed
     hive_exit();
@@ -757,26 +757,26 @@ static void test12_actor_death_during_recv(void *args,
 
     // Create a connection
     int listen_fd = -1;
-    hive_status_t status = hive_net_listen(TEST_PORT + 10, &listen_fd);
+    hive_status_t status = hive_tcp_listen(TEST_PORT + 10, &listen_fd);
     if (HIVE_FAILED(status)) {
         TEST_FAIL("listen failed");
         hive_exit();
     }
 
     int client_fd = -1;
-    status = hive_net_connect("127.0.0.1", TEST_PORT + 10, &client_fd, 1000);
+    status = hive_tcp_connect("127.0.0.1", TEST_PORT + 10, &client_fd, 1000);
     if (HIVE_FAILED(status)) {
         TEST_FAIL("connect failed");
-        hive_net_close(listen_fd);
+        hive_tcp_close(listen_fd);
         hive_exit();
     }
 
     int server_fd = -1;
-    status = hive_net_accept(listen_fd, &server_fd, 1000);
+    status = hive_tcp_accept(listen_fd, &server_fd, 1000);
     if (HIVE_FAILED(status)) {
         TEST_FAIL("accept failed");
-        hive_net_close(client_fd);
-        hive_net_close(listen_fd);
+        hive_tcp_close(client_fd);
+        hive_tcp_close(listen_fd);
         hive_exit();
     }
 
@@ -786,9 +786,9 @@ static void test12_actor_death_during_recv(void *args,
     if (HIVE_FAILED(hive_spawn(blocked_recv_actor, NULL, &server_fd, NULL,
                                &recv_actor))) {
         TEST_FAIL("spawn blocked_recv_actor");
-        hive_net_close(server_fd);
-        hive_net_close(client_fd);
-        hive_net_close(listen_fd);
+        hive_tcp_close(server_fd);
+        hive_tcp_close(client_fd);
+        hive_tcp_close(listen_fd);
         hive_exit();
     }
 
@@ -807,7 +807,7 @@ static void test12_actor_death_during_recv(void *args,
     hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
 
     // Close the socket from under it - this should unblock and cleanup
-    hive_net_close(server_fd);
+    hive_tcp_close(server_fd);
 
     // Wait for actor death notification or timeout
     hive_timer_after(500000, &timer); // 500ms timeout
@@ -824,8 +824,8 @@ static void test12_actor_death_during_recv(void *args,
         TEST_PASS("actor death handled during I/O");
     }
 
-    hive_net_close(client_fd);
-    hive_net_close(listen_fd);
+    hive_tcp_close(client_fd);
+    hive_tcp_close(listen_fd);
     hive_exit();
 }
 
@@ -872,7 +872,7 @@ static void run_all_tests(void *args, const hive_spawn_info_t *siblings,
 }
 
 int main(void) {
-    printf("=== Network I/O (hive_net) Test Suite ===\n");
+    printf("=== TCP I/O (hive_tcp) Test Suite ===\n");
 
     hive_status_t status = hive_init();
     if (HIVE_FAILED(status)) {

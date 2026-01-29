@@ -40,7 +40,7 @@ A minimalistic actor-based runtime designed for **embedded and safety-critical s
 - All bus publish/read paths
 - All name registry operations
 - All link/monitor operations
-- All I/O event dispatch paths (network, file)
+- All I/O event dispatch paths (TCP, file)
 
 **Consequences**
 - Hot path operations use **static pools** with **O(1) allocation** and return `HIVE_ERR_NOMEM` on pool exhaustion
@@ -297,7 +297,7 @@ graph TB
         SCHED --> IPC & BUS & TIMERS
 
         subgraph IO["I/O"]
-            NET[Network<br/>sockets]
+            NET[TCP<br/>sockets]
             FILE[File I/O<br/>synchronous]
         end
 
@@ -345,10 +345,10 @@ When an actor calls a blocking API, the following contract applies:
 | `hive_ipc_recv_matches()` | Message matching any filter arrives or timeout |
 | `hive_ipc_request()` | Reply arrives or timeout |
 | `hive_bus_read()` (with timeout) | Bus data available or timeout |
-| `hive_net_connect()` | Connection established or timeout |
-| `hive_net_accept()` | Incoming connection or timeout |
-| `hive_net_send()` | At least 1 byte sent or timeout |
-| `hive_net_recv()` | At least 1 byte received or timeout |
+| `hive_tcp_connect()` | Connection established or timeout |
+| `hive_tcp_accept()` | Incoming connection or timeout |
+| `hive_tcp_send()` | At least 1 byte sent or timeout |
+| `hive_tcp_recv()` | At least 1 byte received or timeout |
 | `hive_exit()` | Never returns (actor terminates) |
 
 **Non-blocking variants** (return immediately, never yield):
@@ -363,11 +363,11 @@ When an actor calls a blocking API, the following contract applies:
 - Enqueued messages are available when actor unblocks
 
 **Unblock conditions**
-- I/O readiness signaled (network socket becomes readable/writable)
+- I/O readiness signaled (TCP socket becomes readable/writable)
 - Timer expires (for APIs with timeout)
 - Message arrives in mailbox (for `hive_ipc_recv()`, `hive_ipc_recv_match()`, `hive_ipc_recv_matches()`, `hive_ipc_request()`)
 - Bus data published (for `hive_bus_read()` with non-zero timeout)
-- **Important**: Mailbox arrival only unblocks actors blocked in IPC receive operations, not actors blocked on network I/O or bus read
+- **Important**: Mailbox arrival only unblocks actors blocked in IPC receive operations, not actors blocked on TCP I/O or bus read
 
 **Scheduling phase definition**
 
@@ -380,11 +380,11 @@ A scheduling phase consists of one iteration of the scheduler loop:
 
 **Event drain order within a phase**
 
-When `epoll_wait()` returns multiple ready events (timers and network I/O), they are processed in **array index order** as returned by the kernel. This order is deterministic for a given set of ready file descriptors but is not controllable by the runtime.
+When `epoll_wait()` returns multiple ready events (timers and TCP I/O), they are processed in **array index order** as returned by the kernel. This order is deterministic for a given set of ready file descriptors but is not controllable by the runtime.
 
 For each event:
 - **Timer event (timerfd)**: Read timerfd, send timer tick message to actor's mailbox, wake actor
-- **Network event (socket)**: Perform I/O operation, store result in actor's `io_status`, wake actor
+- **TCP event (socket)**: Perform I/O operation, store result in actor's `io_status`, wake actor
 
 **Event drain timing**
 - If runnable actors exist, they run immediately (no `epoll_wait` call)
@@ -394,10 +394,10 @@ For each event:
 
 **Timeout vs I/O readiness - request state machine**
 
-Each blocking network request has an implicit state: `PENDING` -> `COMPLETED` or `TIMED_OUT`.
+Each blocking TCP request has an implicit state: `PENDING` -> `COMPLETED` or `TIMED_OUT`.
 
 **State transitions**
-- Request starts in `PENDING` when actor blocks on network I/O with timeout
+- Request starts in `PENDING` when actor blocks on TCP I/O with timeout
 - First event processed transitions state out of `PENDING`; subsequent events for same request are **ignored without side effects**
 
 **Tie-break rule (deadline check at wake time)**
@@ -412,9 +412,9 @@ Each blocking network request has an implicit state: `PENDING` -> `COMPLETED` or
 - If timeout **before** I/O ready: Actor wakes, deadline reached, return timeout (no I/O attempted)
 - If both fire in **same** `epoll_wait()`: Actor wakes, deadline check determines outcome (I/O not performed if timed out)
 
-**Request serialization (network I/O only)**
-- Applies to: `hive_net_accept()`, `hive_net_connect()`, `hive_net_recv()`, `hive_net_send()` with timeouts
-- Constraint: **One outstanding network request per actor** (enforced by actor blocking)
+**Request serialization (TCP I/O only)**
+- Applies to: `hive_tcp_accept()`, `hive_tcp_connect()`, `hive_tcp_recv()`, `hive_tcp_send()` with timeouts
+- Constraint: **One outstanding TCP request per actor** (enforced by actor blocking)
 - When timeout occurs: epoll registration cleaned up, any late readiness signal is ignored
 - New request from same actor gets fresh epoll state
 
@@ -519,7 +519,7 @@ The runtime is **completely single-threaded**. All runtime operations execute in
 | **Bus APIs** (`hive_bus_publish`, `hive_bus_read`) | Single-threaded only | Must call from actor context |
 | **Timer APIs** (`hive_timer_after`, `hive_timer_every`) | Single-threaded only | Must call from actor context |
 | **File APIs** (`hive_file_read`, `hive_file_write`) | Single-threaded only | Must call from actor context; stalls scheduler |
-| **Network APIs** (`hive_net_recv`, `hive_net_send`) | Single-threaded only | Must call from actor context |
+| **TCP APIs** (`hive_tcp_recv`, `hive_tcp_send`) | Single-threaded only | Must call from actor context |
 
 **Forbidden from**
 - Signal handlers (not reentrant)
@@ -544,7 +544,7 @@ void socket_reader_actor(void *arg) {
     int sock = listen_and_accept();
     while (1) {
         size_t received;
-        hive_net_recv(sock, buf, len, &received, -1);  // Blocks in event loop
+        hive_tcp_recv(sock, buf, len, &received, -1);  // Blocks in event loop
         hive_ipc_notify(worker, HIVE_TAG_NONE, buf, received);  // Forward to actors
     }
 }
@@ -552,7 +552,7 @@ void socket_reader_actor(void *arg) {
 
 This pattern is safe because:
 - External thread only touches OS-level socket (thread-safe by OS)
-- `hive_net_recv()` executes in scheduler thread (actor context)
+- `hive_tcp_recv()` executes in scheduler thread (actor context)
 - `hive_ipc_notify()` executes in scheduler thread (actor context)
 - No direct runtime state access from external thread
 
@@ -588,7 +588,7 @@ This pure single-threaded model provides:
 
 **Linux**
 - Timers: `timerfd` registered in `epoll`
-- Network: Non-blocking sockets registered in `epoll`
+- TCP: Non-blocking sockets registered in `epoll`
 - File: Direct synchronous I/O (regular files don't work with epoll anyway)
 - Event loop: `epoll_wait()` with bounded timeout (10ms) for defensive wakeup
 
@@ -596,7 +596,7 @@ This pure single-threaded model provides:
 
 **STM32 (bare metal)**
 - Timers: Hardware timers (SysTick or TIM peripherals)
-- Network: Not yet implemented (planned: lwIP in NO_SYS mode)
+- TCP: Not yet implemented (planned: lwIP in NO_SYS mode)
 - File: Flash-backed virtual files with ring buffer (see [File API](api.md#file-api))
 - Event loop: WFI (Wait For Interrupt) when no actors runnable
 

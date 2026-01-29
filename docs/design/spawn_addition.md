@@ -330,7 +330,7 @@ void my_actor(void *args, const hive_spawn_info_t *siblings, size_t count) {
 - [x] `tests/simple_backoff_test.c`
 - [x] `tests/congestion_demo.c`
 - [x] `tests/select_test.c`
-- [x] `tests/net_test.c`
+- [x] `tests/tcp_test.c`
 - [x] `tests/file_test.c`
 - [x] `tests/registry_test.c`
 - [x] `tests/supervisor_test.c`

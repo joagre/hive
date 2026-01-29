@@ -418,11 +418,11 @@ To prioritize time-sensitive data, place those sources earlier in the array.
 
 ## Design Decisions
 
-### Network I/O
+### TCP I/O
 
 Intentionally excluded for now. Reasons:
-- Network uses fd-based semantics (different from IPC/bus)
-- Linux-only (STM32 has no network support)
+- TCP uses fd-based semantics (different from IPC/bus)
+- Linux-only (STM32 has no TCP support)
 - Different buffer management requirements
 
 **May be added in future** - the API is extensible
@@ -432,19 +432,19 @@ Intentionally excluded for now. Reasons:
 
 **Current workaround** - idiomatic actor model pattern
 ```c
-// Dedicated network reader actor - separation of concerns
+// Dedicated TCP reader actor - separation of concerns
 void net_reader(void *arg) {
     int fd = *(int *)arg;
     char buf[256];
     while (1) {
         size_t n;
-        hive_net_recv(fd, buf, sizeof(buf), &n, -1);
+        hive_tcp_recv(fd, buf, sizeof(buf), &n, -1);
         hive_ipc_notify(handler_actor, NET_DATA_TAG, buf, n);  // Forward as IPC
     }
 }
 ```
 
-This keeps network complexity isolated and lets `hive_select()` remain simple and portable.
+This keeps TCP complexity isolated and lets `hive_select()` remain simple and portable.
 
 ### `hive_recv_filter_t` Location
 

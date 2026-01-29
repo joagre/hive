@@ -12,7 +12,7 @@
 //
 // Reference: https://www.bitcraze.io/products/micro-sd-card-deck/
 
-#include "hive_mount_stm32.h"
+#include "hive_mount.h"
 #include <string.h>
 #include <stdbool.h>
 

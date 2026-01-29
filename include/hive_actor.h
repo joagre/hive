@@ -9,7 +9,7 @@ typedef enum {
     ACTOR_STATE_DEAD = 0, // Terminated (must be 0 for calloc initialization)
     ACTOR_STATE_READY,    // Ready to run
     ACTOR_STATE_RUNNING,  // Currently executing
-    ACTOR_STATE_WAITING,  // Waiting for I/O (IPC, timer, network, etc.)
+    ACTOR_STATE_WAITING,  // Waiting for I/O (IPC, timer, TCP, etc.)
 } actor_state_t;
 
 // Mailbox entry (linked list)

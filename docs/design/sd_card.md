@@ -325,7 +325,7 @@ Without SD: ~0.5 KB flash overhead for mount table.
 ### POSIX Backend (Linux)
 
 ```c
-// src/hal/linux/hive_hal_linux.c
+// src/hal/linux/hive_hal.c
 
 hive_status_t hive_hal_file_open(const char *path, int flags, int mode,
                                  int *out) {
@@ -455,7 +455,7 @@ static hive_status_t sd_open(const hive_mount_t *mount, const char *subpath,
 ### STM32 HAL Dispatch
 
 ```c
-// src/hal/stm32/hive_hal_file_stm32.c
+// src/hal/stm32/hive_hal_file.c
 
 hive_status_t hive_hal_file_open(const char *path, int flags, int mode,
                                  int *out) {
@@ -516,11 +516,11 @@ src/
     hive_file.c              # Unified wrapper (unchanged)
     hal/
         linux/
-            hive_hal_linux.c        # Main HAL (includes file I/O)
+            hive_hal.c              # Main HAL (includes file I/O)
             hive_mounts.c           # Linux mount config
             hive_mount_linux.h      # Linux mount structure
         stm32/
-            hive_hal_file_stm32.c   # Multi-backend dispatch + flash/SD backends
+            hive_hal_file.c         # Multi-backend dispatch + flash/SD backends
             hive_mounts.c           # Default STM32 mounts
             hive_mount_stm32.h      # STM32 mount structure + FD encoding
             spi_sd.c                # SPI SD protocol driver

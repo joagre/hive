@@ -1,10 +1,10 @@
-#ifndef HIVE_NET_H
-#define HIVE_NET_H
+#ifndef HIVE_TCP_H
+#define HIVE_TCP_H
 
 #include "hive_types.h"
 #include <stdint.h>
 
-// Network operations
+// TCP operations
 // timeout_ms: HIVE_TIMEOUT_NONBLOCKING (0) returns HIVE_ERR_WOULDBLOCK if would
 // block
 //             HIVE_TIMEOUT_INFINITE (-1) blocks forever
@@ -12,25 +12,25 @@
 //             exceeded
 
 // Listen on a port for incoming connections
-hive_status_t hive_net_listen(uint16_t port, int *out);
+hive_status_t hive_tcp_listen(uint16_t port, int *out);
 
 // Accept incoming connection
-hive_status_t hive_net_accept(int listen_fd, int *out, int32_t timeout_ms);
+hive_status_t hive_tcp_accept(int listen_fd, int *out, int32_t timeout_ms);
 
 // Connect to remote server (ip must be numeric IPv4 address, e.g.
 // "192.168.1.1")
-hive_status_t hive_net_connect(const char *ip, uint16_t port, int *out,
+hive_status_t hive_tcp_connect(const char *ip, uint16_t port, int *out,
                                int32_t timeout_ms);
 
-// Close network socket
-hive_status_t hive_net_close(int fd);
+// Close TCP socket
+hive_status_t hive_tcp_close(int fd);
 
 // Receive data from socket
-hive_status_t hive_net_recv(int fd, void *buf, size_t len, size_t *bytes_read,
+hive_status_t hive_tcp_recv(int fd, void *buf, size_t len, size_t *bytes_read,
                             int32_t timeout_ms);
 
 // Send data to socket
-hive_status_t hive_net_send(int fd, const void *buf, size_t len,
+hive_status_t hive_tcp_send(int fd, const void *buf, size_t len,
                             size_t *bytes_written, int32_t timeout_ms);
 
-#endif // HIVE_NET_H
+#endif // HIVE_TCP_H

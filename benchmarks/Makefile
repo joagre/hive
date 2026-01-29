@@ -6,7 +6,7 @@
 # Defaults (when run standalone)
 CC ?= gcc
 CFLAGS ?= -std=c11 -Wall -Wextra -Wpedantic -Werror -O2 -g
-ENABLE_NET ?= 1
+ENABLE_TCP ?= 1
 ENABLE_FILE ?= 1
 
 # Build directory - always use ../build when in benchmarks/
@@ -28,10 +28,10 @@ CPPFLAGS := -I../include $(HAL_INCLUDE) -D_POSIX_C_SOURCE=200809L -DHIVE_PLATFOR
 DEPFLAGS := -MMD -MP
 
 # Feature flags
-ifeq ($(ENABLE_NET),1)
-  CPPFLAGS += -DHIVE_ENABLE_NET=1
+ifeq ($(ENABLE_TCP),1)
+  CPPFLAGS += -DHIVE_ENABLE_TCP=1
 else
-  CPPFLAGS += -DHIVE_ENABLE_NET=0
+  CPPFLAGS += -DHIVE_ENABLE_TCP=0
 endif
 
 ifeq ($(ENABLE_FILE),1)

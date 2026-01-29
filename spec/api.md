@@ -1377,7 +1377,7 @@ while (1) {
 
 **Unit mismatch by design**
 - Timer API uses **microseconds** (`uint32_t delay_us`, `uint32_t interval_us`)
-- Rest of system (IPC, file, network) uses **milliseconds** (`int32_t timeout_ms`)
+- Rest of system (IPC, file, TCP) uses **milliseconds** (`int32_t timeout_ms`)
 - Rationale: Timers often need sub-millisecond precision; I/O timeouts rarely do
 
 **Resolution and precision**
@@ -1455,7 +1455,7 @@ hive_timer_every(tick_interval, &timer);
 
 **Comparison with rest of system**
 
-Feature | Timer API | IPC/File/Network API
+Feature | Timer API | IPC/File/TCP API
 --------|-----------|---------------------
 **Units** | Microseconds (`uint32_t`) | Milliseconds (`int32_t`)
 **Max value** | ~71 minutes | ~24.8 days (2^31 ms)
@@ -1464,7 +1464,7 @@ Feature | Timer API | IPC/File/Network API
 
 **Design rationale**
 - Microseconds for timers: Sub-millisecond intervals common in embedded systems (sensor sampling, PWM, etc.)
-- Milliseconds for I/O: Network/file timeouts rarely need microsecond precision
+- Milliseconds for I/O: TCP/file timeouts rarely need microsecond precision
 - 32-bit limit: Embedded systems prefer fixed-size types; 64-bit would waste memory
 - Trade-off: Accept wraparound at ~71 minutes for memory efficiency
 
@@ -1753,26 +1753,26 @@ void orchestrator(void *args, const hive_spawn_info_t *siblings, size_t sibling_
 }
 ```
 
-## Network API
+## TCP API
 
-Non-blocking network I/O with blocking wrappers.
+Non-blocking TCP I/O with blocking wrappers.
 
 ```c
 // Socket management
-hive_status_t hive_net_listen(uint16_t port, int *out);
-hive_status_t hive_net_accept(int listen_fd, int *out, int32_t timeout_ms);
-hive_status_t hive_net_connect(const char *ip, uint16_t port, int *out, int32_t timeout_ms);
-hive_status_t hive_net_close(int fd);
+hive_status_t hive_tcp_listen(uint16_t port, int *out);
+hive_status_t hive_tcp_accept(int listen_fd, int *out, int32_t timeout_ms);
+hive_status_t hive_tcp_connect(const char *ip, uint16_t port, int *out, int32_t timeout_ms);
+hive_status_t hive_tcp_close(int fd);
 
 // Data transfer
-hive_status_t hive_net_recv(int fd, void *buf, size_t len, size_t *bytes_read, int32_t timeout_ms);
-hive_status_t hive_net_send(int fd, const void *buf, size_t len, size_t *bytes_written, int32_t timeout_ms);
+hive_status_t hive_tcp_recv(int fd, void *buf, size_t len, size_t *bytes_read, int32_t timeout_ms);
+hive_status_t hive_tcp_send(int fd, const void *buf, size_t len, size_t *bytes_written, int32_t timeout_ms);
 ```
 
 **DNS resolution is out of scope.** The `ip` parameter must be a numeric IPv4 address (e.g., "192.168.1.1"). Hostnames are not supported. Rationale:
 - DNS resolution (`getaddrinfo`, `gethostbyname`) is blocking and would stall the scheduler
 - On STM32 bare metal, DNS typically unavailable or requires complex async plumbing
-- Callers needing DNS should resolve externally before calling `hive_net_connect()`
+- Callers needing DNS should resolve externally before calling `hive_tcp_connect()`
 
 All functions with `timeout_ms` parameter support **timeout enforcement**:
 
@@ -1786,7 +1786,7 @@ On blocking calls, the actor yields to the scheduler. The scheduler's event loop
 
 ### Completion Semantics
 
-**`hive_net_recv()` - Partial completion**
+**`hive_tcp_recv()` - Partial completion**
 - Returns successfully when **at least 1 byte** is read (or 0 for EOF/peer closed)
 - Does NOT loop until `len` bytes are received
 - `*bytes_read` contains actual bytes read (may be less than `len`)
@@ -1795,14 +1795,14 @@ On blocking calls, the actor yields to the scheduler. The scheduler's event loop
 size_t total = 0;
 while (total < expected_len) {
     size_t n;
-    hive_status_t s = hive_net_recv(fd, buf + total, expected_len - total, &n, timeout);
+    hive_status_t s = hive_tcp_recv(fd, buf + total, expected_len - total, &n, timeout);
     if (HIVE_FAILED(s)) return s;
     if (n == 0) return HIVE_ERROR(HIVE_ERR_IO, "Connection closed");
     total += n;
 }
 ```
 
-**`hive_net_send()` - Partial completion**
+**`hive_tcp_send()` - Partial completion**
 - Returns successfully when **at least 1 byte** is written
 - Does NOT loop until `len` bytes are sent
 - `*bytes_written` contains actual bytes written (may be less than `len`)
@@ -1811,20 +1811,20 @@ while (total < expected_len) {
 size_t total = 0;
 while (total < len) {
     size_t n;
-    hive_status_t s = hive_net_send(fd, buf + total, len - total, &n, timeout);
+    hive_status_t s = hive_tcp_send(fd, buf + total, len - total, &n, timeout);
     if (HIVE_FAILED(s)) return s;
     total += n;
 }
 ```
 
-**`hive_net_connect()` - Async connect completion**
+**`hive_tcp_connect()` - Async connect completion**
 - If `connect()` returns `EINPROGRESS`: registers for `EPOLLOUT`, actor yields
 - When socket becomes writable: checks `getsockopt(fd, SOL_SOCKET, SO_ERROR, ...)`
 - If `SO_ERROR == 0`: success, returns `HIVE_SUCCESS` with connected socket in `*out`
 - If `SO_ERROR != 0`: returns `HIVE_ERR_IO` with error message, socket is closed
 - If timeout expires before writable: returns `HIVE_ERR_TIMEOUT`, socket is closed
 
-**`hive_net_accept()` - Connection ready**
+**`hive_tcp_accept()` - Connection ready**
 - Waits for `EPOLLIN` on listen socket (incoming connection ready)
 - Calls `accept()` to obtain connected socket
 - Returns `HIVE_SUCCESS` with new socket in `*out`

@@ -61,9 +61,9 @@ hive_status_t hive_init(void) {
     }
 #endif
 
-#if HIVE_ENABLE_NET
-    // Initialize network I/O subsystem
-    status = hive_net_init();
+#if HIVE_ENABLE_TCP
+    // Initialize TCP I/O subsystem
+    status = hive_tcp_init();
     if (HIVE_FAILED(status)) {
 #if HIVE_ENABLE_FILE
         hive_file_cleanup();
@@ -78,8 +78,8 @@ hive_status_t hive_init(void) {
     // Initialize timer subsystem
     status = hive_timer_init();
     if (HIVE_FAILED(status)) {
-#if HIVE_ENABLE_NET
-        hive_net_cleanup();
+#if HIVE_ENABLE_TCP
+        hive_tcp_cleanup();
 #endif
 #if HIVE_ENABLE_FILE
         hive_file_cleanup();
@@ -94,8 +94,8 @@ hive_status_t hive_init(void) {
     status = hive_bus_init();
     if (HIVE_FAILED(status)) {
         hive_timer_cleanup();
-#if HIVE_ENABLE_NET
-        hive_net_cleanup();
+#if HIVE_ENABLE_TCP
+        hive_tcp_cleanup();
 #endif
 #if HIVE_ENABLE_FILE
         hive_file_cleanup();
@@ -128,8 +128,8 @@ void hive_shutdown(void) {
 void hive_cleanup(void) {
     hive_bus_cleanup();
     hive_timer_cleanup();
-#if HIVE_ENABLE_NET
-    hive_net_cleanup();
+#if HIVE_ENABLE_TCP
+    hive_tcp_cleanup();
 #endif
 #if HIVE_ENABLE_FILE
     hive_file_cleanup();

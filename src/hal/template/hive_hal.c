@@ -10,7 +10,7 @@
 //
 // Optional sections (implement if needed):
 //   3. File I/O - Enable with HIVE_ENABLE_FILE=1
-//   4. Network I/O - Enable with HIVE_ENABLE_NET=1
+//   4. TCP I/O - Enable with HIVE_ENABLE_TCP=1
 //
 // See also:
 //   - hive_hal_context_defs.h - Context struct definition (required)
@@ -91,8 +91,8 @@ void hive_hal_critical_exit(uint32_t state) {
 
 // Forward declarations for event handlers (defined in hive core)
 extern void hive_timer_handle_event(io_source_t *source);
-#if HIVE_ENABLE_NET
-extern void hive_net_handle_event(io_source_t *source);
+#if HIVE_ENABLE_TCP
+extern void hive_tcp_handle_event(io_source_t *source);
 #endif
 
 // Initialize event system.
@@ -125,7 +125,7 @@ void hive_hal_event_cleanup(void) {
 // Actions to perform:
 //   - Check all registered I/O sources for readiness
 //   - Process expired timers
-//   - Call appropriate handlers (hive_timer_handle_event, hive_net_handle_event)
+//   - Call appropriate handlers (hive_timer_handle_event, hive_tcp_handle_event)
 //
 void hive_hal_event_poll(void) {
     // TODO: Implement for your platform
@@ -170,7 +170,7 @@ void hive_hal_event_wait(int timeout_ms) {
 // Examples:
 //   - Linux: epoll_ctl(EPOLL_CTL_ADD, fd, ...)
 //   - STM32 timers: Add to software timer wheel
-//   - STM32 network: Add to lwIP event list
+//   - STM32 TCP: Add to lwIP event list
 //
 hive_status_t hive_hal_event_register(int fd, uint32_t events,
                                       io_source_t *source) {
@@ -292,15 +292,15 @@ hive_status_t hive_hal_file_sync(int fd) {
 #endif // HIVE_ENABLE_FILE
 
 // =============================================================================
-// SECTION 4: NETWORK I/O (Optional - compile with HIVE_ENABLE_NET=1)
+// SECTION 4: TCP I/O (Optional - compile with HIVE_ENABLE_TCP=1)
 // =============================================================================
 
-#if HIVE_ENABLE_NET
+#if HIVE_ENABLE_TCP
 
-#include "hal/hive_hal_net.h"
+#include "hal/hive_hal_tcp.h"
 
-// Initialize network subsystem.
-hive_status_t hive_hal_net_init(void) {
+// Initialize TCP subsystem.
+hive_status_t hive_hal_tcp_init(void) {
     // TODO: Implement for your platform
     // Examples:
     //   - Linux: No-op (BSD sockets always available)
@@ -308,29 +308,29 @@ hive_status_t hive_hal_net_init(void) {
     return HIVE_SUCCESS;
 }
 
-// Cleanup network subsystem.
-void hive_hal_net_cleanup(void) {
+// Cleanup TCP subsystem.
+void hive_hal_tcp_cleanup(void) {
     // TODO: Implement for your platform
 }
 
 // Create a TCP socket (non-blocking).
-hive_status_t hive_hal_net_socket(int *out) {
+hive_status_t hive_hal_tcp_socket(int *out) {
     (void)out;
-    return HIVE_ERROR(HIVE_ERR_INVALID, "Network not implemented");
+    return HIVE_ERROR(HIVE_ERR_INVALID, "TCP not implemented");
 }
 
 // Bind socket to port.
-hive_status_t hive_hal_net_bind(int fd, uint16_t port) {
+hive_status_t hive_hal_tcp_bind(int fd, uint16_t port) {
     (void)fd;
     (void)port;
-    return HIVE_ERROR(HIVE_ERR_INVALID, "Network not implemented");
+    return HIVE_ERROR(HIVE_ERR_INVALID, "TCP not implemented");
 }
 
 // Start listening for connections.
-hive_status_t hive_hal_net_listen(int fd, int backlog) {
+hive_status_t hive_hal_tcp_listen(int fd, int backlog) {
     (void)fd;
     (void)backlog;
-    return HIVE_ERROR(HIVE_ERR_INVALID, "Network not implemented");
+    return HIVE_ERROR(HIVE_ERR_INVALID, "TCP not implemented");
 }
 
 // Accept a connection (non-blocking).
@@ -340,10 +340,10 @@ hive_status_t hive_hal_net_listen(int fd, int backlog) {
 //   HIVE_ERR_WOULDBLOCK - No pending connections
 //   Other error on failure
 //
-hive_status_t hive_hal_net_accept(int listen_fd, int *out) {
+hive_status_t hive_hal_tcp_accept(int listen_fd, int *out) {
     (void)listen_fd;
     (void)out;
-    return HIVE_ERROR(HIVE_ERR_INVALID, "Network not implemented");
+    return HIVE_ERROR(HIVE_ERR_INVALID, "TCP not implemented");
 }
 
 // Initiate a connection (non-blocking).
@@ -353,23 +353,23 @@ hive_status_t hive_hal_net_accept(int listen_fd, int *out) {
 //   HIVE_ERR_INPROGRESS - Connection in progress (normal)
 //   Other error on failure
 //
-hive_status_t hive_hal_net_connect(int fd, const char *ip, uint16_t port) {
+hive_status_t hive_hal_tcp_connect(int fd, const char *ip, uint16_t port) {
     (void)fd;
     (void)ip;
     (void)port;
-    return HIVE_ERROR(HIVE_ERR_INVALID, "Network not implemented");
+    return HIVE_ERROR(HIVE_ERR_INVALID, "TCP not implemented");
 }
 
 // Check if async connect completed.
-hive_status_t hive_hal_net_connect_check(int fd) {
+hive_status_t hive_hal_tcp_connect_check(int fd) {
     (void)fd;
-    return HIVE_ERROR(HIVE_ERR_INVALID, "Network not implemented");
+    return HIVE_ERROR(HIVE_ERR_INVALID, "TCP not implemented");
 }
 
 // Close a socket.
-hive_status_t hive_hal_net_close(int fd) {
+hive_status_t hive_hal_tcp_close(int fd) {
     (void)fd;
-    return HIVE_ERROR(HIVE_ERR_INVALID, "Network not implemented");
+    return HIVE_ERROR(HIVE_ERR_INVALID, "TCP not implemented");
 }
 
 // Receive data (non-blocking).
@@ -379,13 +379,13 @@ hive_status_t hive_hal_net_close(int fd) {
 //   HIVE_ERR_WOULDBLOCK - No data available
 //   Other error on failure
 //
-hive_status_t hive_hal_net_recv(int fd, void *buf, size_t len,
+hive_status_t hive_hal_tcp_recv(int fd, void *buf, size_t len,
                                 size_t *bytes_read) {
     (void)fd;
     (void)buf;
     (void)len;
     (void)bytes_read;
-    return HIVE_ERROR(HIVE_ERR_INVALID, "Network not implemented");
+    return HIVE_ERROR(HIVE_ERR_INVALID, "TCP not implemented");
 }
 
 // Send data (non-blocking).
@@ -395,13 +395,13 @@ hive_status_t hive_hal_net_recv(int fd, void *buf, size_t len,
 //   HIVE_ERR_WOULDBLOCK - Send buffer full
 //   Other error on failure
 //
-hive_status_t hive_hal_net_send(int fd, const void *buf, size_t len,
+hive_status_t hive_hal_tcp_send(int fd, const void *buf, size_t len,
                                 size_t *bytes_written) {
     (void)fd;
     (void)buf;
     (void)len;
     (void)bytes_written;
-    return HIVE_ERROR(HIVE_ERR_INVALID, "Network not implemented");
+    return HIVE_ERROR(HIVE_ERR_INVALID, "TCP not implemented");
 }
 
-#endif // HIVE_ENABLE_NET
+#endif // HIVE_ENABLE_TCP

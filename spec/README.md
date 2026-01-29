@@ -44,7 +44,7 @@ This directory contains the complete design specification for the Hive actor run
 - [Unified Event Waiting API](api.md#unified-event-waiting-api)
 - [Timer API](api.md#timer-api)
 - [Supervisor API](api.md#supervisor-api)
-- [Network API](api.md#network-api)
+- [TCP API](api.md#tcp-api)
 - [File API](api.md#file-api)
 - [Logging API](api.md#logging-api)
 

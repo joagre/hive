@@ -64,7 +64,7 @@ See [spec/](spec/) for design details.
 
 **Hive favors boundedness and inspectability over fairness and throughput** (single-threaded, fixed pools, no time-slicing).
 
-**Platforms** - x86-64 Linux (fully implemented), STM32/ARM Cortex-M bare metal (Network I/O not yet supported)
+**Platforms** - x86-64 Linux (fully implemented), STM32/ARM Cortex-M bare metal (TCP I/O not yet supported)
 
 ## Features
 
@@ -79,7 +79,7 @@ See [spec/](spec/) for design details.
 - Supervision (restart strategies, intensity limiting, child specs)
 - Exit notifications with exit reasons (normal, crash, killed)
 - Timers (one-shot and periodic with timerfd/epoll)
-- Network I/O (non-blocking TCP via event loop)
+- TCP I/O (non-blocking TCP via event loop)
 - File I/O (POSIX on Linux, flash-backed on STM32 with optional SD card)
 - Logging (compile-time filtering, dual output: console + binary file)
 - Bus (pub-sub with retention policies)
@@ -130,7 +130,7 @@ Actors run until they **yield** - there is no preemption. Operations that yield:
 | `hive_ipc_request()` | `hive_bus_publish()` |
 | `hive_bus_read()` (timeout != 0) | `hive_select(..., 0)` (timeout=0) |
 | `hive_select()` (timeout != 0) | |
-| `hive_net_*()` | |
+| `hive_tcp_*()` | |
 | `hive_exit()` | |
 
 **File I/O** (`hive_file_*`) is synchronous and briefly stalls the scheduler. This is fine for short, bursty operations; use LOW priority actors for file work. See [spec/design.md](spec/design.md#scheduler-stalling-calls) for details.
@@ -356,7 +356,7 @@ if (hive_msg_is_timer(&msg) && msg.tag == periodic) {
 hive_timer_cancel(periodic);
 ```
 
-### File and Network I/O
+### File and TCP I/O
 
 ```c
 // File I/O (blocks until complete - use LOW priority actors for file work)
@@ -377,31 +377,31 @@ hive_file_pread(fd, buffer, sizeof(buffer), 0, &bytes_read);  // Read from offse
 
 hive_file_close(fd);
 
-// Network echo server (non-blocking via event loop)
+// TCP echo server (non-blocking via event loop)
 int listen_fd, client_fd;
-status = hive_net_listen(8080, &listen_fd);
+status = hive_tcp_listen(8080, &listen_fd);
 if (HIVE_FAILED(status)) {
     // HIVE_ERR_IO if port in use or permission denied
 }
 
-status = hive_net_accept(listen_fd, &client_fd, -1);  // Block until connection
+status = hive_tcp_accept(listen_fd, &client_fd, -1);  // Block until connection
 if (HIVE_SUCCEEDED(status)) {
     size_t received, sent;
     char buf[1024];
 
     // Echo loop
-    while (HIVE_SUCCEEDED(hive_net_recv(client_fd, buf, sizeof(buf), &received, -1))) {
+    while (HIVE_SUCCEEDED(hive_tcp_recv(client_fd, buf, sizeof(buf), &received, -1))) {
         if (received == 0) {
             break;  // Client closed connection
         }
-        hive_net_send(client_fd, buf, received, &sent, -1);
+        hive_tcp_send(client_fd, buf, received, &sent, -1);
     }
-    hive_net_close(client_fd);
+    hive_tcp_close(client_fd);
 }
 
-// Network client
+// TCP client
 int server_fd;
-status = hive_net_connect("127.0.0.1", 8080, &server_fd, 5000);  // 5s timeout
+status = hive_tcp_connect("127.0.0.1", 8080, &server_fd, 5000);  // 5s timeout
 if (status.code == HIVE_ERR_TIMEOUT) {
     // Connection timed out
 } else if (status.code == HIVE_ERR_IO) {
@@ -555,7 +555,7 @@ hive_supervisor_stop(supervisor);
 # File I/O example
 ./build/fileio
 
-# Network echo server (listens on port 8080)
+# TCP echo server (listens on port 8080)
 ./build/echo
 
 # Timer example (one-shot and periodic)
@@ -714,14 +714,14 @@ See `examples/pilot/Makefile.crazyflie-2.1+` for a complete example and [spec/ap
 
 **Binary log format** - 12-byte header + text payload. Use `tools/decode_log.py` to decode.
 
-### Network I/O
+### TCP I/O
 
-- `hive_net_listen(port, out)` - Create TCP listening socket (backlog hardcoded to 5)
-- `hive_net_accept(listen_fd, out, timeout_ms)` - Accept incoming connection
-- `hive_net_connect(ip, port, out, timeout_ms)` - Connect to remote server (numeric IPv4 only)
-- `hive_net_send(fd, buf, len, bytes_written, timeout_ms)` - Send data
-- `hive_net_recv(fd, buf, len, bytes_read, timeout_ms)` - Receive data
-- `hive_net_close(fd)` - Close socket
+- `hive_tcp_listen(port, out)` - Create TCP listening socket (backlog hardcoded to 5)
+- `hive_tcp_accept(listen_fd, out, timeout_ms)` - Accept incoming connection
+- `hive_tcp_connect(ip, port, out, timeout_ms)` - Connect to remote server (numeric IPv4 only)
+- `hive_tcp_send(fd, buf, len, bytes_written, timeout_ms)` - Send data
+- `hive_tcp_recv(fd, buf, len, bytes_read, timeout_ms)` - Receive data
+- `hive_tcp_close(fd)` - Close socket
 
 ### Bus (Pub-Sub)
 
@@ -773,7 +773,7 @@ case SEL_SHUTDOWN:
 
 The runtime is **completely single-threaded**. All actors run cooperatively in a single scheduler thread with zero synchronization primitives (no mutexes, atomics, or locks).
 
-- **Linux** - `epoll` for timers and network; synchronous file I/O
+- **Linux** - `epoll` for timers and TCP; synchronous file I/O
 - **STM32** - Hardware timers, WFI for idle, flash-backed virtual files, optional SD card
 
 All runtime APIs must be called from actor context. External threads must use platform IPC (sockets/pipes) with dedicated reader actors.
@@ -791,7 +791,7 @@ include/hal/
   hive_hal_timer.h     - Timer operations (6 functions)
   hive_hal_context.h   - Context switching (1 function + struct)
   hive_hal_file.h      - File I/O (8 functions, optional)
-  hive_hal_net.h       - Network I/O (10 functions, optional)
+  hive_hal_tcp.h       - TCP I/O (10 functions, optional)
 
 src/hal/
   linux/               - Linux implementation (epoll, POSIX)
@@ -802,7 +802,7 @@ src/hal/
 **Platform-independent wrappers** (in `src/`):
 - `hive_timer.c` - Timer wrapper (calls HAL timer functions)
 - `hive_file.c` - File I/O wrapper (calls HAL file functions)
-- `hive_net.c` - Network I/O wrapper (calls HAL network functions)
+- `hive_tcp.c` - TCP I/O wrapper (calls HAL TCP functions)
 
 **Minimum port** - ~15 C functions + 1 assembly function + 1 struct definition
 
@@ -818,12 +818,12 @@ make                           # Build for x86-64 Linux
 make PLATFORM=stm32 CC=arm-none-eabi-gcc
 
 # Disable optional subsystems
-make ENABLE_NET=0 ENABLE_FILE=0
+make ENABLE_TCP=0 ENABLE_FILE=0
 
 # STM32 with SD card support (requires FatFS library)
 make PLATFORM=stm32 ENABLE_SD=1
 
-# STM32 defaults to ENABLE_NET=0 ENABLE_FILE=1 ENABLE_SD=0
+# STM32 defaults to ENABLE_TCP=0 ENABLE_FILE=1 ENABLE_SD=0
 ```
 
 ## Testing
@@ -839,7 +839,7 @@ valgrind --leak-check=full ./build/ipc_test
 
 ```
 
-The test suite includes 22 test programs covering actors, IPC, timers, bus, networking, file I/O, linking, monitoring, supervision, logging, name registry, and edge cases like pool exhaustion.
+The test suite includes 22 test programs covering actors, IPC, timers, bus, TCP, file I/O, linking, monitoring, supervision, logging, name registry, and edge cases like pool exhaustion.
 
 ## Code Style
 
@@ -911,7 +911,7 @@ make qemu-example-suite        # Run all compatible examples (10 examples)
 make qemu-example-pingpong     # Run specific example
 ```
 
-Compatible tests exclude `net_test`, `file_test`, and `logging_test` (require ENABLE_NET/ENABLE_FILE).
+Compatible tests exclude `tcp_test`, `file_test`, and `logging_test` (require ENABLE_TCP/ENABLE_FILE).
 Compatible examples exclude `echo`, `fileio`, and `logging` (same reason).
 
 ## Quick Links
@@ -938,7 +938,7 @@ man hive_link      # Linking and monitoring
 man hive_timer     # Timers
 man hive_bus       # Pub-sub bus
 man hive_select    # Unified event waiting
-man hive_net       # Network I/O
+man hive_tcp       # TCP I/O
 man hive_file       # File I/O
 man hive_supervisor # Supervision
 man hive_types      # Types and compile-time configuration
@@ -956,5 +956,5 @@ Third-party components included in this project have their own licenses document
 
 ## Future Work
 
-- STM32: Network I/O (lwIP integration)
+- STM32: TCP I/O (lwIP integration)
 - MPU-based stack guard pages for hardware-guaranteed overflow detection

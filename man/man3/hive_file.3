@@ -139,7 +139,7 @@ POSIX I/O error (errno-based message: "No such file", "Permission denied", etc.)
 .SS Blocking Behavior (Critical)
 File I/O is
 .B completely synchronous
-and blocks the scheduler. Unlike network I/O which integrates with epoll, file
+and blocks the scheduler. Unlike TCP I/O which integrates with epoll, file
 operations cannot be made non-blocking on Linux (regular files ignore O_NONBLOCK).
 .PP
 While a file operation is in progress:
@@ -148,7 +148,7 @@ While a file operation is in progress:
 .IP \(bu 2
 Timers may fire late
 .IP \(bu 2
-Network I/O is delayed
+TCP I/O is delayed
 .SS Safety-Critical Usage
 For autopilot and other safety-critical applications, restrict file I/O to:
 .IP \(bu 2

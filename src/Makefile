@@ -32,7 +32,7 @@ ifeq ($(PLATFORM),linux)
   BASE_CFLAGS += -MMD -MP
 
   # Feature defaults for Linux
-  ENABLE_NET ?= 1
+  ENABLE_TCP ?= 1
   ENABLE_FILE ?= 1
 
 else ifeq ($(PLATFORM),stm32)
@@ -57,7 +57,7 @@ else ifeq ($(PLATFORM),stm32)
   BASE_CFLAGS += -MMD -MP
 
   # Feature defaults for STM32
-  ENABLE_NET ?= 0
+  ENABLE_TCP ?= 0
   ENABLE_FILE ?= 1
   ENABLE_SD ?= 0
 
@@ -75,10 +75,10 @@ endif
 # Combine base flags with caller's CFLAGS
 ALL_CFLAGS := $(BASE_CFLAGS) $(CFLAGS)
 
-ifeq ($(ENABLE_NET),1)
-  ALL_CFLAGS += -DHIVE_ENABLE_NET=1
+ifeq ($(ENABLE_TCP),1)
+  ALL_CFLAGS += -DHIVE_ENABLE_TCP=1
 else
-  ALL_CFLAGS += -DHIVE_ENABLE_NET=0
+  ALL_CFLAGS += -DHIVE_ENABLE_TCP=0
 endif
 
 ifeq ($(ENABLE_FILE),1)
@@ -105,8 +105,8 @@ include hive_sources.mk
 ifeq ($(PLATFORM),linux)
   SRCS := $(HIVE_CORE_SRCS) $(HIVE_HAL_LINUX_SRCS)
   ASM_SRCS := $(HIVE_HAL_LINUX_ASM)
-  ifeq ($(ENABLE_NET),1)
-    SRCS += $(HIVE_NET_SRCS)
+  ifeq ($(ENABLE_TCP),1)
+    SRCS += $(HIVE_TCP_SRCS)
   endif
   ifeq ($(ENABLE_FILE),1)
     SRCS += $(HIVE_FILE_SRCS)
@@ -206,7 +206,7 @@ help:
 	@echo "Common Options:"
 	@echo "  PLATFORM=<linux|stm32>  Target platform (default: linux)"
 	@echo "  BUILD_DIR=<path>        Output directory (default: ../build for linux)"
-	@echo "  ENABLE_NET=<0|1>        Network support (default: 1 linux, 0 stm32)"
+	@echo "  ENABLE_TCP=<0|1>        TCP support (default: 1 linux, 0 stm32)"
 	@echo "  ENABLE_FILE=<0|1>       File I/O support (default: 1)"
 	@echo "  CFLAGS+=<flags>         Add extra compiler flags"
 	@echo "  CC=<compiler>           C compiler"
@@ -229,7 +229,7 @@ help:
 	@echo "Examples:"
 	@echo "  make                                    # Linux build"
 	@echo "  make BUILD_DIR=/tmp/build              # Custom output dir"
-	@echo "  make ENABLE_NET=0 ENABLE_FILE=0        # Minimal build"
+	@echo "  make ENABLE_TCP=0 ENABLE_FILE=0        # Minimal build"
 	@echo "  make PLATFORM=stm32 BUILD_DIR=./build \\"
 	@echo "       CC=arm-none-eabi-gcc AR=arm-none-eabi-ar \\"
 	@echo "       CFLAGS='-mcpu=cortex-m4 -mthumb'"

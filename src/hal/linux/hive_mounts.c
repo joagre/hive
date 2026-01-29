@@ -4,7 +4,7 @@
 // The root field allows remapping (e.g., "/" -> "/tmp/hive") for testing,
 // but defaults to empty string for direct passthrough.
 
-#include "hive_mount_linux.h"
+#include "hive_mount.h"
 #include <string.h>
 #include <stdbool.h>
 

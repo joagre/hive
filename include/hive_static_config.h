@@ -12,9 +12,9 @@
 // -----------------------------------------------------------------------------
 // Enable/disable optional subsystems. Set to 0 to disable.
 
-// Network I/O subsystem (BSD sockets on Linux, lwIP on STM32)
-#ifndef HIVE_ENABLE_NET
-#define HIVE_ENABLE_NET 1
+// TCP I/O subsystem (BSD sockets on Linux, lwIP on STM32)
+#ifndef HIVE_ENABLE_TCP
+#define HIVE_ENABLE_TCP 1
 #endif
 
 // File I/O subsystem (POSIX on Linux, FATFS/littlefs on STM32)
@@ -135,7 +135,7 @@
 // -----------------------------------------------------------------------------
 
 // Size of io_source_t pool for tracking pending I/O operations in event loop
-// Each pending network I/O operation consumes one io_source_t until completed
+// Each pending TCP I/O operation consumes one io_source_t until completed
 // Defined in hive_io_source.h: HIVE_IO_SOURCE_POOL_SIZE = 128
 
 // -----------------------------------------------------------------------------
@@ -160,12 +160,12 @@
 #endif
 
 // -----------------------------------------------------------------------------
-// Network Configuration
+// TCP Configuration
 // -----------------------------------------------------------------------------
 
 // TCP listen backlog (queued connections)
-#ifndef HIVE_NET_LISTEN_BACKLOG
-#define HIVE_NET_LISTEN_BACKLOG 5
+#ifndef HIVE_TCP_LISTEN_BACKLOG
+#define HIVE_TCP_LISTEN_BACKLOG 5
 #endif
 
 // -----------------------------------------------------------------------------

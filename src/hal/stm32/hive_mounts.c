@@ -3,7 +3,7 @@
 // Configures flash-backed virtual files from -D flags.
 // SD card mounts are added when HIVE_ENABLE_SD is defined.
 
-#include "hive_mount_stm32.h"
+#include "hive_mount.h"
 #include <string.h>
 #include <stdbool.h>
 

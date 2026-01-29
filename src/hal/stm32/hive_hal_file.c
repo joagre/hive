@@ -8,7 +8,7 @@
 // File descriptors encode backend type for dispatch.
 
 #include "hal/hive_hal_file.h"
-#include "hive_mount_stm32.h"
+#include "hive_mount.h"
 #include "hive_file.h"
 #include "hive_internal.h"
 #include <string.h>

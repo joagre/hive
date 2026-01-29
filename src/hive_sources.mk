@@ -18,26 +18,26 @@ HIVE_CORE_SRCS := \
 	hive_timer.c
 
 # Optional feature sources
-HIVE_NET_SRCS := hive_net.c
+HIVE_TCP_SRCS := hive_tcp.c
 HIVE_FILE_SRCS := hive_file.c
 
 # Linux HAL sources
 HIVE_HAL_LINUX_SRCS := \
-	hal/linux/hive_hal_timer_linux.c \
-	hal/linux/hive_hal_linux.c \
-	hal/linux/hive_hal_context_linux.c \
+	hal/linux/hive_hal_timer.c \
+	hal/linux/hive_hal.c \
+	hal/linux/hive_hal_context.c \
 	hal/linux/hive_mounts.c
 
 HIVE_HAL_LINUX_ASM := hal/linux/hive_context_x86_64.S
 
 # STM32 HAL sources
 HIVE_HAL_STM32_SRCS := \
-	hal/stm32/hive_hal_timer_stm32.c \
-	hal/stm32/hive_hal_stm32.c \
-	hal/stm32/hive_hal_context_stm32.c \
+	hal/stm32/hive_hal_timer.c \
+	hal/stm32/hive_hal.c \
+	hal/stm32/hive_hal_context.c \
 	hal/stm32/hive_mounts.c
 
-HIVE_HAL_STM32_FILE_SRCS := hal/stm32/hive_hal_file_stm32.c
+HIVE_HAL_STM32_FILE_SRCS := hal/stm32/hive_hal_file.c
 
 # SD card support sources (conditional on HIVE_ENABLE_SD)
 HIVE_HAL_STM32_SD_SRCS := hal/stm32/spi_sd.c

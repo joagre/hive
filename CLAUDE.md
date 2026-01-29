@@ -31,7 +31,7 @@ Man pages available:
 - `hive_timer(3)` - One-shot and periodic timers
 - `hive_bus(3)` - Publish-subscribe bus
 - `hive_select(3)` - Unified event waiting (IPC + bus)
-- `hive_net(3)` - Non-blocking TCP network I/O
+- `hive_tcp(3)` - Non-blocking TCP I/O
 - `hive_file(3)` - Synchronous file I/O
 - `hive_types(3)` - Types, constants, compile-time configuration
 
@@ -88,7 +88,7 @@ The runtime consists of:
 3. **IPC**: Inter-process communication via mailboxes with selective receive and request/reply support
 4. **Bus**: Publish-subscribe system with configurable retention policies (consume_after_reads, max_age_ms)
 5. **Timers**: timerfd registered in epoll (Linux), hardware timers on STM32 (SysTick/TIM)
-6. **Network**: Non-blocking sockets registered in epoll (Linux only; STM32 not yet implemented)
+6. **TCP**: Non-blocking sockets registered in epoll (Linux only; STM32 not yet implemented)
 7. **File**: Platform-specific implementation
    - Linux: Synchronous POSIX I/O (briefly pauses scheduler)
    - STM32: Flash-backed virtual files (`/log`, `/config`) with ring buffer for fast writes (blocks when buffer full)
@@ -429,7 +429,7 @@ include/hal/
   hive_hal_timer.h     - Timer operations (6 functions)
   hive_hal_context.h   - Context switching (1 function + struct)
   hive_hal_file.h      - File I/O (8 functions, optional)
-  hive_hal_net.h       - Network I/O (10 functions, optional)
+  hive_hal_tcp.h       - TCP I/O (10 functions, optional)
 
 src/hal/
   linux/               - Linux implementation (epoll, POSIX)
@@ -442,18 +442,18 @@ src/hal/
 **Platform-specific files**
 | Category | Linux | STM32 |
 |----------|-------|-------|
-| Main HAL | `hal/linux/hive_hal_linux.c` | `hal/stm32/hive_hal_stm32.c` |
-| Timer HAL | `hal/linux/hive_hal_timer_linux.c` | `hal/stm32/hive_hal_timer_stm32.c` |
-| Context init | `hal/linux/hive_hal_context_linux.c` | `hal/stm32/hive_hal_context_stm32.c` |
+| Main HAL | `hal/linux/hive_hal.c` | `hal/stm32/hive_hal.c` |
+| Timer HAL | `hal/linux/hive_hal_timer.c` | `hal/stm32/hive_hal_timer.c` |
+| Context init | `hal/linux/hive_hal_context.c` | `hal/stm32/hive_hal_context.c` |
 | Context switch | `hal/linux/hive_context_x86_64.S` | `hal/stm32/hive_context_arm_cm.S` |
 | Context struct | `hal/linux/hive_hal_context_defs.h` | `hal/stm32/hive_hal_context_defs.h` |
-| File HAL | (in main HAL) | `hal/stm32/hive_hal_file_stm32.c` |
+| File HAL | (in main HAL) | `hal/stm32/hive_hal_file.c` |
 
 **Platform-independent files**
 - `hive_scheduler.c` - Unified scheduler (calls HAL event functions)
 - `hive_timer.c` - Thin wrapper around HAL timer functions
 - `hive_file.c` - Thin wrapper around HAL file functions
-- `hive_net.c` - Thin wrapper around HAL network functions
+- `hive_tcp.c` - Thin wrapper around HAL TCP functions
 
 **HAL Functions Summary**
 | Category | Functions | Notes |
@@ -463,7 +463,7 @@ src/hal/
 | Timer | `init`, `cleanup`, `create`, `cancel`, `get_time`, `advance_time` | Required |
 | Context | `init` (C), `switch` (asm) | Required |
 | File | `init`, `cleanup`, `open`, `close`, `read`, `pread`, `write`, `pwrite`, `sync` | Optional |
-| Network | `init`, `cleanup`, `socket`, `bind`, `listen`, `accept`, `connect`, `connect_check`, `close`, `recv`, `send` | Optional |
+| TCP | `init`, `cleanup`, `socket`, `bind`, `listen`, `accept`, `connect`, `connect_check`, `close`, `recv`, `send` | Optional |
 
 See `src/hal/template/README.md` for porting guide.
 
@@ -473,7 +473,7 @@ Different implementations for Linux (dev) vs STM32 bare metal (prod):
 - Context switch: x86-64 asm vs ARM Cortex-M asm
 - Event notification: epoll vs WFI + interrupt flags
 - Timer: timerfd + epoll vs software timer wheel (SysTick/TIM)
-- Network: Non-blocking BSD sockets + epoll (Linux); stubs on STM32 (future lwIP)
+- TCP: Non-blocking BSD sockets + epoll (Linux); stubs on STM32 (future lwIP)
 - File: Synchronous POSIX vs flash-backed ring buffer
 
 **STM32 File I/O Differences**
@@ -496,7 +496,7 @@ See spec/api.md "File API" section for full platform differences table.
 Build commands:
 - `make` or `make PLATFORM=linux` - Build for x86-64 Linux
 - `make PLATFORM=stm32 CC=arm-none-eabi-gcc` - Build for STM32
-- `make ENABLE_NET=0 ENABLE_FILE=0` - Disable optional subsystems
+- `make ENABLE_TCP=0 ENABLE_FILE=0` - Disable optional subsystems
 
 ### Message Classes
 Messages are identified by class (accessible directly via `msg.class`):

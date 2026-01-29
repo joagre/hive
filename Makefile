@@ -5,15 +5,15 @@ CFLAGS := -std=c11 -Wall -Wextra -Wpedantic -Werror -O2 -g
 # Platform selection (linux or stm32)
 PLATFORM ?= linux
 
-# STM32 defaults: disable net (no lwIP yet), enable file (flash-backed), disable SD
+# STM32 defaults: disable tcp (no lwIP yet), enable file (flash-backed), disable SD
 ifeq ($(PLATFORM),stm32)
-  ENABLE_NET ?= 0
+  ENABLE_TCP ?= 0
   ENABLE_FILE ?= 1
   ENABLE_SD ?= 0
 endif
 
 # Feature toggles (set to 0 to disable)
-ENABLE_NET ?= 1
+ENABLE_TCP ?= 1
 ENABLE_FILE ?= 1
 ENABLE_SD ?= 0
 
@@ -28,7 +28,7 @@ MANPREFIX ?= $(PREFIX)/share/man
 LIB := $(BUILD_DIR)/libhive.a
 
 # Variables to export to sub-Makefiles
-export CC CFLAGS PLATFORM ENABLE_NET ENABLE_FILE ENABLE_SD PREFIX MANPREFIX
+export CC CFLAGS PLATFORM ENABLE_TCP ENABLE_FILE ENABLE_SD PREFIX MANPREFIX
 
 # ============================================================================
 # Primary Targets
@@ -164,7 +164,7 @@ help:
 	@echo "  PLATFORM=stm32    - STM32 ARM Cortex-M (requires cross-compiler)"
 	@echo ""
 	@echo "Feature toggles (set to 0 to disable):"
-	@echo "  ENABLE_NET=1      - Network I/O (default: 1 on linux, 0 on stm32)"
+	@echo "  ENABLE_TCP=1      - TCP I/O (default: 1 on linux, 0 on stm32)"
 	@echo "  ENABLE_FILE=1     - File I/O (default: 1)"
 	@echo "  ENABLE_SD=1       - SD card support via FatFS (stm32 only, default: 0)"
 	@echo ""

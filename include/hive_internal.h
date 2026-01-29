@@ -26,9 +26,9 @@ hive_status_t hive_file_init(void);
 void hive_file_cleanup(void);
 #endif
 
-#if HIVE_ENABLE_NET
-hive_status_t hive_net_init(void);
-void hive_net_cleanup(void);
+#if HIVE_ENABLE_TCP
+hive_status_t hive_tcp_init(void);
+void hive_tcp_cleanup(void);
 #endif
 
 // Internal tag constants (not exposed in public API)
@@ -111,7 +111,7 @@ typedef struct {
     } while (0)
 
 // Actor context requirement macro - returns error if not in actor context
-// Used by: IPC, link, bus, timer, network APIs
+// Used by: IPC, link, bus, timer, TCP APIs
 #define HIVE_REQUIRE_ACTOR_CONTEXT()                            \
     do {                                                        \
         if (!hive_actor_current()) {                            \
@@ -143,7 +143,7 @@ void hive_mailbox_add_entry(actor_t *recipient, mailbox_entry_t *entry);
 
 // Check for timeout message in mailbox and dequeue if present
 // Returns HIVE_ERR_TIMEOUT if timeout occurred, otherwise cancels timer and
-// returns HIVE_SUCCESS Used by: IPC recv, network I/O, bus
+// returns HIVE_SUCCESS Used by: IPC recv, TCP I/O, bus
 hive_status_t hive_mailbox_handle_timeout(actor_t *current,
                                           timer_id_t timeout_timer,
                                           const char *operation);
@@ -169,9 +169,9 @@ void hive_timer_handle_event(io_source_t *source);
 // Advance simulation time and fire due timers (called by hive_advance_time)
 void hive_timer_advance_time(uint64_t delta_us);
 
-#if HIVE_ENABLE_NET
-// Handle network event (socket ready)
-void hive_net_handle_event(io_source_t *source);
+#if HIVE_ENABLE_TCP
+// Handle TCP event (socket ready)
+void hive_tcp_handle_event(io_source_t *source);
 #endif
 
 // Clear mailbox entries (used during actor cleanup)

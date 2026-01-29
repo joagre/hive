@@ -1,5 +1,5 @@
 #include "hive_runtime.h"
-#include "hive_net.h"
+#include "hive_tcp.h"
 #include "hive_ipc.h"
 #include "hive_log.h"
 #include <stdio.h>
@@ -28,10 +28,10 @@ static void server_actor(void *args, const hive_spawn_info_t *siblings,
     printf("Server actor started (ID: %u)\n", hive_self());
 
     // Listen on port
-    HIVE_LOG_DEBUG("Server: About to call hive_net_listen");
+    HIVE_LOG_DEBUG("Server: About to call hive_tcp_listen");
     int listen_fd;
-    hive_status_t status = hive_net_listen(ECHO_PORT, &listen_fd);
-    HIVE_LOG_DEBUG("Server: hive_net_listen returned, status=%d", status.code);
+    hive_status_t status = hive_tcp_listen(ECHO_PORT, &listen_fd);
+    HIVE_LOG_DEBUG("Server: hive_tcp_listen returned, status=%d", status.code);
     if (HIVE_FAILED(status)) {
         printf("Server: Failed to listen: %s\n", HIVE_ERR_STR(status));
         hive_exit();
@@ -46,17 +46,17 @@ static void server_actor(void *args, const hive_spawn_info_t *siblings,
     if (HIVE_FAILED(status)) {
         printf("Server: Failed to send ready message: %s\n",
                HIVE_ERR_STR(status));
-        hive_net_close(listen_fd);
+        hive_tcp_close(listen_fd);
         hive_exit();
     }
     printf("Server: Sent ready notification to client via IPC\n");
 
     // Accept connection (block forever)
     int conn_fd;
-    status = hive_net_accept(listen_fd, &conn_fd, -1);
+    status = hive_tcp_accept(listen_fd, &conn_fd, -1);
     if (HIVE_FAILED(status)) {
         printf("Server: Failed to accept: %s\n", HIVE_ERR_STR(status));
-        hive_net_close(listen_fd);
+        hive_tcp_close(listen_fd);
         hive_exit();
     }
 
@@ -67,7 +67,7 @@ static void server_actor(void *args, const hive_spawn_info_t *siblings,
     for (int i = 0; i < 3; i++) {
         size_t received;
         status =
-            hive_net_recv(conn_fd, buffer, sizeof(buffer) - 1, &received, -1);
+            hive_tcp_recv(conn_fd, buffer, sizeof(buffer) - 1, &received, -1);
         if (HIVE_FAILED(status)) {
             printf("Server: Failed to receive: %s\n", HIVE_ERR_STR(status));
             break;
@@ -83,7 +83,7 @@ static void server_actor(void *args, const hive_spawn_info_t *siblings,
 
         // Echo back
         size_t sent;
-        status = hive_net_send(conn_fd, buffer, received, &sent, -1);
+        status = hive_tcp_send(conn_fd, buffer, received, &sent, -1);
         if (HIVE_FAILED(status)) {
             printf("Server: Failed to send: %s\n", HIVE_ERR_STR(status));
             break;
@@ -93,8 +93,8 @@ static void server_actor(void *args, const hive_spawn_info_t *siblings,
     }
 
     // Close connection
-    hive_net_close(conn_fd);
-    hive_net_close(listen_fd);
+    hive_tcp_close(conn_fd);
+    hive_tcp_close(listen_fd);
 
     // Wait for client done notification via IPC
     hive_message_t done_msg;
@@ -149,7 +149,7 @@ static void client_actor(void *args, const hive_spawn_info_t *siblings,
 
     // Connect to server (with timeout)
     int conn_fd;
-    status = hive_net_connect("127.0.0.1", ECHO_PORT, &conn_fd,
+    status = hive_tcp_connect("127.0.0.1", ECHO_PORT, &conn_fd,
                               5000); // 5 second timeout
     if (HIVE_FAILED(status)) {
         printf("Client: Failed to connect: %s\n", HIVE_ERR_STR(status));
@@ -162,7 +162,7 @@ static void client_actor(void *args, const hive_spawn_info_t *siblings,
         // Send message
         size_t sent;
         status =
-            hive_net_send(conn_fd, messages[i], strlen(messages[i]), &sent, -1);
+            hive_tcp_send(conn_fd, messages[i], strlen(messages[i]), &sent, -1);
         if (HIVE_FAILED(status)) {
             printf("Client: Failed to send: %s\n", HIVE_ERR_STR(status));
             break;
@@ -174,7 +174,7 @@ static void client_actor(void *args, const hive_spawn_info_t *siblings,
         char buffer[256];
         size_t received;
         status =
-            hive_net_recv(conn_fd, buffer, sizeof(buffer) - 1, &received, -1);
+            hive_tcp_recv(conn_fd, buffer, sizeof(buffer) - 1, &received, -1);
         if (HIVE_FAILED(status)) {
             printf("Client: Failed to receive: %s\n", HIVE_ERR_STR(status));
             break;
@@ -185,7 +185,7 @@ static void client_actor(void *args, const hive_spawn_info_t *siblings,
     }
 
     // Close connection
-    hive_net_close(conn_fd);
+    hive_tcp_close(conn_fd);
 
     // Notify server that client is done via IPC
     coord_msg_t done_msg = {.type = MSG_CLIENT_DONE};

@@ -4,7 +4,7 @@
 // Critical sections are no-ops (single-threaded, no ISRs).
 // Event system uses epoll for efficient I/O multiplexing.
 // File I/O uses POSIX file operations.
-// Network I/O uses BSD sockets.
+// TCP I/O uses BSD sockets.
 
 #include "hal/hive_hal_time.h"
 #include "hal/hive_hal_event.h"
@@ -18,13 +18,13 @@
 #if HIVE_ENABLE_FILE
 #include "hal/hive_hal_file.h"
 #include "hive_file.h"
-#include "hive_mount_linux.h"
+#include "hive_mount.h"
 #include <fcntl.h>
 #include <stdio.h>
 #endif
 
-#if HIVE_ENABLE_NET
-#include "hal/hive_hal_net.h"
+#if HIVE_ENABLE_TCP
+#include "hal/hive_hal_tcp.h"
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
@@ -35,8 +35,8 @@
 
 // Forward declarations for event handlers
 extern void hive_timer_handle_event(io_source_t *source);
-#if HIVE_ENABLE_NET
-extern void hive_net_handle_event(io_source_t *source);
+#if HIVE_ENABLE_TCP
+extern void hive_tcp_handle_event(io_source_t *source);
 #endif
 
 // Event system state
@@ -81,9 +81,9 @@ static void dispatch_epoll_events(int timeout_ms) {
         if (source->type == IO_SOURCE_TIMER) {
             hive_timer_handle_event(source);
         }
-#if HIVE_ENABLE_NET
-        else if (source->type == IO_SOURCE_NETWORK) {
-            hive_net_handle_event(source);
+#if HIVE_ENABLE_TCP
+        else if (source->type == IO_SOURCE_TCP) {
+            hive_tcp_handle_event(source);
         }
 #endif
     }
@@ -289,10 +289,10 @@ hive_status_t hive_hal_file_sync(int fd) {
 #endif // HIVE_ENABLE_FILE
 
 // =============================================================================
-// Network I/O Implementation (BSD sockets)
+// TCP I/O Implementation (BSD sockets)
 // =============================================================================
 
-#if HIVE_ENABLE_NET
+#if HIVE_ENABLE_TCP
 
 // Set socket to non-blocking mode
 static int set_socket_nonblocking(int fd) {
@@ -303,16 +303,16 @@ static int set_socket_nonblocking(int fd) {
     return fcntl(fd, F_SETFL, flags | O_NONBLOCK);
 }
 
-hive_status_t hive_hal_net_init(void) {
+hive_status_t hive_hal_tcp_init(void) {
     // No initialization needed for BSD sockets
     return HIVE_SUCCESS;
 }
 
-void hive_hal_net_cleanup(void) {
+void hive_hal_tcp_cleanup(void) {
     // No cleanup needed for BSD sockets
 }
 
-hive_status_t hive_hal_net_socket(int *out) {
+hive_status_t hive_hal_tcp_socket(int *out) {
     int fd = socket(AF_INET, SOCK_STREAM, 0);
     if (fd < 0) {
         return HIVE_ERROR(HIVE_ERR_IO, "socket failed");
@@ -332,7 +332,7 @@ hive_status_t hive_hal_net_socket(int *out) {
     return HIVE_SUCCESS;
 }
 
-hive_status_t hive_hal_net_bind(int fd, uint16_t port) {
+hive_status_t hive_hal_tcp_bind(int fd, uint16_t port) {
     struct sockaddr_in addr = {0};
     addr.sin_family = AF_INET;
     addr.sin_addr.s_addr = INADDR_ANY;
@@ -345,14 +345,14 @@ hive_status_t hive_hal_net_bind(int fd, uint16_t port) {
     return HIVE_SUCCESS;
 }
 
-hive_status_t hive_hal_net_listen(int fd, int backlog) {
+hive_status_t hive_hal_tcp_listen(int fd, int backlog) {
     if (listen(fd, backlog) < 0) {
         return HIVE_ERROR(HIVE_ERR_IO, "listen failed");
     }
     return HIVE_SUCCESS;
 }
 
-hive_status_t hive_hal_net_accept(int listen_fd, int *out) {
+hive_status_t hive_hal_tcp_accept(int listen_fd, int *out) {
     struct sockaddr_in client_addr;
     socklen_t client_len = sizeof(client_addr);
     int conn_fd =
@@ -375,7 +375,7 @@ hive_status_t hive_hal_net_accept(int listen_fd, int *out) {
     return HIVE_SUCCESS;
 }
 
-hive_status_t hive_hal_net_connect(int fd, const char *ip, uint16_t port) {
+hive_status_t hive_hal_tcp_connect(int fd, const char *ip, uint16_t port) {
     struct sockaddr_in serv_addr = {0};
     serv_addr.sin_family = AF_INET;
     serv_addr.sin_port = htons(port);
@@ -396,7 +396,7 @@ hive_status_t hive_hal_net_connect(int fd, const char *ip, uint16_t port) {
     return HIVE_SUCCESS;
 }
 
-hive_status_t hive_hal_net_connect_check(int fd) {
+hive_status_t hive_hal_tcp_connect_check(int fd) {
     int error = 0;
     socklen_t len = sizeof(error);
 
@@ -407,14 +407,14 @@ hive_status_t hive_hal_net_connect_check(int fd) {
     return HIVE_SUCCESS;
 }
 
-hive_status_t hive_hal_net_close(int fd) {
+hive_status_t hive_hal_tcp_close(int fd) {
     if (close(fd) < 0) {
         return HIVE_ERROR(HIVE_ERR_IO, "close failed");
     }
     return HIVE_SUCCESS;
 }
 
-hive_status_t hive_hal_net_recv(int fd, void *buf, size_t len,
+hive_status_t hive_hal_tcp_recv(int fd, void *buf, size_t len,
                                 size_t *bytes_read) {
     ssize_t n = recv(fd, buf, len, MSG_DONTWAIT);
 
@@ -429,7 +429,7 @@ hive_status_t hive_hal_net_recv(int fd, void *buf, size_t len,
     return HIVE_SUCCESS;
 }
 
-hive_status_t hive_hal_net_send(int fd, const void *buf, size_t len,
+hive_status_t hive_hal_tcp_send(int fd, const void *buf, size_t len,
                                 size_t *bytes_written) {
     ssize_t n = send(fd, buf, len, MSG_DONTWAIT);
 
@@ -444,4 +444,4 @@ hive_status_t hive_hal_net_send(int fd, const void *buf, size_t len,
     return HIVE_SUCCESS;
 }
 
-#endif // HIVE_ENABLE_NET
+#endif // HIVE_ENABLE_TCP

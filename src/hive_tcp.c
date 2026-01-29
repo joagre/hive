@@ -1,4 +1,4 @@
-#include "hive_net.h"
+#include "hive_tcp.h"
 #include "hive_internal.h"
 #include "hive_static_config.h"
 #include "hive_actor.h"
@@ -10,15 +10,15 @@
 #include "hive_pool.h"
 #include "hive_io_source.h"
 #include "hal/hive_hal_event.h"
-#include "hal/hive_hal_net.h"
+#include "hal/hive_hal_tcp.h"
 #include <string.h>
 
-// Network operation types (used in io_source_t.data.net.operation)
+// TCP operation types (used in io_source_t.data.tcp.operation)
 enum {
-    NET_OP_ACCEPT,
-    NET_OP_CONNECT,
-    NET_OP_RECV,
-    NET_OP_SEND,
+    TCP_OP_ACCEPT,
+    TCP_OP_CONNECT,
+    TCP_OP_RECV,
+    TCP_OP_SEND,
 };
 
 // Static pool for io_source_t entries
@@ -26,20 +26,20 @@ static io_source_t s_io_source_pool[HIVE_IO_SOURCE_POOL_SIZE];
 static bool s_io_source_used[HIVE_IO_SOURCE_POOL_SIZE];
 static hive_pool_t s_io_source_pool_mgr;
 
-// Network I/O subsystem state
+// TCP I/O subsystem state
 static struct {
     bool initialized;
-} s_net = {0};
+} s_tcp = {0};
 
-// Handle network event from scheduler (called when socket ready)
-void hive_net_handle_event(io_source_t *source) {
-    net_io_data_t *net = &source->data.net;
+// Handle TCP event from scheduler (called when socket ready)
+void hive_tcp_handle_event(io_source_t *source) {
+    tcp_io_data_t *tcp = &source->data.tcp;
 
     // Get the actor_t
-    actor_t *a = hive_actor_get(net->actor);
+    actor_t *a = hive_actor_get(tcp->actor);
     if (!a) {
         // Actor is dead - cleanup
-        hive_hal_event_unregister(net->fd);
+        hive_hal_event_unregister(tcp->fd);
         hive_pool_free(&s_io_source_pool_mgr, source);
         return;
     }
@@ -47,10 +47,10 @@ void hive_net_handle_event(io_source_t *source) {
     // Perform the actual I/O based on operation type
     hive_status_t status = HIVE_SUCCESS;
 
-    switch (net->operation) {
-    case NET_OP_ACCEPT: {
+    switch (tcp->operation) {
+    case TCP_OP_ACCEPT: {
         int conn_fd;
-        status = hive_hal_net_accept(net->fd, &conn_fd);
+        status = hive_hal_tcp_accept(tcp->fd, &conn_fd);
         if (status.code == HIVE_ERR_WOULDBLOCK) {
             // Still not ready - this shouldn't happen with epoll, but handle it
             return; // Keep waiting
@@ -61,20 +61,20 @@ void hive_net_handle_event(io_source_t *source) {
         break;
     }
 
-    case NET_OP_CONNECT: {
+    case TCP_OP_CONNECT: {
         // Check if connection succeeded
-        status = hive_hal_net_connect_check(net->fd);
+        status = hive_hal_tcp_connect_check(tcp->fd);
         if (HIVE_FAILED(status)) {
-            hive_hal_net_close(net->fd);
+            hive_hal_tcp_close(tcp->fd);
         } else {
-            a->io_result_fd = net->fd;
+            a->io_result_fd = tcp->fd;
         }
         break;
     }
 
-    case NET_OP_RECV: {
+    case TCP_OP_RECV: {
         size_t received = 0;
-        status = hive_hal_net_recv(net->fd, net->buf, net->len, &received);
+        status = hive_hal_tcp_recv(tcp->fd, tcp->buf, tcp->len, &received);
         if (status.code == HIVE_ERR_WOULDBLOCK) {
             // Still not ready - shouldn't happen with epoll
             return; // Keep waiting
@@ -85,9 +85,9 @@ void hive_net_handle_event(io_source_t *source) {
         break;
     }
 
-    case NET_OP_SEND: {
+    case TCP_OP_SEND: {
         size_t sent = 0;
-        status = hive_hal_net_send(net->fd, net->buf, net->len, &sent);
+        status = hive_hal_tcp_send(tcp->fd, tcp->buf, tcp->len, &sent);
         if (status.code == HIVE_ERR_WOULDBLOCK) {
             // Still not ready - shouldn't happen with epoll
             return; // Keep waiting
@@ -99,12 +99,12 @@ void hive_net_handle_event(io_source_t *source) {
     }
 
     default:
-        status = HIVE_ERROR(HIVE_ERR_INVALID, "Unknown network operation");
+        status = HIVE_ERROR(HIVE_ERR_INVALID, "Unknown TCP operation");
         break;
     }
 
     // Remove from event system (one-shot operation)
-    hive_hal_event_unregister(net->fd);
+    hive_hal_event_unregister(tcp->fd);
 
     // Store result in actor_t
     a->io_status = status;
@@ -116,12 +116,12 @@ void hive_net_handle_event(io_source_t *source) {
     hive_pool_free(&s_io_source_pool_mgr, source);
 }
 
-// Initialize network I/O subsystem
-hive_status_t hive_net_init(void) {
-    HIVE_INIT_GUARD(s_net.initialized);
+// Initialize TCP I/O subsystem
+hive_status_t hive_tcp_init(void) {
+    HIVE_INIT_GUARD(s_tcp.initialized);
 
-    // Initialize HAL network subsystem
-    hive_status_t status = hive_hal_net_init();
+    // Initialize HAL TCP subsystem
+    hive_status_t status = hive_hal_tcp_init();
     if (HIVE_FAILED(status)) {
         return status;
     }
@@ -130,16 +130,16 @@ hive_status_t hive_net_init(void) {
     hive_pool_init(&s_io_source_pool_mgr, s_io_source_pool, s_io_source_used,
                    sizeof(io_source_t), HIVE_IO_SOURCE_POOL_SIZE);
 
-    s_net.initialized = true;
+    s_tcp.initialized = true;
     return HIVE_SUCCESS;
 }
 
-// Cleanup network I/O subsystem
-void hive_net_cleanup(void) {
-    HIVE_CLEANUP_GUARD(s_net.initialized);
+// Cleanup TCP I/O subsystem
+void hive_tcp_cleanup(void) {
+    HIVE_CLEANUP_GUARD(s_tcp.initialized);
 
-    hive_hal_net_cleanup();
-    s_net.initialized = false;
+    hive_hal_tcp_cleanup();
+    s_tcp.initialized = false;
 }
 
 // Helper: Try non-blocking I/O, register with event system if would block
@@ -174,12 +174,12 @@ static hive_status_t try_or_wait(int fd, uint32_t hal_events, int operation,
     }
 
     // Setup io_source_t for event system
-    source->type = IO_SOURCE_NETWORK;
-    source->data.net.fd = fd;
-    source->data.net.buf = buf;
-    source->data.net.len = len;
-    source->data.net.actor = current->id;
-    source->data.net.operation = operation;
+    source->type = IO_SOURCE_TCP;
+    source->data.tcp.fd = fd;
+    source->data.tcp.buf = buf;
+    source->data.tcp.len = len;
+    source->data.tcp.actor = current->id;
+    source->data.tcp.operation = operation;
 
     // Register with HAL event system
     hive_status_t reg_status = hive_hal_event_register(fd, hal_events, source);
@@ -197,7 +197,7 @@ static hive_status_t try_or_wait(int fd, uint32_t hal_events, int operation,
 
     // When we resume, check for timeout
     hive_status_t timeout_status = hive_mailbox_handle_timeout(
-        current, timeout_timer, "Network I/O operation timed out");
+        current, timeout_timer, "TCP I/O operation timed out");
     if (HIVE_FAILED(timeout_status)) {
         // Timeout occurred - cleanup event registration
         hive_hal_event_unregister(fd);
@@ -209,31 +209,31 @@ static hive_status_t try_or_wait(int fd, uint32_t hal_events, int operation,
     return current->io_status;
 }
 
-hive_status_t hive_net_listen(uint16_t port, int *out) {
+hive_status_t hive_tcp_listen(uint16_t port, int *out) {
     if (!out) {
         return HIVE_ERROR(HIVE_ERR_INVALID, "NULL out pointer");
     }
 
-    HIVE_REQUIRE_INIT(s_net.initialized, "Network I/O");
+    HIVE_REQUIRE_INIT(s_tcp.initialized, "TCP I/O");
 
     // Create socket (HAL sets it to non-blocking and SO_REUSEADDR)
     int fd;
-    hive_status_t status = hive_hal_net_socket(&fd);
+    hive_status_t status = hive_hal_tcp_socket(&fd);
     if (HIVE_FAILED(status)) {
         return status;
     }
 
     // Bind to port
-    status = hive_hal_net_bind(fd, port);
+    status = hive_hal_tcp_bind(fd, port);
     if (HIVE_FAILED(status)) {
-        hive_hal_net_close(fd);
+        hive_hal_tcp_close(fd);
         return status;
     }
 
     // Start listening
-    status = hive_hal_net_listen(fd, HIVE_NET_LISTEN_BACKLOG);
+    status = hive_hal_tcp_listen(fd, HIVE_TCP_LISTEN_BACKLOG);
     if (HIVE_FAILED(status)) {
-        hive_hal_net_close(fd);
+        hive_hal_tcp_close(fd);
         return status;
     }
 
@@ -241,19 +241,19 @@ hive_status_t hive_net_listen(uint16_t port, int *out) {
     return HIVE_SUCCESS;
 }
 
-hive_status_t hive_net_accept(int listen_fd, int *out, int32_t timeout_ms) {
+hive_status_t hive_tcp_accept(int listen_fd, int *out, int32_t timeout_ms) {
     if (!out) {
         return HIVE_ERROR(HIVE_ERR_INVALID, "NULL out pointer");
     }
 
-    HIVE_REQUIRE_INIT(s_net.initialized, "Network I/O");
+    HIVE_REQUIRE_INIT(s_tcp.initialized, "TCP I/O");
 
     HIVE_REQUIRE_ACTOR_CONTEXT();
     actor_t *current = hive_actor_current();
 
     // Try immediate accept with non-blocking
     int conn_fd;
-    hive_status_t status = hive_hal_net_accept(listen_fd, &conn_fd);
+    hive_status_t status = hive_hal_tcp_accept(listen_fd, &conn_fd);
 
     if (HIVE_SUCCEEDED(status)) {
         // Success immediately!
@@ -267,7 +267,7 @@ hive_status_t hive_net_accept(int listen_fd, int *out, int32_t timeout_ms) {
     }
 
     // Would block - register interest in epoll and yield
-    status = try_or_wait(listen_fd, HIVE_EVENT_READ, NET_OP_ACCEPT, NULL, 0,
+    status = try_or_wait(listen_fd, HIVE_EVENT_READ, TCP_OP_ACCEPT, NULL, 0,
                          timeout_ms);
     if (HIVE_FAILED(status)) {
         return status;
@@ -278,26 +278,26 @@ hive_status_t hive_net_accept(int listen_fd, int *out, int32_t timeout_ms) {
     return HIVE_SUCCESS;
 }
 
-hive_status_t hive_net_connect(const char *ip, uint16_t port, int *out,
+hive_status_t hive_tcp_connect(const char *ip, uint16_t port, int *out,
                                int32_t timeout_ms) {
     if (!ip || !out) {
         return HIVE_ERROR(HIVE_ERR_INVALID, "NULL ip or out pointer");
     }
 
-    HIVE_REQUIRE_INIT(s_net.initialized, "Network I/O");
+    HIVE_REQUIRE_INIT(s_tcp.initialized, "TCP I/O");
 
     HIVE_REQUIRE_ACTOR_CONTEXT();
     actor_t *current = hive_actor_current();
 
     // Create non-blocking socket
     int fd;
-    hive_status_t status = hive_hal_net_socket(&fd);
+    hive_status_t status = hive_hal_tcp_socket(&fd);
     if (HIVE_FAILED(status)) {
         return status;
     }
 
     // Try non-blocking connect (HAL parses IP address)
-    status = hive_hal_net_connect(fd, ip, port);
+    status = hive_hal_tcp_connect(fd, ip, port);
 
     if (HIVE_SUCCEEDED(status)) {
         // Connected immediately (rare but possible on localhost)
@@ -307,15 +307,15 @@ hive_status_t hive_net_connect(const char *ip, uint16_t port, int *out,
 
     if (status.code != HIVE_ERR_INPROGRESS) {
         // Error (not just "in progress")
-        hive_hal_net_close(fd);
+        hive_hal_tcp_close(fd);
         return status;
     }
 
     // Connection in progress - add to epoll and wait for writable
     status =
-        try_or_wait(fd, HIVE_EVENT_WRITE, NET_OP_CONNECT, NULL, 0, timeout_ms);
+        try_or_wait(fd, HIVE_EVENT_WRITE, TCP_OP_CONNECT, NULL, 0, timeout_ms);
     if (HIVE_FAILED(status)) {
-        hive_hal_net_close(fd);
+        hive_hal_tcp_close(fd);
         return status;
     }
 
@@ -324,25 +324,25 @@ hive_status_t hive_net_connect(const char *ip, uint16_t port, int *out,
     return HIVE_SUCCESS;
 }
 
-hive_status_t hive_net_close(int fd) {
+hive_status_t hive_tcp_close(int fd) {
     // Close is synchronous and fast
-    return hive_hal_net_close(fd);
+    return hive_hal_tcp_close(fd);
 }
 
-hive_status_t hive_net_recv(int fd, void *buf, size_t len, size_t *bytes_read,
+hive_status_t hive_tcp_recv(int fd, void *buf, size_t len, size_t *bytes_read,
                             int32_t timeout_ms) {
     if (!buf || !bytes_read) {
         return HIVE_ERROR(HIVE_ERR_INVALID,
                           "NULL buffer or bytes_read pointer");
     }
 
-    HIVE_REQUIRE_INIT(s_net.initialized, "Network I/O");
+    HIVE_REQUIRE_INIT(s_tcp.initialized, "TCP I/O");
 
     HIVE_REQUIRE_ACTOR_CONTEXT();
     actor_t *current = hive_actor_current();
 
     // Try immediate non-blocking recv
-    hive_status_t status = hive_hal_net_recv(fd, buf, len, bytes_read);
+    hive_status_t status = hive_hal_tcp_recv(fd, buf, len, bytes_read);
 
     if (HIVE_SUCCEEDED(status)) {
         // Success immediately!
@@ -356,7 +356,7 @@ hive_status_t hive_net_recv(int fd, void *buf, size_t len, size_t *bytes_read,
 
     // Would block - register interest in epoll and yield
     status =
-        try_or_wait(fd, HIVE_EVENT_READ, NET_OP_RECV, buf, len, timeout_ms);
+        try_or_wait(fd, HIVE_EVENT_READ, TCP_OP_RECV, buf, len, timeout_ms);
     if (HIVE_FAILED(status)) {
         return status;
     }
@@ -366,20 +366,20 @@ hive_status_t hive_net_recv(int fd, void *buf, size_t len, size_t *bytes_read,
     return HIVE_SUCCESS;
 }
 
-hive_status_t hive_net_send(int fd, const void *buf, size_t len,
+hive_status_t hive_tcp_send(int fd, const void *buf, size_t len,
                             size_t *bytes_written, int32_t timeout_ms) {
     if (!buf || !bytes_written) {
         return HIVE_ERROR(HIVE_ERR_INVALID,
                           "NULL buffer or bytes_written pointer");
     }
 
-    HIVE_REQUIRE_INIT(s_net.initialized, "Network I/O");
+    HIVE_REQUIRE_INIT(s_tcp.initialized, "TCP I/O");
 
     HIVE_REQUIRE_ACTOR_CONTEXT();
     actor_t *current = hive_actor_current();
 
     // Try immediate non-blocking send
-    hive_status_t status = hive_hal_net_send(fd, buf, len, bytes_written);
+    hive_status_t status = hive_hal_tcp_send(fd, buf, len, bytes_written);
 
     if (HIVE_SUCCEEDED(status)) {
         // Success immediately!
@@ -392,7 +392,7 @@ hive_status_t hive_net_send(int fd, const void *buf, size_t len,
     }
 
     // Would block - register interest in epoll and yield
-    status = try_or_wait(fd, HIVE_EVENT_WRITE, NET_OP_SEND, (void *)buf, len,
+    status = try_or_wait(fd, HIVE_EVENT_WRITE, TCP_OP_SEND, (void *)buf, len,
                          timeout_ms);
     if (HIVE_FAILED(status)) {
         return status;

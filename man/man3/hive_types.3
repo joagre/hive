@@ -88,7 +88,7 @@ Target actor or resource is closed/dead.
 Non-blocking operation would block.
 .TP
 .B HIVE_ERR_IO
-I/O error (network or file).
+I/O error (TCP or file).
 .TP
 .B HIVE_ERR_EXISTS
 Name already registered (for auto_register or
@@ -347,8 +347,8 @@ and can be overridden with
 compiler flags. Changing these values requires recompilation.
 .SS Feature Toggles
 .TP
-.B HIVE_ENABLE_NET (1)
-Enable network I/O subsystem. Set to 0 to disable.
+.B HIVE_ENABLE_TCP (1)
+Enable TCP I/O subsystem. Set to 0 to disable.
 .TP
 .B HIVE_ENABLE_FILE (1)
 Enable file I/O subsystem. Set to 0 to disable.
@@ -357,7 +357,7 @@ Enable file I/O subsystem. Set to 0 to disable.
 Enable SD card support via SPI (STM32 only). Requires FatFS library.
 .PP
 Can also be set via Makefile:
-.I make ENABLE_NET=0 ENABLE_FILE=0
+.I make ENABLE_TCP=0 ENABLE_FILE=0
 or
 .I make ENABLE_SD=1
 .SS Actor Configuration
@@ -434,9 +434,9 @@ Maximum epoll events processed per scheduler iteration.
 .TP
 .B HIVE_EPOLL_POLL_TIMEOUT_MS (10)
 Epoll poll timeout in milliseconds (defensive wakeup interval).
-.SS Network Configuration
+.SS TCP Configuration
 .TP
-.B HIVE_NET_LISTEN_BACKLOG (5)
+.B HIVE_TCP_LISTEN_BACKLOG (5)
 TCP listen backlog (queued connections).
 .SS SD Card Configuration (STM32 only)
 .TP

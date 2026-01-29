@@ -42,12 +42,12 @@ For embedded telemetry applications, **UDP is the pragmatic choice**:
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │  Application (actors)                                           │
-│  hive_udp_send(), hive_udp_recv() / hive_net_*() for TCP       │
+│  hive_udp_send(), hive_udp_recv() / hive_tcp_*() for TCP       │
 ├─────────────────────────────────────────────────────────────────┤
-│  hive_udp.c / hive_net.c (platform-independent)                │
+│  hive_udp.c / hive_tcp.c (platform-independent)                │
 │  Async operation management, timeouts, actor wakeup             │
 ├─────────────────────────────────────────────────────────────────┤
-│  HAL: hive_hal_udp_stm32.c / hive_hal_net_stm32.c              │
+│  HAL: hive_hal_udp_stm32.c / hive_hal_tcp_stm32.c              │
 │  lwIP wrapper (Raw API for UDP, Socket API for TCP)            │
 ├─────────────────────────────────────────────────────────────────┤
 │  lwIP (IP stack)                                                │
@@ -287,7 +287,7 @@ bool hive_hal_udp_poll(void) {
 UDP event integration is trivial compared to TCP:
 
 ```c
-// In hive_hal_stm32.c - event wait function
+// In hive_hal.c - event wait function
 void hive_hal_event_wait(int timeout_ms) {
     uint64_t deadline = hive_hal_get_time_us() + timeout_ms * 1000;
 
@@ -377,7 +377,7 @@ TCP is more complex but may be needed for reliable file transfer or firmware upd
 
 ## TCP HAL API
 
-The existing `hive_hal_net.h` defines the TCP API (10 functions):
+The existing `hive_hal_tcp.h` defines the TCP API (10 functions):
 - `init`, `cleanup`
 - `socket`, `bind`, `listen`, `accept`, `connect`, `connect_check`, `close`
 - `recv`, `send`
@@ -397,10 +397,10 @@ The existing `hive_hal_net.h` defines the TCP API (10 functions):
 
 ## TCP HAL Implementation
 
-### File: `src/hal/stm32/hive_hal_net_stm32.c`
+### File: `src/hal/stm32/hive_hal_tcp_stm32.c`
 
 ```c
-#include "hal/hive_hal_net.h"
+#include "hal/hive_hal_tcp.h"
 #include "lwip/sockets.h"
 #include "lwip/netdb.h"
 #include <string.h>
@@ -408,17 +408,17 @@ The existing `hive_hal_net.h` defines the TCP API (10 functions):
 // Socket-to-fd mapping (lwIP sockets start at LWIP_SOCKET_OFFSET)
 // We use lwIP socket numbers directly as our "fd"
 
-hive_status_t hive_hal_net_init(void) {
+hive_status_t hive_hal_tcp_init(void) {
     // lwIP init is done separately at system startup
     // (tcpip_init() called from main before hive_init)
     return HIVE_SUCCESS;
 }
 
-void hive_hal_net_cleanup(void) {
+void hive_hal_tcp_cleanup(void) {
     // Nothing to do - lwIP lifecycle managed by system
 }
 
-hive_status_t hive_hal_net_socket(int *out) {
+hive_status_t hive_hal_tcp_socket(int *out) {
     int sock = lwip_socket(AF_INET, SOCK_STREAM, 0);
     if (sock < 0) {
         return HIVE_ERROR(HIVE_ERR_IO, "Failed to create socket");
@@ -436,7 +436,7 @@ hive_status_t hive_hal_net_socket(int *out) {
     return HIVE_SUCCESS;
 }
 
-hive_status_t hive_hal_net_bind(int fd, uint16_t port) {
+hive_status_t hive_hal_tcp_bind(int fd, uint16_t port) {
     struct sockaddr_in addr = {0};
     addr.sin_family = AF_INET;
     addr.sin_port = lwip_htons(port);
@@ -448,14 +448,14 @@ hive_status_t hive_hal_net_bind(int fd, uint16_t port) {
     return HIVE_SUCCESS;
 }
 
-hive_status_t hive_hal_net_listen(int fd, int backlog) {
+hive_status_t hive_hal_tcp_listen(int fd, int backlog) {
     if (lwip_listen(fd, backlog) < 0) {
         return HIVE_ERROR(HIVE_ERR_IO, "Listen failed");
     }
     return HIVE_SUCCESS;
 }
 
-hive_status_t hive_hal_net_accept(int listen_fd, int *out) {
+hive_status_t hive_hal_tcp_accept(int listen_fd, int *out) {
     struct sockaddr_in addr;
     socklen_t len = sizeof(addr);
 
@@ -475,7 +475,7 @@ hive_status_t hive_hal_net_accept(int listen_fd, int *out) {
     return HIVE_SUCCESS;
 }
 
-hive_status_t hive_hal_net_connect(int fd, const char *ip, uint16_t port) {
+hive_status_t hive_hal_tcp_connect(int fd, const char *ip, uint16_t port) {
     struct sockaddr_in addr = {0};
     addr.sin_family = AF_INET;
     addr.sin_port = lwip_htons(port);
@@ -496,7 +496,7 @@ hive_status_t hive_hal_net_connect(int fd, const char *ip, uint16_t port) {
     return HIVE_ERROR(HIVE_ERR_IO, "Connect failed");
 }
 
-hive_status_t hive_hal_net_connect_check(int fd) {
+hive_status_t hive_hal_tcp_connect_check(int fd) {
     int error = 0;
     socklen_t len = sizeof(error);
 
@@ -511,12 +511,12 @@ hive_status_t hive_hal_net_connect_check(int fd) {
     return HIVE_SUCCESS;
 }
 
-hive_status_t hive_hal_net_close(int fd) {
+hive_status_t hive_hal_tcp_close(int fd) {
     lwip_close(fd);
     return HIVE_SUCCESS;
 }
 
-hive_status_t hive_hal_net_recv(int fd, void *buf, size_t len, size_t *bytes_read) {
+hive_status_t hive_hal_tcp_recv(int fd, void *buf, size_t len, size_t *bytes_read) {
     ssize_t ret = lwip_recv(fd, buf, len, 0);
 
     if (ret < 0) {
@@ -530,7 +530,7 @@ hive_status_t hive_hal_net_recv(int fd, void *buf, size_t len, size_t *bytes_rea
     return HIVE_SUCCESS;
 }
 
-hive_status_t hive_hal_net_send(int fd, const void *buf, size_t len, size_t *bytes_written) {
+hive_status_t hive_hal_tcp_send(int fd, const void *buf, size_t len, size_t *bytes_written) {
     ssize_t ret = lwip_send(fd, buf, len, 0);
 
     if (ret < 0) {
@@ -631,7 +631,7 @@ void hive_hal_event_wait(int timeout_ms) {
             if (FD_ISSET(fd, &read_copy) || FD_ISSET(fd, &write_copy)) {
                 io_source_t *source = s_sources[fd];
                 if (source) {
-                    hive_net_handle_event(source);
+                    hive_tcp_handle_event(source);
                 }
             }
         }
@@ -722,7 +722,7 @@ lib/lwip/                        # lwIP source (git submodule or copy)
 
 src/hal/stm32/
   hive_hal_udp_stm32.c          # UDP HAL (raw API)
-  hive_hal_net_stm32.c          # TCP HAL (socket API)
+  hive_hal_tcp_stm32.c          # TCP HAL (socket API)
   ethernetif.c                   # Board-specific ETH<->lwIP glue
   ethernetif.h
 ```

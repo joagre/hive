@@ -10,13 +10,13 @@ The Hardware Abstraction Layer (HAL) isolates platform-specific code so that por
 
 | Category | Files | Functions | Required |
 |----------|-------|-----------|----------|
-| Core HAL | `hive_hal_<platform>.c` | 7 functions | Yes |
-| Timer HAL | `hive_hal_timer_<platform>.c` | 6 functions | Yes |
-| Context | `hive_hal_context_<platform>.c` | 1 function | Yes |
-| Context | `hive_context_<arch>.S` | 1 function | Yes |
+| Core HAL | `hive_hal.c` | 7 functions | Yes |
+| Timer HAL | `hive_hal_timer.c` | 6 functions | Yes |
+| Context | `hive_hal_context.c` | 1 function | Yes |
+| Context | `hive_context.S` | 1 function | Yes |
 | Context | `hive_hal_context_defs.h` | 1 struct | Yes |
 | File I/O | (in hal or separate) | 9 functions | Optional |
-| Network | (in hal or separate) | 10 functions | Optional |
+| TCP | (in hal or separate) | 10 functions | Optional |
 
 **Minimum port** - ~15 functions + 1 assembly function + 1 struct definition
 
@@ -29,11 +29,11 @@ The Hardware Abstraction Layer (HAL) isolates platform-specific code so that por
 
 2. Copy templates:
    ```
-   cp src/hal/template/hive_hal_template.c src/hal/<platform>/hive_hal_<platform>.c
-   cp src/hal/template/hive_hal_timer_template.c src/hal/<platform>/hive_hal_timer_<platform>.c
+   cp src/hal/template/hive_hal.c src/hal/<platform>/
+   cp src/hal/template/hive_hal_timer.c src/hal/<platform>/
    cp src/hal/template/hive_hal_context_defs.h src/hal/<platform>/
-   cp src/hal/template/hive_hal_context_template.c src/hal/<platform>/hive_hal_context_<platform>.c
-   cp src/hal/template/hive_context_template.S src/hal/<platform>/hive_context_<arch>.S
+   cp src/hal/template/hive_hal_context.c src/hal/<platform>/
+   cp src/hal/template/hive_context.S src/hal/<platform>/
    ```
 
 3. Implement the functions (see sections below)
@@ -103,11 +103,11 @@ See `include/hal/hive_hal_timer.h` for the full API specification.
 ### Context Functions (1 C function + 1 assembly function)
 
 ```c
-// In hive_hal_context_<platform>.c
+// In hive_hal_context.c
 void hive_context_init(hive_context_t *ctx, void *stack, size_t stack_size,
                        void (*fn)(void *, const void *, size_t));
 
-// In hive_context_<arch>.S (assembly)
+// In hive_context.S (assembly)
 void hive_context_switch(hive_context_t *from, hive_context_t *to);
 ```
 
@@ -145,24 +145,24 @@ hive_status_t hive_hal_file_mount_available(const char *path);
 **Implementation notes**
 - `mount_available`: Check if mount point for path is ready (useful for removable media like SD cards). Return `HIVE_OK` if ready, `HIVE_ERR_INVALID` if no mount for path, `HIVE_ERR_IO` if mount exists but backend unavailable.
 
-### Network I/O (10 functions, HIVE_ENABLE_NET=1)
+### TCP I/O (10 functions, HIVE_ENABLE_TCP=1)
 
 ```c
-hive_status_t hive_hal_net_init(void);
-void hive_hal_net_cleanup(void);
-hive_status_t hive_hal_net_socket(int *out);
-hive_status_t hive_hal_net_bind(int fd, uint16_t port);
-hive_status_t hive_hal_net_listen(int fd, int backlog);
-hive_status_t hive_hal_net_accept(int listen_fd, int *out);
-hive_status_t hive_hal_net_connect(int fd, const char *ip, uint16_t port);
-hive_status_t hive_hal_net_connect_check(int fd);
-hive_status_t hive_hal_net_close(int fd);
-hive_status_t hive_hal_net_recv(int fd, void *buf, size_t len, size_t *bytes_read);
-hive_status_t hive_hal_net_send(int fd, const void *buf, size_t len, size_t *bytes_written);
+hive_status_t hive_hal_tcp_init(void);
+void hive_hal_tcp_cleanup(void);
+hive_status_t hive_hal_tcp_socket(int *out);
+hive_status_t hive_hal_tcp_bind(int fd, uint16_t port);
+hive_status_t hive_hal_tcp_listen(int fd, int backlog);
+hive_status_t hive_hal_tcp_accept(int listen_fd, int *out);
+hive_status_t hive_hal_tcp_connect(int fd, const char *ip, uint16_t port);
+hive_status_t hive_hal_tcp_connect_check(int fd);
+hive_status_t hive_hal_tcp_close(int fd);
+hive_status_t hive_hal_tcp_recv(int fd, void *buf, size_t len, size_t *bytes_read);
+hive_status_t hive_hal_tcp_send(int fd, const void *buf, size_t len, size_t *bytes_written);
 ```
 
 **Implementation notes**
-- All network operations must be **non-blocking**
+- All TCP operations must be **non-blocking**
 - Return `HIVE_ERR_WOULDBLOCK` when operation would block
 - Return `HIVE_ERR_INPROGRESS` for async connect in progress
 
@@ -185,19 +185,19 @@ Use these error codes in your HAL implementation:
 ### Linux
 
 See `src/hal/linux/`:
-- `hive_hal_linux.c` - Time, events (epoll), file, network
-- `hive_hal_timer_linux.c` - Timer HAL (timerfd + simulation mode)
-- `hive_hal_context_linux.c` - x86-64 context init
+- `hive_hal.c` - Time, events (epoll), file, TCP
+- `hive_hal_timer.c` - Timer HAL (timerfd + simulation mode)
+- `hive_hal_context.c` - x86-64 context init
 - `hive_context_x86_64.S` - x86-64 context switch
 - `hive_hal_context_defs.h` - x86-64 context struct
 
 ### STM32 (ARM Cortex-M)
 
 See `src/hal/stm32/`:
-- `hive_hal_stm32.c` - Time (SysTick), events (WFI), network stubs
-- `hive_hal_timer_stm32.c` - Timer HAL (software timer wheel)
-- `hive_hal_file_stm32.c` - Flash-based virtual file system
-- `hive_hal_context_stm32.c` - ARM context init
+- `hive_hal.c` - Time (SysTick), events (WFI), TCP stubs
+- `hive_hal_timer.c` - Timer HAL (software timer wheel)
+- `hive_hal_file.c` - Flash-based virtual file system
+- `hive_hal_context.c` - ARM context init
 - `hive_context_arm_cm.S` - ARM context switch
 - `hive_hal_context_defs.h` - ARM context struct (with FPU support)
 

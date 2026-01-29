@@ -58,7 +58,7 @@ ARM_CFLAGS += -MMD -MP
 # Include paths and defines for local sources
 ARM_CPPFLAGS := -I../include -I../lib -I../lib/printf -DPRINTF_INCLUDE_CONFIG_H -I.
 ARM_CPPFLAGS += -I../src/hal/stm32
-ARM_CPPFLAGS += -DHIVE_PLATFORM_STM32 -DHIVE_ENABLE_NET=0 -DHIVE_ENABLE_FILE=0
+ARM_CPPFLAGS += -DHIVE_PLATFORM_STM32 -DHIVE_ENABLE_TCP=0 -DHIVE_ENABLE_FILE=0
 ARM_CPPFLAGS += $(HIVE_CFLAGS)
 
 ARM_LDFLAGS := -Tlm3s6965.ld
@@ -77,7 +77,7 @@ QEMU_LOCAL_OBJS := $(BUILD_DIR)/startup.o $(BUILD_DIR)/semihosting.o $(BUILD_DIR
 QEMU_ELF := $(BUILD_DIR)/test.elf
 QEMU_BIN := $(BUILD_DIR)/test.bin
 
-# Compatible tests (exclude net_test.c, file_test.c, logging_test.c which require disabled features)
+# Compatible tests (exclude tcp_test.c, file_test.c, logging_test.c which require disabled features)
 QEMU_COMPAT_TESTS := actor_test ipc_test timer_test link_test \
                      monitor_test bus_test priority_test runtime_test \
                      timeout_test arena_test pool_exhaustion_test \
@@ -85,7 +85,7 @@ QEMU_COMPAT_TESTS := actor_test ipc_test timer_test link_test \
                      select_test supervisor_test registry_test \
                      sibling_test spawn_init_test
 
-# Compatible examples (exclude echo.c, fileio.c, logging.c which require net/file features)
+# Compatible examples (exclude echo.c, fileio.c, logging.c which require tcp/file features)
 QEMU_COMPAT_EXAMPLES := timer pingpong priority link_demo supervisor bus request_reply select \
                         supervisor_manual registry
 
@@ -105,7 +105,7 @@ $(HIVE_LIB):
 	@$(MAKE) -C $(SRC_DIR) PLATFORM=stm32 \
 		BUILD_DIR=$(abspath $(BUILD_DIR)) \
 		CC=$(ARM_CC) AR=$(ARM_AR) \
-		ENABLE_NET=0 ENABLE_FILE=0 \
+		ENABLE_TCP=0 ENABLE_FILE=0 \
 		CFLAGS="$(HIVE_CFLAGS_EXPORT)"
 
 # Compile QEMU local sources

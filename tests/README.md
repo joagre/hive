@@ -304,8 +304,8 @@ Tests synchronous file I/O operations.
 
 ---
 
-#### `net_test.c`
-Tests non-blocking network I/O operations.
+#### `tcp_test.c`
+Tests non-blocking TCP I/O operations.
 
 **Tests (12 tests)**
 - Listen and accept connection
