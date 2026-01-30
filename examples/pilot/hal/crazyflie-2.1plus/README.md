@@ -1,10 +1,8 @@
-# Crazyflie 2.1+ Hardware Abstraction Layer (v2)
+# Crazyflie 2.1+ Hardware Abstraction Layer
 
 Platform layer for the Bitcraze Crazyflie 2.1+ nano quadcopter.
 
-This is the **v2 HAL** which uses DMA/interrupt-based I2C for reliable sensor
-communication. It is more robust than the v1 polling-based HAL, especially
-under high CPU load.
+Uses DMA/interrupt-based I2C for reliable sensor communication.
 
 ## Quick Start
 
@@ -20,16 +18,16 @@ make PLATFORM=crazyflie TEST=sensors_motors flash-crazyflie
 ../tools/st-trace.sh  # View output
 ```
 
-## Key Differences from v1 HAL
+## Key Features
 
-| Feature | v1 HAL | v2 HAL |
-|---------|--------|--------|
-| **I2C3 driver** | Polling | DMA + interrupt (Bitcraze-derived) |
-| **BMI088 self-test** | Read sensors only | Hardware self-test via `bmi088_perform_*_selftest()` |
-| **Gyro calibration** | Simple average | Variance-based stillness detection |
-| **Accel calibration** | 100 samples | 200 samples (matches Bitcraze) |
-| **VL53L1x init** | Single attempt | Soft reset + robust boot sequence |
-| **Vendor drivers** | Bosch API | Bitcraze-modified Bosch drivers |
+| Feature | Implementation |
+|---------|----------------|
+| **I2C3 driver** | DMA + interrupt (Bitcraze-derived) |
+| **BMI088 self-test** | Hardware self-test via `bmi088_perform_*_selftest()` |
+| **Gyro calibration** | Variance-based stillness detection |
+| **Accel calibration** | 200 samples (matches Bitcraze) |
+| **VL53L1x init** | Soft reset + robust boot sequence |
+| **Vendor drivers** | Bitcraze-modified Bosch drivers |
 
 ## Reference Implementation
 
@@ -56,7 +54,7 @@ firmware, providing proven reliability for the high-frequency sensor reads.
 
 ### Self-Test
 
-The v2 HAL uses BMI088's built-in hardware self-test:
+This HAL uses BMI088's built-in hardware self-test:
 
 ```c
 // Gyro self-test
@@ -509,7 +507,7 @@ Detection uses Model ID register (0x010F) which returns 0xEACC for VL53L1x.
 
 ### VL53L1x sensor init failed
 
-The VL53L1x requires careful I2C timing. The v2 HAL includes:
+The VL53L1x requires careful I2C timing. This HAL includes:
 - Soft reset before init
 - Boot state polling with timeout
 - Inter-write delays during config

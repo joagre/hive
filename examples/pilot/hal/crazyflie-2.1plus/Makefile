@@ -1,4 +1,4 @@
-# Crazyflie 2.1+ HAL Library Makefile (v2)
+# Crazyflie 2.1+ HAL Library Makefile
 #
 # Builds libhal.a static library for the Crazyflie 2.1+ platform.
 # Uses Bitcraze-derived DMA/interrupt I2C driver for reliable sensor access.
@@ -53,7 +53,7 @@ CFLAGS += -Ivendor/st/vl53l1x
 # Assembler flags
 ASFLAGS = $(MCU) -g
 
-# Source files - platform (v2 with DMA I2C driver)
+# Source files - platform (DMA I2C driver)
 C_SOURCES = \
     debug_swo.c \
     hal_init.c \

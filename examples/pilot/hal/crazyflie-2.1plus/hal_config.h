@@ -1,4 +1,4 @@
-// Crazyflie 2.1+ HAL Configuration (v2)
+// Crazyflie 2.1+ HAL Configuration
 
 #ifndef HAL_CONFIG_H
 #define HAL_CONFIG_H

@@ -1,4 +1,4 @@
-// Crazyflie 2.1+ Platform Layer (v2)
+// Crazyflie 2.1+ Platform Layer
 //
 // Provides the platform interface for the Crazyflie 2.1+ hardware.
 // Uses DMA/interrupt-based I2C driver from Bitcraze for reliable sensor access.

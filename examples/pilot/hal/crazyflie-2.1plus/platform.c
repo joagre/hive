@@ -1,4 +1,4 @@
-// Crazyflie 2.1+ Platform Layer Implementation (v2)
+// Crazyflie 2.1+ Platform Layer Implementation
 //
 // Uses Bitcraze-derived DMA/interrupt I2C driver for reliable sensor communication.
 // Implements platform interface for BMI088 IMU and BMP388 barometer.
@@ -902,7 +902,7 @@ int platform_init(void) {
 
     // Initialize debug output first
     debug_swo_init(CPU_FREQ_HZ, SWO_BAUD);
-    debug_swo_printf("\n[INIT] Crazyflie 2.1+ v2 HAL starting...\n");
+    debug_swo_printf("\n[INIT] Crazyflie 2.1+ HAL starting...\n");
 
     // Core initialization
     systick_init();
