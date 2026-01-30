@@ -22,7 +22,8 @@
 #   main           - Combined test runner (all applicable tests)
 
 # Default target shows help
-.PHONY: all help clean
+# FORCE target - always out of date, triggers submake to check real deps
+.PHONY: all help clean FORCE
 
 all: help
 
@@ -176,7 +177,7 @@ $(BUILD_DIR_CF)/test_sd.o: test_sd.c | $(BUILD_DIR_CF)
 	@echo "CC test_sd.c (object)"
 	@$(CC) $(CFLAGS) -DTEST_MAIN_BUILD -c $< -o $@
 
-$(TARGET_ELF): test_main.c $(TEST_MAIN_OBJS) | $(BUILD_DIR_CF)
+$(TARGET_ELF): test_main.c $(TEST_MAIN_OBJS) $(HAL_LIB) $(HIVE_LIB) | $(BUILD_DIR_CF)
 	@echo "CC test_main.c (Crazyflie - combined)"
 	@$(CC) $(CFLAGS) $< $(TEST_MAIN_OBJS) $(HAL_STARTUP) $(HIVE_LIB) $(HAL_LIB) $(LDFLAGS) -o $@
 
@@ -187,7 +188,7 @@ crazyflie: $(HAL_LIB) $(TARGET_BIN)
 	@echo "Built: $(TARGET_BIN)"
 	@$(SZ) $(TARGET_ELF)
 
-$(TARGET_ELF): test_$(TEST).c | $(BUILD_DIR_CF)
+$(TARGET_ELF): test_$(TEST).c $(HAL_LIB) | $(BUILD_DIR_CF)
 	@echo "CC test_$(TEST).c (Crazyflie - HAL only)"
 	@$(CC) $(CFLAGS) $< $(HAL_STARTUP) $(HAL_LIB) $(LDFLAGS) -o $@
 
@@ -198,7 +199,7 @@ crazyflie: $(HAL_LIB) $(HIVE_LIB) $(TARGET_BIN)
 	@echo "Built: $(TARGET_BIN)"
 	@$(SZ) $(TARGET_ELF)
 
-$(TARGET_ELF): test_$(TEST).c | $(BUILD_DIR_CF)
+$(TARGET_ELF): test_$(TEST).c $(HAL_LIB) $(HIVE_LIB) | $(BUILD_DIR_CF)
 	@echo "CC test_$(TEST).c (Crazyflie - HAL + Hive)"
 	@$(CC) $(CFLAGS) $< $(HAL_STARTUP) $(HIVE_LIB) $(HAL_LIB) $(LDFLAGS) -o $@
 
@@ -215,17 +216,16 @@ all-tests:
 $(BUILD_DIR_CF):
 	mkdir -p $@
 
-# Build pilot HAL library
-$(HAL_LIB):
-	@echo "Building pilot HAL library..."
+# Build pilot HAL library - submake handles actual dependency checking
+# If submake rebuilds, $(HAL_LIB) gets new timestamp and dependents rebuild
+$(HAL_LIB): FORCE
 	@$(MAKE) -C $(HAL_DIR) ENABLE_SD=$(ENABLE_SD)
 
 # Board-specific mount configuration
 BOARD_MOUNTS_SRC = $(abspath $(HAL_DIR)/hive_mounts.c)
 
-# Build Hive library for STM32
-$(HIVE_LIB): | $(BUILD_DIR_CF)
-	@echo "Building Hive library for STM32..."
+# Build Hive library for STM32 - submake handles actual dependency checking
+$(HIVE_LIB): FORCE | $(BUILD_DIR_CF)
 	@$(MAKE) -C $(HIVE_SRC_DIR) PLATFORM=stm32 \
 		BUILD_DIR=$(abspath $(BUILD_DIR_CF)) \
 		CC=$(CC) \
@@ -316,9 +316,8 @@ check-webots:
 $(BUILD_DIR_WB):
 	mkdir -p $@
 
-# Build Hive library for Linux
-$(HIVE_LIB): | $(BUILD_DIR_WB)
-	@echo "Building Hive library for Linux..."
+# Build Hive library for Linux - submake handles actual dependency checking
+$(HIVE_LIB): FORCE | $(BUILD_DIR_WB)
 	@$(MAKE) -C $(HIVE_SRC_DIR) \
 		BUILD_DIR=$(abspath $(BUILD_DIR_WB)) \
 		PLATFORM=linux \

@@ -224,15 +224,20 @@ static void i2c3_bus_recovery(void) {
     I2C3->CR1 |= I2C_CR1_PE;
 }
 
-// Reset I2C peripheral after error
+// Reset I2C peripheral after error (full APB1 reset like bringup)
 static void i2c3_reset(void) {
-    // Software reset
-    I2C3->CR1 |= I2C_CR1_SWRST;
-    I2C3->CR1 &= ~I2C_CR1_SWRST;
+    // Disable I2C first
+    I2C3->CR1 = 0;
 
-    // Reconfigure
-    I2C3->CR2 = 42;
-    I2C3->CCR = 35 | I2C_CCR_FS;
+    // Full APB1 peripheral reset
+    RCC->APB1RSTR |= RCC_APB1RSTR_I2C3RST;
+    for (volatile int i = 0; i < 10; i++)
+        ; // Brief delay
+    RCC->APB1RSTR &= ~RCC_APB1RSTR_I2C3RST;
+
+    // Reconfigure (must match i2c3_init settings)
+    I2C3->CR2 = 42;              // FREQ = 42 MHz
+    I2C3->CCR = 53 | I2C_CCR_FS; // CCR for ~400 kHz (matching bringup)
     I2C3->TRISE = 13;
     I2C3->CR1 = I2C_CR1_PE;
 }
@@ -241,42 +246,56 @@ static void i2c3_init(void) {
     // Enable I2C3 clock
     RCC->APB1ENR |= RCC_APB1ENR_I2C3EN;
 
-    // Configure I2C3 GPIO (PA8=SCL, PC9=SDA)
+    // Bus recovery: toggle SCL 9 times to release any stuck slave
+    // Configure PA8 (SCL) as GPIO output first
     GPIOA->MODER &= ~GPIO_MODER_MODER8;
-    GPIOA->MODER |= GPIO_MODER_MODER8_1; // AF mode
-    GPIOA->AFR[1] |= (4 << (0 * 4));     // AF4 = I2C3
+    GPIOA->MODER |= GPIO_MODER_MODER8_0; // Output mode
     GPIOA->OTYPER |= GPIO_OTYPER_OT8;    // Open-drain
+    GPIOA->BSRR = GPIO_BSRR_BS8;         // Start high
+    for (int i = 0; i < 9; i++) {
+        GPIOA->BSRR = GPIO_BSRR_BR8; // SCL low
+        for (volatile int d = 0; d < 100; d++)
+            __NOP();
+        GPIOA->BSRR = GPIO_BSRR_BS8; // SCL high
+        for (volatile int d = 0; d < 100; d++)
+            __NOP();
+    }
+
+    // Reset I2C3 peripheral
+    RCC->APB1RSTR |= RCC_APB1RSTR_I2C3RST;
+    RCC->APB1RSTR &= ~RCC_APB1RSTR_I2C3RST;
+
+    // Configure PA8 (SCL) as AF4 open-drain with high speed
+    GPIOA->MODER &= ~GPIO_MODER_MODER8;
+    GPIOA->MODER |= GPIO_MODER_MODER8_1;      // AF mode
+    GPIOA->OTYPER |= GPIO_OTYPER_OT8;         // Open-drain
+    GPIOA->OSPEEDR |= GPIO_OSPEEDER_OSPEEDR8; // High speed
+    GPIOA->PUPDR &= ~GPIO_PUPDR_PUPDR8;
     GPIOA->PUPDR |= GPIO_PUPDR_PUPDR8_0; // Pull-up
+    GPIOA->AFR[1] &= ~(0xFU << 0);       // Clear AF bits
+    GPIOA->AFR[1] |= (4U << 0);          // AF4 = I2C3
 
+    // Configure PC9 (SDA) as AF4 open-drain with high speed
     GPIOC->MODER &= ~GPIO_MODER_MODER9;
-    GPIOC->MODER |= GPIO_MODER_MODER9_1;
-    GPIOC->AFR[1] |= (4 << (1 * 4));
-    GPIOC->OTYPER |= GPIO_OTYPER_OT9;
-    GPIOC->PUPDR |= GPIO_PUPDR_PUPDR9_0;
-
-    // Bus recovery in case bus is stuck from previous run
-    i2c3_bus_recovery();
+    GPIOC->MODER |= GPIO_MODER_MODER9_1;      // AF mode
+    GPIOC->OTYPER |= GPIO_OTYPER_OT9;         // Open-drain
+    GPIOC->OSPEEDR |= GPIO_OSPEEDER_OSPEEDR9; // High speed
+    GPIOC->PUPDR &= ~GPIO_PUPDR_PUPDR9;
+    GPIOC->PUPDR |= GPIO_PUPDR_PUPDR9_0; // Pull-up
+    GPIOC->AFR[1] &= ~(0xFU << 4);       // Clear AF bits
+    GPIOC->AFR[1] |= (4U << 4);          // AF4 = I2C3
 
     // Configure I2C3: 400 kHz fast mode
-    // APB1 = 42 MHz, CCR = 42MHz / (3 * 400kHz) = 35
+    // APB1 = 42 MHz, CCR = 42MHz / (2 * 400kHz) = 52.5 -> 53 (matching bringup)
+    I2C3->CR1 = 0;               // Disable before configuring
     I2C3->CR2 = 42;              // FREQ = 42 MHz
-    I2C3->CCR = 35 | I2C_CCR_FS; // CCR for 400 kHz, fast mode enabled
+    I2C3->CCR = 53 | I2C_CCR_FS; // CCR for ~400 kHz, fast mode enabled
     I2C3->TRISE = 13;            // Maximum rise time
     I2C3->CR1 = I2C_CR1_PE;      // Enable I2C
 }
 
 static bool i2c3_write(uint8_t addr, uint8_t *data, uint16_t len) {
-    // Clear any pending errors
-    i2c3_check_error();
-
-    // Wait for bus not busy
-    if (!i2c3_wait(&I2C3->SR2, I2C_SR2_BUSY, 0)) {
-        i2c3_bus_recovery();
-        i2c3_reset();
-        return false;
-    }
-
-    // Generate START
+    // Generate START (no pre-checks - matches bringup)
     I2C3->CR1 |= I2C_CR1_START;
     if (!i2c3_wait(&I2C3->SR1, I2C_SR1_SB, I2C_SR1_SB)) {
         I2C3->CR1 |= I2C_CR1_STOP;
@@ -286,10 +305,6 @@ static bool i2c3_write(uint8_t addr, uint8_t *data, uint16_t len) {
     // Send address (write)
     I2C3->DR = addr << 1;
     if (!i2c3_wait(&I2C3->SR1, I2C_SR1_ADDR, I2C_SR1_ADDR)) {
-        if (i2c3_check_error()) {
-            I2C3->CR1 |= I2C_CR1_STOP;
-            return false; // NACK - device not responding
-        }
         I2C3->CR1 |= I2C_CR1_STOP;
         return false;
     }
@@ -298,10 +313,6 @@ static bool i2c3_write(uint8_t addr, uint8_t *data, uint16_t len) {
     // Send data
     for (uint16_t i = 0; i < len; i++) {
         if (!i2c3_wait(&I2C3->SR1, I2C_SR1_TXE, I2C_SR1_TXE)) {
-            I2C3->CR1 |= I2C_CR1_STOP;
-            return false;
-        }
-        if (i2c3_check_error()) {
             I2C3->CR1 |= I2C_CR1_STOP;
             return false;
         }
@@ -316,6 +327,9 @@ static bool i2c3_write(uint8_t addr, uint8_t *data, uint16_t len) {
 
     // Generate STOP
     I2C3->CR1 |= I2C_CR1_STOP;
+
+    // Wait for STOP to complete (BUSY flag cleared) - matches bringup
+    i2c3_wait(&I2C3->SR2, I2C_SR2_BUSY, 0);
 
     return true;
 }
@@ -420,6 +434,108 @@ static bool i2c3_read(uint8_t addr, uint8_t *data, uint16_t len) {
     }
 
     return true;
+}
+
+// Combined write-then-read with repeated start (proper I2C register read)
+static bool i2c3_write_read(uint8_t addr, const uint8_t *wdata, uint16_t wlen,
+                            uint8_t *rdata, uint16_t rlen) {
+    if (wlen == 0 || rlen == 0)
+        return false;
+
+    // Generate START (no pre-checks - matches bringup)
+    I2C3->CR1 |= I2C_CR1_START;
+    if (!i2c3_wait(&I2C3->SR1, I2C_SR1_SB, I2C_SR1_SB))
+        goto error;
+
+    // Send address (write)
+    I2C3->DR = addr << 1;
+    if (!i2c3_wait(&I2C3->SR1, I2C_SR1_ADDR, I2C_SR1_ADDR))
+        goto error;
+    (void)I2C3->SR2; // Clear ADDR
+
+    // Send write data
+    for (uint16_t i = 0; i < wlen; i++) {
+        if (!i2c3_wait(&I2C3->SR1, I2C_SR1_TXE, I2C_SR1_TXE))
+            goto error;
+        I2C3->DR = wdata[i];
+    }
+    if (!i2c3_wait(&I2C3->SR1, I2C_SR1_BTF, I2C_SR1_BTF))
+        goto error;
+
+    // REPEATED START (not STOP)
+    I2C3->CR1 |= I2C_CR1_ACK;
+    I2C3->CR1 |= I2C_CR1_START;
+    if (!i2c3_wait(&I2C3->SR1, I2C_SR1_SB, I2C_SR1_SB))
+        goto error;
+
+    // Send address (read)
+    I2C3->DR = (addr << 1) | 1;
+    if (!i2c3_wait(&I2C3->SR1, I2C_SR1_ADDR, I2C_SR1_ADDR))
+        goto error;
+
+    // Handle read based on length (per RM0090)
+    if (rlen == 1) {
+        I2C3->CR1 &= ~I2C_CR1_ACK;
+        (void)I2C3->SR2; // Clear ADDR
+        I2C3->CR1 |= I2C_CR1_STOP;
+        if (!i2c3_wait(&I2C3->SR1, I2C_SR1_RXNE, I2C_SR1_RXNE))
+            goto error;
+        rdata[0] = I2C3->DR;
+    } else if (rlen == 2) {
+        I2C3->CR1 |= I2C_CR1_POS;
+        (void)I2C3->SR2; // Clear ADDR
+        I2C3->CR1 &= ~I2C_CR1_ACK;
+        if (!i2c3_wait(&I2C3->SR1, I2C_SR1_BTF, I2C_SR1_BTF))
+            goto error;
+        I2C3->CR1 |= I2C_CR1_STOP;
+        rdata[0] = I2C3->DR;
+        rdata[1] = I2C3->DR;
+        I2C3->CR1 &= ~I2C_CR1_POS;
+    } else {
+        // N > 2 (per RM0090 section 27.3.3)
+        (void)I2C3->SR2; // Clear ADDR
+
+        // Read bytes 0 to N-3 normally
+        for (uint16_t i = 0; i < rlen - 2; i++) {
+            if (!i2c3_wait(&I2C3->SR1, I2C_SR1_RXNE, I2C_SR1_RXNE))
+                goto error;
+            rdata[i] = I2C3->DR;
+        }
+
+        // Wait for BTF (byte N-2 in DR, byte N-1 in shift register)
+        if (!i2c3_wait(&I2C3->SR1, I2C_SR1_BTF, I2C_SR1_BTF))
+            goto error;
+
+        // Clear ACK, set STOP
+        I2C3->CR1 &= ~I2C_CR1_ACK;
+        I2C3->CR1 |= I2C_CR1_STOP;
+
+        // Read byte N-2 (shifts byte N-1 to DR)
+        rdata[rlen - 2] = I2C3->DR;
+
+        // Wait for byte N-1 to be ready
+        if (!i2c3_wait(&I2C3->SR1, I2C_SR1_RXNE, I2C_SR1_RXNE))
+            goto error;
+
+        // Read byte N-1
+        rdata[rlen - 1] = I2C3->DR;
+    }
+
+    // Wait for STOP to complete (hardware clears STOP bit)
+    if (!i2c3_wait(&I2C3->CR1, I2C_CR1_STOP, 0)) {
+        // STOP didn't clear - do full recovery (like bringup does)
+        i2c3_bus_recovery();
+        i2c3_reset();
+    }
+    // Wait for bus not busy (ignore timeout, like bringup)
+    i2c3_wait(&I2C3->SR2, I2C_SR2_BUSY, 0);
+
+    return true;
+
+error:
+    I2C3->CR1 |= I2C_CR1_STOP;
+    i2c3_wait(&I2C3->SR2, I2C_SR2_BUSY, 0);
+    return false;
 }
 
 // ----------------------------------------------------------------------------
@@ -716,9 +832,8 @@ static uint8_t spi1_transfer(uint8_t data) {
 static int8_t bmi08_i2c_read(uint8_t reg_addr, uint8_t *data, uint32_t len,
                              void *intf_ptr) {
     uint8_t dev_addr = *(uint8_t *)intf_ptr;
-    if (!i2c3_write(dev_addr, &reg_addr, 1))
-        return -1;
-    if (!i2c3_read(dev_addr, data, (uint16_t)len))
+    // Use combined write-read with repeated start (proper I2C register read)
+    if (!i2c3_write_read(dev_addr, &reg_addr, 1, data, (uint16_t)len))
         return -1;
     return 0;
 }
@@ -747,9 +862,8 @@ static void bmi08_delay_us(uint32_t period, void *intf_ptr) {
 static int8_t bmp3_i2c_read(uint8_t reg_addr, uint8_t *data, uint32_t len,
                             void *intf_ptr) {
     uint8_t dev_addr = *(uint8_t *)intf_ptr;
-    if (!i2c3_write(dev_addr, &reg_addr, 1))
-        return -1;
-    if (!i2c3_read(dev_addr, data, (uint16_t)len))
+    // Use combined write-read with repeated start (proper I2C register read)
+    if (!i2c3_write_read(dev_addr, &reg_addr, 1, data, (uint16_t)len))
         return -1;
     return 0;
 }
@@ -906,15 +1020,28 @@ static bool init_bmi08x(void) {
     s_bmi08_dev.intf_ptr_gyro = &s_bmi08_gyro_addr;
     s_bmi08_dev.read_write_len = 32;
 
+    debug_swo_printf("  BMI088: accel addr=0x%02X, gyro addr=0x%02X\n",
+                     s_bmi08_accel_addr, s_bmi08_gyro_addr);
+
     // Initialize accelerometer
+    debug_swo_printf("  BMI088: accel init...\n");
     rslt = bmi08xa_init(&s_bmi08_dev);
-    if (rslt != BMI08_OK)
+    if (rslt != BMI08_OK) {
+        debug_swo_printf("  BMI088: accel init FAILED (rslt=%d)\n", rslt);
         return false;
+    }
+    debug_swo_printf("  BMI088: accel chip_id=0x%02X\n",
+                     s_bmi08_dev.accel_chip_id);
 
     // Initialize gyroscope
+    debug_swo_printf("  BMI088: gyro init...\n");
     rslt = bmi08g_init(&s_bmi08_dev);
-    if (rslt != BMI08_OK)
+    if (rslt != BMI08_OK) {
+        debug_swo_printf("  BMI088: gyro init FAILED (rslt=%d)\n", rslt);
         return false;
+    }
+    debug_swo_printf("  BMI088: gyro chip_id=0x%02X\n",
+                     s_bmi08_dev.gyro_chip_id);
 
     // Configure accelerometer (matching Bitcraze):
     // +/-24g range, 1600Hz ODR, OSR4 (4x oversampling) bandwidth
@@ -965,20 +1092,14 @@ static bool init_bmp3(void) {
 
     // Initialize
     rslt = bmp3_init(&s_bmp3_dev);
-    if (rslt != BMP3_OK)
+    if (rslt != BMP3_OK) {
+        debug_swo_printf("  BMP388 init FAILED (rslt=%d)\n", rslt);
         return false;
+    }
+    debug_swo_printf("  BMP388: chip_id=0x%02X\n", s_bmp3_dev.chip_id);
 
-    // Soft reset before configuration (matching Bitcraze)
-    rslt = bmp3_soft_reset(&s_bmp3_dev);
-    if (rslt != BMP3_OK)
-        return false;
-
-    platform_delay_ms(5);
-
-    // Re-initialize after soft reset
-    rslt = bmp3_init(&s_bmp3_dev);
-    if (rslt != BMP3_OK)
-        return false;
+    // Add delay after init before configuring
+    platform_delay_ms(20);
 
     // Configure settings (matching Bitcraze):
     // pressure + temperature enabled, 50Hz ODR
@@ -996,14 +1117,18 @@ static bool init_bmp3(void) {
                             BMP3_SEL_ODR | BMP3_SEL_IIR_FILTER;
 
     rslt = bmp3_set_sensor_settings(settings_sel, &settings, &s_bmp3_dev);
-    if (rslt != BMP3_OK)
+    if (rslt != BMP3_OK) {
+        debug_swo_printf("  BMP388 settings FAILED (rslt=%d)\n", rslt);
         return false;
+    }
 
     // Set normal mode
     settings.op_mode = BMP3_MODE_NORMAL;
     rslt = bmp3_set_op_mode(&settings, &s_bmp3_dev);
-    if (rslt != BMP3_OK)
+    if (rslt != BMP3_OK) {
+        debug_swo_printf("  BMP388 mode FAILED (rslt=%d)\n", rslt);
         return false;
+    }
 
     // Delay before first read (matching Bitcraze)
     platform_delay_ms(20);

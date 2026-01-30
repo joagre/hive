@@ -117,14 +117,18 @@ HIVE_CFLAGS_EXPORT += -DHIVE_STACK_WATERMARK=1
 endif
 
 # Targets
-.PHONY: all build install clean check-webots
+.PHONY: all build install clean check-webots FORCE
 
 all: install
 
 build: check-webots $(TARGET)
 
+# FORCE target - always out of date, triggers submake to check real deps
+FORCE:
+
 # Build hive library (delegate to src/Makefile)
-$(HIVE_LIB):
+# Submake handles actual dependency checking; if it rebuilds, dependents rebuild
+$(HIVE_LIB): FORCE
 	@$(MAKE) -C $(HIVE_SRC_DIR) BUILD_DIR=$(abspath $(BUILD_DIR)) \
 		CFLAGS="$(HIVE_CFLAGS_EXPORT)"
 
