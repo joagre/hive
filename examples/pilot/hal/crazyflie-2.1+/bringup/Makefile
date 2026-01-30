@@ -42,9 +42,13 @@ CFLAGS += -std=c11 -Wall -Wextra -Wpedantic
 CFLAGS += -O0 -g
 CFLAGS += -ffunction-sections -fdata-sections
 CFLAGS += -ffreestanding -nostdlib
+CFLAGS += -MMD -MP
 CFLAGS += -I$(CMSIS_DIR)/Include
 CFLAGS += -I$(CMSIS_DIR)/Device/ST/STM32F4xx/Include
 CFLAGS += -DSTM32F405xx
+
+# Dependency files
+DEPS = $(SRCS:%.c=$(BUILD_DIR)/%.d)
 
 # Assembler flags
 ASFLAGS = -mcpu=cortex-m4 -mthumb -mfloat-abi=hard -mfpu=fpv4-sp-d16 -g
@@ -118,3 +122,6 @@ help:
 	@echo "  2. make flash"
 	@echo "  3. make trace (or: ../../../tools/st-trace.sh -t 0 for no timeout)"
 	@echo "  4. Press reset or: make reset"
+
+# Auto-generated dependencies
+-include $(DEPS)

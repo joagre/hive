@@ -5,7 +5,7 @@
  * - Copies .data section from Flash to RAM
  * - Zeros .bss section
  * - Copies .ramfunc section from Flash to RAM
- * - Calls SystemInit() if available
+ * - Calls SystemInit() (must be provided by application)
  * - Calls main()
  * - Defines vector table with all STM32F405 interrupts
  */
@@ -92,7 +92,7 @@ Reset_Handler:
     cmp r0, r1
     blo .L_copy_ramfunc_loop
 
-    /* Call SystemInit() if defined */
+    /* Call SystemInit() - must be provided by system_stm32f4xx.c */
     bl SystemInit
 
     /* Call static constructors */
@@ -488,11 +488,5 @@ g_pfnVectors:
 
     .weak FPU_IRQHandler
     .thumb_set FPU_IRQHandler, Default_Handler
-
-/**
- * Weak SystemInit (can be overridden)
- */
-    .weak SystemInit
-    .thumb_set SystemInit, Default_Handler
 
 .end

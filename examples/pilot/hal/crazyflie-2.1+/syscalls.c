@@ -1,14 +1,10 @@
 // Newlib syscall stubs for bare-metal STM32
 //
 // Minimal implementations for libc functions that need OS support.
+// SystemCoreClock is defined in system_stm32f4xx.c
 
-#include <stdint.h>
 #include <sys/stat.h>
 #include <errno.h>
-#include "debug_swo.h"
-
-// System core clock - 168 MHz after PLL configuration
-uint32_t SystemCoreClock = 168000000;
 
 // Heap end (from linker script)
 extern char _end;
@@ -49,10 +45,8 @@ int _read(int file, char *ptr, int len) {
 }
 int _write(int file, char *ptr, int len) {
     (void)file;
-    // Route stdout/stderr to SWO debug output
-    for (int i = 0; i < len; i++) {
-        debug_swo_putc(ptr[i]);
-    }
+    (void)ptr;
+    (void)len;
     return len;
 }
 
@@ -70,9 +64,4 @@ void _exit(int status) {
     (void)status;
     while (1)
         ;
-}
-
-// Empty SystemInit (clock configured in platform_init)
-void SystemInit(void) {
-    // Clock configuration done in platform_crazyflie.c
 }

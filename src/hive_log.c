@@ -18,8 +18,7 @@ void putchar_(char c) {
 }
 
 #if HIVE_LOG_TO_STDOUT
-#include <stdio.h>
-#include <unistd.h>
+#include "hal/hive_hal_log.h"
 #endif
 
 #if HIVE_LOG_TO_FILE
@@ -48,52 +47,21 @@ static uint16_t s_seq = 0; // Monotonic sequence number
 static const char *s_level_names[] = {"TRACE", "DEBUG", "INFO", "WARN",
                                       "ERROR"};
 
-// Level colors for terminal output (ANSI escape codes)
-static const char *s_level_colors[] = {
-    "\x1b[36m", // TRACE: Cyan
-    "\x1b[35m", // DEBUG: Magenta
-    "\x1b[32m", // INFO: Green
-    "\x1b[33m", // WARN: Yellow
-    "\x1b[31m"  // ERROR: Red
-};
-
-#define COLOR_RESET "\x1b[0m"
-
 // Extract basename from file path
 static const char *basename_simple(const char *path) {
     const char *slash = strrchr(path, '/');
     return slash ? slash + 1 : path;
 }
 
-// Output callback for fctprintf - writes to stderr
-static void stderr_putc(char c, void *arg) {
-    (void)arg;
-    fputc(c, stderr);
-}
-
+// Console output via HAL - platform handles colors/formatting
 static void log_to_console(hive_log_level_t level, const char *file, int line,
                            const char *text) {
-    // Check if stderr is a terminal for colored output
-    static int s_use_colors = -1;
-    if (s_use_colors == -1) {
-        s_use_colors = isatty(fileno(stderr));
-    }
-
-    // Print log level with optional color (using lightweight printf)
-    if (s_use_colors) {
-        fctprintf(stderr_putc, NULL, "%s%-5s%s ", s_level_colors[level],
-                  s_level_names[level], COLOR_RESET);
-    } else {
-        fctprintf(stderr_putc, NULL, "%-5s ", s_level_names[level]);
-    }
-
-    // Print file:line for DEBUG and TRACE
     if (level <= HIVE_LOG_LEVEL_DEBUG) {
-        fctprintf(stderr_putc, NULL, "%s:%d: ", basename_simple(file), line);
+        hive_hal_printf("%-5s %s:%d: %s\n", s_level_names[level],
+                        basename_simple(file), line, text);
+    } else {
+        hive_hal_printf("%-5s %s\n", s_level_names[level], text);
     }
-
-    // Print the message
-    fctprintf(stderr_putc, NULL, "%s\n", text);
 }
 
 #endif // HIVE_LOG_TO_STDOUT

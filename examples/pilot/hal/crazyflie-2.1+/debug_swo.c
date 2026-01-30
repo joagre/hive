@@ -13,6 +13,22 @@
 static uint32_t s_swo_initialized = 0;
 
 void debug_swo_init(uint32_t cpu_freq_hz, uint32_t swo_baud) {
+    // Enable DBGMCU clock and trace output
+    RCC->APB2ENR |= RCC_APB2ENR_SYSCFGEN;
+
+    // Enable trace and keep debug active during sleep/stop/standby
+    // Without DBG_SLEEP, WFI breaks the ST-Link debug connection
+    DBGMCU->CR |= DBGMCU_CR_TRACE_IOEN | DBGMCU_CR_DBG_SLEEP |
+                  DBGMCU_CR_DBG_STOP | DBGMCU_CR_DBG_STANDBY;
+
+    // Configure PB3 as SWO output (AF0 = TRACESWO)
+    RCC->AHB1ENR |= RCC_AHB1ENR_GPIOBEN;
+    GPIOB->MODER &= ~GPIO_MODER_MODER3;
+    GPIOB->MODER |= GPIO_MODER_MODER3_1;      // AF mode
+    GPIOB->AFR[0] &= ~(0xFUL << (3 * 4));     // Clear AF bits for PB3
+    GPIOB->AFR[0] |= (0x0UL << (3 * 4));      // AF0 = TRACESWO
+    GPIOB->OSPEEDR |= GPIO_OSPEEDER_OSPEEDR3; // High speed
+
     // Enable trace in core debug
     CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
 

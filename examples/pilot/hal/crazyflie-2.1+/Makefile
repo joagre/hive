@@ -83,22 +83,26 @@ C_SOURCES += \
     vendor/st/vl53l1x/vl53l1x_uld.c \
     vendor/bitcraze/pmw3901/pmw3901.c
 
+# Startup assembly - built separately, not included in libhal.a
+# Applications link startup_stm32f405.o directly to ensure proper symbol resolution
 ASM_SOURCES = \
     startup_stm32f405.s
 
-# Object files
+# Object files for libhal.a (C sources only)
 OBJECTS = $(addprefix $(BUILD_DIR)/, $(C_SOURCES:.c=.o))
-OBJECTS += $(addprefix $(BUILD_DIR)/, $(ASM_SOURCES:.s=.o))
+
+# Startup object (built but not in library)
+STARTUP_OBJ = $(BUILD_DIR)/startup_stm32f405.o
 
 # Dependency files
 DEPS = $(addprefix $(BUILD_DIR)/, $(C_SOURCES:.c=.d))
 
-# Default target
-all: $(TARGET)
+# Default target - build library and startup object
+all: $(TARGET) $(STARTUP_OBJ)
 	@echo ""
 	@echo "Built: $(TARGET)"
 
-# Library archive
+# Library archive (without startup - applications link startup separately)
 $(TARGET): $(OBJECTS)
 	@echo "AR $@"
 	@$(AR) rcs $@ $^

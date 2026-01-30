@@ -140,6 +140,7 @@ LDFLAGS += -lm -lc
 
 # Libraries
 HAL_LIB = $(HAL_DIR)/build/libhal.a
+HAL_STARTUP = $(HAL_DIR)/build/startup_stm32f405.o
 HIVE_LIB = $(BUILD_DIR_CF)/libhive.a
 
 # Target
@@ -177,7 +178,7 @@ $(BUILD_DIR_CF)/test_sd.o: test_sd.c | $(BUILD_DIR_CF)
 
 $(TARGET_ELF): test_main.c $(TEST_MAIN_OBJS) | $(BUILD_DIR_CF)
 	@echo "CC test_main.c (Crazyflie - combined)"
-	@$(CC) $(CFLAGS) $< $(TEST_MAIN_OBJS) $(HIVE_LIB) $(HAL_LIB) $(LDFLAGS) -o $@
+	@$(CC) $(CFLAGS) $< $(TEST_MAIN_OBJS) $(HAL_STARTUP) $(HIVE_LIB) $(HAL_LIB) $(LDFLAGS) -o $@
 
 else ifeq ($(NEEDS_HIVE),)
 # sensors_motors standalone: only needs HAL
@@ -188,7 +189,7 @@ crazyflie: $(HAL_LIB) $(TARGET_BIN)
 
 $(TARGET_ELF): test_$(TEST).c | $(BUILD_DIR_CF)
 	@echo "CC test_$(TEST).c (Crazyflie - HAL only)"
-	@$(CC) $(CFLAGS) $< $(HAL_LIB) $(LDFLAGS) -o $@
+	@$(CC) $(CFLAGS) $< $(HAL_STARTUP) $(HAL_LIB) $(LDFLAGS) -o $@
 
 else
 # flash/sd standalone: needs HAL + libhive.a
@@ -199,7 +200,7 @@ crazyflie: $(HAL_LIB) $(HIVE_LIB) $(TARGET_BIN)
 
 $(TARGET_ELF): test_$(TEST).c | $(BUILD_DIR_CF)
 	@echo "CC test_$(TEST).c (Crazyflie - HAL + Hive)"
-	@$(CC) $(CFLAGS) $< $(HIVE_LIB) $(HAL_LIB) $(LDFLAGS) -o $@
+	@$(CC) $(CFLAGS) $< $(HAL_STARTUP) $(HIVE_LIB) $(HAL_LIB) $(LDFLAGS) -o $@
 
 endif
 

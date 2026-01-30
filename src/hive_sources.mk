@@ -27,6 +27,7 @@ HIVE_HAL_LINUX_SRCS := \
 	hal/linux/hive_hal_event.c \
 	hal/linux/hive_hal_timer.c \
 	hal/linux/hive_hal_context.c \
+	hal/linux/hive_hal_log.c \
 	hal/linux/hive_mounts.c
 
 # Linux HAL optional sources
@@ -36,6 +37,7 @@ HIVE_HAL_LINUX_TCP_SRCS := hal/linux/hive_hal_tcp.c
 HIVE_HAL_LINUX_ASM := hal/linux/hive_context_x86_64.S
 
 # STM32 HAL sources (required)
+# Note: hive_hal_printf() must be provided by the application (no default)
 HIVE_HAL_STM32_SRCS := \
 	hal/stm32/hive_hal_time.c \
 	hal/stm32/hive_hal_event.c \

@@ -16,3 +16,11 @@ void hal_printf(const char *fmt, ...) {
     debug_swo_vprintf(fmt, args);
     va_end(args);
 }
+
+// Implement Hive's hive_hal_printf (required for HIVE_LOG_TO_STDOUT on STM32)
+void hive_hal_printf(const char *fmt, ...) {
+    va_list args;
+    va_start(args, fmt);
+    debug_swo_vprintf(fmt, args);
+    va_end(args);
+}
