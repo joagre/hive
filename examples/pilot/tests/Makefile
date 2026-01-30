@@ -89,7 +89,7 @@ CP = $(PREFIX)objcopy
 SZ = $(PREFIX)size
 
 # HAL directory
-HAL_DIR = $(PILOT_DIR)/hal/crazyflie-2.1+
+HAL_DIR = $(PILOT_DIR)/hal/crazyflie-2.1+_v2
 
 # MCU flags for STM32F405
 MCU = -mcpu=cortex-m4 -mthumb -mfpu=fpv4-sp-d16 -mfloat-abi=hard
@@ -110,7 +110,7 @@ CFLAGS += -I$(PILOT_DIR)
 CFLAGS += -I$(PILOT_DIR)/include
 CFLAGS += -I$(HAL_DIR)
 CFLAGS += -I$(HAL_DIR)/vendor/CMSIS/Include
-CFLAGS += -I$(HAL_DIR)/vendor/CMSIS/Device/ST/STM32F4xx/Include
+CFLAGS += -I$(HAL_DIR)/vendor/CMSIS/STM32F4xx/Include
 
 # Hive includes
 CFLAGS += -I$(HIVE_ROOT)/include
