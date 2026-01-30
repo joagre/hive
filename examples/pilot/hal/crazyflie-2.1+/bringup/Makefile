@@ -100,7 +100,7 @@ reset:
 	st-flash reset
 
 trace: $(TARGET).bin
-	./st-trace.sh
+	../../../tools/st-trace.sh
 
 # Help
 help:
@@ -116,5 +116,5 @@ help:
 	@echo "Usage:"
 	@echo "  1. make"
 	@echo "  2. make flash"
-	@echo "  3. make trace (or: ./st-trace.sh -t 0 for no timeout)"
+	@echo "  3. make trace (or: ../../../tools/st-trace.sh -t 0 for no timeout)"
 	@echo "  4. Press reset or: make reset"

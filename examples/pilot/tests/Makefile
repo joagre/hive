@@ -96,6 +96,7 @@ CFLAGS += -ffunction-sections -fdata-sections
 CFLAGS += -fno-common
 CFLAGS += -DSTM32F405xx
 CFLAGS += -DHIVE_PLATFORM_STM32
+CFLAGS += -DHIVE_LOG_TO_STDOUT=1
 CFLAGS += -MMD -MP
 CFLAGS += -I$(PILOT_DIR)
 CFLAGS += -I$(PILOT_DIR)/include
@@ -230,7 +231,7 @@ $(HIVE_LIB): | $(BUILD_DIR_CF)
 		AR=$(AR) \
 		BOARD_MOUNTS_SRC=$(BOARD_MOUNTS_SRC) \
 		ENABLE_SD=$(ENABLE_SD) \
-		CFLAGS="$(MCU) -std=c11 -Os -g3 -ffunction-sections -fdata-sections -DSTM32F405xx -DHIVE_PLATFORM_STM32 $(HIVE_CFLAGS) -I$(abspath $(HAL_DIR))/vendor/CMSIS/Include -I$(abspath $(HAL_DIR))/vendor/CMSIS/Device/ST/STM32F4xx/Include"
+		CFLAGS="$(MCU) -std=c11 -Os -g3 -ffunction-sections -fdata-sections -DSTM32F405xx -DHIVE_PLATFORM_STM32 -DHIVE_LOG_TO_STDOUT=1 $(HIVE_CFLAGS) -I$(abspath $(HAL_DIR))/vendor/CMSIS/Include -I$(abspath $(HAL_DIR))/vendor/CMSIS/Device/ST/STM32F4xx/Include"
 
 $(TARGET_BIN): $(TARGET_ELF)
 	@echo "BIN test_$(TEST).bin"

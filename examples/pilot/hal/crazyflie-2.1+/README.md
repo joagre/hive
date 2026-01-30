@@ -675,7 +675,7 @@ works correctly. See `bringup/README.md` for details.
 ```bash
 cd bringup
 make && make flash
-./st-trace.sh  # View test output
+make trace  # Or: ../../tools/st-trace.sh
 ```
 
 ## Resources

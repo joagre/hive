@@ -10,7 +10,9 @@
 
 set -e
 
-STLINK_DIR="$(cd "$(dirname "$0")/../../../../.." && pwd)/local/stlink/install/bin"
+# Find hive root (3 levels up from examples/pilot/tools/)
+HIVE_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
+STLINK_DIR="$HIVE_ROOT/local/stlink/install/bin"
 ST_TRACE="$STLINK_DIR/st-trace"
 
 # Default timeout: 70 seconds covers all bringup phases including:

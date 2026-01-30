@@ -375,6 +375,13 @@ All tests output progress via `HIVE_LOG_*` macros (which use `hal_printf()`).
 On Crazyflie, connect a debugger and monitor SWO output to see detailed test
 progress. On Webots, output goes to stdout.
 
+**Viewing SWO output on Crazyflie:**
+```bash
+# After flashing, run trace from any directory:
+../tools/st-trace.sh -t 30    # 30s timeout
+../tools/st-trace.sh -t 0     # No timeout (Ctrl-C to stop)
+```
+
 Example output for `flash` test:
 ```
 ========================================

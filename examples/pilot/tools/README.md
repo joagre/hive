@@ -1,4 +1,34 @@
-# Pilot Telemetry Tools
+# Pilot Tools
+
+Tools for debugging, analyzing, and communicating with Crazyflie hardware.
+
+## Debug Tools
+
+### st-trace.sh
+
+SWO trace viewer for viewing debug output from Crazyflie firmware via ST-Link.
+Uses a locally built stlink-tools (system version 1.8.0 has bugs with SWO).
+
+```bash
+# View SWO output with 30s timeout
+./st-trace.sh -t 30
+
+# No timeout (Ctrl-C to stop)
+./st-trace.sh -t 0
+
+# Default 70s timeout (enough for full bringup test)
+./st-trace.sh
+```
+
+**Building stlink-tools** (if not already built):
+```bash
+cd $HIVE_ROOT/local/stlink
+mkdir build && cd build
+cmake -DCMAKE_INSTALL_PREFIX=../install ..
+make && make install
+```
+
+## Telemetry Tools
 
 Python scripts for analyzing flight telemetry, tuning PID controllers, and communicating with Crazyflie hardware.
 

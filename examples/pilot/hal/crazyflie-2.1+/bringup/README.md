@@ -47,7 +47,7 @@ Trace Macrocell). This is a one-way output channel - no input is possible.
 
 1. Connect ST-Link V2 or V3 to PC via USB
 2. Flash the firmware
-3. View output: `make trace` (or `./st-trace.sh`)
+3. View output: `make trace`
 
 The trace runs with a **70-second timeout** by default, which is enough for
 all bringup phases including the motor test delays. After the timeout, trace
@@ -55,16 +55,17 @@ output stops automatically.
 
 **Timeout options:**
 ```bash
-make trace              # 70s timeout (recommended for full test)
-./st-trace.sh -t 30     # 30s timeout (quick test)
-./st-trace.sh -t 0      # No timeout (Ctrl-C to stop)
+make trace                              # 70s timeout (recommended for full test)
+../../tools/st-trace.sh -t 30           # 30s timeout (quick test)
+../../tools/st-trace.sh -t 0            # No timeout (Ctrl-C to stop)
 ```
 
-The `st-trace.sh` script uses a locally built stlink-tools (the system
-version 1.8.0 has bugs with SWO trace). If you need to build it:
+The `st-trace.sh` script (in `examples/pilot/tools/`) uses a locally built
+stlink-tools (the system version 1.8.0 has bugs with SWO trace). If you need
+to build it:
 
 ```bash
-cd local/stlink
+cd $HIVE_ROOT/local/stlink
 mkdir build && cd build
 cmake -DCMAKE_INSTALL_PREFIX=../install ..
 make && make install
@@ -186,7 +187,7 @@ make trace
 # Or manually:
 st-flash write build/bringup.bin 0x08000000
 st-flash reset
-./st-trace.sh -t 0   # No timeout
+../../../tools/st-trace.sh -t 0   # No timeout
 ```
 
 ## Bring-Up Sequence
@@ -577,7 +578,7 @@ this point - you won't see any more trace output until the board is reset.
 
 ### No output on SWO
 
-1. Use `./st-trace.sh` (system st-trace v1.8.0 has bugs)
+1. Use `../../../tools/st-trace.sh` (system st-trace v1.8.0 has bugs)
 2. Verify SWO pin connected (pin 6 on debug header, pin 13 on 20-pin)
 3. Try ST-Link V2 if V3 doesn't work (some V3 units have issues)
 4. Try resetting the target: `st-flash reset`
@@ -718,4 +719,3 @@ The following tests are planned but not yet implemented:
 | `bringup_deck.c/h` | Expansion deck detection (1-Wire) |
 | `bringup_leds.c/h` | LED test (blue status, red motor LEDs) |
 | `Makefile` | Build system |
-| `st-trace.sh` | SWO trace viewer with timeout (default 70s) |

@@ -5,6 +5,7 @@
 #include <stdint.h>
 #include <sys/stat.h>
 #include <errno.h>
+#include "debug_swo.h"
 
 // System core clock - 168 MHz after PLL configuration
 uint32_t SystemCoreClock = 168000000;
@@ -48,8 +49,10 @@ int _read(int file, char *ptr, int len) {
 }
 int _write(int file, char *ptr, int len) {
     (void)file;
-    (void)ptr;
-    (void)len;
+    // Route stdout/stderr to SWO debug output
+    for (int i = 0; i < len; i++) {
+        debug_swo_putc(ptr[i]);
+    }
     return len;
 }
 
