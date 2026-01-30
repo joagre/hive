@@ -47,6 +47,8 @@ CFLAGS += -Ivendor/CMSIS/Include
 CFLAGS += -Ivendor/CMSIS/STM32F4xx/Include
 CFLAGS += -Ivendor/STM32F4xx_StdPeriph_Driver/inc
 CFLAGS += -Ivendor/bosch
+CFLAGS += -Ivendor/bitcraze/pmw3901
+CFLAGS += -Ivendor/st/vl53l1x
 
 # Assembler flags
 ASFLAGS = $(MCU) -g
@@ -71,6 +73,11 @@ C_SOURCES += \
     vendor/bosch/bmi088_accel.c \
     vendor/bosch/bmi088_gyro.c \
     vendor/bosch/bmp3.c
+
+# Source files - flow deck drivers (PMW3901 optical flow, VL53L1x ToF)
+C_SOURCES += \
+    vendor/bitcraze/pmw3901/pmw3901.c \
+    vendor/st/vl53l1x/vl53l1x_uld.c
 
 # Source files - ST Standard Peripheral Library (Bitcraze version)
 C_SOURCES += \

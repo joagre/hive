@@ -12,6 +12,10 @@
 #include "bmi088.h"
 #include "bmp3.h"
 
+// Flow deck drivers
+#include "pmw3901.h"
+#include "vl53l1x_uld.h"
+
 #include <stdbool.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -43,6 +47,16 @@
 #define LED_PIN (1U << 2) // PD2 blue LED on Crazyflie
 #define LED_PORT GPIOD
 
+// Flow deck pins
+#define FLOW_SPI_CS_PIN 4 // PB4 (IO3 on deck connector)
+#define I2C1_SCL_PORT GPIOB
+#define I2C1_SCL_PIN_NUM 6
+#define I2C1_SDA_PORT GPIOB
+#define I2C1_SDA_PIN_NUM 7
+
+// I2C timeout for polling operations
+#define I2C_TIMEOUT_US 100000
+
 // I2C addresses (use Bitcraze driver defines)
 // BMI088_ACCEL_I2C_ADDR_PRIMARY = 0x18
 // BMI088_GYRO_I2C_ADDR_SECONDARY = 0x69
@@ -72,6 +86,12 @@ static volatile uint32_t s_sys_tick_ms = 0;
 static struct bmi088_dev s_bmi088_dev;
 static struct bmp3_dev s_bmp3_dev;
 
+// Flow deck state
+static bool s_flow_deck_present = false;
+static bool s_i2c1_initialized = false;
+static pmw3901_dev_t s_pmw3901_dev;
+static vl53l1x_dev_t s_vl53l1x_dev;
+
 // ----------------------------------------------------------------------------
 // SysTick Handler
 // ----------------------------------------------------------------------------
@@ -99,6 +119,425 @@ static void gpio_init(void) {
     LED_PORT->MODER |= GPIO_MODER_MODER2_0;
     LED_PORT->OSPEEDR |= GPIO_OSPEEDER_OSPEEDR2;
     LED_PORT->ODR &= ~LED_PIN;
+}
+
+// ----------------------------------------------------------------------------
+// I2C1 Low-Level Interface (for VL53L1x on flow deck)
+// PB6 = SCL, PB7 = SDA
+// ----------------------------------------------------------------------------
+
+static bool i2c1_wait(volatile uint16_t *reg, uint16_t mask,
+                      uint16_t expected) {
+    uint32_t start = platform_get_time_us();
+    while ((*reg & mask) != expected) {
+        if ((platform_get_time_us() - start) > I2C_TIMEOUT_US) {
+            return false;
+        }
+    }
+    return true;
+}
+
+static bool i2c1_check_error(void) {
+    uint32_t sr1 = I2C1->SR1;
+    if (sr1 & (I2C_SR1_BERR | I2C_SR1_ARLO | I2C_SR1_AF | I2C_SR1_OVR)) {
+        I2C1->SR1 =
+            sr1 & ~(I2C_SR1_BERR | I2C_SR1_ARLO | I2C_SR1_AF | I2C_SR1_OVR);
+        return true;
+    }
+    return false;
+}
+
+static void i2c1_bus_recovery(void) {
+    I2C1->CR1 &= ~I2C_CR1_PE;
+
+    // Set SCL as GPIO output
+    I2C1_SCL_PORT->MODER &= ~(3U << (I2C1_SCL_PIN_NUM * 2));
+    I2C1_SCL_PORT->MODER |= (1U << (I2C1_SCL_PIN_NUM * 2));
+    I2C1_SCL_PORT->OTYPER |= (1U << I2C1_SCL_PIN_NUM);
+
+    // Set SDA as input to monitor
+    I2C1_SDA_PORT->MODER &= ~(3U << (I2C1_SDA_PIN_NUM * 2));
+
+    // Clock out up to 9 bits to release stuck slave
+    for (int i = 0; i < 9; i++) {
+        if (I2C1_SDA_PORT->IDR & (1U << I2C1_SDA_PIN_NUM)) {
+            break;
+        }
+        I2C1_SCL_PORT->ODR &= ~(1U << I2C1_SCL_PIN_NUM);
+        for (volatile int d = 0; d < 100; d++)
+            __NOP();
+        I2C1_SCL_PORT->ODR |= (1U << I2C1_SCL_PIN_NUM);
+        for (volatile int d = 0; d < 100; d++)
+            __NOP();
+    }
+
+    // Generate STOP condition
+    I2C1_SDA_PORT->MODER |= (1U << (I2C1_SDA_PIN_NUM * 2));
+    I2C1_SDA_PORT->OTYPER |= (1U << I2C1_SDA_PIN_NUM);
+    I2C1_SDA_PORT->ODR &= ~(1U << I2C1_SDA_PIN_NUM);
+    for (volatile int d = 0; d < 100; d++)
+        __NOP();
+    I2C1_SDA_PORT->ODR |= (1U << I2C1_SDA_PIN_NUM);
+    for (volatile int d = 0; d < 100; d++)
+        __NOP();
+
+    // Restore pins to AF mode
+    I2C1_SCL_PORT->MODER &= ~(3U << (I2C1_SCL_PIN_NUM * 2));
+    I2C1_SCL_PORT->MODER |= (2U << (I2C1_SCL_PIN_NUM * 2));
+    I2C1_SDA_PORT->MODER &= ~(3U << (I2C1_SDA_PIN_NUM * 2));
+    I2C1_SDA_PORT->MODER |= (2U << (I2C1_SDA_PIN_NUM * 2));
+
+    I2C1->CR1 |= I2C_CR1_PE;
+}
+
+static void i2c1_reset(void) {
+    I2C1->CR1 |= I2C_CR1_SWRST;
+    I2C1->CR1 &= ~I2C_CR1_SWRST;
+
+    // Reconfigure: 400kHz fast mode (APB1 = 42 MHz)
+    I2C1->CR2 = 42;
+    I2C1->CCR = 35 | I2C_CCR_FS;
+    I2C1->TRISE = 13;
+    I2C1->CR1 = I2C_CR1_PE;
+}
+
+static void i2c1_init(void) {
+    if (s_i2c1_initialized)
+        return;
+
+    // Enable I2C1 clock
+    RCC->APB1ENR |= RCC_APB1ENR_I2C1EN;
+
+    // Configure I2C1 GPIO (PB6=SCL, PB7=SDA)
+    GPIOB->MODER &= ~(GPIO_MODER_MODER6 | GPIO_MODER_MODER7);
+    GPIOB->MODER |= GPIO_MODER_MODER6_1 | GPIO_MODER_MODER7_1; // AF mode
+    GPIOB->AFR[0] |= (4 << (6 * 4)) | (4 << (7 * 4));          // AF4 = I2C1
+    GPIOB->OTYPER |= GPIO_OTYPER_OT_6 | GPIO_OTYPER_OT_7;      // Open-drain
+    GPIOB->PUPDR |= GPIO_PUPDR_PUPDR6_0 | GPIO_PUPDR_PUPDR7_0; // Pull-up
+
+    i2c1_bus_recovery();
+
+    // Configure I2C1: 400 kHz fast mode (APB1 = 42 MHz)
+    I2C1->CR2 = 42;
+    I2C1->CCR = 35 | I2C_CCR_FS;
+    I2C1->TRISE = 13;
+    I2C1->CR1 = I2C_CR1_PE;
+
+    s_i2c1_initialized = true;
+}
+
+static bool i2c1_write(uint8_t addr, uint8_t *data, uint16_t len) {
+    i2c1_check_error();
+
+    if (!i2c1_wait(&I2C1->SR2, I2C_SR2_BUSY, 0)) {
+        i2c1_bus_recovery();
+        i2c1_reset();
+        return false;
+    }
+
+    I2C1->CR1 |= I2C_CR1_START;
+    if (!i2c1_wait(&I2C1->SR1, I2C_SR1_SB, I2C_SR1_SB)) {
+        I2C1->CR1 |= I2C_CR1_STOP;
+        return false;
+    }
+
+    I2C1->DR = addr << 1;
+    if (!i2c1_wait(&I2C1->SR1, I2C_SR1_ADDR, I2C_SR1_ADDR)) {
+        if (i2c1_check_error()) {
+            I2C1->CR1 |= I2C_CR1_STOP;
+            return false;
+        }
+        I2C1->CR1 |= I2C_CR1_STOP;
+        return false;
+    }
+    (void)I2C1->SR2;
+
+    for (uint16_t i = 0; i < len; i++) {
+        if (!i2c1_wait(&I2C1->SR1, I2C_SR1_TXE, I2C_SR1_TXE)) {
+            I2C1->CR1 |= I2C_CR1_STOP;
+            return false;
+        }
+        if (i2c1_check_error()) {
+            I2C1->CR1 |= I2C_CR1_STOP;
+            return false;
+        }
+        I2C1->DR = data[i];
+    }
+
+    if (!i2c1_wait(&I2C1->SR1, I2C_SR1_BTF, I2C_SR1_BTF)) {
+        I2C1->CR1 |= I2C_CR1_STOP;
+        return false;
+    }
+
+    I2C1->CR1 |= I2C_CR1_STOP;
+    return true;
+}
+
+static bool i2c1_read(uint8_t addr, uint8_t *data, uint16_t len) {
+    if (len == 0)
+        return false;
+
+    i2c1_check_error();
+
+    if (!i2c1_wait(&I2C1->SR2, I2C_SR2_BUSY, 0)) {
+        i2c1_bus_recovery();
+        i2c1_reset();
+        return false;
+    }
+
+    I2C1->CR1 |= I2C_CR1_ACK;
+
+    I2C1->CR1 |= I2C_CR1_START;
+    if (!i2c1_wait(&I2C1->SR1, I2C_SR1_SB, I2C_SR1_SB)) {
+        I2C1->CR1 |= I2C_CR1_STOP;
+        return false;
+    }
+
+    I2C1->DR = (addr << 1) | 1;
+    if (!i2c1_wait(&I2C1->SR1, I2C_SR1_ADDR, I2C_SR1_ADDR)) {
+        if (i2c1_check_error()) {
+            I2C1->CR1 |= I2C_CR1_STOP;
+            return false;
+        }
+        I2C1->CR1 |= I2C_CR1_STOP;
+        return false;
+    }
+
+    if (len == 1) {
+        I2C1->CR1 &= ~I2C_CR1_ACK;
+        (void)I2C1->SR2;
+        I2C1->CR1 |= I2C_CR1_STOP;
+
+        if (!i2c1_wait(&I2C1->SR1, I2C_SR1_RXNE, I2C_SR1_RXNE)) {
+            return false;
+        }
+        data[0] = I2C1->DR;
+        return true;
+    }
+
+    if (len == 2) {
+        I2C1->CR1 |= I2C_CR1_POS;
+        (void)I2C1->SR2;
+        I2C1->CR1 &= ~I2C_CR1_ACK;
+
+        if (!i2c1_wait(&I2C1->SR1, I2C_SR1_BTF, I2C_SR1_BTF)) {
+            I2C1->CR1 &= ~I2C_CR1_POS;
+            I2C1->CR1 |= I2C_CR1_STOP;
+            return false;
+        }
+
+        I2C1->CR1 |= I2C_CR1_STOP;
+        data[0] = I2C1->DR;
+        data[1] = I2C1->DR;
+
+        I2C1->CR1 &= ~I2C_CR1_POS;
+        return true;
+    }
+
+    (void)I2C1->SR2;
+
+    for (uint16_t i = 0; i < len; i++) {
+        if (i == len - 1) {
+            if (!i2c1_wait(&I2C1->SR1, I2C_SR1_RXNE, I2C_SR1_RXNE)) {
+                return false;
+            }
+            data[i] = I2C1->DR;
+        } else if (i == len - 2) {
+            if (!i2c1_wait(&I2C1->SR1, I2C_SR1_BTF, I2C_SR1_BTF)) {
+                I2C1->CR1 |= I2C_CR1_STOP;
+                return false;
+            }
+            I2C1->CR1 &= ~I2C_CR1_ACK;
+            I2C1->CR1 |= I2C_CR1_STOP;
+            data[i] = I2C1->DR;
+        } else {
+            if (!i2c1_wait(&I2C1->SR1, I2C_SR1_RXNE, I2C_SR1_RXNE)) {
+                I2C1->CR1 |= I2C_CR1_STOP;
+                return false;
+            }
+            data[i] = I2C1->DR;
+        }
+    }
+
+    return true;
+}
+
+// ----------------------------------------------------------------------------
+// SPI1 Low-Level Interface (for PMW3901 on flow deck)
+// PA5 = SCK, PA6 = MISO, PA7 = MOSI, PB4 = CS
+// ----------------------------------------------------------------------------
+
+static void spi1_init(void) {
+    // Enable SPI1 clock
+    RCC->APB2ENR |= RCC_APB2ENR_SPI1EN;
+
+    // Configure SPI1 GPIO (PA5=SCK, PA6=MISO, PA7=MOSI)
+    GPIOA->MODER &=
+        ~(GPIO_MODER_MODER5 | GPIO_MODER_MODER6 | GPIO_MODER_MODER7);
+    GPIOA->MODER |=
+        (GPIO_MODER_MODER5_1 | GPIO_MODER_MODER6_1 | GPIO_MODER_MODER7_1);
+    GPIOA->AFR[0] |=
+        (5 << (5 * 4)) | (5 << (6 * 4)) | (5 << (7 * 4)); // AF5 = SPI1
+    GPIOA->OSPEEDR |= (GPIO_OSPEEDER_OSPEEDR5 | GPIO_OSPEEDER_OSPEEDR6 |
+                       GPIO_OSPEEDER_OSPEEDR7);
+
+    // Configure PMW3901 CS pin (PB4) as output
+    GPIOB->MODER &= ~(3U << (FLOW_SPI_CS_PIN * 2));
+    GPIOB->MODER |= (1U << (FLOW_SPI_CS_PIN * 2));
+    GPIOB->OSPEEDR |= (3U << (FLOW_SPI_CS_PIN * 2));
+    GPIOB->ODR |= (1 << FLOW_SPI_CS_PIN); // CS high (deselected)
+
+    // Configure SPI1: Master, 8-bit, CPOL=1, CPHA=1 (Mode 3), ~1.3 MHz (84/64)
+    // PMW3901 max SPI clock is 2 MHz per datasheet
+    SPI1->CR1 = SPI_CR1_MSTR |                // Master mode
+                SPI_CR1_BR_2 | SPI_CR1_BR_0 | // Baud rate = fPCLK/64 = 1.3 MHz
+                SPI_CR1_CPOL |                // CPOL=1
+                SPI_CR1_CPHA |                // CPHA=1
+                SPI_CR1_SSM |                 // Software slave management
+                SPI_CR1_SSI;                  // Internal slave select
+
+    SPI1->CR1 |= SPI_CR1_SPE; // Enable SPI
+}
+
+static uint8_t spi1_transfer(uint8_t data) {
+    while (!(SPI1->SR & SPI_SR_TXE))
+        ;
+    SPI1->DR = data;
+    while (!(SPI1->SR & SPI_SR_RXNE))
+        ;
+    return SPI1->DR;
+}
+
+// ----------------------------------------------------------------------------
+// VL53L1x Platform Callbacks (I2C1)
+// ----------------------------------------------------------------------------
+
+#define I2C_WRITE_BUF_MAX 32
+
+static int vl53l1x_i2c_write(uint8_t dev_addr, uint16_t reg_addr,
+                             const uint8_t *data, uint16_t len) {
+    if (len + 2 > I2C_WRITE_BUF_MAX)
+        return -1;
+    uint8_t buf[I2C_WRITE_BUF_MAX];
+    buf[0] = (uint8_t)(reg_addr >> 8);
+    buf[1] = (uint8_t)(reg_addr & 0xFF);
+    for (uint16_t i = 0; i < len; i++)
+        buf[i + 2] = data[i];
+    if (!i2c1_write(dev_addr, buf, len + 2))
+        return -1;
+    return 0;
+}
+
+static int vl53l1x_i2c_read(uint8_t dev_addr, uint16_t reg_addr, uint8_t *data,
+                            uint16_t len) {
+    uint8_t reg_buf[2] = {(uint8_t)(reg_addr >> 8), (uint8_t)(reg_addr & 0xFF)};
+    if (!i2c1_write(dev_addr, reg_buf, 2))
+        return -1;
+    if (!i2c1_read(dev_addr, data, len))
+        return -1;
+    return 0;
+}
+
+static void vl53l1x_delay_ms(uint32_t ms) {
+    platform_delay_ms(ms);
+}
+
+static const vl53l1x_platform_t s_vl53l1x_platform = {
+    .i2c_write = vl53l1x_i2c_write,
+    .i2c_read = vl53l1x_i2c_read,
+    .delay_ms = vl53l1x_delay_ms,
+};
+
+// ----------------------------------------------------------------------------
+// PMW3901 Platform Callbacks (SPI1)
+// ----------------------------------------------------------------------------
+
+static int pmw3901_spi_transfer(uint8_t tx_data, uint8_t *rx_data) {
+    uint8_t rx = spi1_transfer(tx_data);
+    if (rx_data)
+        *rx_data = rx;
+    return 0;
+}
+
+static void pmw3901_cs_set(int level) {
+    if (level)
+        GPIOB->ODR |= (1 << FLOW_SPI_CS_PIN);
+    else
+        GPIOB->ODR &= ~(1 << FLOW_SPI_CS_PIN);
+}
+
+static void pmw3901_delay_ms(uint32_t ms) {
+    platform_delay_ms(ms);
+}
+
+static void pmw3901_delay_us(uint32_t us) {
+    platform_delay_us(us);
+}
+
+static const pmw3901_platform_t s_pmw3901_platform = {
+    .spi_transfer = pmw3901_spi_transfer,
+    .cs_set = pmw3901_cs_set,
+    .delay_ms = pmw3901_delay_ms,
+    .delay_us = pmw3901_delay_us,
+};
+
+// ----------------------------------------------------------------------------
+// Flow Deck Initialization
+// ----------------------------------------------------------------------------
+
+static bool flow_deck_init(void) {
+    debug_swo_printf("[FLOW] Initializing flow deck...\n");
+
+    // Initialize SPI1 for PMW3901
+    spi1_init();
+
+    // Initialize I2C1 for VL53L1x
+    i2c1_init();
+
+    // Try to initialize PMW3901 (optical flow)
+    if (!pmw3901_init(&s_pmw3901_dev, &s_pmw3901_platform)) {
+        debug_swo_printf("[FLOW] PMW3901 not found (no flow deck?)\n");
+        return false;
+    }
+    debug_swo_printf("[FLOW] PMW3901 detected\n");
+
+    // Try to initialize VL53L1x (ToF range sensor)
+    if (vl53l1x_init(&s_vl53l1x_dev, &s_vl53l1x_platform) != 0) {
+        debug_swo_printf("[FLOW] VL53L1x init failed\n");
+        return false;
+    }
+
+    // Wait for sensor to boot
+    uint8_t boot_state = 0;
+    for (int i = 0; i < 100 && !boot_state; i++) {
+        vl53l1x_boot_state(&s_vl53l1x_dev, &boot_state);
+        platform_delay_ms(10);
+    }
+    if (!boot_state) {
+        debug_swo_printf("[FLOW] VL53L1x boot timeout\n");
+        return false;
+    }
+
+    // Initialize sensor with default config
+    if (vl53l1x_sensor_init(&s_vl53l1x_dev) != 0) {
+        debug_swo_printf("[FLOW] VL53L1x sensor init failed\n");
+        return false;
+    }
+
+    // Configure for short distance mode (up to 1.3m, faster)
+    vl53l1x_set_distance_mode(&s_vl53l1x_dev, VL53L1X_DISTANCE_MODE_SHORT);
+    vl53l1x_set_timing_budget(&s_vl53l1x_dev, VL53L1X_TIMING_20MS);
+    vl53l1x_set_inter_measurement(&s_vl53l1x_dev, 25); // 25ms period -> 40Hz
+
+    // Start continuous ranging
+    if (vl53l1x_start_ranging(&s_vl53l1x_dev) != 0) {
+        debug_swo_printf("[FLOW] VL53L1x start ranging failed\n");
+        return false;
+    }
+
+    debug_swo_printf("[FLOW] VL53L1x configured (short mode, 40Hz)\n");
+    debug_swo_printf("[FLOW] Flow deck initialized OK\n");
+    return true;
 }
 
 // ----------------------------------------------------------------------------
@@ -438,6 +877,10 @@ int platform_init(void) {
         return -1;
     }
 
+    // Try to initialize flow deck (optional - may not be present)
+    debug_swo_printf("[INIT] Checking for flow deck...\n");
+    s_flow_deck_present = flow_deck_init();
+
     s_initialized = true;
     debug_swo_printf("[INIT] Platform init complete\n");
     return 0;
@@ -665,18 +1108,28 @@ void platform_led_toggle(void) {
 }
 
 bool platform_has_flow_deck(void) {
-    return false; // Not implemented in v2 yet
+    return s_flow_deck_present;
 }
 
 bool platform_read_flow(int16_t *delta_x, int16_t *delta_y) {
-    (void)delta_x;
-    (void)delta_y;
-    return false;
+    if (!s_flow_deck_present)
+        return false;
+    pmw3901_read_motion(&s_pmw3901_dev, delta_x, delta_y);
+    return true;
 }
 
 bool platform_read_height(uint16_t *height_mm) {
-    (void)height_mm;
-    return false;
+    if (!s_flow_deck_present)
+        return false;
+
+    uint8_t ready = 0;
+    vl53l1x_check_data_ready(&s_vl53l1x_dev, &ready);
+    if (!ready)
+        return false;
+
+    vl53l1x_get_distance(&s_vl53l1x_dev, height_mm);
+    vl53l1x_clear_interrupt(&s_vl53l1x_dev);
+    return true;
 }
 
 void platform_debug_init(void) {
