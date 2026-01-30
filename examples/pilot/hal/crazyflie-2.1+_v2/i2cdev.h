@@ -20,14 +20,6 @@ typedef I2cDrv I2C_Dev;
 // Bus aliases
 #define I2C3_DEV (&sensorsBus)
 
-// I2C addresses for Crazyflie 2.1+ sensors
-#define BMI088_ACCEL_I2C_ADDRESS 0x18
-#define BMI088_GYRO_I2C_ADDRESS 0x69
-#define BMP3_I2C_ADDRESS 0x77
-
-// No memory address flag
-#define I2CDEV_NO_MEM_ADDR 0xFF
-
 // Initialize I2C device
 int i2cdevInit(I2C_Dev *dev);
 

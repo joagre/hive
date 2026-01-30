@@ -68,7 +68,6 @@ typedef struct {
     const I2cDef *def;              // Definition of the i2c
     I2cMessage txMessage;           // The I2C send message
     uint32_t messageIndex;          // Index of bytes sent/received
-    uint32_t nbrOfretries;          // Retries done
     volatile bool transferComplete; // Set by ISR when transfer done
     volatile bool transferError;    // Set by ISR on error
     DMA_InitTypeDef DMAStruct;      // DMA configuration structure

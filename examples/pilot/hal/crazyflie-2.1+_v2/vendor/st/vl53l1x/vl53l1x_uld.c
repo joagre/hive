@@ -218,30 +218,46 @@ int8_t vl53l1x_sensor_init(vl53l1x_dev_t *dev) {
     uint8_t addr;
     uint8_t tmp;
 
-    // Load default configuration
+    // Load default configuration (91 bytes)
+    // Add brief delay between writes to allow sensor to process
     for (addr = 0x2D; addr <= 0x87; addr++) {
         status = wr_byte(dev, addr, VL53L1X_DEFAULT_CONFIGURATION[addr - 0x2D]);
-        if (status != 0) return status;
+        if (status != 0) return -10 - (addr - 0x2D); // Config write error
+        // Small delay every 8 writes to let I2C bus settle
+        if ((addr & 0x07) == 0x07) {
+            dev->platform->delay_ms(1);
+        }
     }
 
     // Post-init: start ranging once to validate
     status = vl53l1x_start_ranging(dev);
-    if (status != 0) return status;
+    if (status != 0) return -2; // Start ranging error
 
+    // Wait for first measurement with timeout
     tmp = 0;
-    while (tmp == 0) {
+    int timeout = 500; // 500 iterations * delay
+    while (tmp == 0 && timeout > 0) {
         status = vl53l1x_check_data_ready(dev, &tmp);
-        if (status != 0) return status;
+        if (status != 0) return -3; // Data ready check error
+        dev->platform->delay_ms(2);
+        timeout--;
     }
+    if (tmp == 0) return -4; // Timeout waiting for data
 
     status = vl53l1x_clear_interrupt(dev);
+    if (status != 0) return -5; // Clear interrupt error
+
     status = vl53l1x_stop_ranging(dev);
+    if (status != 0) return -6; // Stop ranging error
 
     // Configure VHV
     status = wr_byte(dev, VL53L1_VHV_CONFIG__TIMEOUT_MACROP_LOOP_BOUND, 0x09);
-    status = wr_byte(dev, 0x0B, 0x00);
+    if (status != 0) return -7; // VHV config error
 
-    return status;
+    status = wr_byte(dev, 0x0B, 0x00);
+    if (status != 0) return -8; // Final config error
+
+    return 0;
 }
 
 int8_t vl53l1x_start_ranging(vl53l1x_dev_t *dev) {

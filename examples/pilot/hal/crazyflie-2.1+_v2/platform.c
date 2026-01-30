@@ -25,14 +25,18 @@
 #define CPU_FREQ_HZ 168000000
 #define SWO_BAUD 2000000
 
+// Debug tracing - set to 1 to enable I2C bus scan and register tests during init
+#define PLATFORM_DEBUG_INIT 0
+
 // ----------------------------------------------------------------------------
 // Configuration
 // ----------------------------------------------------------------------------
 
 // Calibration parameters
 #define CALIBRATION_SAMPLES 512
-#define GYRO_VARIANCE_THRESHOLD 100.0f
 #define BARO_CALIBRATION_SAMPLES 50
+// Gyro variance threshold in (rad/s)^2 - ~0.01 rad/s std dev max for stillness
+#define GYRO_VARIANCE_THRESHOLD 0.0001f
 
 // Startup delay for sensor power stabilization
 #define SENSOR_STARTUP_DELAY_MS 1000
@@ -438,9 +442,9 @@ static int vl53l1x_i2c_write(uint8_t dev_addr, uint16_t reg_addr,
         buf[i + 2] = data[i];
     if (!i2c1_write(dev_addr, buf, len + 2))
         return -1;
-    // Brief delay after write to give sensor time to process
+    // Delay after write to give sensor time to process
     // VL53L1x needs this during rapid config writes in sensor_init
-    for (volatile int d = 0; d < 200; d++)
+    for (volatile int d = 0; d < 1000; d++)
         __NOP();
     return 0;
 }
@@ -563,7 +567,7 @@ static bool flow_deck_init(void) {
     }
     debug_swo_printf("[FLOW] VL53L1x found at 0x%02X\n", found_addr);
 
-    // Try to initialize VL53L1x (ToF range sensor)
+    // Initialize VL53L1x handle (sets platform callbacks)
     if (vl53l1x_init(&s_vl53l1x_dev, &s_vl53l1x_platform) != 0) {
         debug_swo_printf("[FLOW] VL53L1x init failed\n");
         return false;
@@ -572,20 +576,35 @@ static bool flow_deck_init(void) {
     // Override with discovered address (driver defaults to 0x29)
     s_vl53l1x_dev.i2c_address = found_addr;
 
-    // Wait for sensor to boot
+    // Soft reset the sensor to ensure clean state
+    debug_swo_printf("[FLOW] VL53L1x soft reset...\n");
+    vl53l1x_reset(&s_vl53l1x_dev);
+    platform_delay_ms(100); // Wait for reset to complete
+
+    // Wait for sensor to boot (firmware ready)
+    debug_swo_printf("[FLOW] VL53L1x waiting for boot...\n");
     uint8_t boot_state = 0;
-    for (int i = 0; i < 100 && !boot_state; i++) {
-        vl53l1x_boot_state(&s_vl53l1x_dev, &boot_state);
+    for (int i = 0; i < 150 && !boot_state; i++) {
+        if (vl53l1x_boot_state(&s_vl53l1x_dev, &boot_state) != 0) {
+            debug_swo_printf("[FLOW] VL53L1x boot_state read error\n");
+        }
         platform_delay_ms(10);
     }
     if (!boot_state) {
         debug_swo_printf("[FLOW] VL53L1x boot timeout\n");
         return false;
     }
+    debug_swo_printf("[FLOW] VL53L1x boot OK\n");
 
-    // Initialize sensor with default config
-    if (vl53l1x_sensor_init(&s_vl53l1x_dev) != 0) {
-        debug_swo_printf("[FLOW] VL53L1x sensor init failed\n");
+    // Additional delay before config writes
+    platform_delay_ms(10);
+
+    // Initialize sensor with default config (91 register writes)
+    debug_swo_printf("[FLOW] VL53L1x sensor init (config writes)...\n");
+    int8_t init_status = vl53l1x_sensor_init(&s_vl53l1x_dev);
+    if (init_status != 0) {
+        debug_swo_printf("[FLOW] VL53L1x sensor init failed: %d\n",
+                         init_status);
         return false;
     }
     debug_swo_printf("[FLOW] VL53L1x initialized\n");
@@ -899,7 +918,8 @@ int platform_init(void) {
     debug_swo_printf("[INIT] I2C3 init (DMA-based)...\n");
     i2cdevInit(I2C3_DEV);
 
-    // I2C bus scan - check what devices respond
+#if PLATFORM_DEBUG_INIT
+    // I2C bus scan - check what devices respond (slow, enable for debugging)
     debug_swo_printf("[INIT] I2C bus scan:\n");
     uint8_t dummy;
     for (uint8_t addr = 0x08; addr < 0x78; addr++) {
@@ -929,6 +949,7 @@ int platform_init(void) {
     ok = i2cdevReadByte(I2C3_DEV, 0x77, 0x00, &chip_id);
     debug_swo_printf("  Baro 0x77 reg 0x00: ok=%d val=0x%02X (exp 0x50)\n", ok,
                      chip_id);
+#endif
 
     // Initialize sensors
     debug_swo_printf("[INIT] BMI088 init...\n");
@@ -955,12 +976,67 @@ int platform_init(void) {
 bool platform_self_test(void) {
     debug_swo_printf("[TEST] Self-test starting...\n");
 
-    // Read a few samples to verify sensors work
+    // BMI088 hardware self-test (uses sensor's internal test mechanism)
+    int8_t selftest_result = 0;
+    uint16_t rslt;
+
+    debug_swo_printf("[TEST] BMI088 gyro hardware self-test...\n");
+    rslt = bmi088_perform_gyro_selftest(&selftest_result, &s_bmi088_dev);
+    if (rslt != BMI088_OK || selftest_result != BMI088_SELFTEST_PASS) {
+        debug_swo_printf("[TEST] Gyro self-test FAILED (rslt=%u, result=%d)\n",
+                         rslt, selftest_result);
+        return false;
+    }
+    debug_swo_printf("[TEST] Gyro self-test PASSED\n");
+
+    // Re-initialize gyro after self-test (self-test may change settings)
+    platform_delay_ms(50);
+    rslt = bmi088_gyro_init(&s_bmi088_dev);
+    if (rslt != BMI088_OK) {
+        debug_swo_printf("[TEST] Gyro re-init failed: %u\n", rslt);
+        return false;
+    }
+    s_bmi088_dev.gyro_cfg.odr = BMI088_GYRO_BW_116_ODR_1000_HZ;
+    s_bmi088_dev.gyro_cfg.range = BMI088_GYRO_RANGE_2000_DPS;
+    s_bmi088_dev.gyro_cfg.bw = BMI088_GYRO_BW_116_ODR_1000_HZ;
+    s_bmi088_dev.gyro_cfg.power = BMI088_GYRO_PM_NORMAL;
+    bmi088_set_gyro_power_mode(&s_bmi088_dev);
+    platform_delay_ms(30);
+    bmi088_set_gyro_meas_conf(&s_bmi088_dev);
+
+    debug_swo_printf("[TEST] BMI088 accel hardware self-test...\n");
+    rslt = bmi088_perform_accel_selftest(&selftest_result, &s_bmi088_dev);
+    if (rslt != BMI088_OK || selftest_result != BMI088_SELFTEST_PASS) {
+        debug_swo_printf("[TEST] Accel self-test FAILED (rslt=%u, result=%d)\n",
+                         rslt, selftest_result);
+        return false;
+    }
+    debug_swo_printf("[TEST] Accel self-test PASSED\n");
+
+    // Re-initialize accel after self-test
+    platform_delay_ms(50);
+    rslt =
+        bmi088_accel_switch_control(&s_bmi088_dev, BMI088_ACCEL_POWER_ENABLE);
+    platform_delay_ms(5);
+    rslt = bmi088_accel_init(&s_bmi088_dev);
+    if (rslt != BMI088_OK) {
+        debug_swo_printf("[TEST] Accel re-init failed: %u\n", rslt);
+        return false;
+    }
+    s_bmi088_dev.accel_cfg.odr = BMI088_ACCEL_ODR_1600_HZ;
+    s_bmi088_dev.accel_cfg.range = BMI088_ACCEL_RANGE_24G;
+    s_bmi088_dev.accel_cfg.bw = BMI088_ACCEL_BW_OSR4;
+    s_bmi088_dev.accel_cfg.power = BMI088_ACCEL_PM_ACTIVE;
+    bmi088_set_accel_power_mode(&s_bmi088_dev);
+    platform_delay_ms(10);
+    bmi088_set_accel_meas_conf(&s_bmi088_dev);
+
+    // Read samples to verify sensors work after re-init
     struct bmi088_sensor_data accel_data;
     struct bmi088_sensor_data gyro_data;
     struct bmp3_data baro_data;
 
-    // Test accelerometer
+    // Test accelerometer read
     if (bmi088_get_accel_data(&accel_data, &s_bmi088_dev) != BMI088_OK) {
         debug_swo_printf("[TEST] Accel read FAILED\n");
         return false;
@@ -968,7 +1044,7 @@ bool platform_self_test(void) {
     debug_swo_printf("[TEST] Accel: x=%d y=%d z=%d\n", accel_data.x,
                      accel_data.y, accel_data.z);
 
-    // Test gyroscope
+    // Test gyroscope read
     if (bmi088_get_gyro_data(&gyro_data, &s_bmi088_dev) != BMI088_OK) {
         debug_swo_printf("[TEST] Gyro read FAILED\n");
         return false;
@@ -990,44 +1066,81 @@ bool platform_self_test(void) {
 
 int platform_calibrate(void) {
     debug_swo_printf("[CAL] Calibration starting...\n");
+    debug_swo_printf("[CAL] Keep drone STILL and LEVEL!\n");
 
-    // Gyro bias calibration
+    // Gyro bias calibration with variance-based stillness detection
     float gyro_sum[3] = {0, 0, 0};
+    float gyro_sum_sq[3] = {0, 0, 0};
     struct bmi088_sensor_data gyro_data;
     const float gyro_scale = (2000.0f / 32768.0f) * (M_PI / 180.0f);
+    int valid_samples = 0;
 
     debug_swo_printf("[CAL] Gyro calibration (%d samples)...\n",
                      CALIBRATION_SAMPLES);
 
     for (int i = 0; i < CALIBRATION_SAMPLES; i++) {
         if (bmi088_get_gyro_data(&gyro_data, &s_bmi088_dev) == BMI088_OK) {
-            gyro_sum[0] += gyro_data.x * gyro_scale;
-            gyro_sum[1] += gyro_data.y * gyro_scale;
-            gyro_sum[2] += gyro_data.z * gyro_scale;
+            float gx = gyro_data.x * gyro_scale;
+            float gy = gyro_data.y * gyro_scale;
+            float gz = gyro_data.z * gyro_scale;
+            gyro_sum[0] += gx;
+            gyro_sum[1] += gy;
+            gyro_sum[2] += gz;
+            gyro_sum_sq[0] += gx * gx;
+            gyro_sum_sq[1] += gy * gy;
+            gyro_sum_sq[2] += gz * gz;
+            valid_samples++;
         }
         if (i % 50 == 0) {
             platform_led_toggle();
         }
-        platform_delay_ms(1);
+        platform_delay_ms(2); // ~500 Hz sample rate, ~1 second total
     }
 
-    s_gyro_bias[0] = gyro_sum[0] / CALIBRATION_SAMPLES;
-    s_gyro_bias[1] = gyro_sum[1] / CALIBRATION_SAMPLES;
-    s_gyro_bias[2] = gyro_sum[2] / CALIBRATION_SAMPLES;
+    if (valid_samples < CALIBRATION_SAMPLES / 2) {
+        debug_swo_printf("[CAL] Too few valid samples (%d)\n", valid_samples);
+        return -1;
+    }
+
+    // Compute mean and variance
+    float n = (float)valid_samples;
+    float gyro_mean[3], gyro_var[3];
+    for (int i = 0; i < 3; i++) {
+        gyro_mean[i] = gyro_sum[i] / n;
+        gyro_var[i] = (gyro_sum_sq[i] / n) - (gyro_mean[i] * gyro_mean[i]);
+    }
+
+    // Check variance - reject if drone was moving
+    if (gyro_var[0] > GYRO_VARIANCE_THRESHOLD ||
+        gyro_var[1] > GYRO_VARIANCE_THRESHOLD ||
+        gyro_var[2] > GYRO_VARIANCE_THRESHOLD) {
+        debug_swo_printf("[CAL] Gyro variance too high - drone not still!\n");
+        debug_swo_printf("[CAL] Variance: x=%.6f y=%.6f z=%.6f (max=%.6f)\n",
+                         (double)gyro_var[0], (double)gyro_var[1],
+                         (double)gyro_var[2], (double)GYRO_VARIANCE_THRESHOLD);
+        return -1;
+    }
+
+    s_gyro_bias[0] = gyro_mean[0];
+    s_gyro_bias[1] = gyro_mean[1];
+    s_gyro_bias[2] = gyro_mean[2];
 
     debug_swo_printf("[CAL] Gyro bias: x=%.4f y=%.4f z=%.4f rad/s\n",
                      (double)s_gyro_bias[0], (double)s_gyro_bias[1],
                      (double)s_gyro_bias[2]);
+    debug_swo_printf("[CAL] Gyro variance: x=%.6f y=%.6f z=%.6f (OK)\n",
+                     (double)gyro_var[0], (double)gyro_var[1],
+                     (double)gyro_var[2]);
 
-    // Accelerometer scale calibration
+    // Accelerometer scale calibration (200 samples like Bitcraze)
     // Measure gravity magnitude and compute correction factor
-    debug_swo_printf("[CAL] Accel scale calibration...\n");
+    debug_swo_printf("[CAL] Accel scale calibration (200 samples)...\n");
     struct bmi088_sensor_data accel_cal_data;
     const float accel_scale_raw = (24.0f * GRAVITY) / 32768.0f;
     float accel_magnitude_sum = 0.0f;
     int accel_samples = 0;
 
-    for (int i = 0; i < 100; i++) {
+    for (int i = 0; i < 200; i++) {
         if (bmi088_get_accel_data(&accel_cal_data, &s_bmi088_dev) ==
             BMI088_OK) {
             float ax = accel_cal_data.x * accel_scale_raw;
@@ -1037,10 +1150,10 @@ int platform_calibrate(void) {
             accel_magnitude_sum += magnitude;
             accel_samples++;
         }
-        if (i % 10 == 0) {
+        if (i % 20 == 0) {
             platform_led_toggle();
         }
-        platform_delay_ms(10);
+        platform_delay_ms(5);
     }
 
     if (accel_samples > 0) {
@@ -1163,10 +1276,11 @@ void platform_disarm(void) {
 
 void platform_emergency_stop(void) {
     s_armed = false;
+    // M1: TIM2_CH2, M2: TIM2_CH4, M3: TIM2_CH1, M4: TIM4_CH4
     TIM2->CCR1 = 0;
     TIM2->CCR2 = 0;
-    TIM2->CCR3 = 0;
     TIM2->CCR4 = 0;
+    TIM4->CCR4 = 0;
 }
 
 uint32_t platform_get_time_ms(void) {
@@ -1227,8 +1341,16 @@ bool platform_read_height(uint16_t *height_mm) {
     if (!ready)
         return false;
 
-    vl53l1x_get_distance(&s_vl53l1x_dev, height_mm);
+    uint16_t distance;
+    vl53l1x_get_distance(&s_vl53l1x_dev, &distance);
     vl53l1x_clear_interrupt(&s_vl53l1x_dev);
+
+    // Outlier filtering: discard readings > 5m (sensor max range, likely invalid)
+    if (distance > 5000) {
+        return false;
+    }
+
+    *height_mm = distance;
     return true;
 }
 

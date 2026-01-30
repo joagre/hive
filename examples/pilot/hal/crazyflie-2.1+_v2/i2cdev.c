@@ -14,7 +14,7 @@
 
 int i2cdevInit(I2C_Dev *dev) {
     i2cdrvInit(dev);
-    return true;
+    return 0; // Success
 }
 
 bool i2cdevReadByte(I2C_Dev *dev, uint8_t devAddress, uint8_t memAddress,

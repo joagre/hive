@@ -3,16 +3,10 @@
 // Platform lifecycle: init, cleanup, self-test, calibration, arm/disarm.
 
 #include "../hal.h"
-#include "debug_swo.h"
 #include "platform.h"
 
-// Crazyflie 2.1+ runs at 168 MHz
-#define CPU_FREQ_HZ 168000000
-#define SWO_BAUD 2000000
-
 int hal_init(void) {
-    // Initialize SWO debug output first so we can log during init
-    debug_swo_init(CPU_FREQ_HZ, SWO_BAUD);
+    // SWO debug output is initialized by platform_init()
     return platform_init();
 }
 

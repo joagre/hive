@@ -55,23 +55,71 @@ The following may be added after initial flight testing:
 #### Bitcraze Supervisor Features (Reference)
 
 The [Bitcraze crazyflie-firmware supervisor](https://github.com/bitcraze/crazyflie-firmware/blob/master/src/modules/src/supervisor.c)
-implements additional safety features that could be added as a supervisor actor:
+implements a comprehensive state machine with safety features. Local copy at `local/crazyflie-firmware/`.
 
-| Feature | Description | Priority |
-|---------|-------------|----------|
-| **Arming state machine** | Explicit states: PreFlightChecks → Armed → Flying → Landed | Medium |
-| **Commander watchdog** | Warning at 500ms, motor shutoff at 2000ms without setpoint | High |
-| **Tumble detection** | Configurable tilt threshold + duration before declaring tumbled | Medium |
-| **Crash detection** | Detect crashed state, require explicit recovery command | Low |
-| **Emergency stop** | External signal or parameter to immediately stop motors | High |
-| **Estimator health** | Check Kalman filter covariance within bounds | Medium |
+**State Machine (11 states)**
+
+```
+NotInitialized → PreFlChecksNotPassed → PreFlChecksPassed → ReadyToFly
+                                                               ↓
+                     Locked ← Reset ← Landed ← Flying ← (armed)
+                       ↑                ↓         ↓
+                       └──── Crashed ←──┴── WarningLevelOut
+                                              (excessive tilt)
+```
+
+| State | Description |
+|-------|-------------|
+| PreFlChecksNotPassed | Waiting for system initialization |
+| PreFlChecksPassed | Ready to arm (sensors OK) |
+| ReadyToFly | Armed, motors can spin |
+| Flying | Thrust above idle threshold |
+| Landed | Thrust below idle for >2s |
+| WarningLevelOut | Excessive tilt - XY disabled, roll/pitch locked to zero |
+| Crashed | Crash detected, requires explicit recovery |
+| Locked | Emergency stop triggered, reboot required |
+| Reset | Transitional state back to PreFlChecksPassed |
+
+**Safety Features**
+
+| Feature | Description | Thresholds/Timeouts | Priority |
+|---------|-------------|---------------------|----------|
+| **Commander watchdog** | Stale setpoint detection | Warning 500ms, shutdown 2000ms | High |
+| **Emergency stop** | Multiple trigger sources | Parameter, localization watchdog (1000ms), external request | High |
+| **Tumble detection** | Tilt angle + duration | 0.5g Z-accel (~60°) for 1000ms, or -0.2g (upside-down) for 100ms | High |
+| **Free fall exception** | Suspends tumble check | All axes < 0.1g | Medium |
+| **Is Flying detection** | Motor thrust monitoring | Any motor > idle thrust, 2000ms hysteresis | Medium |
+| **Preflight timeout** | Armed-but-not-flying limit | 30s default (configurable) | Medium |
+| **Landing timeout** | Landed state duration | 3s default (configurable) | Low |
+| **Crash recovery** | Explicit recovery required | Blocked if still tumbled | Low |
+| **Warning Level Out** | Excessive tilt handling | Disables XY, locks roll/pitch to zero, keeps Z control | Medium |
+
+**Configurable Parameters**
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `supervisor.tmblChckEn` | 1 | Enable/disable tumble check |
+| `supervisor.prefltTimeout` | 30000ms | Preflight timeout duration |
+| `supervisor.landedTimeout` | 3000ms | Landing timeout duration |
+| `stabilizer.stop` | 0 | Emergency stop (non-zero = stop) |
+
+**Tumble Detection Details**
+
+The tumble check uses accelerometer Z-axis to detect unsafe orientations:
+- **Tilt threshold**: Z-accel < 0.5g (~60° from vertical) for 1000ms → tumbled
+- **Upside-down threshold**: Z-accel < -0.2g for 100ms → tumbled immediately
+- **Free fall exception**: If |X|, |Y|, |Z| all < 0.1g, tumble timer resets (valid flight)
+
+**NOT in Bitcraze supervisor** (was incorrectly listed):
+- Estimator health / Kalman covariance checking - not implemented in supervisor.c
 
 **Implementation approach**: These would be implemented in a dedicated supervisor
 actor (not in HAL) that:
 1. Subscribes to sensor_bus and state_bus
-2. Monitors attitude, rates, and estimator health
+2. Monitors attitude, thrust, and flight state
 3. Can override motor commands via motor_bus or direct IPC
 4. Manages arming state transitions
+5. Implements tumble detection using accelerometer data
 
 The current pilot has basic cutoffs in altitude_actor.c (attitude >45°, altitude >2m).
 A supervisor actor would centralize these checks and add the additional features above.

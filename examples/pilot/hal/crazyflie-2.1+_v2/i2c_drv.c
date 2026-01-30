@@ -557,16 +557,18 @@ void i2cdrvErrorIsrHandler(I2cDrv *i2c) {
 }
 
 void i2cdrvDmaIsrHandler(I2cDrv *i2c) {
-    uint32_t lisr = DMA1->LISR; // Low interrupt status register
-    uint32_t hisr = DMA1->HISR; // High interrupt status register
     bool has_error = false;
 
+#if I2C_DEBUG_TRACE
+    uint32_t lisr = DMA1->LISR;
+    uint32_t hisr = DMA1->HISR;
     I2C_TRACE("[I2C-DMA] ISR: LISR=0x%08X HISR=0x%08X NDTR=%d\n",
               (unsigned)lisr, (unsigned)hisr, (int)i2c->def->dmaRxStream->NDTR);
     I2C_TRACE("[I2C-DMA] M0AR=0x%08X PAR=0x%08X CR=0x%08X\n",
               (unsigned)i2c->def->dmaRxStream->M0AR,
               (unsigned)i2c->def->dmaRxStream->PAR,
               (unsigned)i2c->def->dmaRxStream->CR);
+#endif
 
     if (DMA_GetFlagStatus(i2c->def->dmaRxStream, i2c->def->dmaRxTEFlag)) {
         // Transfer error - check what went wrong

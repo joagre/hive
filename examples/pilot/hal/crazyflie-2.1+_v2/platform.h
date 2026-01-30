@@ -54,7 +54,7 @@ void platform_debug_printf(const char *fmt, ...)
 void platform_emergency_stop(void);
 
 // ----------------------------------------------------------------------------
-// Flow Deck Interface (not implemented in v2)
+// Flow Deck Interface (PMW3901 optical flow + VL53L1x ToF)
 // ----------------------------------------------------------------------------
 
 bool platform_has_flow_deck(void);
