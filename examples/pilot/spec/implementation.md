@@ -177,7 +177,7 @@ See `hal/<platform>/README.md` for detailed LED patterns per platform.
 | Platform | Build | Details |
 |----------|-------|---------|
 | Webots simulation | `make` | Uses `-DSIMULATED_TIME` |
-| Crazyflie 2.1+ | `make -f Makefile.crazyflie-2.1+` | See `hal/crazyflie-2.1+/README.md` |
+| Crazyflie 2.1+ | `make -f Makefile.crazyflie-2.1plus` | See `hal/crazyflie-2.1plus/README.md` |
 
 All hardware differences are encapsulated in the HAL. Actor code is identical
 across platforms. The only compile-time difference is `SIMULATED_TIME` which
@@ -243,7 +243,7 @@ examples/pilot/
         ground_station.py    # Radio telemetry receiver (Crazyflie)
         README.md            # Tools documentation
     Makefile                 # Webots simulation build
-    Makefile.crazyflie-2.1+  # Crazyflie 2.1+ build
+    Makefile.crazyflie-2.1plus  # Crazyflie 2.1+ build
     hive_config.mk           # Shared Hive memory config
     README.md            # Usage instructions
     spec/                # This specification
@@ -260,7 +260,7 @@ examples/pilot/
     hal/
         hal.h                # Common HAL interface
         webots-crazyflie/    # Webots simulation HAL
-        crazyflie-2.1+/      # Crazyflie 2.1+ HAL (STM32F405)
+        crazyflie-2.1plus/      # Crazyflie 2.1+ HAL (STM32F405)
             bringup/         # Hardware bring-up test firmware
             tests/           # HAL test firmware
 ```

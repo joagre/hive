@@ -1,16 +1,16 @@
-# Makefile.crazyflie-2.1+ - Build pilot for Crazyflie 2.1+ (STM32F405)
+# Makefile.crazyflie-2.1plus - Build pilot for Crazyflie 2.1+ (STM32F405)
 #
 # Usage:
-#   make -f Makefile.crazyflie-2.1+          # Build firmware
-#   make -f Makefile.crazyflie-2.1+ help     # Show all build options
+#   make -f Makefile.crazyflie-2.1plus          # Build firmware
+#   make -f Makefile.crazyflie-2.1plus help     # Show all build options
 
 # Paths
 HIVE_ROOT := ../..
 HIVE_SRC_DIR := $(HIVE_ROOT)/src
-HAL_DIR := hal/crazyflie-2.1+
+HAL_DIR := hal/crazyflie-2.1plus
 
-TARGET := pilot_crazyflie-2.1+
-BUILD_DIR := build_crazyflie-2.1+
+TARGET := pilot_crazyflie-2.1plus
+BUILD_DIR := build_crazyflie-2.1plus
 
 # Toolchain
 PREFIX := arm-none-eabi-
@@ -139,11 +139,11 @@ help:
 	@echo "Pilot Crazyflie 2.1+ Firmware - Build System"
 	@echo ""
 	@echo "Targets:"
-	@echo "  make -f Makefile.crazyflie-2.1+          Build firmware"
-	@echo "  make -f Makefile.crazyflie-2.1+ flash    Flash via ST-Link"
-	@echo "  make -f Makefile.crazyflie-2.1+ size     Show memory usage"
-	@echo "  make -f Makefile.crazyflie-2.1+ clean    Remove build artifacts"
-	@echo "  make -f Makefile.crazyflie-2.1+ help     Show this help"
+	@echo "  make -f Makefile.crazyflie-2.1plus          Build firmware"
+	@echo "  make -f Makefile.crazyflie-2.1plus flash    Flash via ST-Link"
+	@echo "  make -f Makefile.crazyflie-2.1plus size     Show memory usage"
+	@echo "  make -f Makefile.crazyflie-2.1plus clean    Remove build artifacts"
+	@echo "  make -f Makefile.crazyflie-2.1plus help     Show this help"
 	@echo ""
 	@echo "Build Options:"
 	@echo "  FLIGHT_PROFILE=<profile>  Flight profile (default: FLIGHT_PROFILE_FIRST_TEST)"
@@ -166,9 +166,9 @@ help:
 	@echo "  Sensors:    BMI088 IMU, BMP388 baro, Flow deck (PMW3901 + VL53L1x)"
 	@echo ""
 	@echo "Examples:"
-	@echo "  make -f Makefile.crazyflie-2.1+"
-	@echo "  make -f Makefile.crazyflie-2.1+ FLIGHT_PROFILE=FLIGHT_PROFILE_ALTITUDE"
-	@echo "  make -f Makefile.crazyflie-2.1+ LOG_LEVEL=DEBUG"
-	@echo "  make -f Makefile.crazyflie-2.1+ flash"
+	@echo "  make -f Makefile.crazyflie-2.1plus"
+	@echo "  make -f Makefile.crazyflie-2.1plus FLIGHT_PROFILE=FLIGHT_PROFILE_ALTITUDE"
+	@echo "  make -f Makefile.crazyflie-2.1plus LOG_LEVEL=DEBUG"
+	@echo "  make -f Makefile.crazyflie-2.1plus flash"
 
 -include $(PILOT_DEPS)

@@ -176,7 +176,7 @@ static int run_thrust_test(void) {
                   THRUST_TEST_VALUE);
     HIVE_LOG_INFO("  - Lifted off: decrease to %.2f",
                   THRUST_TEST_VALUE - 0.01f);
-    HIVE_LOG_INFO("Update hal/crazyflie-2.1+/hal_config.h with found value");
+    HIVE_LOG_INFO("Update hal/crazyflie-2.1plus/hal_config.h with found value");
 
     hal_cleanup();
     hive_cleanup();

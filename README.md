@@ -211,9 +211,9 @@ Compile-time parameters flow through a hierarchy where later levels override ear
 
 **Example flow** (see `examples/pilot/`):
 ```makefile
-# Makefile.crazyflie-2.1+
+# Makefile.crazyflie-2.1plus
 include hive_config.mk                      # Level 2: app config
-include hal/crazyflie-2.1+/hive_board_config.mk  # Level 3: board config
+include hal/crazyflie-2.1plus/hive_board_config.mk  # Level 3: board config
 
 # hive_config.mk sets: HIVE_MAX_ACTORS=16, pools, stack sizes
 # hive_board_config.mk sets: flash addresses, SD config
@@ -691,7 +691,7 @@ SD card files are accessed via the `/sd` mount point. Use `hive_file_mount_avail
 if the card is present before opening files. See [spec/api.md](spec/api.md#stm32-sd-card-support-optional)
 for details and limitations.
 
-See `examples/pilot/Makefile.crazyflie-2.1+` for a complete example and [spec/api.md](spec/api.md#file-api) for full platform differences.
+See `examples/pilot/Makefile.crazyflie-2.1plus` for a complete example and [spec/api.md](spec/api.md#file-api) for full platform differences.
 
 ### Logging
 

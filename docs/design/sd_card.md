@@ -527,7 +527,7 @@ src/
             spi_sd.h                # SPI SD driver interface
             spi_ll.h                # Low-level SPI interface (board implements)
 
-examples/pilot/hal/crazyflie-2.1+/
+examples/pilot/hal/crazyflie-2.1plus/
     hive_mounts.c            # Board-specific mount table
     spi_ll_sd.c              # Board-specific SPI implementation
 

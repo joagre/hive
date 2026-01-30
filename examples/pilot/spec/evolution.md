@@ -521,4 +521,4 @@ python3 tools/plot_flight.py /tmp/pilot_telemetry.csv
 5. **RC input** - Manual control override
 6. **Setpoint actor** - Altitude command generation, mode switching
 7. **Bus retention on subscribe** - Late subscribers immediately receive most recent value (useful after supervisor restart). Current behavior: wait for next publish cycle, acceptable for high-frequency buses (< 4ms delay at 250Hz)
-8. **SD card logging** - [DONE] High-volume telemetry logging via Micro SD Card Deck (SPI, FAT32). Build with `ENABLE_SD=1`. See `hal/crazyflie-2.1+/README.md` for details
+8. **SD card logging** - [DONE] High-volume telemetry logging via Micro SD Card Deck (SPI, FAT32). Build with `ENABLE_SD=1`. See `hal/crazyflie-2.1plus/README.md` for details

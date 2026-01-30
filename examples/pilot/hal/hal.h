@@ -10,7 +10,7 @@
 //   Torque: positive command produces positive rotation
 //
 // Implementations:
-//   hal/crazyflie-2.1+/   - Crazyflie 2.1+ real hardware
+//   hal/crazyflie-2.1plus/   - Crazyflie 2.1+ real hardware
 //   hal/webots-crazyflie/ - Webots simulation
 
 #ifndef HAL_H
@@ -76,7 +76,7 @@ void hal_write_torque(const torque_cmd_t *cmd);
 // ----------------------------------------------------------------------------
 
 // HAL_BASE_THRUST is defined in each platform's hal_config.h:
-//   hal/crazyflie-2.1+/hal_config.h
+//   hal/crazyflie-2.1plus/hal_config.h
 //   hal/webots-crazyflie/hal_config.h
 // The appropriate file is included via the platform-specific Makefile.
 // This keeps platform constants in platform directories (no #ifdefs here).

@@ -18,7 +18,7 @@ Step-by-step guide from hardware verification to first flight.
 Run the hardware bringup firmware to verify all components.
 
 ```bash
-cd examples/pilot/hal/crazyflie-2.1+/bringup
+cd examples/pilot/hal/crazyflie-2.1plus/bringup
 make && make flash
 make trace    # Or: ../../tools/st-trace.sh -t 0 for no timeout
 ```
@@ -52,8 +52,8 @@ Flash the pilot firmware and verify control response without props.
 
 ```bash
 cd examples/pilot
-make -f Makefile.crazyflie-2.1+ FLIGHT_PROFILE=1
-make -f Makefile.crazyflie-2.1+ flash
+make -f Makefile.crazyflie-2.1plus FLIGHT_PROFILE=1
+make -f Makefile.crazyflie-2.1plus flash
 ```
 
 ### Motor Response Tests (props OFF)
@@ -138,13 +138,13 @@ Only proceed if tethered flight was stable.
 
 ```bash
 # Conservative hover test
-make -f Makefile.crazyflie-2.1+ FLIGHT_PROFILE=1  # 10s at 0.5m
+make -f Makefile.crazyflie-2.1plus FLIGHT_PROFILE=1  # 10s at 0.5m
 
 # Altitude changes (max 1.2m, within flow deck range)
-make -f Makefile.crazyflie-2.1+ FLIGHT_PROFILE=2  # 0.5m -> 0.8m -> 1.2m -> 0.8m
+make -f Makefile.crazyflie-2.1plus FLIGHT_PROFILE=2  # 0.5m -> 0.8m -> 1.2m -> 0.8m
 
 # Full 3D (requires Flow deck, max 1.2m)
-make -f Makefile.crazyflie-2.1+ FLIGHT_PROFILE=3  # Waypoint navigation
+make -f Makefile.crazyflie-2.1plus FLIGHT_PROFILE=3  # Waypoint navigation
 ```
 
 ### Tuning Sequence

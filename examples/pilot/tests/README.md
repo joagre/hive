@@ -21,7 +21,7 @@ These tests are organized by what they validate:
 - `main` combines all tests for use as a Webots controller
 
 For bare-metal hardware bring-up tests (direct register access), see
-`hal/crazyflie-2.1+/bringup/`.
+`hal/crazyflie-2.1plus/bringup/`.
 
 ## Quick Start
 
@@ -81,7 +81,7 @@ value by running motors at a specified thrust level.
    - **No movement:** increase thrust by 0.02
    - **Light on skids:** correct value found!
    - **Lifts off:** decrease thrust by 0.01
-5. Update `HAL_BASE_THRUST` in `hal/crazyflie-2.1+/hal_config.h`
+5. Update `HAL_BASE_THRUST` in `hal/crazyflie-2.1plus/hal_config.h`
 
 **Usage:**
 ```bash
@@ -137,7 +137,7 @@ Observations:
   - No movement: increase to 0.40
   - Light on skids: GOOD! Use 0.38 as HAL_BASE_THRUST
   - Lifted off: decrease to 0.37
-Update hal/crazyflie-2.1+/hal_config.h with found value
+Update hal/crazyflie-2.1plus/hal_config.h with found value
 ```
 
 ### flash

@@ -616,7 +616,7 @@ Syslink support adds radio functions to this same HAL interface.
 examples/pilot/
 ├── hal/
 │   ├── hal.h                      # Common interface (all platforms)
-│   ├── crazyflie-2.1+/
+│   ├── crazyflie-2.1plus/
 │   │   ├── hal_crazyflie.c        # HAL implementation
 │   │   ├── platform_crazyflie.h   # Platform-specific functions
 │   │   └── Makefile
@@ -666,7 +666,7 @@ float hal_power_get_battery(void);
 The Crazyflie HAL implements these functions using syslink:
 
 ```
-examples/pilot/hal/crazyflie-2.1+/
+examples/pilot/hal/crazyflie-2.1plus/
 ├── hal_init.c               # Existing: init, cleanup, self_test, calibrate, arm, disarm
 ├── hal_sensors.c            # Existing: hal_read_sensors
 ├── hal_motors.c             # Existing: hal_write_torque
@@ -706,7 +706,7 @@ float hal_power_get_battery(void) { return 0.0f; }
 ### Makefile Changes
 
 ```makefile
-# hal/crazyflie-2.1+/Makefile
+# hal/crazyflie-2.1plus/Makefile
 
 # Enable radio support
 CFLAGS += -DHAL_HAS_RADIO

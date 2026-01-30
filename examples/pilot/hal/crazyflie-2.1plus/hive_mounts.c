@@ -3,7 +3,7 @@
 // Board-specific mount configuration for Crazyflie 2.1+ with optional
 // Micro SD Card Deck.
 //
-// Flash mounts configured via -D flags in Makefile.crazyflie-2.1+:
+// Flash mounts configured via -D flags in Makefile.crazyflie-2.1plus:
 //   HIVE_VFILE_LOG_BASE, HIVE_VFILE_LOG_SIZE, HIVE_VFILE_LOG_SECTOR
 //
 // SD card deck configuration:

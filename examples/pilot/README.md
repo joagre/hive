@@ -280,7 +280,7 @@ Logs downloadable over radio after flight (see Log Download section).
 | File | Description |
 |------|-------------|
 | `Makefile` | Webots simulation build |
-| `Makefile.crazyflie-2.1+` | Crazyflie 2.1+ build (STM32F405, 168 MHz) |
+| `Makefile.crazyflie-2.1plus` | Crazyflie 2.1+ build (STM32F405, 168 MHz) |
 | `hive_config.mk` | Shared Hive memory config (included by all Makefiles) |
 | `hal/<platform>/hive_board_config.mk` | Board-specific Hive config (flash, SD) |
 | `hal/<platform>/hal_config.h` | Platform-specific PID gains and thrust |
@@ -300,12 +300,12 @@ The pilot uses a layered configuration system where later levels override earlie
 │  Pilot needs: HIVE_MAX_ACTORS=16, smaller pools, 4KB stacks        │
 ├─────────────────────────────────────────────────────────────────────┤
 │  Level 3: Board Config                                             │
-│  hal/crazyflie-2.1+/hive_board_config.mk                           │
+│  hal/crazyflie-2.1plus/hive_board_config.mk                           │
 │  Flash addresses: VFILE_LOG_BASE, VFILE_LOG_SIZE, VFILE_LOG_SECTOR │
 │  SD card: ENABLE_SD, HIVE_ENABLE_SD, HIVE_MAX_SD_FILES             │
 ├─────────────────────────────────────────────────────────────────────┤
 │  Level 4: Command Line                                             │
-│  make -f Makefile.crazyflie-2.1+ ENABLE_SD=1                       │
+│  make -f Makefile.crazyflie-2.1plus ENABLE_SD=1                       │
 │  Highest priority - for testing and one-off builds                 │
 └─────────────────────────────────────────────────────────────────────┘
 ```
@@ -323,7 +323,7 @@ The pilot uses a layered configuration system where later levels override earlie
 ```bash
 # hive_board_config.mk has: ENABLE_SD ?= 0 (default off)
 # Override from command line:
-make -f Makefile.crazyflie-2.1+ ENABLE_SD=1
+make -f Makefile.crazyflie-2.1plus ENABLE_SD=1
 ```
 
 **Example: hive_config.mk contents**
@@ -501,7 +501,7 @@ doesn't affect flight-critical control loops and won't trigger restarts if it fa
 | `spec/` | Design specification (design, implementation, evolution) |
 | `docs/` | Documentation (first flight checklist) |
 | `hal/` | Hardware abstraction layer (see `hal/<platform>/README.md`) |
-| `hal/crazyflie-2.1+/bringup/` | Hardware bring-up test firmware |
+| `hal/crazyflie-2.1plus/bringup/` | Hardware bring-up test firmware |
 | `tools/` | PID tuning and telemetry analysis tools |
 | `controllers/pilot/` | Webots controller (installed by `make`) |
 | `worlds/` | Webots world files |

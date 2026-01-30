@@ -89,7 +89,7 @@ CP = $(PREFIX)objcopy
 SZ = $(PREFIX)size
 
 # HAL directory
-HAL_DIR = $(PILOT_DIR)/hal/crazyflie-2.1+_v2
+HAL_DIR = $(PILOT_DIR)/hal/crazyflie-2.1plus
 
 # MCU flags for STM32F405
 MCU = -mcpu=cortex-m4 -mthumb -mfpu=fpv4-sp-d16 -mfloat-abi=hard
