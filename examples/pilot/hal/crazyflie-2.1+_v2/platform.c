@@ -1019,6 +1019,40 @@ int platform_calibrate(void) {
                      (double)s_gyro_bias[0], (double)s_gyro_bias[1],
                      (double)s_gyro_bias[2]);
 
+    // Accelerometer scale calibration
+    // Measure gravity magnitude and compute correction factor
+    debug_swo_printf("[CAL] Accel scale calibration...\n");
+    struct bmi088_sensor_data accel_cal_data;
+    const float accel_scale_raw = (24.0f * GRAVITY) / 32768.0f;
+    float accel_magnitude_sum = 0.0f;
+    int accel_samples = 0;
+
+    for (int i = 0; i < 100; i++) {
+        if (bmi088_get_accel_data(&accel_cal_data, &s_bmi088_dev) ==
+            BMI088_OK) {
+            float ax = accel_cal_data.x * accel_scale_raw;
+            float ay = accel_cal_data.y * accel_scale_raw;
+            float az = accel_cal_data.z * accel_scale_raw;
+            float magnitude = sqrtf(ax * ax + ay * ay + az * az);
+            accel_magnitude_sum += magnitude;
+            accel_samples++;
+        }
+        if (i % 10 == 0) {
+            platform_led_toggle();
+        }
+        platform_delay_ms(10);
+    }
+
+    if (accel_samples > 0) {
+        float avg_magnitude = accel_magnitude_sum / accel_samples;
+        // Scale factor: expected is GRAVITY, actual is avg_magnitude
+        if (avg_magnitude > 0.1f) {
+            s_accel_scale = GRAVITY / avg_magnitude;
+        }
+        debug_swo_printf("[CAL] Accel scale: %.4f (raw mag=%.2f m/s^2)\n",
+                         (double)s_accel_scale, (double)avg_magnitude);
+    }
+
     // Barometer reference calibration
     float pressure_sum = 0;
     struct bmp3_data baro_data;
