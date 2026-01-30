@@ -549,7 +549,7 @@ static bool flow_deck_init(void) {
         }
     }
 
-    // Scan I2C1 for VL53L1x at known addresses (like v1 HAL does)
+    // Scan I2C1 for VL53L1x at known addresses
     // Bitcraze firmware may reassign from default 0x29 to avoid conflicts
     static const uint8_t addrs_to_scan[] = {0x29, 0x6A, 0x30, 0x31, 0x32, 0x52};
     uint8_t found_addr = 0;
