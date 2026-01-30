@@ -227,20 +227,24 @@ static void i2c1_init(void) {
 }
 
 static bool i2c1_write(uint8_t addr, uint8_t *data, uint16_t len) {
+    // Clear any pending errors
     i2c1_check_error();
 
+    // Wait for bus not busy
     if (!i2c1_wait(&I2C1->SR2, I2C_SR2_BUSY, 0)) {
         i2c1_bus_recovery();
         i2c1_reset();
         return false;
     }
 
+    // Generate start
     I2C1->CR1 |= I2C_CR1_START;
     if (!i2c1_wait(&I2C1->SR1, I2C_SR1_SB, I2C_SR1_SB)) {
         I2C1->CR1 |= I2C_CR1_STOP;
         return false;
     }
 
+    // Send address (write)
     I2C1->DR = addr << 1;
     if (!i2c1_wait(&I2C1->SR1, I2C_SR1_ADDR, I2C_SR1_ADDR)) {
         if (i2c1_check_error()) {
@@ -252,6 +256,7 @@ static bool i2c1_write(uint8_t addr, uint8_t *data, uint16_t len) {
     }
     (void)I2C1->SR2;
 
+    // Send data
     for (uint16_t i = 0; i < len; i++) {
         if (!i2c1_wait(&I2C1->SR1, I2C_SR1_TXE, I2C_SR1_TXE)) {
             I2C1->CR1 |= I2C_CR1_STOP;
@@ -264,6 +269,7 @@ static bool i2c1_write(uint8_t addr, uint8_t *data, uint16_t len) {
         I2C1->DR = data[i];
     }
 
+    // Wait for transfer complete
     if (!i2c1_wait(&I2C1->SR1, I2C_SR1_BTF, I2C_SR1_BTF)) {
         I2C1->CR1 |= I2C_CR1_STOP;
         return false;
@@ -277,8 +283,10 @@ static bool i2c1_read(uint8_t addr, uint8_t *data, uint16_t len) {
     if (len == 0)
         return false;
 
+    // Clear any pending errors
     i2c1_check_error();
 
+    // Wait for bus not busy
     if (!i2c1_wait(&I2C1->SR2, I2C_SR2_BUSY, 0)) {
         i2c1_bus_recovery();
         i2c1_reset();
@@ -287,12 +295,14 @@ static bool i2c1_read(uint8_t addr, uint8_t *data, uint16_t len) {
 
     I2C1->CR1 |= I2C_CR1_ACK;
 
+    // Generate start
     I2C1->CR1 |= I2C_CR1_START;
     if (!i2c1_wait(&I2C1->SR1, I2C_SR1_SB, I2C_SR1_SB)) {
         I2C1->CR1 |= I2C_CR1_STOP;
         return false;
     }
 
+    // Send address (read)
     I2C1->DR = (addr << 1) | 1;
     if (!i2c1_wait(&I2C1->SR1, I2C_SR1_ADDR, I2C_SR1_ADDR)) {
         if (i2c1_check_error()) {
@@ -304,6 +314,7 @@ static bool i2c1_read(uint8_t addr, uint8_t *data, uint16_t len) {
     }
 
     if (len == 1) {
+        // N=1: Disable ACK before clearing ADDR, then set STOP
         I2C1->CR1 &= ~I2C_CR1_ACK;
         (void)I2C1->SR2;
         I2C1->CR1 |= I2C_CR1_STOP;
@@ -316,6 +327,7 @@ static bool i2c1_read(uint8_t addr, uint8_t *data, uint16_t len) {
     }
 
     if (len == 2) {
+        // N=2: Use POS bit per STM32 reference manual
         I2C1->CR1 |= I2C_CR1_POS;
         (void)I2C1->SR2;
         I2C1->CR1 &= ~I2C_CR1_ACK;
@@ -334,6 +346,7 @@ static bool i2c1_read(uint8_t addr, uint8_t *data, uint16_t len) {
         return true;
     }
 
+    // N>2
     (void)I2C1->SR2;
 
     for (uint16_t i = 0; i < len; i++) {
@@ -425,6 +438,10 @@ static int vl53l1x_i2c_write(uint8_t dev_addr, uint16_t reg_addr,
         buf[i + 2] = data[i];
     if (!i2c1_write(dev_addr, buf, len + 2))
         return -1;
+    // Brief delay after write to give sensor time to process
+    // VL53L1x needs this during rapid config writes in sensor_init
+    for (volatile int d = 0; d < 200; d++)
+        __NOP();
     return 0;
 }
 
@@ -485,6 +502,18 @@ static const pmw3901_platform_t s_pmw3901_platform = {
 // Flow Deck Initialization
 // ----------------------------------------------------------------------------
 
+// Probe for VL53L1x at a specific address by reading model ID
+// Returns true if VL53L1x found at this address
+static bool vl53l1x_probe_address(uint8_t addr) {
+    // Read model ID register (0x010F) - should return 0xEACC for VL53L1x
+    uint8_t id[2];
+    if (vl53l1x_i2c_read(addr, 0x010F, id, 2) != 0) {
+        return false;
+    }
+    uint16_t model_id = (uint16_t)(id[0] << 8) | id[1];
+    return (model_id == 0xEACC);
+}
+
 static bool flow_deck_init(void) {
     debug_swo_printf("[FLOW] Initializing flow deck...\n");
 
@@ -501,11 +530,47 @@ static bool flow_deck_init(void) {
     }
     debug_swo_printf("[FLOW] PMW3901 detected\n");
 
+    // Allow I2C1 bus to stabilize after init
+    platform_delay_ms(10);
+
+    // Wake up VL53L1x by doing a few dummy I2C transactions
+    // The sensor may need a few I2C cycles before responding to register reads
+    {
+        uint8_t dummy;
+        for (int i = 0; i < 3; i++) {
+            uint8_t reg = 0x00;
+            i2c1_write(0x29, &reg, 1);
+            i2c1_read(0x29, &dummy, 1);
+            platform_delay_ms(5);
+        }
+    }
+
+    // Scan I2C1 for VL53L1x at known addresses (like v1 HAL does)
+    // Bitcraze firmware may reassign from default 0x29 to avoid conflicts
+    static const uint8_t addrs_to_scan[] = {0x29, 0x6A, 0x30, 0x31, 0x32, 0x52};
+    uint8_t found_addr = 0;
+
+    for (size_t i = 0; i < sizeof(addrs_to_scan); i++) {
+        if (vl53l1x_probe_address(addrs_to_scan[i])) {
+            found_addr = addrs_to_scan[i];
+            break;
+        }
+    }
+
+    if (found_addr == 0) {
+        debug_swo_printf("[FLOW] VL53L1x not found on I2C1\n");
+        return false;
+    }
+    debug_swo_printf("[FLOW] VL53L1x found at 0x%02X\n", found_addr);
+
     // Try to initialize VL53L1x (ToF range sensor)
     if (vl53l1x_init(&s_vl53l1x_dev, &s_vl53l1x_platform) != 0) {
         debug_swo_printf("[FLOW] VL53L1x init failed\n");
         return false;
     }
+
+    // Override with discovered address (driver defaults to 0x29)
+    s_vl53l1x_dev.i2c_address = found_addr;
 
     // Wait for sensor to boot
     uint8_t boot_state = 0;
@@ -523,6 +588,7 @@ static bool flow_deck_init(void) {
         debug_swo_printf("[FLOW] VL53L1x sensor init failed\n");
         return false;
     }
+    debug_swo_printf("[FLOW] VL53L1x initialized\n");
 
     // Configure for short distance mode (up to 1.3m, faster)
     vl53l1x_set_distance_mode(&s_vl53l1x_dev, VL53L1X_DISTANCE_MODE_SHORT);
