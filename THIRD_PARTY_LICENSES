@@ -65,27 +65,32 @@ CRAZYFLIE 2.1+ HAL VENDOR DRIVERS (examples/pilot/hal/crazyflie-2.1plus/vendor/)
 | Directory | Type | License | Source |
 |-----------|------|---------|--------|
 | `CMSIS/Include/` | Unmodified | Apache-2.0 | ARM CMSIS-Core |
-| `CMSIS/Device/ST/` | Unmodified | BSD-3-Clause | STMicroelectronics |
-| `bosch/bmi08x/` | Unmodified | BSD-3-Clause | Bosch Sensortec GitHub |
-| `bosch/bmp3/` | Unmodified | BSD-3-Clause | Bosch Sensortec GitHub |
+| `CMSIS/STM32F4xx/` | Unmodified | BSD-3-Clause | STMicroelectronics |
+| `STM32F4xx_StdPeriph_Driver/` | Unmodified | ST Liberty | STMicroelectronics |
+| `bosch/` | Bitcraze-modified | BSD-3-Clause | Bitcraze crazyflie-firmware |
 | `st/vl53l1x/` | **C port** | BSD-3-Clause | ST Arduino library |
 | `bitcraze/pmw3901/` | **C port** | MIT | Bitcraze Arduino library |
 
+**Bosch drivers** - The Bosch sensor drivers (BMI088, BMP3, etc.) are from the Bitcraze
+crazyflie-firmware repository, which uses modified versions of the Bosch SensorAPI.
+
 **C ports** - The VL53L1x and PMW3901 drivers are C ports of the original C++/Arduino
-libraries. The original `.cpp` files are included for reference. The C ports implement
-the same register-level logic but use plain C with platform I2C/SPI callbacks instead
-of Arduino Wire/SPI classes.
+libraries. The C ports implement the same register-level logic but use plain C with
+platform I2C/SPI callbacks instead of Arduino Wire/SPI classes.
 
 --------------------------------------------------------------------------------
 
-## Bosch BMI08x (vendor/bosch/bmi08x/)
+## Bosch Sensor Drivers (vendor/bosch/)
 
 **License** - BSD-3-Clause
-**Source** - https://github.com/boschsensortec/BMI08x_SensorAPI
-**Copyright** - (c) 2024 Bosch Sensortec GmbH
+**Source** - https://github.com/bitcraze/crazyflie-firmware (drivers/src/bosch/)
+**Original** - https://github.com/boschsensortec
+**Copyright** - (c) Bosch Sensortec GmbH
 
-The BMI08x sensor API provides accelerometer and gyroscope support for the
-BMI085/BMI088 6-axis inertial measurement unit.
+Bosch sensor drivers from the Bitcraze crazyflie-firmware repository:
+- BMI088 - 6-axis IMU (accelerometer + gyroscope)
+- BMP3 - Barometric pressure sensor
+- BMI055, BMI160, BMM150, BMP280 - Additional sensor support
 
 ```
 BSD-3-Clause
@@ -120,16 +125,14 @@ POSSIBILITY OF SUCH DAMAGE.
 
 --------------------------------------------------------------------------------
 
-## Bosch BMP3 (vendor/bosch/bmp3/)
+## STM32F4xx Standard Peripheral Library (vendor/STM32F4xx_StdPeriph_Driver/)
 
-**License** - BSD-3-Clause
-**Source** - https://github.com/boschsensortec/BMP3_SensorAPI
-**Copyright** - (c) 2022 Bosch Sensortec GmbH
+**License** - ST Liberty License (proprietary, free for ST hardware)
+**Source** - https://github.com/bitcraze/crazyflie-firmware
+**Copyright** - (c) STMicroelectronics
 
-The BMP3 sensor API provides barometric pressure and temperature support for
-the BMP380/BMP388/BMP390 barometer.
-
-(Same BSD-3-Clause license text as BMI08x above)
+ST's Standard Peripheral Library provides low-level driver functions for
+STM32F4xx peripherals (GPIO, I2C, DMA, RCC, etc.). Free for use with ST hardware.
 
 --------------------------------------------------------------------------------
 
@@ -193,12 +196,12 @@ Files: `core_cm4.h`, `cmsis_gcc.h`, `cmsis_compiler.h`, `cmsis_version.h`, `mpu_
 
 --------------------------------------------------------------------------------
 
-## STMicroelectronics CMSIS Device (vendor/CMSIS/Device/ST/)
+## STMicroelectronics CMSIS Device (vendor/CMSIS/STM32F4xx/)
 
 **License** - BSD-3-Clause
 **Source** - https://github.com/STMicroelectronics/cmsis_device_f4
 **Copyright** - (c) 2017 STMicroelectronics
 
-STM32F4 device-specific CMSIS headers providing register definitions.
+STM32F4 device-specific CMSIS headers and startup files.
 
-Files: `stm32f4xx.h`, `stm32f405xx.h`, `system_stm32f4xx.h`
+Files: `Include/stm32f4xx.h`, `Include/system_stm32f4xx.h`, `Source/system_stm32f4xx.c`
