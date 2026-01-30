@@ -50,12 +50,14 @@
 #   9 flight actors + optional comms + optional tlog (all supervised)
 #   comms: HAL_HAS_RADIO, tlog: SIMULATED_TIME (both TEMPORARY)
 #
-# Mailbox entries: ~7 peak, 16 configured
+# Mailbox entries: ~13 peak, 32 configured
 #   IPC: START, LANDING, LANDED, STOP notifications
 #   Timer messages: up to 6 concurrent
+#   Buffer for pool_block wake-up latency
 #
-# Message data pool: ~14 peak, 32 configured
-#   7 bus entries + ~7 IPC messages in flight
+# Message data pool: ~35 peak, 64 configured
+#   7 buses x 4 entries = 28 max bus entries
+#   Plus IPC messages and timer messages in flight
 #
 # Message size: 64 bytes max (sensor_data_t), 128 configured
 #
@@ -66,8 +68,8 @@ HIVE_CFLAGS += -DHIVE_MAX_ACTORS=13
 HIVE_CFLAGS += -DHIVE_MAX_BUSES=8
 
 # IPC pool sizes - sized for pilot's messaging patterns
-HIVE_CFLAGS += -DHIVE_MAILBOX_ENTRY_POOL_SIZE=16
-HIVE_CFLAGS += -DHIVE_MESSAGE_DATA_POOL_SIZE=32
+HIVE_CFLAGS += -DHIVE_MAILBOX_ENTRY_POOL_SIZE=32
+HIVE_CFLAGS += -DHIVE_MESSAGE_DATA_POOL_SIZE=64
 HIVE_CFLAGS += -DHIVE_LINK_ENTRY_POOL_SIZE=8
 HIVE_CFLAGS += -DHIVE_MONITOR_ENTRY_POOL_SIZE=12
 HIVE_CFLAGS += -DHIVE_TIMER_ENTRY_POOL_SIZE=10
