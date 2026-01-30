@@ -46,8 +46,12 @@ help:
 	@echo "  esb             - ESB radio communication test"
 	@echo "  main            - Combined test runner (Webots dummy pilot)"
 	@echo ""
+	@echo "Options:"
+	@echo "  ENABLE_MOTOR_TEST=1     Enable motor test (disabled by default)"
+	@echo ""
 	@echo "Examples:"
 	@echo "  make PLATFORM=crazyflie TEST=sensors_motors"
+	@echo "  make PLATFORM=crazyflie TEST=sensors_motors ENABLE_MOTOR_TEST=1"
 	@echo "  make PLATFORM=crazyflie TEST=thrust"
 	@echo "  make PLATFORM=crazyflie TEST=thrust CFLAGS+='-DTHRUST_TEST_VALUE=0.40f'"
 	@echo "  make install-webots"
@@ -64,6 +68,9 @@ HIVE_SRC_DIR = $(HIVE_ROOT)/src
 
 # Test selection
 TEST ?= sensors_motors
+
+# Motor test is disabled by default for safety (enable with ENABLE_MOTOR_TEST=1)
+ENABLE_MOTOR_TEST ?= 0
 
 # Tests that require libhive.a (use Hive file API or logging)
 HIVE_TESTS = sensors_motors thrust flash sd esb main
@@ -129,6 +136,9 @@ endif
 
 # Add Hive config to CFLAGS
 CFLAGS += $(HIVE_CFLAGS)
+
+# Motor test control
+CFLAGS += -DENABLE_MOTOR_TEST=$(ENABLE_MOTOR_TEST)
 
 # Linker flags
 LDSCRIPT = $(HAL_DIR)/stm32f405_flash.ld
@@ -291,6 +301,9 @@ HIVE_CFLAGS += -DHIVE_DEFAULT_STACK_SIZE=4096
 HIVE_CFLAGS += '-DHIVE_STACK_ARENA_SIZE=(32*1024)'
 
 CFLAGS += $(HIVE_CFLAGS)
+
+# Motor test control
+CFLAGS += -DENABLE_MOTOR_TEST=$(ENABLE_MOTOR_TEST)
 
 LDFLAGS = -L$(WEBOTS_LIB)
 LDLIBS = -lController -lm

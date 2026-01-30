@@ -37,6 +37,9 @@
  *   Crazyflie: make PLATFORM=crazyflie TEST=sensors_motors
  *              make flash-crazyflie TEST=sensors_motors
  *   Webots:    make PLATFORM=webots TEST=sensors_motors
+ *
+ * Motor test is disabled by default for safety. Enable with:
+ *   make PLATFORM=crazyflie TEST=sensors_motors ENABLE_MOTOR_TEST=1
  */
 
 #include "hal/hal.h"
@@ -60,6 +63,11 @@ int test_sensors_motors_run(bool standalone);
 #define SENSOR_TEST_DURATION_MS 5000 // Read sensors for 5 seconds
 #define MOTOR_TEST_DURATION_MS 2000  // Run motors for 2 seconds
 #define MOTOR_TEST_THRUST 0.15f      // Low thrust for safety
+
+// Set ENABLE_MOTOR_TEST=1 to enable motor test (disabled by default for safety)
+#ifndef ENABLE_MOTOR_TEST
+#define ENABLE_MOTOR_TEST 0
+#endif
 
 // ============================================================================
 // LED Helpers (use pilot HAL functions)
@@ -222,6 +230,7 @@ int test_sensors_motors_run(bool standalone) {
     // Phase 5: Motor Test
     // ========================================================================
 
+#if ENABLE_MOTOR_TEST
     HIVE_LOG_INFO("Phase 5: Motor test (%d ms at %.0f%% thrust)",
                   MOTOR_TEST_DURATION_MS, MOTOR_TEST_THRUST * 100);
     hal_arm();
@@ -256,6 +265,9 @@ int test_sensors_motors_run(bool standalone) {
     // 6 blinks = motor test done
     hal_delay_ms(500);
     test_blink(6, 200, 200);
+#else
+    HIVE_LOG_INFO("Phase 5: Motor test SKIPPED (ENABLE_MOTOR_TEST=0)");
+#endif
 
     // ========================================================================
     // All Tests Passed!
