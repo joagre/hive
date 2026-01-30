@@ -45,6 +45,7 @@
 #include "hal/hal.h"
 #include "hive_log.h"
 #include "hive_runtime.h"
+#include "platform.h"
 #include "types.h"
 
 #include <stdbool.h>
@@ -168,19 +169,56 @@ int test_sensors_motors_run(bool standalone) {
 
     HIVE_LOG_INFO("Phase 4: Sensor read test (%d ms)", SENSOR_TEST_DURATION_MS);
 
+    // Check for flow deck
+    bool has_flow = platform_has_flow_deck();
+    if (has_flow) {
+        HIVE_LOG_INFO("Flow deck detected");
+    } else {
+        HIVE_LOG_INFO("No flow deck detected");
+    }
+
     // Read first sample while drone is still level/stationary
     sensor_data_t first_sensors;
     hal_read_sensors(&first_sensors);
+
+    // Read flow deck if present
+    int16_t first_flow_x = 0, first_flow_y = 0;
+    uint16_t first_height = 0;
+    if (has_flow) {
+        platform_read_flow(&first_flow_x, &first_flow_y);
+        platform_read_height(&first_height);
+    }
 
     // Continue reading for SENSOR_TEST_DURATION_MS to test sustained operation
     sensor_data_t sensors;
     uint32_t start_time = hal_get_time_ms();
     uint32_t last_blink = start_time;
+    uint32_t last_print = start_time;
     int read_count = 1; // Already read one
+    int16_t flow_x = 0, flow_y = 0;
+    uint16_t height_mm = 0;
 
     while ((hal_get_time_ms() - start_time) < SENSOR_TEST_DURATION_MS) {
         hal_read_sensors(&sensors);
+        if (has_flow) {
+            platform_read_flow(&flow_x, &flow_y);
+            platform_read_height(&height_mm);
+        }
         read_count++;
+
+        // Print sensor values every 500ms
+        if ((hal_get_time_ms() - last_print) >= 500) {
+            HIVE_LOG_INFO("Accel: [%.2f, %.2f, %.2f] Gyro: [%.3f, %.3f, %.3f]",
+                          sensors.accel[0], sensors.accel[1], sensors.accel[2],
+                          sensors.gyro[0], sensors.gyro[1], sensors.gyro[2]);
+            HIVE_LOG_INFO("Baro: P=%.1f hPa T=%.2f C", sensors.pressure_hpa,
+                          sensors.baro_temp_c);
+            if (has_flow) {
+                HIVE_LOG_INFO("Flow: dx=%d dy=%d Height: %u mm", flow_x, flow_y,
+                              height_mm);
+            }
+            last_print = hal_get_time_ms();
+        }
 
         // Fast blink (10 Hz)
         if ((hal_get_time_ms() - last_blink) >= 50) {
@@ -210,6 +248,16 @@ int test_sensors_motors_run(bool standalone) {
     HIVE_LOG_INFO("First sample - Gyro: [%.3f, %.3f, %.3f] rad/s (%s)",
                   first_sensors.gyro[0], first_sensors.gyro[1],
                   first_sensors.gyro[2], gyro_ok ? "OK" : "FAIL");
+
+    // Check flow deck values if present
+    if (has_flow) {
+        HIVE_LOG_INFO("First sample - Flow: dx=%d dy=%d Height: %u mm",
+                      first_flow_x, first_flow_y, first_height);
+        // Height should be reasonable (not 0, not maxed out)
+        if (first_height == 0 || first_height > 4000) {
+            HIVE_LOG_WARN("Height reading may be invalid: %u mm", first_height);
+        }
+    }
 
     if (!accel_ok || !gyro_ok) {
         HIVE_LOG_ERROR("Sensor data out of range");

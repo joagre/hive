@@ -107,21 +107,52 @@ static void debug_swo_print_int(int32_t val) {
     debug_swo_print_uint((uint32_t)val, 10, 0, '0');
 }
 
-// Simple float to string (2 decimal places)
-static void debug_swo_print_float(float val) {
+// Float to string with configurable precision (default 2)
+static void debug_swo_print_float(float val, int precision) {
+    if (precision < 0 || precision > 6)
+        precision = 2;
+
     if (val < 0) {
         debug_swo_putc('-');
         val = -val;
     }
+
+    // Calculate multiplier for precision (10^precision)
+    int32_t mult = 1;
+    for (int i = 0; i < precision; i++)
+        mult *= 10;
+
     int32_t integer = (int32_t)val;
-    int32_t frac = (int32_t)((val - integer) * 100 + 0.5f);
-    if (frac >= 100) {
+    int32_t frac = (int32_t)((val - integer) * mult + 0.5f);
+    if (frac >= mult) {
         integer++;
-        frac -= 100;
+        frac -= mult;
     }
     debug_swo_print_uint((uint32_t)integer, 10, 0, '0');
-    debug_swo_putc('.');
-    debug_swo_print_uint((uint32_t)frac, 10, 2, '0');
+    if (precision > 0) {
+        debug_swo_putc('.');
+        debug_swo_print_uint((uint32_t)frac, 10, precision, '0');
+    }
+}
+
+// Print string with optional width and justification
+static void debug_swo_print_string(const char *s, int width, int left_justify) {
+    int len = 0;
+    const char *p = s;
+    while (*p++)
+        len++;
+
+    // Right padding (left justify): print string first
+    if (left_justify) {
+        debug_swo_puts(s);
+        for (int i = len; i < width; i++)
+            debug_swo_putc(' ');
+    } else {
+        // Left padding (right justify): pad first
+        for (int i = len; i < width; i++)
+            debug_swo_putc(' ');
+        debug_swo_puts(s);
+    }
 }
 
 void debug_swo_vprintf(const char *fmt, va_list args) {
@@ -129,7 +160,15 @@ void debug_swo_vprintf(const char *fmt, va_list args) {
         if (*fmt == '%') {
             fmt++;
             int width = 0;
+            int precision = -1; // -1 means not specified
             char pad = ' ';
+            int left_justify = 0;
+
+            // Check for flags
+            if (*fmt == '-') {
+                left_justify = 1;
+                fmt++;
+            }
 
             // Check for zero padding
             if (*fmt == '0') {
@@ -141,6 +180,16 @@ void debug_swo_vprintf(const char *fmt, va_list args) {
             while (*fmt >= '0' && *fmt <= '9') {
                 width = width * 10 + (*fmt - '0');
                 fmt++;
+            }
+
+            // Parse precision
+            if (*fmt == '.') {
+                fmt++;
+                precision = 0;
+                while (*fmt >= '0' && *fmt <= '9') {
+                    precision = precision * 10 + (*fmt - '0');
+                    fmt++;
+                }
             }
 
             switch (*fmt) {
@@ -158,10 +207,12 @@ void debug_swo_vprintf(const char *fmt, va_list args) {
                                      pad);
                 break;
             case 'f':
-                debug_swo_print_float((float)va_arg(args, double));
+                debug_swo_print_float((float)va_arg(args, double),
+                                      precision >= 0 ? precision : 2);
                 break;
             case 's':
-                debug_swo_puts(va_arg(args, const char *));
+                debug_swo_print_string(va_arg(args, const char *), width,
+                                       left_justify);
                 break;
             case 'c':
                 debug_swo_putc((char)va_arg(args, int));
