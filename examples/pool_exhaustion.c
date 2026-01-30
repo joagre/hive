@@ -54,7 +54,7 @@ static void slow_receiver(void *args, const hive_spawn_info_t *siblings,
     }
 
     printf("Slow receiver processed %d messages\n", messages_received);
-    hive_exit();
+    return;
 }
 
 static void nonblocking_sender(void *args, const hive_spawn_info_t *siblings,
@@ -118,7 +118,7 @@ static void nonblocking_sender(void *args, const hive_spawn_info_t *siblings,
 
     printf("\nNon-blocking sender: sent %d messages with %d retries\n",
            messages_sent_nonblocking, retries);
-    hive_exit();
+    return;
 }
 
 // =============================================================================
@@ -150,7 +150,7 @@ static void consumer(void *args, const hive_spawn_info_t *siblings,
     }
 
     printf("Consumer: consumed %d messages\n", consumed);
-    hive_exit();
+    return;
 }
 
 static void blocking_sender(void *args, const hive_spawn_info_t *siblings,
@@ -187,7 +187,7 @@ static void blocking_sender(void *args, const hive_spawn_info_t *siblings,
 
     printf("\nBlocking sender: sent %d messages (no retries needed!)\n",
            messages_sent_blocking);
-    hive_exit();
+    return;
 }
 
 // =============================================================================
@@ -223,7 +223,7 @@ static void runtime_api_demo(void *args, const hive_spawn_info_t *siblings,
            hive_pool_get_block() ? "true" : "false");
 
     printf("Runtime API demo complete\n");
-    hive_exit();
+    return;
 }
 
 // =============================================================================

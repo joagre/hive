@@ -50,7 +50,7 @@ static void critical_actor(void *args, const hive_spawn_info_t *siblings,
     }
 
     printf("  CRITICAL actor %d done\n", id);
-    hive_exit();
+    return;
 }
 
 // High priority actor - runs after critical, time-sensitive
@@ -66,7 +66,7 @@ static void high_actor(void *args, const hive_spawn_info_t *siblings,
     }
 
     printf("  HIGH actor %d done\n", id);
-    hive_exit();
+    return;
 }
 
 // Normal priority actor - standard processing
@@ -82,7 +82,7 @@ static void normal_actor(void *args, const hive_spawn_info_t *siblings,
     }
 
     printf("  NORMAL actor %d done\n", id);
-    hive_exit();
+    return;
 }
 
 // Low priority actor - background tasks
@@ -98,7 +98,7 @@ static void low_actor(void *args, const hive_spawn_info_t *siblings,
     }
 
     printf("  LOW actor %d done\n", id);
-    hive_exit();
+    return;
 }
 
 // High priority actor that runs for a while without yielding (for starvation demo)
@@ -117,7 +117,7 @@ static void busy_high_actor(void *args, const hive_spawn_info_t *siblings,
     (void)sum;
 
     printf("  BUSY_HIGH: Done with computation\n");
-    hive_exit();
+    return;
 }
 
 // Low priority actor that should run after high finishes (for starvation demo)
@@ -127,7 +127,7 @@ static void waiting_low_actor(void *args, const hive_spawn_info_t *siblings,
     (void)siblings;
     (void)sibling_count;
     printf("  WAITING_LOW: Finally got to run!\n");
-    hive_exit();
+    return;
 }
 
 // Demonstrate starvation scenario

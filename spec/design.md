@@ -691,17 +691,21 @@ if (len > HIVE_MAX_MESSAGE_SIZE) {
 
 ### Actor Exit Semantics
 
-**Returning from actor function = CRASH**
+**Returning from actor function = NORMAL (Erlang semantics)**
 
-If an actor's entry function returns without calling `hive_exit()`, the runtime treats this as a crash (`HIVE_EXIT_CRASH`). Linked/monitoring actors receive EXIT notifications with crash reason.
+If an actor's entry function returns without calling `hive_exit()`, the runtime treats this as normal termination (`HIVE_EXIT_REASON_NORMAL`). This follows Erlang semantics where a process with no more code to execute terminates normally.
 
 ```c
 void my_actor(void *args, const hive_spawn_info_t *siblings, size_t count) {
-    // BAD: returning without hive_exit() = CRASH
-    return;
+    // OK: returning = HIVE_EXIT_REASON_NORMAL (Erlang semantics)
+    // Just let the function end, or use explicit return:
+    // return;
 
-    // GOOD: explicit normal exit
-    hive_exit(HIVE_EXIT_NORMAL);
+    // To signal failure:
+    // hive_exit(HIVE_EXIT_REASON_CRASH);
+
+    // App-defined exit reason:
+    // hive_exit(42);
 }
 ```
 

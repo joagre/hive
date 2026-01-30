@@ -205,7 +205,7 @@ void timer_demo(void *arg, const hive_spawn_info_t *siblings,
     hive_timer_cancel(periodic);
     printf("Periodic timer cancelled\\n");
 
-    hive_exit();
+    return;
 }
 
 int main(void) {
@@ -232,7 +232,7 @@ void worker(void *arg, const hive_spawn_info_t *siblings,
         printf("Got message from %u\\n", msg.sender);
     }
 
-    hive_exit();
+    return;
 }
 .fi
 .SH SEE ALSO

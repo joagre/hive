@@ -45,7 +45,7 @@ static void priority_actor(void *args, const hive_spawn_info_t *siblings,
         g_exec_order[g_exec_count++] = id;
     }
 
-    hive_exit();
+    return;
 }
 
 static void test1_coordinator(void *args, const hive_spawn_info_t *siblings,
@@ -129,7 +129,7 @@ static void test1_coordinator(void *args, const hive_spawn_info_t *siblings,
                critical_pos, high_pos, normal_pos, low_pos);
     }
 
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -157,7 +157,7 @@ static void rr_actor(void *args, const hive_spawn_info_t *siblings,
         g_rr_order[g_rr_count++] = id;
     }
 
-    hive_exit();
+    return;
 }
 
 static void test2_coordinator(void *args, const hive_spawn_info_t *siblings,
@@ -212,7 +212,7 @@ static void test2_coordinator(void *args, const hive_spawn_info_t *siblings,
         TEST_FAIL("not enough executions recorded");
     }
 
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -232,7 +232,7 @@ static void high_prio_late_spawn(void *args, const hive_spawn_info_t *siblings,
     if (!g_low_finished) {
         g_high_ran_first = true;
     }
-    hive_exit();
+    return;
 }
 
 static void low_prio_spawner(void *args, const hive_spawn_info_t *siblings,
@@ -251,7 +251,7 @@ static void low_prio_spawner(void *args, const hive_spawn_info_t *siblings,
     hive_yield();
 
     g_low_finished = true;
-    hive_exit();
+    return;
 }
 
 static void test3_coordinator(void *args, const hive_spawn_info_t *siblings,
@@ -282,7 +282,7 @@ static void test3_coordinator(void *args, const hive_spawn_info_t *siblings,
         TEST_FAIL("high priority actor did not preempt");
     }
 
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -297,7 +297,7 @@ static void starvation_actor(void *args, const hive_spawn_info_t *siblings,
     (void)sibling_count;
     int prio = *(int *)args;
     g_prio_ran[prio] = true;
-    hive_exit();
+    return;
 }
 
 static void test4_coordinator(void *args, const hive_spawn_info_t *siblings,
@@ -339,7 +339,7 @@ static void test4_coordinator(void *args, const hive_spawn_info_t *siblings,
         TEST_FAIL("some priority levels starved");
     }
 
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -357,7 +357,7 @@ static void check_default_prio(void *args, const hive_spawn_info_t *siblings,
     // We'll verify by checking HIVE_ACTOR_CONFIG_DEFAULT
     hive_actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
     s_default_prio = cfg.priority;
-    hive_exit();
+    return;
 }
 
 static void test5_coordinator(void *args, const hive_spawn_info_t *siblings,
@@ -387,7 +387,7 @@ static void test5_coordinator(void *args, const hive_spawn_info_t *siblings,
     hive_message_t msg;
     hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
 
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -425,7 +425,7 @@ static void run_all_tests(void *args, const hive_spawn_info_t *siblings,
         hive_ipc_recv(&msg, 5000);
     }
 
-    hive_exit();
+    return;
 }
 
 int main(void) {

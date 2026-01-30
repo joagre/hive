@@ -18,7 +18,7 @@ static void timer_actor(void *args, const hive_spawn_info_t *siblings,
     hive_status_t status = hive_timer_after(500000, &oneshot);
     if (HIVE_FAILED(status)) {
         printf("Failed to create one-shot timer: %s\n", HIVE_ERR_STR(status));
-        hive_exit();
+        return;
     }
     printf("One-shot timer created (ID: %u)\n", oneshot);
 
@@ -28,7 +28,7 @@ static void timer_actor(void *args, const hive_spawn_info_t *siblings,
     status = hive_timer_every(200000, &periodic);
     if (HIVE_FAILED(status)) {
         printf("Failed to create periodic timer: %s\n", HIVE_ERR_STR(status));
-        hive_exit();
+        return;
     }
     printf("Periodic timer created (ID: %u)\n", periodic);
 
@@ -75,7 +75,7 @@ static void timer_actor(void *args, const hive_spawn_info_t *siblings,
     printf("One-shot received: %s\n", oneshot_received ? "yes" : "no");
     printf("Periodic ticks: %d\n", periodic_count);
 
-    hive_exit();
+    return;
 }
 
 int main(void) {

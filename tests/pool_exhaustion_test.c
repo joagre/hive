@@ -22,7 +22,7 @@ void slow_receiver_actor(void *args, const hive_spawn_info_t *siblings,
     hive_message_t msg;
     hive_ipc_recv(&msg, -1); // Block forever (won't get any messages)
 
-    hive_exit();
+    return;
 }
 
 void sender_actor(void *args, const hive_spawn_info_t *siblings,
@@ -54,7 +54,7 @@ void sender_actor(void *args, const hive_spawn_info_t *siblings,
             } else {
                 printf("Sender: Unexpected error: %d (%s)\n", status.code,
                        status.msg);
-                hive_exit();
+                return;
             }
         }
 
@@ -64,7 +64,7 @@ void sender_actor(void *args, const hive_spawn_info_t *siblings,
         if (sent_count > HIVE_MAILBOX_ENTRY_POOL_SIZE + 100) {
             printf("Sender: ERROR - Sent %d messages without exhausting pool\n",
                    sent_count);
-            hive_exit();
+            return;
         }
     }
 
@@ -122,7 +122,7 @@ void sender_actor(void *args, const hive_spawn_info_t *siblings,
     printf("  2. [OK] Backoff-retry with timeout\n");
     printf("  3. [OK] Developer handles timeout vs message explicitly\n");
 
-    hive_exit();
+    return;
 }
 
 int main(void) {

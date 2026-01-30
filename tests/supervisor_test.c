@@ -67,7 +67,7 @@ static void stable_child(void *args, const hive_spawn_info_t *siblings,
     hive_ipc_recv(&msg, -1);
 
     s_child_exited[id]++;
-    hive_exit();
+    return;
 }
 
 // Child that crashes immediately
@@ -78,7 +78,7 @@ static void crashing_child(void *args, const hive_spawn_info_t *siblings,
     int id = args ? *(int *)args : 0;
     s_child_started[id]++;
     s_child_exited[id]++;
-    // Return without calling hive_exit() = crash
+    hive_exit(HIVE_EXIT_REASON_CRASH);
 }
 
 // Child that exits normally
@@ -89,7 +89,7 @@ static void exiting_child(void *args, const hive_spawn_info_t *siblings,
     int id = args ? *(int *)args : 0;
     s_child_started[id]++;
     s_child_exited[id]++;
-    hive_exit();
+    return;
 }
 
 // Child that crashes after a short delay
@@ -103,7 +103,7 @@ static void delayed_crash_child(void *args, const hive_spawn_info_t *siblings,
     wait_ms(50);
 
     s_child_exited[id]++;
-    // Crash
+    hive_exit(HIVE_EXIT_REASON_CRASH);
 }
 
 // Shutdown callback
@@ -158,7 +158,7 @@ static void test1_basic_lifecycle(void *args, const hive_spawn_info_t *siblings,
     hive_status_t status = hive_supervisor_start(&cfg, &sup_cfg, &supervisor);
     if (HIVE_FAILED(status)) {
         TEST_FAIL("hive_supervisor_start");
-        hive_exit();
+        return;
     }
 
     // Monitor supervisor
@@ -180,7 +180,7 @@ static void test1_basic_lifecycle(void *args, const hive_spawn_info_t *siblings,
     status = hive_supervisor_stop(supervisor);
     if (HIVE_FAILED(status)) {
         TEST_FAIL("hive_supervisor_stop");
-        hive_exit();
+        return;
     }
 
     // Wait for supervisor exit
@@ -189,7 +189,7 @@ static void test1_basic_lifecycle(void *args, const hive_spawn_info_t *siblings,
                                  1000);
     if (HIVE_FAILED(status)) {
         TEST_FAIL("supervisor did not exit");
-        hive_exit();
+        return;
     }
 
     if (s_shutdown_called) {
@@ -199,7 +199,7 @@ static void test1_basic_lifecycle(void *args, const hive_spawn_info_t *siblings,
     }
 
     TEST_PASS("basic lifecycle works");
-    hive_exit();
+    return;
 }
 
 // =============================================================================
@@ -250,7 +250,7 @@ static void test2_one_for_one(void *args, const hive_spawn_info_t *siblings,
     hive_status_t status = hive_supervisor_start(&cfg, &sup_cfg, &supervisor);
     if (HIVE_FAILED(status)) {
         TEST_FAIL("hive_supervisor_start");
-        hive_exit();
+        return;
     }
 
     // Wait for crasher to crash and restart a couple times
@@ -269,7 +269,7 @@ static void test2_one_for_one(void *args, const hive_spawn_info_t *siblings,
     hive_supervisor_stop(supervisor);
     wait_ms(100);
 
-    hive_exit();
+    return;
 }
 
 // =============================================================================
@@ -320,7 +320,7 @@ static void test3_one_for_all(void *args, const hive_spawn_info_t *siblings,
     hive_status_t status = hive_supervisor_start(&cfg, &sup_cfg, &supervisor);
     if (HIVE_FAILED(status)) {
         TEST_FAIL("hive_supervisor_start");
-        hive_exit();
+        return;
     }
 
     // Wait for crasher to crash and all to restart
@@ -338,7 +338,7 @@ static void test3_one_for_all(void *args, const hive_spawn_info_t *siblings,
     hive_supervisor_stop(supervisor);
     wait_ms(100);
 
-    hive_exit();
+    return;
 }
 
 // =============================================================================
@@ -398,7 +398,7 @@ static void test4_rest_for_one(void *args, const hive_spawn_info_t *siblings,
     hive_status_t status = hive_supervisor_start(&cfg, &sup_cfg, &supervisor);
     if (HIVE_FAILED(status)) {
         TEST_FAIL("hive_supervisor_start");
-        hive_exit();
+        return;
     }
 
     // Wait for crasher to crash
@@ -419,7 +419,7 @@ static void test4_rest_for_one(void *args, const hive_spawn_info_t *siblings,
     hive_supervisor_stop(supervisor);
     wait_ms(100);
 
-    hive_exit();
+    return;
 }
 
 // =============================================================================
@@ -462,7 +462,7 @@ static void test5_restart_intensity(void *args,
     hive_status_t status = hive_supervisor_start(&cfg, &sup_cfg, &supervisor);
     if (HIVE_FAILED(status)) {
         TEST_FAIL("hive_supervisor_start");
-        hive_exit();
+        return;
     }
 
     // Monitor supervisor
@@ -486,7 +486,7 @@ static void test5_restart_intensity(void *args,
         TEST_FAIL("shutdown callback not called");
     }
 
-    hive_exit();
+    return;
 }
 
 // =============================================================================
@@ -548,7 +548,7 @@ static void test6_restart_types(void *args, const hive_spawn_info_t *siblings,
     hive_status_t status = hive_supervisor_start(&cfg, &sup_cfg, &supervisor);
     if (HIVE_FAILED(status)) {
         TEST_FAIL("hive_supervisor_start");
-        hive_exit();
+        return;
     }
 
     // Wait for children to run their course
@@ -581,7 +581,7 @@ static void test6_restart_types(void *args, const hive_spawn_info_t *siblings,
     hive_supervisor_stop(supervisor);
     wait_ms(100);
 
-    hive_exit();
+    return;
 }
 
 // =============================================================================
@@ -608,7 +608,7 @@ static void test7_empty_children(void *args, const hive_spawn_info_t *siblings,
     hive_status_t status = hive_supervisor_start(&cfg, &sup_cfg, &supervisor);
     if (HIVE_FAILED(status)) {
         TEST_FAIL("hive_supervisor_start with empty children");
-        hive_exit();
+        return;
     }
 
     TEST_PASS("supervisor starts with empty children");
@@ -630,7 +630,7 @@ static void test7_empty_children(void *args, const hive_spawn_info_t *siblings,
         TEST_FAIL("empty supervisor did not stop");
     }
 
-    hive_exit();
+    return;
 }
 
 // =============================================================================
@@ -702,7 +702,7 @@ static void test8_invalid_config(void *args, const hive_spawn_info_t *siblings,
         TEST_FAIL("should reject NULL child function");
     }
 
-    hive_exit();
+    return;
 }
 
 // =============================================================================
@@ -761,7 +761,7 @@ static void test9_utility_functions(void *args,
         TEST_FAIL("child_restart_str temporary");
     }
 
-    hive_exit();
+    return;
 }
 
 // =============================================================================
@@ -798,7 +798,7 @@ static void run_all_tests(void *args, const hive_spawn_info_t *siblings,
         hive_ipc_recv(&msg, 10000);
     }
 
-    hive_exit();
+    return;
 }
 
 int main(void) {

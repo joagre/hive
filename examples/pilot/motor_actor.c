@@ -45,13 +45,13 @@ void motor_actor(void *args, const hive_spawn_info_t *siblings,
         hive_find_sibling(siblings, sibling_count, "flight_manager");
     if (state->flight_manager == HIVE_ACTOR_ID_INVALID) {
         HIVE_LOG_ERROR("[MOTOR] flight_manager sibling not found");
-        return;
+        hive_exit(HIVE_EXIT_REASON_CRASH);
     }
 
     hive_status_t status = hive_bus_subscribe(state->torque_bus);
     if (HIVE_FAILED(status)) {
         HIVE_LOG_ERROR("[MOTOR] failed to subscribe to torque bus");
-        return;
+        hive_exit(HIVE_EXIT_REASON_CRASH);
     }
 
     bool stopped = false;
@@ -83,7 +83,7 @@ void motor_actor(void *args, const hive_spawn_info_t *siblings,
 
         if (HIVE_FAILED(status)) {
             HIVE_LOG_ERROR("[MOTOR] select failed: %s", HIVE_ERR_STR(status));
-            return;
+            hive_exit(HIVE_EXIT_REASON_CRASH);
         }
 
         if (result.index == SEL_STOP) {

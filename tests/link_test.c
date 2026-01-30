@@ -42,7 +42,7 @@ static void actor_a_links_to_b(void *args, const hive_spawn_info_t *siblings,
     // Link to actor B
     hive_status_t status = hive_link(actor_b);
     if (HIVE_FAILED(status)) {
-        hive_exit();
+        return;
     }
 
     // Wait for exit notification
@@ -57,7 +57,7 @@ static void actor_a_links_to_b(void *args, const hive_spawn_info_t *siblings,
         }
     }
 
-    hive_exit();
+    return;
 }
 
 static void actor_b_exits_immediately(void *args,
@@ -72,7 +72,7 @@ static void actor_b_exits_immediately(void *args,
     hive_message_t msg;
     hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
 
-    hive_exit();
+    return;
 }
 
 static void test1_basic_link(void *args, const hive_spawn_info_t *siblings,
@@ -90,7 +90,7 @@ static void test1_basic_link(void *args, const hive_spawn_info_t *siblings,
     if (HIVE_FAILED(hive_spawn(actor_b_exits_immediately, NULL, NULL, NULL,
                                &actor_b))) {
         TEST_FAIL("spawn actor B");
-        hive_exit();
+        return;
     }
 
     // Spawn actor A and pass actor B's ID
@@ -98,7 +98,7 @@ static void test1_basic_link(void *args, const hive_spawn_info_t *siblings,
     if (HIVE_FAILED(
             hive_spawn(actor_a_links_to_b, NULL, &actor_b, NULL, &actor_a))) {
         TEST_FAIL("spawn actor A");
-        hive_exit();
+        return;
     }
 
     // Wait for both to complete
@@ -113,7 +113,7 @@ static void test1_basic_link(void *args, const hive_spawn_info_t *siblings,
         TEST_FAIL("linked actor did not receive notification");
     }
 
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -142,7 +142,7 @@ static void target_waits_for_linker(void *args,
         }
     }
 
-    hive_exit();
+    return;
 }
 
 static void linker_dies_first(void *args, const hive_spawn_info_t *siblings,
@@ -155,7 +155,7 @@ static void linker_dies_first(void *args, const hive_spawn_info_t *siblings,
     hive_link(target);
 
     // Die immediately
-    hive_exit();
+    return;
 }
 
 static void test2_bidirectional(void *args, const hive_spawn_info_t *siblings,
@@ -172,14 +172,14 @@ static void test2_bidirectional(void *args, const hive_spawn_info_t *siblings,
     if (HIVE_FAILED(
             hive_spawn(target_waits_for_linker, NULL, NULL, NULL, &target))) {
         TEST_FAIL("spawn target");
-        hive_exit();
+        return;
     }
 
     // Spawn linker
     if (HIVE_FAILED(
             hive_spawn(linker_dies_first, NULL, &target, NULL, &g_linker_id))) {
         TEST_FAIL("spawn linker");
-        hive_exit();
+        return;
     }
 
     // Wait for completion
@@ -194,7 +194,7 @@ static void test2_bidirectional(void *args, const hive_spawn_info_t *siblings,
         TEST_FAIL("target not notified (link should be bidirectional)");
     }
 
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -221,7 +221,7 @@ static void actor_unlinks_before_death(void *args,
         g_unlinked_received_notification = true;
     }
 
-    hive_exit();
+    return;
 }
 
 static void actor_dies_after_unlink(void *args,
@@ -237,7 +237,7 @@ static void actor_dies_after_unlink(void *args,
     hive_message_t msg;
     hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
 
-    hive_exit();
+    return;
 }
 
 static void test3_unlink(void *args, const hive_spawn_info_t *siblings,
@@ -253,7 +253,7 @@ static void test3_unlink(void *args, const hive_spawn_info_t *siblings,
     if (HIVE_FAILED(
             hive_spawn(actor_dies_after_unlink, NULL, NULL, NULL, &target))) {
         TEST_FAIL("spawn target");
-        hive_exit();
+        return;
     }
 
     actor_id_t unlinker;
@@ -270,7 +270,7 @@ static void test3_unlink(void *args, const hive_spawn_info_t *siblings,
         TEST_FAIL("received notification after unlink");
     }
 
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -298,7 +298,7 @@ static void test4_link_invalid(void *args, const hive_spawn_info_t *siblings,
         TEST_FAIL("hive_link should reject non-existent actor");
     }
 
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -318,7 +318,7 @@ static void multi_link_target(void *args, const hive_spawn_info_t *siblings,
     hive_message_t msg;
     hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
 
-    hive_exit();
+    return;
 }
 
 static void multi_linker(void *args, const hive_spawn_info_t *siblings,
@@ -341,7 +341,7 @@ static void multi_linker(void *args, const hive_spawn_info_t *siblings,
         }
     }
 
-    hive_exit();
+    return;
 }
 
 static void test5_multiple_links(void *args, const hive_spawn_info_t *siblings,
@@ -361,7 +361,7 @@ static void test5_multiple_links(void *args, const hive_spawn_info_t *siblings,
         if (HIVE_FAILED(hive_spawn(multi_link_target, NULL, &delays[i], NULL,
                                    &targets[i]))) {
             TEST_FAIL("spawn target");
-            hive_exit();
+            return;
         }
     }
 
@@ -382,7 +382,7 @@ static void test5_multiple_links(void *args, const hive_spawn_info_t *siblings,
         TEST_FAIL("did not receive all notifications");
     }
 
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -402,7 +402,7 @@ static void link_target_waits(void *args, const hive_spawn_info_t *siblings,
     if (HIVE_SUCCEEDED(status) && hive_msg_is_exit(&msg)) {
         g_link_target_got_notification = true;
     }
-    hive_exit();
+    return;
 }
 
 static void monitor_target_waits(void *args, const hive_spawn_info_t *siblings,
@@ -415,7 +415,7 @@ static void monitor_target_waits(void *args, const hive_spawn_info_t *siblings,
     if (HIVE_SUCCEEDED(status) && hive_msg_is_exit(&msg)) {
         g_monitor_target_got_notification = true;
     }
-    hive_exit();
+    return;
 }
 
 static void linker_actor(void *args, const hive_spawn_info_t *siblings,
@@ -424,7 +424,7 @@ static void linker_actor(void *args, const hive_spawn_info_t *siblings,
     (void)sibling_count;
     actor_id_t target = *(actor_id_t *)args;
     hive_link(target);
-    hive_exit(); // Die immediately
+    return; // Die immediately
 }
 
 static void monitor_actor(void *args, const hive_spawn_info_t *siblings,
@@ -434,7 +434,7 @@ static void monitor_actor(void *args, const hive_spawn_info_t *siblings,
     actor_id_t target = *(actor_id_t *)args;
     uint32_t ref;
     hive_monitor(target, &ref);
-    hive_exit(); // Die immediately
+    return; // Die immediately
 }
 
 static void test6_link_vs_monitor(void *args, const hive_spawn_info_t *siblings,
@@ -480,14 +480,14 @@ static void test6_link_vs_monitor(void *args, const hive_spawn_info_t *siblings,
         TEST_FAIL("monitor target should NOT be notified");
     }
 
-    hive_exit();
+    return;
 }
 
 // ============================================================================
 // Test 7: Exit reason in link notification
 // ============================================================================
 
-static hive_exit_reason_t s_received_reason = HIVE_EXIT_NORMAL;
+static hive_exit_reason_t s_received_reason = HIVE_EXIT_REASON_NORMAL;
 
 static void link_receiver_checks_reason(void *args,
                                         const hive_spawn_info_t *siblings,
@@ -506,7 +506,7 @@ static void link_receiver_checks_reason(void *args,
         s_received_reason = exit_info.reason;
     }
 
-    hive_exit();
+    return;
 }
 
 static void normal_exit_actor(void *args, const hive_spawn_info_t *siblings,
@@ -518,7 +518,7 @@ static void normal_exit_actor(void *args, const hive_spawn_info_t *siblings,
     hive_timer_after(50000, &timer);
     hive_message_t msg;
     hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
-    hive_exit(); // Normal exit
+    return; // Normal exit
 }
 
 static void test7_exit_reason(void *args, const hive_spawn_info_t *siblings,
@@ -540,15 +540,15 @@ static void test7_exit_reason(void *args, const hive_spawn_info_t *siblings,
     hive_message_t msg;
     hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
 
-    if (s_received_reason == HIVE_EXIT_NORMAL) {
-        TEST_PASS("exit reason is HIVE_EXIT_NORMAL for normal exit");
+    if (s_received_reason == HIVE_EXIT_REASON_NORMAL) {
+        TEST_PASS("exit reason is HIVE_EXIT_REASON_NORMAL for normal exit");
     } else {
         printf("    Got reason: %d, expected: %d\n", s_received_reason,
-               HIVE_EXIT_NORMAL);
+               HIVE_EXIT_REASON_NORMAL);
         TEST_FAIL("wrong exit reason");
     }
 
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -560,7 +560,7 @@ static void quickly_exiting_actor(void *args, const hive_spawn_info_t *siblings,
     (void)args;
     (void)siblings;
     (void)sibling_count;
-    hive_exit();
+    return;
 }
 
 static void test8_link_to_dead_actor(void *args,
@@ -577,7 +577,7 @@ static void test8_link_to_dead_actor(void *args,
     if (HIVE_FAILED(
             hive_spawn(quickly_exiting_actor, NULL, NULL, NULL, &target))) {
         TEST_FAIL("failed to spawn target actor");
-        hive_exit();
+        return;
     }
 
     // Yield to let it run and exit
@@ -588,7 +588,7 @@ static void test8_link_to_dead_actor(void *args,
     // Verify the actor is dead
     if (hive_actor_alive(target)) {
         TEST_FAIL("target actor should be dead by now");
-        hive_exit();
+        return;
     }
 
     // Try to link to the dead actor
@@ -599,7 +599,7 @@ static void test8_link_to_dead_actor(void *args,
         TEST_FAIL("hive_link should reject dead actor");
     }
 
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -624,7 +624,7 @@ static void test9_link_to_self(void *args, const hive_spawn_info_t *siblings,
         TEST_PASS("hive_link to self accepted (no-op expected)");
     }
 
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -641,7 +641,7 @@ static void unlink_target_actor(void *args, const hive_spawn_info_t *siblings,
     hive_timer_after(200000, &timer);
     hive_message_t msg;
     hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
-    hive_exit();
+    return;
 }
 
 static void test10_unlink_non_linked(void *args,
@@ -658,7 +658,7 @@ static void test10_unlink_non_linked(void *args,
     if (HIVE_FAILED(
             hive_spawn(unlink_target_actor, NULL, NULL, NULL, &target))) {
         TEST_FAIL("spawn target");
-        hive_exit();
+        return;
     }
 
     // Try to unlink from an actor we're not linked to
@@ -677,7 +677,7 @@ static void test10_unlink_non_linked(void *args,
     hive_message_t msg;
     hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
 
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -706,7 +706,7 @@ static void test11_unlink_invalid(void *args, const hive_spawn_info_t *siblings,
         TEST_FAIL("hive_unlink should reject non-existent actor");
     }
 
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -723,7 +723,7 @@ static void link_pool_target_actor(void *args,
     // Wait for signal to exit
     hive_message_t msg;
     hive_ipc_recv(&msg, 5000);
-    hive_exit();
+    return;
 }
 
 static void test12_link_pool_exhaustion(void *args,
@@ -787,7 +787,7 @@ static void test12_link_pool_exhaustion(void *args,
         hive_ipc_recv(&msg, 0);
     }
 
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -827,7 +827,7 @@ static void run_all_tests(void *args, const hive_spawn_info_t *siblings,
         hive_ipc_recv(&msg, 5000);
     }
 
-    hive_exit();
+    return;
 }
 
 int main(void) {

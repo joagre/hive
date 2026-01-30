@@ -30,7 +30,7 @@ Tests actor lifecycle and management (spawn, exit, yield).
 - Spawn with name
 - Spawn with NULL function (rejected)
 - Multiple spawns
-- Actor crash detection (return without rt_exit)
+- Actor return = normal termination (Erlang semantics)
 - Actor table exhaustion (RT_MAX_ACTORS)
 
 ---

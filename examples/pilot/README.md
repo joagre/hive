@@ -266,8 +266,8 @@ Note: Comms actor (Crazyflie only) not included in Webots measurements.
 Actors use explicit error checking instead of `assert()`, enabling the supervisor to
 detect and restart failed actors:
 
-- **Cold path (init)** - Log error and return -> supervisor sees CRASH, attempts restart
-- **Hot path blocking** - Log error and return -> fundamental runtime problem
+- **Cold path (init)** - Log error and `hive_exit(HIVE_EXIT_REASON_CRASH)` -> supervisor attempts restart
+- **Hot path blocking** - Log error and `hive_exit(HIVE_EXIT_REASON_CRASH)` -> fundamental runtime problem
 - **Hot path non-blocking** - Log warning and continue -> next iteration proceeds
 
 See [spec/design.md](spec/design.md#error-handling-pattern) for detailed examples and rationale.

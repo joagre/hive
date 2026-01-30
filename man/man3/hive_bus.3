@@ -236,7 +236,7 @@ void sensor_publisher(void *arg, const hive_spawn_info_t *siblings,
                data.temperature, data.humidity);
     }
 
-    hive_exit();
+    return;
 }
 
 void display_actor(void *arg, const hive_spawn_info_t *siblings,
@@ -256,7 +256,7 @@ void display_actor(void *arg, const hive_spawn_info_t *siblings,
     }
 
     hive_bus_unsubscribe(sensor_bus);
-    hive_exit();
+    return;
 }
 
 void logger_actor(void *arg, const hive_spawn_info_t *siblings,
@@ -274,7 +274,7 @@ void logger_actor(void *arg, const hive_spawn_info_t *siblings,
     }
 
     hive_bus_unsubscribe(sensor_bus);
-    hive_exit();
+    return;
 }
 
 int main(void) {

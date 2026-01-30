@@ -41,7 +41,7 @@ static void test1_register_actor(void *args, const hive_spawn_info_t *siblings,
 
     hive_status_t status = hive_register("test_actor");
     if (HIVE_FAILED(status)) {
-        hive_exit();
+        return;
     }
 
     g_test1_expected_id = hive_self();
@@ -52,7 +52,7 @@ static void test1_register_actor(void *args, const hive_spawn_info_t *siblings,
     hive_message_t msg;
     hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
 
-    hive_exit();
+    return;
 }
 
 static void test1_lookup_actor(void *args, const hive_spawn_info_t *siblings,
@@ -73,7 +73,7 @@ static void test1_lookup_actor(void *args, const hive_spawn_info_t *siblings,
         g_test1_lookup_success = true;
     }
 
-    hive_exit();
+    return;
 }
 
 static void test1_basic_register_whereis(void *args,
@@ -103,7 +103,7 @@ static void test1_basic_register_whereis(void *args,
         TEST_FAIL("hive_whereis did not return expected actor ID");
     }
 
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -130,7 +130,7 @@ static void test2_first_actor(void *args, const hive_spawn_info_t *siblings,
     hive_message_t msg;
     hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
 
-    hive_exit();
+    return;
 }
 
 static void test2_second_actor(void *args, const hive_spawn_info_t *siblings,
@@ -150,7 +150,7 @@ static void test2_second_actor(void *args, const hive_spawn_info_t *siblings,
         g_test2_second_failed = true;
     }
 
-    hive_exit();
+    return;
 }
 
 static void test2_duplicate_name(void *args, const hive_spawn_info_t *siblings,
@@ -178,7 +178,7 @@ static void test2_duplicate_name(void *args, const hive_spawn_info_t *siblings,
         TEST_FAIL("duplicate name should be rejected");
     }
 
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -204,7 +204,7 @@ static void test3_registering_actor(void *args,
     hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
 
     // Exit - name should be auto-cleaned
-    hive_exit();
+    return;
 }
 
 static void test3_checker_actor(void *args, const hive_spawn_info_t *siblings,
@@ -234,7 +234,7 @@ static void test3_checker_actor(void *args, const hive_spawn_info_t *siblings,
         g_test3_not_found_after = true;
     }
 
-    hive_exit();
+    return;
 }
 
 static void test3_auto_cleanup(void *args, const hive_spawn_info_t *siblings,
@@ -264,7 +264,7 @@ static void test3_auto_cleanup(void *args, const hive_spawn_info_t *siblings,
         TEST_FAIL("auto-cleanup did not work");
     }
 
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -295,7 +295,7 @@ static void test4_unregister_actor(void *args,
     hive_timer_after(100000, &timer);
     hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
 
-    hive_exit();
+    return;
 }
 
 static void test4_checker_actor(void *args, const hive_spawn_info_t *siblings,
@@ -323,7 +323,7 @@ static void test4_checker_actor(void *args, const hive_spawn_info_t *siblings,
         g_test4_not_found_after = true;
     }
 
-    hive_exit();
+    return;
 }
 
 static void test4_unregister(void *args, const hive_spawn_info_t *siblings,
@@ -351,7 +351,7 @@ static void test4_unregister(void *args, const hive_spawn_info_t *siblings,
         TEST_FAIL("unregister did not work");
     }
 
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -374,7 +374,7 @@ static void test5_whereis_nonexistent(void *args,
         TEST_FAIL("hive_whereis should fail for non-existent name");
     }
 
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -417,7 +417,7 @@ static void test6_null_args(void *args, const hive_spawn_info_t *siblings,
         TEST_FAIL("hive_unregister should reject NULL");
     }
 
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -440,7 +440,7 @@ static void test7_owner_actor(void *args, const hive_spawn_info_t *siblings,
     hive_message_t msg;
     hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
 
-    hive_exit();
+    return;
 }
 
 static void test7_thief_actor(void *args, const hive_spawn_info_t *siblings,
@@ -461,7 +461,7 @@ static void test7_thief_actor(void *args, const hive_spawn_info_t *siblings,
         g_test7_unregister_failed = true;
     }
 
-    hive_exit();
+    return;
 }
 
 static void test7_cannot_unregister_others(void *args,
@@ -489,7 +489,7 @@ static void test7_cannot_unregister_others(void *args,
         TEST_FAIL("should not be able to unregister another's name");
     }
 
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -515,7 +515,7 @@ static void test8_multi_name_actor(void *args,
     hive_message_t msg;
     hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
 
-    hive_exit();
+    return;
 }
 
 static void test8_checker_actor(void *args, const hive_spawn_info_t *siblings,
@@ -539,7 +539,7 @@ static void test8_checker_actor(void *args, const hive_spawn_info_t *siblings,
         g_test8_all_found = true;
     }
 
-    hive_exit();
+    return;
 }
 
 static void test8_multiple_names(void *args, const hive_spawn_info_t *siblings,
@@ -566,7 +566,7 @@ static void test8_multiple_names(void *args, const hive_spawn_info_t *siblings,
         TEST_FAIL("multiple names not working");
     }
 
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -608,7 +608,7 @@ static void run_all_tests(void *args, const hive_spawn_info_t *siblings,
         hive_ipc_recv(&msg, 5000);
     }
 
-    hive_exit();
+    return;
 }
 
 int main(void) {

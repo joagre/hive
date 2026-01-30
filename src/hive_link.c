@@ -234,22 +234,6 @@ hive_status_t hive_decode_exit(const hive_message_t *msg,
     return HIVE_SUCCESS;
 }
 
-// Convert exit reason to string
-const char *hive_exit_reason_str(hive_exit_reason_t reason) {
-    switch (reason) {
-    case HIVE_EXIT_NORMAL:
-        return "NORMAL";
-    case HIVE_EXIT_CRASH:
-        return "CRASH";
-    case HIVE_EXIT_CRASH_STACK:
-        return "STACK_OVERFLOW";
-    case HIVE_EXIT_KILLED:
-        return "KILLED";
-    default:
-        return "UNKNOWN";
-    }
-}
-
 // Helper: Send exit notification to an actor_t
 // monitor_id: 0 for links, non-zero for monitors
 static bool send_exit_notification(actor_t *recipient, actor_id_t dying_id,

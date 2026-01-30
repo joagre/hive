@@ -311,7 +311,7 @@ static bool should_restart_child(hive_child_restart_t restart,
     case HIVE_CHILD_PERMANENT:
         return true;
     case HIVE_CHILD_TRANSIENT:
-        return reason != HIVE_EXIT_NORMAL;
+        return reason != HIVE_EXIT_REASON_NORMAL;
     case HIVE_CHILD_TEMPORARY:
         return false;
     default:
@@ -419,8 +419,8 @@ static hive_status_t handle_child_exit(supervisor_state_t *sup,
         return HIVE_SUCCESS;
     }
 
-    HIVE_LOG_WARN("[SUP] Child \"%s\" exited (%s)", sup->children[index].name,
-                  hive_exit_reason_str(reason));
+    HIVE_LOG_WARN("[SUP] Child \"%s\" exited (reason=%u)",
+                  sup->children[index].name, (unsigned)reason);
 
     switch (sup->strategy) {
     case HIVE_STRATEGY_ONE_FOR_ONE:
@@ -456,7 +456,7 @@ static void supervisor_actor_fn(void *args, const hive_spawn_info_t *siblings,
             sup->on_shutdown(sup->shutdown_ctx);
         }
         free_supervisor(sup);
-        hive_exit();
+        hive_exit(HIVE_EXIT_REASON_NORMAL);
     }
 
     HIVE_LOG_INFO("[SUP] All %zu children started", sup->num_children);
@@ -507,7 +507,7 @@ static void supervisor_actor_fn(void *args, const hive_spawn_info_t *siblings,
     }
 
     free_supervisor(sup);
-    hive_exit();
+    hive_exit(HIVE_EXIT_REASON_NORMAL);
 }
 
 // =============================================================================

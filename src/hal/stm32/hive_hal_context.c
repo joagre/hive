@@ -5,6 +5,7 @@
 
 #include "hal/hive_hal_context.h"
 #include "hive_internal.h"
+#include "hive_runtime.h"
 #include "hive_actor.h"
 #include <stdint.h>
 #include <string.h>
@@ -38,8 +39,9 @@ void hive_context_entry_run(void (*fn)(void *, const hive_spawn_info_t *,
     // Call the actor_t function with all three arguments
     fn(args, siblings, sibling_count);
 
-    // Actor returned without calling hive_exit() - this is a crash
-    hive_exit_crash();
+    // Actor returned without calling hive_exit() - treat as normal exit
+    // (Erlang semantics: process with no more code to execute terminates normally)
+    hive_exit(HIVE_EXIT_REASON_NORMAL);
 }
 
 void hive_context_init(hive_context_t *ctx, void *stack, size_t stack_size,

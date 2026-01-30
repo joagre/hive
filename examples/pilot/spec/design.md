@@ -160,24 +160,24 @@ same instant.
 
 ### Error Handling Pattern
 
-> **Actor return semantics** - In Hive, returning from an actor entry function is treated as abnormal termination (CRASH) unless the actor explicitly calls `hive_exit()`. This enables supervision and restart.
+> **Actor return semantics (Erlang)** - In Hive, returning from an actor entry function is normal termination (`HIVE_EXIT_REASON_NORMAL`). To signal failure, actors must explicitly call `hive_exit(HIVE_EXIT_REASON_CRASH)`.
 
 Actors use explicit error checking instead of `assert()`. This enables the supervisor
 to detect and recover from failed actors.
 
-**Cold path (initialization)** - Log error and return without calling `hive_exit()`.
+**Cold path (initialization)** - Log error and call `hive_exit(HIVE_EXIT_REASON_CRASH)`.
 The supervisor sees this as a CRASH and can attempt restart per the restart strategy.
 
 ```c
 // Estimator subscribes to sensor bus (consumer role)
 if (HIVE_FAILED(hive_bus_subscribe(state->sensor_bus))) {
     HIVE_LOG_ERROR("[ESTIMATOR] bus subscribe failed");
-    return;
+    hive_exit(HIVE_EXIT_REASON_CRASH);
 }
 ```
 
 **Hot path - blocking calls** (`hive_select`, `hive_bus_read` with timeout, `hive_ipc_recv_match`):
-Log error and return. These failures indicate a fundamental runtime problem that the
+Log error and call `hive_exit(HIVE_EXIT_REASON_CRASH)`. These failures indicate a fundamental runtime problem that the
 actor cannot recover from.
 
 ```c
@@ -185,7 +185,7 @@ actor cannot recover from.
 status = hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
 if (HIVE_FAILED(status)) {
     HIVE_LOG_ERROR("[SENSOR] recv_match failed: %s", HIVE_ERR_STR(status));
-    return;
+    hive_exit(HIVE_EXIT_REASON_CRASH);
 }
 ```
 
@@ -202,7 +202,7 @@ if (HIVE_FAILED(hive_bus_publish(state->sensor_bus, &sensors, sizeof(sensors))))
 **Why no `assert()`**
 - `assert()` terminates the entire process - supervisor cannot recover
 - On STM32, `assert()` behavior is platform-dependent (hang, reset, undefined)
-- Log + return gives consistent behavior across platforms
+- Log + `hive_exit(CRASH)` gives consistent behavior across platforms
 - Supervisor sees CRASH and applies restart strategy (ONE_FOR_ALL in pilot)
 
 **Exception** - `_Static_assert` is used for compile-time checks (e.g., packet sizes

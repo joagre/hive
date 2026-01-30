@@ -22,7 +22,4 @@ hive_status_t hive_demonitor(uint32_t id);
 bool hive_msg_is_exit(const hive_message_t *msg);
 hive_status_t hive_decode_exit(const hive_message_t *msg, hive_exit_msg_t *out);
 
-// Convert exit reason to string (for logging/debugging)
-const char *hive_exit_reason_str(hive_exit_reason_t reason);
-
 #endif // HIVE_LINK_H

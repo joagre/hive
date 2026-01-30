@@ -61,7 +61,7 @@ void telemetry_logger_actor(void *args, const hive_spawn_info_t *siblings,
     if (HIVE_FAILED(status)) {
         HIVE_LOG_ERROR("[TLOG] Failed to open %s: %s", state->log_path,
                        HIVE_ERR_STR(status));
-        return;
+        hive_exit(HIVE_EXIT_REASON_CRASH);
     }
 
     // Write CSV header
@@ -89,7 +89,7 @@ void telemetry_logger_actor(void *args, const hive_spawn_info_t *siblings,
         HIVE_FAILED(hive_bus_subscribe(state->position_target_bus))) {
         HIVE_LOG_ERROR("[TLOG] Bus subscribe failed");
         hive_file_close(state->log_fd);
-        return;
+        hive_exit(HIVE_EXIT_REASON_CRASH);
     }
 
     // Start logging timer
@@ -97,7 +97,7 @@ void telemetry_logger_actor(void *args, const hive_spawn_info_t *siblings,
     if (HIVE_FAILED(hive_timer_every(LOG_INTERVAL_US, &timer))) {
         HIVE_LOG_ERROR("[TLOG] Timer setup failed");
         hive_file_close(state->log_fd);
-        return;
+        hive_exit(HIVE_EXIT_REASON_CRASH);
     }
 
     // Latest data from buses

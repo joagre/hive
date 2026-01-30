@@ -248,7 +248,7 @@ void client_handler(void *arg, const hive_spawn_info_t *siblings,
     }
 
     hive_tcp_close(conn_fd);
-    hive_exit();
+    return;
 }
 
 void server(void *arg, const hive_spawn_info_t *siblings,
@@ -258,7 +258,7 @@ void server(void *arg, const hive_spawn_info_t *siblings,
     hive_status_t s = hive_tcp_listen(8080, &listen_fd);
     if (HIVE_FAILED(s)) {
         printf("Listen failed: %s\\n", HIVE_ERR_STR(s));
-        hive_exit();
+        return;
     }
 
     printf("Server listening on port 8080\\n");
@@ -298,7 +298,7 @@ void client(void *arg, const hive_spawn_info_t *siblings,
     hive_status_t s = hive_tcp_connect("127.0.0.1", 8080, &fd, 5000);
     if (HIVE_FAILED(s)) {
         printf("Connect failed: %s\\n", HIVE_ERR_STR(s));
-        hive_exit();
+        return;
     }
 
     /* Send request */
@@ -319,7 +319,7 @@ void client(void *arg, const hive_spawn_info_t *siblings,
     }
 
     hive_tcp_close(fd);
-    hive_exit();
+    return;
 }
 .fi
 .SH SEE ALSO

@@ -36,7 +36,7 @@ static void target_normal_exit(void *args, const hive_spawn_info_t *siblings,
     (void)siblings;
     (void)sibling_count;
     // Exit normally immediately
-    hive_exit();
+    return;
 }
 
 static void test1_monitor_actor(void *args, const hive_spawn_info_t *siblings,
@@ -51,7 +51,7 @@ static void test1_monitor_actor(void *args, const hive_spawn_info_t *siblings,
     if (HIVE_FAILED(
             hive_spawn(target_normal_exit, NULL, NULL, NULL, &target))) {
         TEST_FAIL("spawn target");
-        hive_exit();
+        return;
     }
 
     // Monitor it
@@ -59,7 +59,7 @@ static void test1_monitor_actor(void *args, const hive_spawn_info_t *siblings,
     hive_status_t status = hive_monitor(target, &ref);
     if (HIVE_FAILED(status)) {
         TEST_FAIL("hive_monitor");
-        hive_exit();
+        return;
     }
 
     // Wait for exit notification
@@ -67,12 +67,12 @@ static void test1_monitor_actor(void *args, const hive_spawn_info_t *siblings,
     status = hive_ipc_recv(&msg, 1000); // 1 second timeout
     if (HIVE_FAILED(status)) {
         TEST_FAIL("receive exit notification (timeout)");
-        hive_exit();
+        return;
     }
 
     if (!hive_msg_is_exit(&msg)) {
         TEST_FAIL("message is not exit notification");
-        hive_exit();
+        return;
     }
 
     hive_exit_msg_t exit_info;
@@ -80,16 +80,16 @@ static void test1_monitor_actor(void *args, const hive_spawn_info_t *siblings,
 
     if (exit_info.actor != target) {
         TEST_FAIL("exit notification from wrong actor");
-        hive_exit();
+        return;
     }
 
-    if (exit_info.reason != HIVE_EXIT_NORMAL) {
+    if (exit_info.reason != HIVE_EXIT_REASON_NORMAL) {
         TEST_FAIL("exit reason should be NORMAL");
-        hive_exit();
+        return;
     }
 
     TEST_PASS("monitor receives normal exit notification");
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -108,7 +108,7 @@ static void target_delayed_exit(void *args, const hive_spawn_info_t *siblings,
     hive_message_t msg;
     hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
 
-    hive_exit();
+    return;
 }
 
 static void test3_multi_monitor_actor(void *args,
@@ -128,13 +128,13 @@ static void test3_multi_monitor_actor(void *args,
         if (HIVE_FAILED(hive_spawn(target_delayed_exit, NULL, &delays[i], NULL,
                                    &targets[i]))) {
             TEST_FAIL("spawn target");
-            hive_exit();
+            return;
         }
 
         hive_status_t status = hive_monitor(targets[i], &refs[i]);
         if (HIVE_FAILED(status)) {
             TEST_FAIL("hive_monitor");
-            hive_exit();
+            return;
         }
     }
 
@@ -148,7 +148,7 @@ static void test3_multi_monitor_actor(void *args,
         if (HIVE_FAILED(status)) {
             printf("  Only received %d/3 notifications\n", received);
             TEST_FAIL("receive all exit notifications");
-            hive_exit();
+            return;
         }
 
         if (!hive_msg_is_exit(&msg)) {
@@ -168,7 +168,7 @@ static void test3_multi_monitor_actor(void *args,
     }
 
     TEST_PASS("received all 3 exit notifications");
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -187,7 +187,7 @@ static void target_slow_exit(void *args, const hive_spawn_info_t *siblings,
     hive_message_t msg;
     hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
 
-    hive_exit();
+    return;
 }
 
 static void test4_demonitor_actor(void *args, const hive_spawn_info_t *siblings,
@@ -201,7 +201,7 @@ static void test4_demonitor_actor(void *args, const hive_spawn_info_t *siblings,
     actor_id_t target;
     if (HIVE_FAILED(hive_spawn(target_slow_exit, NULL, NULL, NULL, &target))) {
         TEST_FAIL("spawn target");
-        hive_exit();
+        return;
     }
 
     // Monitor it
@@ -209,14 +209,14 @@ static void test4_demonitor_actor(void *args, const hive_spawn_info_t *siblings,
     hive_status_t status = hive_monitor(target, &ref);
     if (HIVE_FAILED(status)) {
         TEST_FAIL("hive_monitor");
-        hive_exit();
+        return;
     }
 
     // Immediately demonitor
     status = hive_demonitor(ref);
     if (HIVE_FAILED(status)) {
         TEST_FAIL("hive_demonitor");
-        hive_exit();
+        return;
     }
 
     // Wait a bit - should NOT receive exit notification
@@ -236,7 +236,7 @@ static void test4_demonitor_actor(void *args, const hive_spawn_info_t *siblings,
         }
     }
 
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -259,7 +259,7 @@ static void target_waits_for_exit(void *args, const hive_spawn_info_t *siblings,
         g_target_received_exit = true;
     }
 
-    hive_exit();
+    return;
 }
 
 static void monitor_dies_early(void *args, const hive_spawn_info_t *siblings,
@@ -273,7 +273,7 @@ static void monitor_dies_early(void *args, const hive_spawn_info_t *siblings,
     hive_monitor(target, &ref);
 
     // Die immediately (monitor dies, target should NOT be notified)
-    hive_exit();
+    return;
 }
 
 static void test5_coordinator(void *args, const hive_spawn_info_t *siblings,
@@ -289,7 +289,7 @@ static void test5_coordinator(void *args, const hive_spawn_info_t *siblings,
     if (HIVE_FAILED(
             hive_spawn(target_waits_for_exit, NULL, NULL, NULL, &target))) {
         TEST_FAIL("spawn target");
-        hive_exit();
+        return;
     }
 
     // Spawn monitor that will monitor target then die
@@ -297,7 +297,7 @@ static void test5_coordinator(void *args, const hive_spawn_info_t *siblings,
     if (HIVE_FAILED(
             hive_spawn(monitor_dies_early, NULL, &target, NULL, &monitor))) {
         TEST_FAIL("spawn monitor");
-        hive_exit();
+        return;
     }
 
     // Wait for both to finish
@@ -313,7 +313,7 @@ static void test5_coordinator(void *args, const hive_spawn_info_t *siblings,
             "target received exit notification (should be unidirectional)");
     }
 
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -345,7 +345,7 @@ static void test6_monitor_invalid(void *args, const hive_spawn_info_t *siblings,
         TEST_FAIL("hive_monitor should reject non-existent actor");
     }
 
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -375,7 +375,7 @@ static void test7_demonitor_invalid(void *args,
         TEST_PASS("hive_demonitor non-existent ref is no-op");
     }
 
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -392,7 +392,7 @@ static void double_demonitor_target(void *args,
     hive_timer_after(500000, &timer);
     hive_message_t msg;
     hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
-    hive_exit();
+    return;
 }
 
 static void test8_double_demonitor(void *args,
@@ -407,21 +407,21 @@ static void test8_double_demonitor(void *args,
     if (HIVE_FAILED(
             hive_spawn(double_demonitor_target, NULL, NULL, NULL, &target))) {
         TEST_FAIL("spawn target");
-        hive_exit();
+        return;
     }
 
     uint32_t ref;
     hive_status_t status = hive_monitor(target, &ref);
     if (HIVE_FAILED(status)) {
         TEST_FAIL("hive_monitor");
-        hive_exit();
+        return;
     }
 
     // First demonitor should succeed
     status = hive_demonitor(ref);
     if (HIVE_FAILED(status)) {
         TEST_FAIL("first demonitor failed");
-        hive_exit();
+        return;
     }
     TEST_PASS("first demonitor succeeds");
 
@@ -439,7 +439,7 @@ static void test8_double_demonitor(void *args,
     hive_message_t msg;
     hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
 
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -453,7 +453,7 @@ static void monitor_pool_target(void *args, const hive_spawn_info_t *siblings,
     (void)sibling_count;
     hive_message_t msg;
     hive_ipc_recv(&msg, 5000);
-    hive_exit();
+    return;
 }
 
 static void test9_monitor_pool_exhaustion(void *args,
@@ -517,7 +517,7 @@ static void test9_monitor_pool_exhaustion(void *args,
         hive_ipc_recv(&msg, 0);
     }
 
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -557,7 +557,7 @@ static void run_all_tests(void *args, const hive_spawn_info_t *siblings,
         hive_ipc_recv(&msg, 5000); // 5 second timeout per test
     }
 
-    hive_exit();
+    return;
 }
 
 int main(void) {

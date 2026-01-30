@@ -237,7 +237,7 @@ This hierarchy ensures:
 
 void my_actor(void *args, const hive_spawn_info_t *siblings, size_t sibling_count) {
     printf("Hello from actor %u\n", hive_self());
-    hive_exit();
+    return;
 }
 
 int main(void) {
@@ -311,7 +311,7 @@ void worker_actor(void *args, const hive_spawn_info_t *siblings, size_t sibling_
         int result = *(int *)msg.data * 2;  // Process request
         hive_ipc_reply(&msg, &result, sizeof(result));
     }
-    hive_exit();
+    return;
 }
 
 // Receive with different timeout behaviors
@@ -466,7 +466,7 @@ hive_ipc_recv(&msg, -1);
 if (hive_msg_is_exit(&msg)) {
     hive_exit_msg_t info;
     hive_decode_exit(&msg, &info);
-    printf("Actor %u died: %s\n", info.actor, hive_exit_reason_str(info.reason));
+    printf("Actor %u died (reason=%u)\n", info.actor, (unsigned)info.reason);
 
     // Distinguish link from monitor notification
     if (info.monitor_id == 0) {
@@ -476,7 +476,7 @@ if (hive_msg_is_exit(&msg)) {
     }
 }
 
-// Exit reasons: HIVE_EXIT_NORMAL, HIVE_EXIT_CRASH, HIVE_EXIT_KILLED
+// Exit reasons: HIVE_EXIT_REASON_NORMAL, HIVE_EXIT_REASON_CRASH, HIVE_EXIT_REASON_KILLED
 ```
 
 ### Supervision
@@ -484,12 +484,12 @@ if (hive_msg_is_exit(&msg)) {
 ```c
 #include "hive_supervisor.h"
 
-// Worker actor that may crash
+// Worker actor
 void worker_actor(void *args, const hive_spawn_info_t *siblings, size_t sibling_count) {
     int id = *(int *)args;
     printf("Worker %d started\n", id);
-    // ... do work, may crash ...
-    hive_exit();
+    // ... do work ...
+    // return = NORMAL exit, hive_exit(HIVE_EXIT_REASON_CRASH) = signal failure
 }
 
 // Define child specifications
@@ -605,7 +605,7 @@ See [examples/pilot/README.md](examples/pilot/README.md) for build instructions 
   - `init`: Optional init function called in spawner context (NULL to skip)
   - `init_args`: Arguments passed to init (or directly to actor if init is NULL)
   - `cfg`: Actor configuration (NULL = defaults), includes `auto_register` for name registry
-- `hive_exit()` - Terminate current actor
+- `hive_exit(reason)` - Terminate current actor (or just return for NORMAL exit)
 - `hive_self()` - Get current actor's ID
 - `hive_yield()` - Voluntarily yield to scheduler
 - `hive_find_sibling(siblings, count, name)` - Find sibling by name in spawn info array
@@ -637,7 +637,6 @@ See [examples/pilot/README.md](examples/pilot/README.md) for build instructions 
 - `hive_demonitor(id)` - Cancel monitor
 - `hive_msg_is_exit(msg)` - Check if message is exit notification
 - `hive_decode_exit(msg, out)` - Decode exit message into `hive_exit_msg_t` struct
-- `hive_exit_reason_str(reason)` - Convert exit reason to string ("NORMAL", "CRASH", etc.)
 - `hive_actor_kill(target)` - Kill an actor externally (for supervisor use)
 
 ### Supervision

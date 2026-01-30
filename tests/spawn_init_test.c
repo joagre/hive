@@ -54,7 +54,7 @@ static void init_receiver_actor(void *args, const hive_spawn_info_t *siblings,
     (void)sibling_count;
     init_output_t *out = (init_output_t *)args;
     s_received_value = out->transformed_value;
-    hive_exit();
+    return;
 }
 
 static void test1_init_transforms(void *args, const hive_spawn_info_t *siblings,
@@ -72,7 +72,7 @@ static void test1_init_transforms(void *args, const hive_spawn_info_t *siblings,
         hive_spawn(init_receiver_actor, transform_init, &input, NULL, &id);
     if (HIVE_FAILED(s)) {
         TEST_FAIL("spawn with init failed");
-        hive_exit();
+        return;
     }
 
     hive_link(id);
@@ -86,7 +86,7 @@ static void test1_init_transforms(void *args, const hive_spawn_info_t *siblings,
         TEST_FAIL("init function did not transform correctly");
     }
 
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -105,7 +105,7 @@ static void null_args_actor(void *args, const hive_spawn_info_t *siblings,
     (void)siblings;
     (void)sibling_count;
     s_null_args_received = (args == NULL);
-    hive_exit();
+    return;
 }
 
 static void test2_init_returns_null(void *args,
@@ -123,7 +123,7 @@ static void test2_init_returns_null(void *args,
     hive_status_t s = hive_spawn(null_args_actor, null_init, &dummy, NULL, &id);
     if (HIVE_FAILED(s)) {
         TEST_FAIL("spawn with null-returning init failed");
-        hive_exit();
+        return;
     }
 
     hive_link(id);
@@ -136,7 +136,7 @@ static void test2_init_returns_null(void *args,
         TEST_FAIL("actor did not receive NULL args");
     }
 
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -152,7 +152,7 @@ static void registered_actor(void *args, const hive_spawn_info_t *siblings,
     // Wait for parent to check registration
     hive_message_t msg;
     hive_ipc_recv(&msg, 1000);
-    hive_exit();
+    return;
 }
 
 static void test3_auto_register(void *args, const hive_spawn_info_t *siblings,
@@ -170,7 +170,7 @@ static void test3_auto_register(void *args, const hive_spawn_info_t *siblings,
     hive_status_t s = hive_spawn(registered_actor, NULL, NULL, &cfg, &id);
     if (HIVE_FAILED(s)) {
         TEST_FAIL("spawn with auto_register failed");
-        hive_exit();
+        return;
     }
 
     // Check that we can find it by name
@@ -179,7 +179,7 @@ static void test3_auto_register(void *args, const hive_spawn_info_t *siblings,
     if (HIVE_FAILED(s)) {
         TEST_FAIL("hive_whereis failed to find registered actor");
         hive_ipc_notify(id, HIVE_TAG_NONE, NULL, 0);
-        hive_exit();
+        return;
     }
 
     if (found == id) {
@@ -190,7 +190,7 @@ static void test3_auto_register(void *args, const hive_spawn_info_t *siblings,
 
     hive_ipc_notify(id, HIVE_TAG_NONE, NULL, 0);
     hive_sleep(100000);
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -204,7 +204,7 @@ static void placeholder_actor(void *args, const hive_spawn_info_t *siblings,
     (void)sibling_count;
     hive_message_t msg;
     hive_ipc_recv(&msg, 2000);
-    hive_exit();
+    return;
 }
 
 static void test4_register_conflict(void *args,
@@ -224,7 +224,7 @@ static void test4_register_conflict(void *args,
     hive_status_t s = hive_spawn(placeholder_actor, NULL, NULL, &cfg, &id1);
     if (HIVE_FAILED(s)) {
         TEST_FAIL("first spawn failed");
-        hive_exit();
+        return;
     }
 
     // Try to spawn second actor with same name
@@ -242,7 +242,7 @@ static void test4_register_conflict(void *args,
 
     hive_ipc_notify(id1, HIVE_TAG_NONE, NULL, 0);
     hive_sleep(100000);
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -257,7 +257,7 @@ static void direct_args_actor(void *args, const hive_spawn_info_t *siblings,
     (void)sibling_count;
     int *val = (int *)args;
     s_direct_value = *val;
-    hive_exit();
+    return;
 }
 
 static void test5_no_init(void *args, const hive_spawn_info_t *siblings,
@@ -274,7 +274,7 @@ static void test5_no_init(void *args, const hive_spawn_info_t *siblings,
     hive_status_t s = hive_spawn(direct_args_actor, NULL, &value, NULL, &id);
     if (HIVE_FAILED(s)) {
         TEST_FAIL("spawn without init failed");
-        hive_exit();
+        return;
     }
 
     hive_link(id);
@@ -288,7 +288,7 @@ static void test5_no_init(void *args, const hive_spawn_info_t *siblings,
         TEST_FAIL("args not passed correctly");
     }
 
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -323,7 +323,7 @@ static void run_next_test(void *args, const hive_spawn_info_t *siblings,
         hive_spawn(run_next_test, NULL, NULL, NULL, &id);
     }
 
-    hive_exit();
+    return;
 }
 
 int main(void) {

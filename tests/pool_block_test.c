@@ -27,7 +27,7 @@ static void receiver_no_block(void *args, const hive_spawn_info_t *siblings,
     // Just block forever - don't process messages
     hive_message_t msg;
     hive_ipc_recv(&msg, -1);
-    hive_exit();
+    return;
 }
 
 static void sender_no_block(void *args, const hive_spawn_info_t *siblings,
@@ -39,7 +39,7 @@ static void sender_no_block(void *args, const hive_spawn_info_t *siblings,
     // Verify default is non-blocking
     if (hive_pool_get_block()) {
         printf("    FAIL: default pool_block should be false\n");
-        hive_exit();
+        return;
     }
 
     // Send messages until pool is exhausted
@@ -70,7 +70,7 @@ static void sender_no_block(void *args, const hive_spawn_info_t *siblings,
         }
     }
 
-    hive_exit();
+    return;
 }
 
 // =============================================================================
@@ -103,7 +103,7 @@ static void consumer_actor(void *args, const hive_spawn_info_t *siblings,
     }
 
     printf("    Consumer: consumed %d messages\n", messages_received);
-    hive_exit();
+    return;
 }
 
 static void sender_blocking(void *args, const hive_spawn_info_t *siblings,
@@ -115,7 +115,7 @@ static void sender_blocking(void *args, const hive_spawn_info_t *siblings,
     // Verify pool_block is set from config
     if (!hive_pool_get_block()) {
         printf("    FAIL: pool_block should be true (from config)\n");
-        hive_exit();
+        return;
     }
 
     printf("    Blocking sender: sending messages until pool exhausted...\n");
@@ -132,7 +132,7 @@ static void sender_blocking(void *args, const hive_spawn_info_t *siblings,
         if (HIVE_FAILED(s)) {
             // Should not get NOMEM with blocking enabled!
             printf("    FAIL: got error %d with pool_block=true\n", s.code);
-            hive_exit();
+            return;
         }
         sent++;
         data++;
@@ -140,7 +140,7 @@ static void sender_blocking(void *args, const hive_spawn_info_t *siblings,
 
     printf("    Blocking sender: sent %d messages (blocking worked!)\n", sent);
     test_passed = true;
-    hive_exit();
+    return;
 }
 
 // =============================================================================
@@ -156,14 +156,14 @@ static void runtime_api_actor(void *args, const hive_spawn_info_t *siblings,
     // Test initial value (should be false from default config)
     if (hive_pool_get_block() != false) {
         printf("    FAIL: initial pool_block should be false\n");
-        hive_exit();
+        return;
     }
 
     // Test HIVE_POOL_BLOCK
     hive_pool_set_block(HIVE_POOL_BLOCK);
     if (hive_pool_get_block() != true) {
         printf("    FAIL: pool_block should be true after HIVE_POOL_BLOCK\n");
-        hive_exit();
+        return;
     }
 
     // Test HIVE_POOL_NO_BLOCK
@@ -171,7 +171,7 @@ static void runtime_api_actor(void *args, const hive_spawn_info_t *siblings,
     if (hive_pool_get_block() != false) {
         printf(
             "    FAIL: pool_block should be false after HIVE_POOL_NO_BLOCK\n");
-        hive_exit();
+        return;
     }
 
     // Test HIVE_POOL_DEFAULT (should restore spawn default = false)
@@ -180,12 +180,12 @@ static void runtime_api_actor(void *args, const hive_spawn_info_t *siblings,
     if (hive_pool_get_block() != false) {
         printf(
             "    FAIL: pool_block should be false after HIVE_POOL_DEFAULT\n");
-        hive_exit();
+        return;
     }
 
     printf("    Runtime API test passed\n");
     test_passed = true;
-    hive_exit();
+    return;
 }
 
 // =============================================================================
@@ -212,7 +212,7 @@ static void timer_under_exhaustion_sender(void *args,
         data++;
         if (sent > HIVE_MAILBOX_ENTRY_POOL_SIZE + 100) {
             printf("    FAIL: sent too many without exhausting pool\n");
-            hive_exit();
+            return;
         }
     }
 
@@ -224,7 +224,7 @@ static void timer_under_exhaustion_sender(void *args,
     hive_status_t s = hive_timer_after(10000, &timer); // 10ms
     if (HIVE_FAILED(s)) {
         printf("    FAIL: timer creation failed: %s\n", HIVE_ERR_STR(s));
-        hive_exit();
+        return;
     }
 
     printf("    Timer created successfully under pool exhaustion\n");
@@ -239,7 +239,7 @@ static void timer_under_exhaustion_sender(void *args,
         printf("    FAIL: timer receive failed: %s\n", HIVE_ERR_STR(s));
     }
 
-    hive_exit();
+    return;
 }
 
 static void timer_test_receiver(void *args, const hive_spawn_info_t *siblings,
@@ -251,7 +251,7 @@ static void timer_test_receiver(void *args, const hive_spawn_info_t *siblings,
     // Just block - don't process messages (let pool stay full)
     hive_message_t msg;
     hive_ipc_recv(&msg, -1);
-    hive_exit();
+    return;
 }
 
 // =============================================================================

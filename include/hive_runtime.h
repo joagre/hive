@@ -51,8 +51,11 @@ hive_status_t hive_spawn(hive_actor_fn_t fn, hive_actor_init_fn_t init,
                          void *init_args, const hive_actor_config_t *cfg,
                          actor_id_t *out);
 
-// Terminate current actor
-_Noreturn void hive_exit(void);
+// Terminate current actor with specified exit reason
+// Use HIVE_EXIT_REASON_NORMAL for normal termination
+// Use HIVE_EXIT_REASON_CRASH to signal abnormal termination
+// Use app-defined values (0-0xFFFB) for custom exit reasons
+_Noreturn void hive_exit(hive_exit_reason_t reason);
 
 // Get current actor's ID
 actor_id_t hive_self(void);
@@ -65,7 +68,7 @@ bool hive_actor_alive(actor_id_t id);
 
 // Kill an actor externally
 // Terminates the target actor and notifies linked/monitoring actors.
-// The target's exit reason will be HIVE_EXIT_KILLED.
+// The target's exit reason will be HIVE_EXIT_REASON_KILLED.
 // Cannot kill the currently running actor (use hive_exit instead).
 // Returns HIVE_ERR_INVALID if target is self or invalid.
 hive_status_t hive_actor_kill(actor_id_t target);

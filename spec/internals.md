@@ -136,7 +136,7 @@ void hive_cleanup(void);
 
 ## Actor Death Handling
 
-When an actor dies (via `hive_exit()`, crash, or external kill):
+When an actor dies (via `hive_exit(reason)`, return from actor function, or external kill):
 
 **Note** - Stack overflow results in undefined behavior since there is no runtime detection. The cleanup below assumes normal actor death. If stack overflow corrupts runtime metadata, the system may crash before cleanup completes.
 
@@ -189,7 +189,7 @@ Exit notifications (steps 2-3 above) are enqueued in recipient mailboxes **durin
 void actor_A(void *arg) {
     hive_ipc_notify(B, HIVE_TAG_NONE, &msg1, sizeof(msg1));  // Enqueued in B's mailbox
     hive_ipc_notify(C, HIVE_TAG_NONE, &msg2, sizeof(msg2));  // Enqueued in C's mailbox
-    hive_exit();  // Exit notifications sent to links/monitors
+    return;  // Exit notifications sent to links/monitors
 }
 // Linked actor B will receive: msg1, then EXIT(A) (class=HIVE_MSG_EXIT)
 // Actor C will receive: msg2 (no exit notification, not linked)
@@ -200,7 +200,7 @@ void actor_B(void *arg) {
 }
 void actor_A(void *arg) {
     // ... does some work ...
-    hive_exit();  // Mailbox cleared, msg from B is discarded
+    return;  // Mailbox cleared, msg from B is discarded
 }
 ```
 
@@ -588,7 +588,7 @@ The runtime does **not** perform stack overflow detection. Stack overflow result
 - **Corruption of runtime state** (if overflow is severe)
 - **Silent data corruption** (worst case - no immediate crash)
 
-**Links/monitors are NOT notified.** The `HIVE_EXIT_CRASH_STACK` exit reason is reserved for future use; the runtime does not currently detect stack overflow.
+**Links/monitors are NOT notified.** The `HIVE_EXIT_REASON_CRASH_STACK` exit reason is reserved for future use; the runtime does not currently detect stack overflow.
 
 ### Required Mitigation
 

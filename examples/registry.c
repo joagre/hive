@@ -33,7 +33,7 @@ static void calculator_service(void *args, const hive_spawn_info_t *siblings,
     if (HIVE_FAILED(status)) {
         printf("[SERVICE] Failed to register: %s\n", HIVE_ERR_STR(status));
         fflush(stdout);
-        hive_exit();
+        return;
     }
     printf("[SERVICE] Registered as '%s' (ID: %u)\n", SERVICE_NAME,
            hive_self());
@@ -72,7 +72,7 @@ static void calculator_service(void *args, const hive_spawn_info_t *siblings,
     fflush(stdout);
     hive_unregister(SERVICE_NAME);
 
-    hive_exit();
+    return;
 }
 
 // Client - looks up service by name and sends requests
@@ -97,7 +97,7 @@ static void client_actor(void *args, const hive_spawn_info_t *siblings,
     if (HIVE_FAILED(status)) {
         printf("[CLIENT] Service '%s' not found!\n", SERVICE_NAME);
         fflush(stdout);
-        hive_exit();
+        return;
     }
     printf("[CLIENT] Found '%s' at actor ID %u\n", SERVICE_NAME, service);
     fflush(stdout);
@@ -139,7 +139,7 @@ static void client_actor(void *args, const hive_spawn_info_t *siblings,
 
     printf("[CLIENT] Done\n");
     fflush(stdout);
-    hive_exit();
+    return;
 }
 
 int main(void) {

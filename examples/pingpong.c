@@ -54,7 +54,7 @@ static void pong_actor(void *args, const hive_spawn_info_t *siblings,
     }
 
     printf("Pong actor exiting\n");
-    hive_exit();
+    return;
 }
 
 // Ping actor
@@ -74,7 +74,7 @@ static void ping_actor(void *args, const hive_spawn_info_t *siblings,
     if (HIVE_FAILED(status)) {
         printf("Ping: Failed to send initial message: %s\n",
                HIVE_ERR_STR(status));
-        hive_exit();
+        return;
     }
 
     printf("Ping: Sent initial ping #%d\n", pm.count);
@@ -108,7 +108,7 @@ static void ping_actor(void *args, const hive_spawn_info_t *siblings,
     }
 
     printf("Ping actor exiting\n");
-    hive_exit();
+    return;
 }
 
 int main(void) {

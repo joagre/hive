@@ -45,7 +45,7 @@ static void basic_actor(void *args, const hive_spawn_info_t *siblings,
     (void)siblings;
     (void)sibling_count;
     g_basic_spawn_ran = true;
-    hive_exit();
+    return;
 }
 
 static void test1_basic_spawn(void *args, const hive_spawn_info_t *siblings,
@@ -60,7 +60,7 @@ static void test1_basic_spawn(void *args, const hive_spawn_info_t *siblings,
     actor_id_t id;
     if (HIVE_FAILED(hive_spawn(basic_actor, NULL, NULL, NULL, &id))) {
         TEST_FAIL("hive_spawn returned error");
-        hive_exit();
+        return;
     }
 
     hive_link(id);
@@ -74,7 +74,7 @@ static void test1_basic_spawn(void *args, const hive_spawn_info_t *siblings,
         TEST_FAIL("spawned actor did not run");
     }
 
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -89,7 +89,7 @@ static void self_reporter_actor(void *args, const hive_spawn_info_t *siblings,
     (void)siblings;
     (void)sibling_count;
     g_self_id_from_actor = hive_self();
-    hive_exit();
+    return;
 }
 
 static void test2_rt_self(void *args, const hive_spawn_info_t *siblings,
@@ -115,7 +115,7 @@ static void test2_rt_self(void *args, const hive_spawn_info_t *siblings,
         TEST_FAIL("hive_self returned wrong ID");
     }
 
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -130,7 +130,7 @@ static void arg_receiver_actor(void *args, const hive_spawn_info_t *siblings,
     (void)sibling_count;
     int *value = (int *)args;
     g_received_arg = *value;
-    hive_exit();
+    return;
 }
 
 static void test3_argument_passing(void *args,
@@ -158,7 +158,7 @@ static void test3_argument_passing(void *args,
         TEST_FAIL("argument not passed correctly");
     }
 
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -179,7 +179,7 @@ static void counter_actor(void *args, const hive_spawn_info_t *siblings,
         hive_yield();
     }
     g_counter_done = true;
-    hive_exit();
+    return;
 }
 
 static void yielder_actor(void *args, const hive_spawn_info_t *siblings,
@@ -192,7 +192,7 @@ static void yielder_actor(void *args, const hive_spawn_info_t *siblings,
         hive_yield();
     }
     g_yielder_done = true;
-    hive_exit();
+    return;
 }
 
 static void test4_yield(void *args, const hive_spawn_info_t *siblings,
@@ -227,7 +227,7 @@ static void test4_yield(void *args, const hive_spawn_info_t *siblings,
         TEST_FAIL("hive_yield did not work correctly");
     }
 
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -239,7 +239,7 @@ static void short_lived_actor(void *args, const hive_spawn_info_t *siblings,
     (void)args;
     (void)siblings;
     (void)sibling_count;
-    hive_exit();
+    return;
 }
 
 static void test5_actor_alive(void *args, const hive_spawn_info_t *siblings,
@@ -286,7 +286,7 @@ static void test5_actor_alive(void *args, const hive_spawn_info_t *siblings,
             "hive_actor_alive should return false for non-existent actor");
     }
 
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -304,7 +304,7 @@ static void priority_reporter_actor(void *args,
     // Can't directly access priority, but we can verify the actor runs
     s_captured_priority =
         HIVE_PRIORITY_HIGH; // Indicate we ran with expected priority
-    hive_exit();
+    return;
 }
 
 static void test6_custom_priority(void *args, const hive_spawn_info_t *siblings,
@@ -323,7 +323,7 @@ static void test6_custom_priority(void *args, const hive_spawn_info_t *siblings,
     if (HIVE_FAILED(
             hive_spawn(priority_reporter_actor, NULL, NULL, &cfg, &id))) {
         TEST_FAIL("hive_spawn with custom priority failed");
-        hive_exit();
+        return;
     }
 
     hive_link(id);
@@ -332,7 +332,7 @@ static void test6_custom_priority(void *args, const hive_spawn_info_t *siblings,
 
     TEST_PASS("spawn with custom priority works");
 
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -359,7 +359,7 @@ static void large_stack_actor(void *args, const hive_spawn_info_t *siblings,
     if (buffer[LARGE_STACK_BUFFER_SIZE - 1] == 'A') {
         g_large_stack_ok = true;
     }
-    hive_exit();
+    return;
 }
 
 static void test7_custom_stack_size(void *args,
@@ -378,7 +378,7 @@ static void test7_custom_stack_size(void *args,
     actor_id_t id;
     if (HIVE_FAILED(hive_spawn(large_stack_actor, NULL, NULL, &cfg, &id))) {
         TEST_FAIL("hive_spawn with custom stack size failed");
-        hive_exit();
+        return;
     }
 
     hive_link(id);
@@ -391,7 +391,7 @@ static void test7_custom_stack_size(void *args,
         TEST_FAIL("large stack actor did not complete");
     }
 
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -406,7 +406,7 @@ static void malloc_stack_actor(void *args, const hive_spawn_info_t *siblings,
     (void)siblings;
     (void)sibling_count;
     g_malloc_stack_ran = true;
-    hive_exit();
+    return;
 }
 
 static void test8_malloc_stack(void *args, const hive_spawn_info_t *siblings,
@@ -425,7 +425,7 @@ static void test8_malloc_stack(void *args, const hive_spawn_info_t *siblings,
     actor_id_t id;
     if (HIVE_FAILED(hive_spawn(malloc_stack_actor, NULL, NULL, &cfg, &id))) {
         TEST_FAIL("hive_spawn with malloc_stack failed");
-        hive_exit();
+        return;
     }
 
     hive_link(id);
@@ -438,7 +438,7 @@ static void test8_malloc_stack(void *args, const hive_spawn_info_t *siblings,
         TEST_FAIL("malloc stack actor did not run");
     }
 
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -450,7 +450,7 @@ static void named_actor(void *args, const hive_spawn_info_t *siblings,
     (void)args;
     (void)siblings;
     (void)sibling_count;
-    hive_exit();
+    return;
 }
 
 static void test9_named_actor(void *args, const hive_spawn_info_t *siblings,
@@ -466,7 +466,7 @@ static void test9_named_actor(void *args, const hive_spawn_info_t *siblings,
     actor_id_t id;
     if (HIVE_FAILED(hive_spawn(named_actor, NULL, NULL, &cfg, &id))) {
         TEST_FAIL("hive_spawn with name failed");
-        hive_exit();
+        return;
     }
 
     hive_link(id);
@@ -475,7 +475,7 @@ static void test9_named_actor(void *args, const hive_spawn_info_t *siblings,
 
     TEST_PASS("spawn with name works");
 
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -496,7 +496,7 @@ static void test10_spawn_null_fn(void *args, const hive_spawn_info_t *siblings,
         TEST_FAIL("hive_spawn should reject NULL function");
     }
 
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -511,7 +511,7 @@ static void counting_actor(void *args, const hive_spawn_info_t *siblings,
     (void)siblings;
     (void)sibling_count;
     g_multi_spawn_count++;
-    hive_exit();
+    return;
 }
 
 /* Number of actors to spawn in test 11 - reduced for QEMU's limited actor table */
@@ -537,7 +537,7 @@ static void test11_multiple_spawns(void *args,
                 hive_spawn(counting_actor, NULL, NULL, NULL, &ids[i]))) {
             printf("    Failed to spawn actor %d\n", i);
             TEST_FAIL("multiple spawns failed");
-            hive_exit();
+            return;
         }
         hive_link(ids[i]);
     }
@@ -556,37 +556,37 @@ static void test11_multiple_spawns(void *args,
         TEST_FAIL("not all actors ran");
     }
 
-    hive_exit();
+    return;
 }
 
 // ============================================================================
-// Test 12: Actor returns without calling hive_exit (crash detection)
+// Test 12: Actor returns without calling hive_exit (normal termination)
 // ============================================================================
 
-static void crashing_actor(void *args, const hive_spawn_info_t *siblings,
-                           size_t sibling_count) {
+static void returning_actor(void *args, const hive_spawn_info_t *siblings,
+                            size_t sibling_count) {
     (void)args;
     (void)siblings;
     (void)sibling_count;
-    // Deliberately return without calling hive_exit()
-    // This should be detected as HIVE_EXIT_CRASH
+    // Return without calling hive_exit()
+    // Per Erlang semantics: process with no more code terminates normally
 }
 
-static void test12_actor_crash(void *args, const hive_spawn_info_t *siblings,
-                               size_t sibling_count) {
+static void test12_actor_return(void *args, const hive_spawn_info_t *siblings,
+                                size_t sibling_count) {
     (void)args;
     (void)siblings;
     (void)sibling_count;
-    printf("\nTest 12: Actor returns without hive_exit (crash detection)\n");
+    printf("\nTest 12: Actor returns without hive_exit (normal termination)\n");
     fflush(stdout);
 
-    actor_id_t crasher;
-    if (HIVE_FAILED(hive_spawn(crashing_actor, NULL, NULL, NULL, &crasher))) {
-        TEST_FAIL("failed to spawn crashing actor");
-        hive_exit();
+    actor_id_t returner;
+    if (HIVE_FAILED(hive_spawn(returning_actor, NULL, NULL, NULL, &returner))) {
+        TEST_FAIL("failed to spawn returning actor");
+        return;
     }
 
-    hive_link(crasher);
+    hive_link(returner);
 
     // Wait for exit notification
     hive_message_t msg;
@@ -594,30 +594,30 @@ static void test12_actor_crash(void *args, const hive_spawn_info_t *siblings,
     if (HIVE_FAILED(status)) {
         printf("    recv failed: %s\n", status.msg ? status.msg : "unknown");
         TEST_FAIL("did not receive exit notification");
-        hive_exit();
+        return;
     }
 
     if (!hive_msg_is_exit(&msg)) {
         TEST_FAIL("received non-exit message");
-        hive_exit();
+        return;
     }
 
     hive_exit_msg_t exit_msg;
     status = hive_decode_exit(&msg, &exit_msg);
     if (HIVE_FAILED(status)) {
         TEST_FAIL("failed to decode exit message");
-        hive_exit();
+        return;
     }
 
-    if (exit_msg.reason == HIVE_EXIT_CRASH) {
-        TEST_PASS("crash detected with HIVE_EXIT_CRASH");
+    if (exit_msg.reason == HIVE_EXIT_REASON_NORMAL) {
+        TEST_PASS("actor return terminates with HIVE_EXIT_REASON_NORMAL");
     } else {
-        printf("    exit reason: %d (expected HIVE_EXIT_CRASH=%d)\n",
-               exit_msg.reason, HIVE_EXIT_CRASH);
+        printf("    exit reason: %u (expected HIVE_EXIT_REASON_NORMAL=%u)\n",
+               (unsigned)exit_msg.reason, (unsigned)HIVE_EXIT_REASON_NORMAL);
         TEST_FAIL("wrong exit reason");
     }
 
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -632,7 +632,7 @@ static void wait_for_signal_actor(void *args, const hive_spawn_info_t *siblings,
     // Wait for signal from parent to exit
     hive_message_t msg;
     hive_ipc_recv(&msg, 5000); // Timeout after 5s in case parent dies
-    hive_exit();
+    return;
 }
 
 static void test13_actor_table_exhaustion(void *args,
@@ -690,7 +690,7 @@ static void test13_actor_table_exhaustion(void *args,
         hive_yield();
     }
 
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -709,7 +709,7 @@ static hive_actor_fn_t test_funcs[] = {
     test9_named_actor,
     test10_spawn_null_fn,
     test11_multiple_spawns,
-    test12_actor_crash,
+    test12_actor_return,
     test13_actor_table_exhaustion,
 };
 
@@ -737,7 +737,7 @@ static void run_all_tests(void *args, const hive_spawn_info_t *siblings,
         hive_ipc_recv(&msg, 5000);
     }
 
-    hive_exit();
+    return;
 }
 
 int main(void) {

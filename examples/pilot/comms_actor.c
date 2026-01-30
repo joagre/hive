@@ -191,7 +191,7 @@ void comms_actor(void *args, const hive_spawn_info_t *siblings,
     // Initialize radio
     if (hal_esb_init() != 0) {
         HIVE_LOG_ERROR("[COMMS] Radio init failed");
-        return; // No hive_exit() - supervisor sees CRASH
+        hive_exit(HIVE_EXIT_REASON_CRASH); // Signal failure to supervisor
     }
 
     // Register RX callback for ground station commands
@@ -204,14 +204,14 @@ void comms_actor(void *args, const hive_spawn_info_t *siblings,
         HIVE_FAILED(hive_bus_subscribe(state->sensor_bus)) ||
         HIVE_FAILED(hive_bus_subscribe(state->thrust_bus))) {
         HIVE_LOG_ERROR("[COMMS] Bus subscribe failed");
-        return;
+        hive_exit(HIVE_EXIT_REASON_CRASH);
     }
 
     // Start telemetry timer
     timer_id_t timer;
     if (HIVE_FAILED(hive_timer_every(TELEMETRY_INTERVAL_US, &timer))) {
         HIVE_LOG_ERROR("[COMMS] Timer setup failed");
-        return;
+        hive_exit(HIVE_EXIT_REASON_CRASH);
     }
 
     HIVE_LOG_INFO("[COMMS] Started at 100Hz");
@@ -228,7 +228,7 @@ void comms_actor(void *args, const hive_spawn_info_t *siblings,
         if (HIVE_FAILED(status)) {
             HIVE_LOG_ERROR("[COMMS] recv_match failed: %s",
                            HIVE_ERR_STR(status));
-            return;
+            hive_exit(HIVE_EXIT_REASON_CRASH);
         }
 
         // Increment tick counter (10ms per tick)

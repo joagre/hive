@@ -13,7 +13,7 @@ void simple_actor(void *args, const hive_spawn_info_t *siblings,
     (void)args;
     (void)siblings;
     (void)sibling_count;
-    hive_exit();
+    return;
 }
 
 int main(void) {

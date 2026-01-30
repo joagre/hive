@@ -34,7 +34,7 @@ static void server_actor(void *args, const hive_spawn_info_t *siblings,
     HIVE_LOG_DEBUG("Server: hive_tcp_listen returned, status=%d", status.code);
     if (HIVE_FAILED(status)) {
         printf("Server: Failed to listen: %s\n", HIVE_ERR_STR(status));
-        hive_exit();
+        return;
     }
 
     printf("Server: Listening on port %d (fd=%d)\n", ECHO_PORT, listen_fd);
@@ -47,7 +47,7 @@ static void server_actor(void *args, const hive_spawn_info_t *siblings,
         printf("Server: Failed to send ready message: %s\n",
                HIVE_ERR_STR(status));
         hive_tcp_close(listen_fd);
-        hive_exit();
+        return;
     }
     printf("Server: Sent ready notification to client via IPC\n");
 
@@ -57,7 +57,7 @@ static void server_actor(void *args, const hive_spawn_info_t *siblings,
     if (HIVE_FAILED(status)) {
         printf("Server: Failed to accept: %s\n", HIVE_ERR_STR(status));
         hive_tcp_close(listen_fd);
-        hive_exit();
+        return;
     }
 
     printf("Server: Accepted connection (fd=%d)\n", conn_fd);
@@ -109,7 +109,7 @@ static void server_actor(void *args, const hive_spawn_info_t *siblings,
     }
 
     printf("Server: Done!\n");
-    hive_exit();
+    return;
 }
 
 // Messages to send (static to avoid stack issues)
@@ -134,7 +134,7 @@ static void client_actor(void *args, const hive_spawn_info_t *siblings,
     if (HIVE_FAILED(status)) {
         printf("Client: Failed to receive ready message: %s\n",
                HIVE_ERR_STR(status));
-        hive_exit();
+        return;
     }
 
     actor_id_t server_id = msg.sender;
@@ -153,7 +153,7 @@ static void client_actor(void *args, const hive_spawn_info_t *siblings,
                               5000); // 5 second timeout
     if (HIVE_FAILED(status)) {
         printf("Client: Failed to connect: %s\n", HIVE_ERR_STR(status));
-        hive_exit();
+        return;
     }
 
     printf("Client: Connected (fd=%d)\n", conn_fd);
@@ -199,7 +199,7 @@ static void client_actor(void *args, const hive_spawn_info_t *siblings,
     }
 
     printf("Client: Done!\n");
-    hive_exit();
+    return;
 }
 
 int main(void) {

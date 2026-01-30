@@ -40,7 +40,7 @@ void worker_actor(void *args, const hive_spawn_info_t *siblings,
     }
 
     printf("Worker %d: Processed %d messages\n", id, processed);
-    hive_exit();
+    return;
 }
 
 // Coordinator that distributes work with backoff-retry
@@ -115,7 +115,7 @@ void coordinator_actor(void *args, const hive_spawn_info_t *siblings,
                retry_needed);
     }
 
-    hive_exit();
+    return;
 }
 
 int main(void) {

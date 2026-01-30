@@ -40,7 +40,7 @@ void attitude_actor(void *args, const hive_spawn_info_t *siblings,
     if (HIVE_FAILED(hive_bus_subscribe(state->state_bus)) ||
         HIVE_FAILED(hive_bus_subscribe(state->attitude_setpoint_bus))) {
         HIVE_LOG_ERROR("[ATT] Bus subscribe failed");
-        return;
+        hive_exit(HIVE_EXIT_REASON_CRASH);
     }
 
     pid_state_t roll_pid, pitch_pid, yaw_pid;
@@ -71,7 +71,7 @@ void attitude_actor(void *args, const hive_spawn_info_t *siblings,
                                HIVE_TIMEOUT_INFINITE);
         if (HIVE_FAILED(status)) {
             HIVE_LOG_ERROR("[ATT] bus read failed: %s", HIVE_ERR_STR(status));
-            return;
+            hive_exit(HIVE_EXIT_REASON_CRASH);
         }
 
         // Measure actual dt

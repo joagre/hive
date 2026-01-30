@@ -26,7 +26,7 @@ static void worker_actor(void *args, const hive_spawn_info_t *siblings,
     hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, work_timer, &msg, -1);
 
     printf("Worker %d: Completed work, exiting normally\n", worker_id);
-    hive_exit();
+    return;
 }
 
 // Supervisor actor - monitors workers and reports when they exit
@@ -83,8 +83,8 @@ static void supervisor_actor(void *args, const hive_spawn_info_t *siblings,
         if (msg.class == HIVE_MSG_EXIT) {
             hive_exit_msg_t *exit_info = (hive_exit_msg_t *)msg.data;
 
-            printf("Supervisor: Worker died (Actor ID: %u, reason: %s)\n",
-                   exit_info->actor, hive_exit_reason_str(exit_info->reason));
+            printf("Supervisor: Worker died (Actor ID: %u, reason: %u)\n",
+                   exit_info->actor, (unsigned)exit_info->reason);
 
             workers_completed++;
         } else {
@@ -94,7 +94,7 @@ static void supervisor_actor(void *args, const hive_spawn_info_t *siblings,
     }
 
     printf("\nSupervisor: All workers completed, exiting\n");
-    hive_exit();
+    return;
 }
 
 int main(void) {

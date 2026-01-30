@@ -60,14 +60,14 @@ void waypoint_actor(void *args, const hive_spawn_info_t *siblings,
         hive_find_sibling(siblings, sibling_count, "flight_manager");
     if (state->flight_manager == HIVE_ACTOR_ID_INVALID) {
         HIVE_LOG_ERROR("[WPT] Failed to find flight_manager sibling");
-        return;
+        hive_exit(HIVE_EXIT_REASON_CRASH);
     }
 
     hive_status_t status = hive_bus_subscribe(state->state_bus);
     if (HIVE_FAILED(status)) {
         HIVE_LOG_ERROR("[WPT] Failed to subscribe to state bus: %s",
                        HIVE_ERR_STR(status));
-        return;
+        hive_exit(HIVE_EXIT_REASON_CRASH);
     }
 
     // Wait for START signal from flight manager before beginning flight
@@ -81,7 +81,7 @@ void waypoint_actor(void *args, const hive_spawn_info_t *siblings,
     if (HIVE_FAILED(status)) {
         HIVE_LOG_ERROR("[WPT] recv_match START failed: %s",
                        HIVE_ERR_STR(status));
-        return;
+        hive_exit(HIVE_EXIT_REASON_CRASH);
     }
     HIVE_LOG_INFO("[WPT] START received - beginning flight sequence");
 
@@ -114,7 +114,7 @@ void waypoint_actor(void *args, const hive_spawn_info_t *siblings,
         status = hive_select(sources, num_sources, &result, -1);
         if (HIVE_FAILED(status)) {
             HIVE_LOG_ERROR("[WPT] select failed: %s", HIVE_ERR_STR(status));
-            return;
+            hive_exit(HIVE_EXIT_REASON_CRASH);
         }
 
         if (result.index == SEL_HOVER_TIMER) {

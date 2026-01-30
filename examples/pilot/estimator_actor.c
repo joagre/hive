@@ -45,7 +45,7 @@ void estimator_actor(void *args, const hive_spawn_info_t *siblings,
     hive_status_t status = hive_bus_subscribe(state->sensor_bus);
     if (HIVE_FAILED(status)) {
         HIVE_LOG_ERROR("[EST] bus subscribe failed: %s", HIVE_ERR_STR(status));
-        return;
+        hive_exit(HIVE_EXIT_REASON_CRASH);
     }
 
     // Initialize complementary filter for attitude
@@ -97,7 +97,7 @@ void estimator_actor(void *args, const hive_spawn_info_t *siblings,
                                &len, HIVE_TIMEOUT_INFINITE);
         if (HIVE_FAILED(status)) {
             HIVE_LOG_ERROR("[EST] bus read failed: %s", HIVE_ERR_STR(status));
-            return;
+            hive_exit(HIVE_EXIT_REASON_CRASH);
         }
 
         // Measure actual dt

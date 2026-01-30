@@ -52,7 +52,7 @@ static void switch_actor_a(void *args, const hive_spawn_info_t *siblings,
     }
 
     ctx->end_time = get_nanos();
-    hive_exit();
+    return;
 }
 
 static void switch_actor_b(void *args, const hive_spawn_info_t *siblings,
@@ -73,7 +73,7 @@ static void switch_actor_b(void *args, const hive_spawn_info_t *siblings,
         ctx->count++;
     }
 
-    hive_exit();
+    return;
 }
 
 static void bench_context_switch(void) {
@@ -166,7 +166,7 @@ static void ipc_sender(void *args, const hive_spawn_info_t *siblings,
     }
 
     ctx->end_time = get_nanos();
-    hive_exit();
+    return;
 }
 
 static void ipc_receiver(void *args, const hive_spawn_info_t *siblings,
@@ -184,7 +184,7 @@ static void ipc_receiver(void *args, const hive_spawn_info_t *siblings,
         hive_ipc_notify(ctx->partner, HIVE_TAG_NONE, &ack, sizeof(ack));
     }
 
-    hive_exit();
+    return;
 }
 
 static void bench_ipc_copy(size_t msg_size, const char *label) {
@@ -339,7 +339,7 @@ static void dummy_actor(void *args, const hive_spawn_info_t *siblings,
     (void)args;
     (void)siblings;
     (void)sibling_count;
-    hive_exit();
+    return;
 }
 
 static void bench_actor_spawn(void) __attribute__((unused));
@@ -406,7 +406,7 @@ static void bus_publisher(void *args, const hive_spawn_info_t *siblings,
     }
 
     ctx->end_time = get_nanos();
-    hive_exit();
+    return;
 }
 
 static void bus_subscriber(void *args, const hive_spawn_info_t *siblings,
@@ -429,7 +429,7 @@ static void bus_subscriber(void *args, const hive_spawn_info_t *siblings,
         }
     }
 
-    hive_exit();
+    return;
 }
 
 static void bench_bus(void) __attribute__((unused));

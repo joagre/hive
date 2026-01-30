@@ -557,7 +557,7 @@ static void run_timer_tests(void *args, const hive_spawn_info_t *siblings,
     printf("\n%s\n",
            tests_failed == 0 ? "All tests passed!" : "Some tests FAILED!");
 
-    hive_exit();
+    return;
 }
 
 int main(void) {

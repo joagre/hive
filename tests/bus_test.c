@@ -54,7 +54,7 @@ static void test1_basic_pubsub(void *args, const hive_spawn_info_t *siblings,
     hive_status_t status = hive_bus_create(&cfg, &bus);
     if (HIVE_FAILED(status)) {
         TEST_FAIL("hive_bus_create");
-        hive_exit();
+        return;
     }
 
     // Subscribe
@@ -62,7 +62,7 @@ static void test1_basic_pubsub(void *args, const hive_spawn_info_t *siblings,
     if (HIVE_FAILED(status)) {
         TEST_FAIL("hive_bus_subscribe");
         hive_bus_destroy(bus);
-        hive_exit();
+        return;
     }
 
     // Publish data
@@ -72,7 +72,7 @@ static void test1_basic_pubsub(void *args, const hive_spawn_info_t *siblings,
         TEST_FAIL("hive_bus_publish");
         hive_bus_unsubscribe(bus);
         hive_bus_destroy(bus);
-        hive_exit();
+        return;
     }
 
     // Read data
@@ -84,7 +84,7 @@ static void test1_basic_pubsub(void *args, const hive_spawn_info_t *siblings,
         TEST_FAIL("hive_bus_read");
         hive_bus_unsubscribe(bus);
         hive_bus_destroy(bus);
-        hive_exit();
+        return;
     }
 
     if (strcmp(buf, msg) == 0) {
@@ -95,7 +95,7 @@ static void test1_basic_pubsub(void *args, const hive_spawn_info_t *siblings,
 
     hive_bus_unsubscribe(bus);
     hive_bus_destroy(bus);
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -113,7 +113,7 @@ static void subscriber_actor(void *args, const hive_spawn_info_t *siblings,
 
     hive_status_t status = hive_bus_subscribe(s_shared_bus);
     if (HIVE_FAILED(status)) {
-        hive_exit();
+        return;
     }
 
     // Wait for data with timeout
@@ -126,7 +126,7 @@ static void subscriber_actor(void *args, const hive_spawn_info_t *siblings,
     }
 
     hive_bus_unsubscribe(s_shared_bus);
-    hive_exit();
+    return;
 }
 
 static void test2_multi_subscriber(void *args,
@@ -142,7 +142,7 @@ static void test2_multi_subscriber(void *args,
     hive_status_t status = hive_bus_create(&cfg, &s_shared_bus);
     if (HIVE_FAILED(status)) {
         TEST_FAIL("hive_bus_create");
-        hive_exit();
+        return;
     }
 
     // Spawn 3 subscribers
@@ -165,7 +165,7 @@ static void test2_multi_subscriber(void *args,
     if (HIVE_FAILED(status)) {
         TEST_FAIL("hive_bus_publish");
         hive_bus_destroy(s_shared_bus);
-        hive_exit();
+        return;
     }
 
     // Wait for subscribers to read
@@ -183,7 +183,7 @@ static void test2_multi_subscriber(void *args,
     }
 
     hive_bus_destroy(s_shared_bus);
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -213,7 +213,7 @@ static void max_readers_subscriber(void *args,
     }
 
     hive_bus_unsubscribe(s_max_readers_bus);
-    hive_exit();
+    return;
 }
 
 static void test3_max_readers(void *args, const hive_spawn_info_t *siblings,
@@ -229,7 +229,7 @@ static void test3_max_readers(void *args, const hive_spawn_info_t *siblings,
     hive_status_t status = hive_bus_create(&cfg, &s_max_readers_bus);
     if (HIVE_FAILED(status)) {
         TEST_FAIL("hive_bus_create");
-        hive_exit();
+        return;
     }
 
     // Reset counters
@@ -276,7 +276,7 @@ static void test3_max_readers(void *args, const hive_spawn_info_t *siblings,
     }
 
     hive_bus_destroy(s_max_readers_bus);
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -298,7 +298,7 @@ static void test4_ring_buffer_wrap(void *args,
     hive_status_t status = hive_bus_create(&cfg, &bus);
     if (HIVE_FAILED(status)) {
         TEST_FAIL("hive_bus_create");
-        hive_exit();
+        return;
     }
 
     hive_bus_subscribe(bus);
@@ -317,7 +317,7 @@ static void test4_ring_buffer_wrap(void *args,
         TEST_FAIL("wrong entry count");
         hive_bus_unsubscribe(bus);
         hive_bus_destroy(bus);
-        hive_exit();
+        return;
     }
 
     // First read should be "Message 3" (oldest surviving)
@@ -334,7 +334,7 @@ static void test4_ring_buffer_wrap(void *args,
 
     hive_bus_unsubscribe(bus);
     hive_bus_destroy(bus);
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -368,7 +368,7 @@ static void test5_nonblocking_read(void *args,
 
     hive_bus_unsubscribe(bus);
     hive_bus_destroy(bus);
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -405,7 +405,7 @@ static void test6_blocking_read_timeout(void *args,
 
     hive_bus_unsubscribe(bus);
     hive_bus_destroy(bus);
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -442,7 +442,7 @@ static void test7_destroy_with_subscribers(void *args,
         TEST_FAIL("destroy should succeed after unsubscribe");
     }
 
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -484,7 +484,7 @@ static void test8_invalid_operations(void *args,
         TEST_FAIL("read from invalid bus should fail");
     }
 
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -507,14 +507,14 @@ static void test9_max_age_expiry(void *args, const hive_spawn_info_t *siblings,
     hive_status_t status = hive_bus_create(&cfg, &bus);
     if (HIVE_FAILED(status)) {
         TEST_FAIL("failed to create bus with max_age_ms");
-        hive_exit();
+        return;
     }
 
     status = hive_bus_subscribe(bus);
     if (HIVE_FAILED(status)) {
         TEST_FAIL("failed to subscribe");
         hive_bus_destroy(bus);
-        hive_exit();
+        return;
     }
 
     // Publish an entry
@@ -524,7 +524,7 @@ static void test9_max_age_expiry(void *args, const hive_spawn_info_t *siblings,
         TEST_FAIL("failed to publish");
         hive_bus_unsubscribe(bus);
         hive_bus_destroy(bus);
-        hive_exit();
+        return;
     }
 
     // Read immediately - should succeed
@@ -536,7 +536,7 @@ static void test9_max_age_expiry(void *args, const hive_spawn_info_t *siblings,
         TEST_FAIL("immediate read failed (expected success)");
         hive_bus_unsubscribe(bus);
         hive_bus_destroy(bus);
-        hive_exit();
+        return;
     }
     TEST_PASS("entry readable immediately after publish");
 
@@ -564,7 +564,7 @@ static void test9_max_age_expiry(void *args, const hive_spawn_info_t *siblings,
 
     hive_bus_unsubscribe(bus);
     hive_bus_destroy(bus);
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -589,14 +589,14 @@ static void test10_entry_count(void *args, const hive_spawn_info_t *siblings,
     hive_status_t status = hive_bus_create(&cfg, &bus);
     if (HIVE_FAILED(status)) {
         TEST_FAIL("hive_bus_create");
-        hive_exit();
+        return;
     }
 
     status = hive_bus_subscribe(bus);
     if (HIVE_FAILED(status)) {
         TEST_FAIL("hive_bus_subscribe");
         hive_bus_destroy(bus);
-        hive_exit();
+        return;
     }
 
     // Initially empty
@@ -661,7 +661,7 @@ static void test10_entry_count(void *args, const hive_spawn_info_t *siblings,
 
     hive_bus_unsubscribe(bus);
     hive_bus_destroy(bus);
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -682,14 +682,14 @@ static void test11_subscribe_destroyed_bus(void *args,
     hive_status_t status = hive_bus_create(&cfg, &bus);
     if (HIVE_FAILED(status)) {
         TEST_FAIL("hive_bus_create");
-        hive_exit();
+        return;
     }
 
     // Destroy it immediately
     status = hive_bus_destroy(bus);
     if (HIVE_FAILED(status)) {
         TEST_FAIL("hive_bus_destroy");
-        hive_exit();
+        return;
     }
 
     // Try to subscribe to destroyed bus
@@ -700,7 +700,7 @@ static void test11_subscribe_destroyed_bus(void *args,
         TEST_FAIL("subscribe to destroyed bus should fail");
     }
 
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -721,14 +721,14 @@ static void test12_buffer_overflow_protection(void *args,
     hive_status_t status = hive_bus_create(&cfg, &bus);
     if (HIVE_FAILED(status)) {
         TEST_FAIL("hive_bus_create");
-        hive_exit();
+        return;
     }
 
     status = hive_bus_subscribe(bus);
     if (HIVE_FAILED(status)) {
         TEST_FAIL("hive_bus_subscribe");
         hive_bus_destroy(bus);
-        hive_exit();
+        return;
     }
 
     // Publish a large message
@@ -741,7 +741,7 @@ static void test12_buffer_overflow_protection(void *args,
         TEST_FAIL("hive_bus_publish large message");
         hive_bus_unsubscribe(bus);
         hive_bus_destroy(bus);
-        hive_exit();
+        return;
     }
 
     // Try to read with undersized buffer - should not overflow
@@ -766,7 +766,7 @@ static void test12_buffer_overflow_protection(void *args,
 
     hive_bus_unsubscribe(bus);
     hive_bus_destroy(bus);
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -812,7 +812,7 @@ static void run_all_tests(void *args, const hive_spawn_info_t *siblings,
         hive_ipc_recv(&msg, 5000);
     }
 
-    hive_exit();
+    return;
 }
 
 int main(void) {

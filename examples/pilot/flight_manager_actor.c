@@ -57,7 +57,7 @@ void flight_manager_actor(void *args, const hive_spawn_info_t *siblings,
     if (waypoint == HIVE_ACTOR_ID_INVALID ||
         altitude == HIVE_ACTOR_ID_INVALID || motor == HIVE_ACTOR_ID_INVALID) {
         HIVE_LOG_ERROR("[FLM] Failed to find required siblings");
-        return;
+        hive_exit(HIVE_EXIT_REASON_CRASH);
     }
 
 #ifndef SIMULATED_TIME
@@ -96,7 +96,7 @@ void flight_manager_actor(void *args, const hive_spawn_info_t *siblings,
     if (HIVE_FAILED(status)) {
         HIVE_LOG_ERROR("[FLM] sync timer_every failed: %s",
                        HIVE_ERR_STR(status));
-        return;
+        hive_exit(HIVE_EXIT_REASON_CRASH);
     }
 
     // === FLIGHT PHASE ===
@@ -113,7 +113,7 @@ void flight_manager_actor(void *args, const hive_spawn_info_t *siblings,
     if (HIVE_FAILED(status)) {
         HIVE_LOG_ERROR("[FLM] flight timer_after failed: %s",
                        HIVE_ERR_STR(status));
-        return;
+        hive_exit(HIVE_EXIT_REASON_CRASH);
     }
 
     // Event loop: handle sync timer and flight timer using hive_select()
@@ -133,7 +133,7 @@ void flight_manager_actor(void *args, const hive_spawn_info_t *siblings,
         if (HIVE_FAILED(status)) {
             HIVE_LOG_ERROR("[FLM] select (flight) failed: %s",
                            HIVE_ERR_STR(status));
-            return;
+            hive_exit(HIVE_EXIT_REASON_CRASH);
         }
 
         if (result.index == SEL_SYNC_TIMER) {
@@ -164,7 +164,7 @@ void flight_manager_actor(void *args, const hive_spawn_info_t *siblings,
         if (HIVE_FAILED(status)) {
             HIVE_LOG_ERROR("[FLM] select (landing) failed: %s",
                            HIVE_ERR_STR(status));
-            return;
+            hive_exit(HIVE_EXIT_REASON_CRASH);
         }
 
         if (result.index == SEL_SYNC) {
@@ -188,5 +188,5 @@ void flight_manager_actor(void *args, const hive_spawn_info_t *siblings,
     stack_profile_capture("flight_mgr");
     stack_profile_request();
 
-    hive_exit();
+    return;
 }

@@ -42,7 +42,7 @@ void slow_processor_actor(void *args, const hive_spawn_info_t *siblings,
     }
 
     printf("Processor: Finished, processed %d total messages\n", processed);
-    hive_exit();
+    return;
 }
 
 void aggressive_sender_actor(void *args, const hive_spawn_info_t *siblings,
@@ -131,7 +131,7 @@ void aggressive_sender_actor(void *args, const hive_spawn_info_t *siblings,
             "  Pool space became available as receiver processed messages\n");
     }
 
-    hive_exit();
+    return;
 }
 
 int main(void) {

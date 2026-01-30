@@ -9,7 +9,7 @@ hive_spawn, hive_exit, hive_self, hive_yield, hive_actor_alive, hive_find_siblin
 .BI "hive_status_t hive_spawn(hive_actor_fn_t " fn ", hive_actor_init_fn_t " init ","
 .BI "                       void *" init_args ", const hive_actor_config_t *" cfg ","
 .BI "                       actor_id_t *" out ");"
-.BI "_Noreturn void hive_exit(void);"
+.BI "_Noreturn void hive_exit(hive_exit_reason_t " reason ");"
 .BI "actor_id_t hive_self(void);"
 .BI "void hive_yield(void);"
 .BI "bool hive_actor_alive(actor_id_t " id ");"
@@ -143,14 +143,15 @@ to the matching entry, or NULL if not found. This is a convenience function
 for supervised actors to discover sibling IDs without using the name registry.
 .SS Terminating Actors
 .BR hive_exit ()
-terminates the calling actor. This function does not return. When an actor
-exits:
+terminates the calling actor with the specified exit
+.IR reason .
+This function does not return. When an actor exits:
 .IP \(bu 2
 Its mailbox is cleared
 .IP \(bu 2
-Linked actors receive EXIT notifications
+Linked actors receive EXIT notifications with the exit reason
 .IP \(bu 2
-Monitors receive EXIT notifications
+Monitors receive EXIT notifications with the exit reason
 .IP \(bu 2
 Bus subscriptions are removed
 .IP \(bu 2
@@ -160,13 +161,28 @@ Name registrations are removed
 .IP \(bu 2
 Stack memory is returned to the arena
 .PP
-.B Important:
+.B Exit reasons:
+.IP \(bu 2
+.B HIVE_EXIT_REASON_NORMAL
+(0xFFFF) - Normal termination
+.IP \(bu 2
+.B HIVE_EXIT_REASON_CRASH
+(0xFFFD) - Abnormal termination (application-signaled)
+.IP \(bu 2
+.B HIVE_EXIT_REASON_KILLED
+(0xFFFE) - Killed externally via hive_actor_kill()
+.IP \(bu 2
+.B HIVE_EXIT_REASON_STACK_OVERFLOW
+(0xFFFC) - Reserved for future MPU detection
+.IP \(bu 2
+Values 0 to 0xFFFB can be used for application-defined exit reasons
+.PP
+.B Erlang semantics:
 If an actor function returns without calling
 .BR hive_exit (),
-this is detected as a crash and linked/monitoring actors receive
-.B HIVE_EXIT_CRASH
-instead of
-.BR HIVE_EXIT_NORMAL .
+this is treated as normal termination with
+.B HIVE_EXIT_REASON_NORMAL
+(a process with no more code to execute terminates normally).
 .SS Querying Actor State
 .BR hive_self ()
 returns the actor ID of the calling actor. Returns
@@ -284,7 +300,7 @@ to use heap allocation instead (not recommended for embedded systems).
 Default stack size is 64 KB (HIVE_DEFAULT_STACK_SIZE). Embedded applications
 should carefully size stacks based on worst-case call depth. Stack overflow
 results in undefined behavior. The
-.B HIVE_EXIT_CRASH_STACK
+.B HIVE_EXIT_REASON_CRASH_STACK
 exit reason is reserved for future hardware-based detection (MPU/mprotect).
 .SS Spawn from Main vs Actor
 Actors can be spawned from main() before
@@ -329,7 +345,7 @@ void worker(void *args, const hive_spawn_info_t *siblings,
     /* Do work... */
 
     printf("Worker %d exiting\\n", id);
-    hive_exit();
+    return;
 }
 
 int main(void) {
@@ -386,7 +402,7 @@ void worker_actor(void *args, const hive_spawn_info_t *siblings,
     /* Cleanup */
     free(state->buffer);
     free(state);
-    hive_exit();
+    return;
 }
 .fi
 .SS Auto-Register Example
@@ -433,14 +449,14 @@ void client(void *args, const hive_spawn_info_t *siblings,
     hive_status_t s = hive_whereis("database", &db);
     if (HIVE_FAILED(s)) {
         printf("Database not found\\n");
-        hive_exit();
+        return;
     }
 
     /* Send request to database */
     char query[] = "SELECT * FROM users";
     hive_ipc_notify(db, HIVE_TAG_NONE, query, sizeof(query));
 
-    hive_exit();
+    return;
 }
 .fi
 .SH SEE ALSO

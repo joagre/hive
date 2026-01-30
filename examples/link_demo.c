@@ -30,7 +30,7 @@ static void actor_a(void *args, const hive_spawn_info_t *siblings,
     hive_status_t status = hive_link(g_actor_b);
     if (HIVE_FAILED(status)) {
         printf("Actor A: Failed to link to B: %s\n", HIVE_ERR_STR(status));
-        hive_exit();
+        return;
     }
 
     printf("Actor A: Successfully linked to Actor B\n");
@@ -44,14 +44,13 @@ static void actor_a(void *args, const hive_spawn_info_t *siblings,
 
         printf("Actor A: Received exit notification!\n");
         printf("Actor A:   Died actor: %u\n", exit_info->actor);
-        printf("Actor A:   Exit reason: %s\n",
-               hive_exit_reason_str(exit_info->reason));
+        printf("Actor A:   Exit reason: %u\n", (unsigned)exit_info->reason);
     } else {
         printf("Actor A: Received unexpected message from %u\n", msg.sender);
     }
 
     printf("Actor A: Exiting normally\n");
-    hive_exit();
+    return;
 }
 
 // Actor B - waits a bit, then exits normally
@@ -72,7 +71,7 @@ static void actor_b(void *args, const hive_spawn_info_t *siblings,
     hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, wait_timer, &msg, -1);
 
     printf("Actor B: Exiting normally\n");
-    hive_exit();
+    return;
 }
 
 int main(void) {

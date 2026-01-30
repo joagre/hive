@@ -70,7 +70,7 @@ static void test_timeout_actor(void *args, const hive_spawn_info_t *siblings,
     printf("  [OK] Backoff-retry pattern works\n");
 
     printf("\nAll tests passed!\n");
-    hive_exit();
+    return;
 }
 
 int main(void) {

@@ -57,7 +57,7 @@ static void run_logging_tests(void *args, const hive_spawn_info_t *siblings,
         if (HIVE_FAILED(status)) {
             printf("    Error: %s\n", HIVE_ERR_STR(status));
             TEST_FAIL("hive_log_file_open");
-            hive_exit();
+            return;
         } else {
             TEST_PASS("hive_log_file_open succeeds");
         }
@@ -234,7 +234,7 @@ static void run_logging_tests(void *args, const hive_spawn_info_t *siblings,
     // Clean up test file
     unlink(TEST_LOG_FILE);
 
-    hive_exit();
+    return;
 }
 
 int main(void) {

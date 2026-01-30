@@ -126,12 +126,14 @@ typedef struct {
 } hive_recv_filter_t;
 
 // Exit reason codes
-typedef enum {
-    HIVE_EXIT_NORMAL, // Actor called hive_exit()
-    HIVE_EXIT_CRASH,  // Actor function returned without calling hive_exit()
-    HIVE_EXIT_CRASH_STACK, // Reserved for future MPU-based detection
-    HIVE_EXIT_KILLED, // Actor was killed externally (reserved for future use)
-} hive_exit_reason_t;
+// Reserved values use high range (0xFFFC-0xFFFF), leaving 0-0xFFFB for app-defined
+#define HIVE_EXIT_REASON_NORMAL 0xFFFF // Normal termination
+#define HIVE_EXIT_REASON_KILLED \
+    0xFFFE                            // Killed externally via hive_actor_kill()
+#define HIVE_EXIT_REASON_CRASH 0xFFFD // Abnormal termination (app-signaled)
+#define HIVE_EXIT_REASON_STACK_OVERFLOW \
+    0xFFFC // Reserved for future MPU detection
+typedef uint16_t hive_exit_reason_t;
 
 // Pool exhaustion blocking mode
 typedef enum {

@@ -59,14 +59,14 @@ static void test1_async_basic(void *args, const hive_spawn_info_t *siblings,
         hive_ipc_notify(self, HIVE_TAG_NONE, msg_data, strlen(msg_data) + 1);
     if (HIVE_FAILED(status)) {
         TEST_FAIL("hive_ipc_notify ASYNC failed");
-        hive_exit();
+        return;
     }
 
     hive_message_t msg;
     status = hive_ipc_recv(&msg, 100);
     if (HIVE_FAILED(status)) {
         TEST_FAIL("hive_ipc_recv failed");
-        hive_exit();
+        return;
     }
 
     if (strcmp((const char *)msg.data, "Hello ASYNC") == 0) {
@@ -82,7 +82,7 @@ static void test1_async_basic(void *args, const hive_spawn_info_t *siblings,
         TEST_FAIL("wrong sender ID");
     }
 
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -114,7 +114,7 @@ static void test2_async_invalid_receiver(void *args,
         TEST_FAIL("send to non-existent actor should fail");
     }
 
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -158,7 +158,7 @@ static void test3_message_ordering(void *args,
         TEST_FAIL("message ordering violated");
     }
 
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -174,7 +174,7 @@ static void sender_actor(void *args, const hive_spawn_info_t *siblings,
     (void)sibling_count;
     int id = *(int *)args;
     hive_ipc_notify(g_receiver_id, HIVE_TAG_NONE, &id, sizeof(id));
-    hive_exit();
+    return;
 }
 
 static void test4_multiple_senders(void *args,
@@ -221,7 +221,7 @@ static void test4_multiple_senders(void *args,
         TEST_FAIL("did not receive all messages");
     }
 
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -257,7 +257,7 @@ static void test5_send_to_self(void *args, const hive_spawn_info_t *siblings,
         TEST_FAIL("send to self should succeed");
     }
 
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -275,7 +275,7 @@ static void request_reply_server_actor(void *args,
     hive_message_t msg;
     hive_status_t status = hive_ipc_recv(&msg, 1000);
     if (HIVE_FAILED(status)) {
-        hive_exit();
+        return;
     }
 
     // Verify it's a REQUEST message
@@ -285,7 +285,7 @@ static void request_reply_server_actor(void *args,
         hive_ipc_reply(&msg, &result, sizeof(result));
     }
 
-    hive_exit();
+    return;
 }
 
 static void test6_request_reply(void *args, const hive_spawn_info_t *siblings,
@@ -313,7 +313,7 @@ static void test6_request_reply(void *args, const hive_spawn_info_t *siblings,
         printf("    hive_ipc_request failed: %s\n",
                status.msg ? status.msg : "unknown");
         TEST_FAIL("hive_ipc_request failed");
-        hive_exit();
+        return;
     }
 
     // Verify reply
@@ -328,7 +328,7 @@ static void test6_request_reply(void *args, const hive_spawn_info_t *siblings,
         TEST_FAIL("wrong request/reply result");
     }
 
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -388,7 +388,7 @@ static void test7_pending_count(void *args, const hive_spawn_info_t *siblings,
         TEST_FAIL("hive_ipc_count should return 0 after draining");
     }
 
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -434,7 +434,7 @@ static void test8_nonblocking_recv(void *args,
         TEST_FAIL("non-blocking recv should succeed with message present");
     }
 
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -470,7 +470,7 @@ static void test9_timed_recv(void *args, const hive_spawn_info_t *siblings,
         TEST_FAIL("timed recv did not wait for correct duration");
     }
 
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -492,7 +492,7 @@ static void delayed_sender_actor(void *args, const hive_spawn_info_t *siblings,
     int data = 123;
     hive_ipc_notify(target, HIVE_TAG_NONE, &data, sizeof(data));
 
-    hive_exit();
+    return;
 }
 
 static void test10_block_forever_recv(void *args,
@@ -528,7 +528,7 @@ static void test10_block_forever_recv(void *args,
         TEST_FAIL("timing seems off");
     }
 
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -583,7 +583,7 @@ static void test11_message_size_limits(void *args,
         hive_ipc_recv(&msg, 0);
     }
 
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -603,7 +603,7 @@ static void selective_sender_actor(void *args,
     hive_ipc_notify(target, HIVE_TAG_NONE, &b, sizeof(b));
     hive_ipc_notify(target, HIVE_TAG_NONE, &c, sizeof(c));
 
-    hive_exit();
+    return;
 }
 
 static void test12_selective_receive(void *args,
@@ -648,7 +648,7 @@ static void test12_selective_receive(void *args,
     while (HIVE_SUCCEEDED(hive_ipc_recv(&msg, 0))) {
     }
 
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -681,7 +681,7 @@ static void test13_zero_length_message(void *args,
         TEST_FAIL("failed to send zero-length message");
     }
 
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -693,7 +693,7 @@ static void quickly_dying_actor(void *args, const hive_spawn_info_t *siblings,
     (void)args;
     (void)siblings;
     (void)sibling_count;
-    hive_exit();
+    return;
 }
 
 static void test14_send_to_dead_actor(void *args,
@@ -723,7 +723,7 @@ static void test14_send_to_dead_actor(void *args,
         TEST_FAIL("send to dead actor should fail");
     }
 
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -782,7 +782,7 @@ static void test15_message_pool_info(void *args,
         TEST_FAIL("message count mismatch");
     }
 
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -810,7 +810,7 @@ static void test16_null_data_send(void *args, const hive_spawn_info_t *siblings,
         TEST_PASS("hive_ipc_notify handles NULL data gracefully");
     }
 
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -825,7 +825,7 @@ static void short_lived_actor(void *args, const hive_spawn_info_t *siblings,
     // Send a message then die
     int data = 42;
     hive_ipc_notify(parent, HIVE_TAG_NONE, &data, sizeof(data));
-    hive_exit();
+    return;
 }
 
 static void test17_spawn_death_cycle_leak(void *args,
@@ -871,7 +871,7 @@ static void test17_spawn_death_cycle_leak(void *args,
         TEST_FAIL("possible mailbox leak or message loss");
     }
 
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -888,7 +888,7 @@ static void dying_without_reply_actor(void *args,
     hive_message_t msg;
     hive_ipc_recv(&msg, 500);
     // Die without calling hive_ipc_reply()
-    hive_exit();
+    return;
 }
 
 static void test18_request_to_dying_actor(void *args,
@@ -939,7 +939,7 @@ static void test18_request_to_dying_actor(void *args,
         TEST_FAIL("took too long to detect target death");
     }
 
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -956,7 +956,7 @@ static void test19_sender(void *args, const hive_spawn_info_t *siblings,
     actor_id_t target = *(actor_id_t *)args;
     // Send message matching first filter (TAG_A)
     hive_ipc_notify(target, TEST19_TAG_A, "hello", 5);
-    hive_exit();
+    return;
 }
 
 static void test19_multi_filter_basic(void *args,
@@ -989,7 +989,7 @@ static void test19_multi_filter_basic(void *args,
         TEST_FAIL("expected match on first filter");
     }
 
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -1003,7 +1003,7 @@ static void test20_sender(void *args, const hive_spawn_info_t *siblings,
     actor_id_t target = *(actor_id_t *)args;
     // Send message matching second filter (TAG_B)
     hive_ipc_notify(target, TEST19_TAG_B, "world", 5);
-    hive_exit();
+    return;
 }
 
 static void test20_multi_filter_second(void *args,
@@ -1036,7 +1036,7 @@ static void test20_multi_filter_second(void *args,
         TEST_FAIL("expected match on second filter");
     }
 
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -1066,7 +1066,7 @@ static void test21_multi_filter_timeout(void *args,
         TEST_FAIL("expected HIVE_ERR_TIMEOUT");
     }
 
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -1094,7 +1094,7 @@ static void test22_multi_filter_nonblocking(void *args,
         TEST_FAIL("expected HIVE_ERR_WOULDBLOCK");
     }
 
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -1150,7 +1150,7 @@ static void run_all_tests(void *args, const hive_spawn_info_t *siblings,
         hive_ipc_recv(&msg, 10000);
     }
 
-    hive_exit();
+    return;
 }
 
 int main(void) {

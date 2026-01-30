@@ -239,15 +239,21 @@ hive_status_t hive_spawn(hive_actor_fn_t fn, hive_actor_init_fn_t init,
     return HIVE_SUCCESS;
 }
 
-_Noreturn void hive_exit(void) {
+_Noreturn void hive_exit(hive_exit_reason_t reason) {
     actor_t *current = hive_actor_current();
     if (current) {
-        HIVE_LOG_DEBUG("Actor %u (%s) exiting", current->id,
-                       current->name ? current->name : "unnamed");
+        if (reason == HIVE_EXIT_REASON_NORMAL) {
+            HIVE_LOG_DEBUG("Actor %u (%s) exiting normally", current->id,
+                           current->name ? current->name : "unnamed");
+        } else {
+            HIVE_LOG_DEBUG("Actor %u (%s) exiting with reason %u", current->id,
+                           current->name ? current->name : "unnamed",
+                           (unsigned)reason);
+        }
 
         // Mark exit reason and actor_t state
         // Scheduler will clean up resources - don't free stack here!
-        current->exit_reason = HIVE_EXIT_NORMAL;
+        current->exit_reason = reason;
         current->state = ACTOR_STATE_DEAD;
     }
 
@@ -256,26 +262,6 @@ _Noreturn void hive_exit(void) {
 
     // Should never reach here
     HIVE_LOG_ERROR("hive_exit: returned from scheduler yield");
-    abort();
-}
-
-_Noreturn void hive_exit_crash(void) {
-    actor_t *current = hive_actor_current();
-    if (current) {
-        HIVE_LOG_ERROR("Actor %u (%s) returned without calling hive_exit()",
-                       (unsigned)current->id,
-                       current->name ? current->name : "unnamed");
-
-        // Mark as crashed - linked/monitoring actors will be notified
-        current->exit_reason = HIVE_EXIT_CRASH;
-        current->state = ACTOR_STATE_DEAD;
-    }
-
-    // Yield back to scheduler and never return
-    hive_scheduler_yield();
-
-    // Should never reach here
-    HIVE_LOG_ERROR("hive_exit_crash: returned from scheduler yield");
     abort();
 }
 
@@ -310,7 +296,7 @@ hive_status_t hive_actor_kill(actor_id_t target) {
                    a->name ? a->name : "unnamed");
 
     // Set exit reason before cleanup (so notifications report correct reason)
-    a->exit_reason = HIVE_EXIT_KILLED;
+    a->exit_reason = HIVE_EXIT_REASON_KILLED;
 
     // Free actor_t resources and send death notifications
     hive_actor_free(a);

@@ -39,7 +39,7 @@ void sensor_actor(void *args, const hive_spawn_info_t *siblings,
     if (HIVE_FAILED(status)) {
         HIVE_LOG_ERROR("[SENSOR] Failed to create periodic timer: %s",
                        HIVE_ERR_STR(status));
-        return;
+        hive_exit(HIVE_EXIT_REASON_CRASH);
     }
 
     while (1) {
@@ -49,7 +49,7 @@ void sensor_actor(void *args, const hive_spawn_info_t *siblings,
         if (HIVE_FAILED(status)) {
             HIVE_LOG_ERROR("[SENSOR] recv_match failed: %s",
                            HIVE_ERR_STR(status));
-            return;
+            hive_exit(HIVE_EXIT_REASON_CRASH);
         }
 
         sensor_data_t sensors;

@@ -157,10 +157,6 @@ void hive_ipc_free_entry(mailbox_entry_t *entry);
 // Used by: IPC recv, timeout handling, bus
 mailbox_entry_t *hive_ipc_dequeue_head(actor_t *a);
 
-// Actor crash handler (called when actor returns without hive_exit)
-// Sets HIVE_EXIT_CRASH and yields to scheduler - never returns
-_Noreturn void hive_exit_crash(void);
-
 // Event loop handlers (called by scheduler when I/O sources become ready)
 
 // Handle timer event (timerfd ready)

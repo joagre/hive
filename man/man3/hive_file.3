@@ -390,7 +390,7 @@ void logger_actor(void *arg, const hive_spawn_info_t *siblings,
     }
 
     hive_file_close(fd);
-    hive_exit();
+    return;
 }
 
 /* Flight actor pushes data (O(1), never blocks) */
@@ -408,7 +408,7 @@ void flight_actor(void *arg, const hive_spawn_info_t *siblings,
 
         hive_sleep(2000);  /* 2ms control loop */
     }
-    hive_exit();
+    return;
 }
 
 int main(void) {

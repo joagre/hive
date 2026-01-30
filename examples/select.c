@@ -63,7 +63,7 @@ static void sensor_publisher(void *args, const hive_spawn_info_t *siblings,
 
     printf("[Sensor] Publisher finished\n");
     hive_timer_cancel(tick);
-    hive_exit();
+    return;
 }
 
 // Command sender actor - sends shutdown command after delay
@@ -91,7 +91,7 @@ static void command_sender(void *args, const hive_spawn_info_t *siblings,
     hive_ipc_notify(controller, CMD_SHUTDOWN, &shutdown_data,
                     sizeof(shutdown_data));
 
-    hive_exit();
+    return;
 }
 
 // Controller actor - uses hive_select() to wait on multiple sources
@@ -106,7 +106,7 @@ static void controller(void *args, const hive_spawn_info_t *siblings,
     hive_status_t status = hive_bus_subscribe(s_sensor_bus);
     if (HIVE_FAILED(status)) {
         printf("[Controller] Failed to subscribe: %s\n", HIVE_ERR_STR(status));
-        hive_exit();
+        return;
     }
 
     // Create heartbeat timer (250ms)
@@ -188,8 +188,8 @@ static void controller(void *args, const hive_spawn_info_t *siblings,
             if (hive_msg_is_exit(&msg)) {
                 hive_exit_msg_t exit_info;
                 hive_decode_exit(&msg, &exit_info);
-                printf("[Controller] Actor %u exited (%s)\n", exit_info.actor,
-                       hive_exit_reason_str(exit_info.reason));
+                printf("[Controller] Actor %u exited (reason=%u)\n",
+                       exit_info.actor, (unsigned)exit_info.reason);
             }
         }
     }
@@ -202,7 +202,7 @@ static void controller(void *args, const hive_spawn_info_t *siblings,
            sensor_count, heartbeat_count);
     printf("[Controller] Finished\n");
 
-    hive_exit();
+    return;
 }
 
 int main(void) {

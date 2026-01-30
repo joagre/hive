@@ -132,9 +132,10 @@ Documented in examples/pilot/spec/design.md "Supervision Semantics" section:
 
 ### 2.4 Error Handling Rules
 
-**Status** - DONE
-Documented in spec/api.md "Actor Exit Semantics" section:
-- Returning from actor function = `hive_exit(CRASH)`
+**Status** - DONE (updated Jan 2026 for Erlang semantics)
+Documented in spec/api.md "Actor function return behavior" section:
+- Returning from actor function = `HIVE_EXIT_REASON_NORMAL` (Erlang semantics)
+- To signal failure: `hive_exit(HIVE_EXIT_REASON_CRASH)`
 - `HIVE_ERR_TIMEOUT` is not a crash (normal control flow)
 - `HIVE_ERR_NOMEM` is systemic error (should be surfaced)
 

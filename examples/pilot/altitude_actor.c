@@ -57,13 +57,13 @@ void altitude_actor(void *args, const hive_spawn_info_t *siblings,
         hive_find_sibling(siblings, sibling_count, "flight_manager");
     if (state->flight_manager == HIVE_ACTOR_ID_INVALID) {
         HIVE_LOG_ERROR("[ALT] Failed to find flight_manager sibling");
-        return;
+        hive_exit(HIVE_EXIT_REASON_CRASH);
     }
 
     if (HIVE_FAILED(hive_bus_subscribe(state->state_bus)) ||
         HIVE_FAILED(hive_bus_subscribe(state->position_target_bus))) {
         HIVE_LOG_ERROR("[ALT] Bus subscribe failed");
-        return;
+        hive_exit(HIVE_EXIT_REASON_CRASH);
     }
 
     pid_state_t alt_pid;
@@ -101,7 +101,7 @@ void altitude_actor(void *args, const hive_spawn_info_t *siblings,
         status = hive_select(sources, 2, &result, -1);
         if (HIVE_FAILED(status)) {
             HIVE_LOG_ERROR("[ALT] select failed: %s", HIVE_ERR_STR(status));
-            return;
+            hive_exit(HIVE_EXIT_REASON_CRASH);
         }
 
         if (result.index == SEL_LANDING) {

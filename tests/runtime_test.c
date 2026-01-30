@@ -66,7 +66,7 @@ static void test2_self_outside_actor(void *args,
         TEST_FAIL("hive_self returned invalid ID inside actor context");
     }
 
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -85,7 +85,7 @@ static void yield_actor1(void *args, const hive_spawn_info_t *siblings,
     g_actor1_order = ++g_yield_order;
     hive_yield();
     g_actor1_order = ++g_yield_order;
-    hive_exit();
+    return;
 }
 
 static void yield_actor2(void *args, const hive_spawn_info_t *siblings,
@@ -96,7 +96,7 @@ static void yield_actor2(void *args, const hive_spawn_info_t *siblings,
     g_actor2_order = ++g_yield_order;
     hive_yield();
     g_actor2_order = ++g_yield_order;
-    hive_exit();
+    return;
 }
 
 static void test3_yield(void *args, const hive_spawn_info_t *siblings,
@@ -133,7 +133,7 @@ static void test3_yield(void *args, const hive_spawn_info_t *siblings,
         TEST_FAIL("yield did not interleave correctly");
     }
 
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -145,7 +145,7 @@ static void quickly_exit_actor(void *args, const hive_spawn_info_t *siblings,
     (void)args;
     (void)siblings;
     (void)sibling_count;
-    hive_exit();
+    return;
 }
 
 static void test4_actor_alive(void *args, const hive_spawn_info_t *siblings,
@@ -201,7 +201,7 @@ static void test4_actor_alive(void *args, const hive_spawn_info_t *siblings,
         TEST_FAIL("hive_actor_alive did not track lifecycle correctly");
     }
 
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -222,7 +222,7 @@ static void many_actor(void *args, const hive_spawn_info_t *siblings,
     (void)siblings;
     (void)sibling_count;
     g_many_actors_count++;
-    hive_exit();
+    return;
 }
 
 static void test5_many_actors(void *args, const hive_spawn_info_t *siblings,
@@ -265,7 +265,7 @@ static void test5_many_actors(void *args, const hive_spawn_info_t *siblings,
         }
     }
 
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -286,7 +286,7 @@ static void test6_shutdown(void *args, const hive_spawn_info_t *siblings,
     // because it would terminate us
     TEST_PASS("hive_shutdown exists (not tested from within actor)");
 
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -305,7 +305,7 @@ static void small_stack_actor(void *args, const hive_spawn_info_t *siblings,
     int x = 42;
     (void)x;
     g_small_stack_ok = true;
-    hive_exit();
+    return;
 }
 
 /* Buffer size for large stack test - reduced for QEMU */
@@ -326,7 +326,7 @@ static void large_stack_actor(void *args, const hive_spawn_info_t *siblings,
     if (buffer[LARGE_STACK_BUFFER_SIZE - 1] == 'A') {
         g_large_stack_ok = true;
     }
-    hive_exit();
+    return;
 }
 
 static void test7_stack_sizes(void *args, const hive_spawn_info_t *siblings,
@@ -380,7 +380,7 @@ static void test7_stack_sizes(void *args, const hive_spawn_info_t *siblings,
         TEST_FAIL("failed to spawn large stack actor");
     }
 
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -396,7 +396,7 @@ static void priority_actor(void *args, const hive_spawn_info_t *siblings,
     (void)sibling_count;
     int level = *(int *)args;
     g_priority_order[level] = ++g_priority_counter;
-    hive_exit();
+    return;
 }
 
 static void test8_priorities(void *args, const hive_spawn_info_t *siblings,
@@ -446,7 +446,7 @@ static void test8_priorities(void *args, const hive_spawn_info_t *siblings,
         TEST_FAIL("priority order not respected");
     }
 
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -487,7 +487,7 @@ static void run_all_tests(void *args, const hive_spawn_info_t *siblings,
         hive_ipc_recv(&msg, 10000);
     }
 
-    hive_exit();
+    return;
 }
 
 int main(void) {

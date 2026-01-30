@@ -21,7 +21,7 @@ static void writer_actor(void *args, const hive_spawn_info_t *siblings,
         filename, HIVE_O_WRONLY | HIVE_O_CREAT | HIVE_O_TRUNC, 0644, &fd);
     if (HIVE_FAILED(status)) {
         printf("Writer: Failed to open file: %s\n", HIVE_ERR_STR(status));
-        hive_exit();
+        return;
     }
 
     printf("Writer: Opened file (fd=%d)\n", fd);
@@ -32,7 +32,7 @@ static void writer_actor(void *args, const hive_spawn_info_t *siblings,
     if (HIVE_FAILED(status)) {
         printf("Writer: Failed to write: %s\n", HIVE_ERR_STR(status));
         hive_file_close(fd);
-        hive_exit();
+        return;
     }
 
     printf("Writer: Wrote %zu bytes\n", written);
@@ -50,7 +50,7 @@ static void writer_actor(void *args, const hive_spawn_info_t *siblings,
     }
 
     printf("Writer: Done!\n");
-    hive_exit();
+    return;
 }
 
 // File reader actor
@@ -74,7 +74,7 @@ static void reader_actor(void *args, const hive_spawn_info_t *siblings,
     hive_status_t status = hive_file_open(filename, HIVE_O_RDONLY, 0, &fd);
     if (HIVE_FAILED(status)) {
         printf("Reader: Failed to open file: %s\n", HIVE_ERR_STR(status));
-        hive_exit();
+        return;
     }
 
     printf("Reader: Opened file (fd=%d)\n", fd);
@@ -86,7 +86,7 @@ static void reader_actor(void *args, const hive_spawn_info_t *siblings,
     if (HIVE_FAILED(status)) {
         printf("Reader: Failed to read: %s\n", HIVE_ERR_STR(status));
         hive_file_close(fd);
-        hive_exit();
+        return;
     }
 
     printf("Reader: Read %zu bytes: \"%s\"\n", nread, buffer);
@@ -98,7 +98,7 @@ static void reader_actor(void *args, const hive_spawn_info_t *siblings,
     }
 
     printf("Reader: Done!\n");
-    hive_exit();
+    return;
 }
 
 int main(void) {

@@ -242,20 +242,26 @@ exhausted instead of returning HIVE_ERR_NOMEM. This setting can be overridden
 at runtime using
 .BR hive_pool_set_block ().
 .SS Exit Reasons
+Exit reasons are uint16_t values. Reserved system values use the high range (0xFFFC-0xFFFF),
+leaving values 0 to 0xFFFB for application-defined exit reasons.
 .TP
-.B HIVE_EXIT_NORMAL
-Actor called
-.BR hive_exit ().
+.B HIVE_EXIT_REASON_NORMAL (0xFFFF)
+Normal termination. Actor called
+.BR hive_exit ()
+with this reason, or actor function returned (Erlang semantics).
 .TP
-.B HIVE_EXIT_CRASH
-Actor function returned without calling
-.BR hive_exit ().
+.B HIVE_EXIT_REASON_CRASH (0xFFFD)
+Abnormal termination. Actor explicitly signaled failure.
 .TP
-.B HIVE_EXIT_CRASH_STACK
-Stack overflow detected (reserved for future hardware-based detection).
+.B HIVE_EXIT_REASON_STACK_OVERFLOW (0xFFFC)
+Stack overflow detected (reserved for future MPU-based detection).
 .TP
-.B HIVE_EXIT_KILLED
-Actor was killed externally (reserved for future use).
+.B HIVE_EXIT_REASON_KILLED (0xFFFE)
+Actor was killed externally via
+.BR hive_actor_kill ().
+.TP
+.B Application-defined (0 to 0xFFFB)
+Applications can define custom exit reasons for domain-specific error conditions.
 .SS Exit Message Payload
 .PP
 Defined in

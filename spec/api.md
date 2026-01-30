@@ -96,16 +96,15 @@ The sibling array is a **startup-time snapshot**. If a sibling restarts (getting
 - Sibling array is best for stable peer references in ONE_FOR_ALL supervision (all restart together)
 - Registry is best for service discovery patterns where restarts are expected
 
-**Actor function return behavior**
+**Actor function return behavior (Erlang semantics)**
 
-Actors **must** call `hive_exit()` to terminate cleanly. If an actor function returns without calling `hive_exit()`, the runtime detects this as a crash:
+When an actor function returns (reaches end or executes `return;`), the actor terminates with `HIVE_EXIT_REASON_NORMAL`. This follows Erlang semantics: "a process with no more code to execute terminates normally."
 
-1. Exit reason is set to `HIVE_EXIT_CRASH`
-2. Linked/monitoring actors receive exit notification with `HIVE_EXIT_CRASH` reason
-3. Normal cleanup proceeds (mailbox cleared, resources freed)
-4. An ERROR log is emitted: "Actor N returned without calling hive_exit()"
+- **Normal exit**: Just return from the actor function
+- **Abnormal exit**: Call `hive_exit(HIVE_EXIT_REASON_CRASH)` to signal failure
+- **Custom exit**: Call `hive_exit(reason)` with application-defined reason (0-0xFFFB)
 
-This crash detection prevents infinite loops and ensures linked actors are notified of the improper termination.
+This design makes intent explicit - returning is intentional normal completion, while crashes require explicit signaling.
 
 ```c
 // Get current actor's ID
@@ -121,7 +120,7 @@ bool hive_actor_alive(actor_id_t id);
 hive_status_t hive_actor_kill(actor_id_t target);
 ```
 
-**hive_actor_kill(target)**: Terminates the target actor immediately. This is a **hard kill** - the target cannot resist or defer termination. There is no graceful shutdown protocol; the actor is removed from the scheduler at the next opportunity. The target's exit reason is set to `HIVE_EXIT_KILLED`. Linked/monitoring actors receive exit notifications. Cannot kill self (use `hive_exit()` instead). Used internally by supervisors to terminate children during shutdown or strategy application.
+**hive_actor_kill(target)**: Terminates the target actor immediately. This is a **hard kill** - the target cannot resist or defer termination. There is no graceful shutdown protocol; the actor is removed from the scheduler at the next opportunity. The target's exit reason is set to `HIVE_EXIT_REASON_KILLED`. Linked/monitoring actors receive exit notifications. Cannot kill self (use `hive_exit()` instead). Used internally by supervisors to terminate children during shutdown or strategy application.
 
 For graceful shutdown, implement an application-level protocol: send a shutdown request message, wait for acknowledgment, then kill if needed.
 
@@ -175,15 +174,18 @@ hive_status_t hive_monitor(actor_id_t target, uint32_t *out);
 hive_status_t hive_demonitor(uint32_t id);
 ```
 
-Exit message structure:
+Exit reasons and message structure:
 
 ```c
-typedef enum {
-    HIVE_EXIT_NORMAL,       // Actor called hive_exit()
-    HIVE_EXIT_CRASH,        // Actor function returned without calling hive_exit()
-    HIVE_EXIT_CRASH_STACK,  // Reserved for future MPU-based detection
-    HIVE_EXIT_KILLED,       // Actor was killed externally
-} hive_exit_reason_t;
+// Exit reasons are uint16_t. Reserved system values use high range (0xFFFC-0xFFFF),
+// leaving 0-0xFFFB for application-defined exit reasons.
+#define HIVE_EXIT_REASON_NORMAL          0xFFFF  // Normal termination (return or explicit)
+#define HIVE_EXIT_REASON_KILLED          0xFFFE  // Killed externally via hive_actor_kill()
+#define HIVE_EXIT_REASON_CRASH           0xFFFD  // Abnormal termination (app-signaled)
+#define HIVE_EXIT_REASON_STACK_OVERFLOW  0xFFFC  // Reserved for future MPU detection
+// Application-defined reasons: 0 to 0xFFFB
+
+typedef uint16_t hive_exit_reason_t;
 
 typedef struct {
     actor_id_t         actor;      // who died
@@ -196,9 +198,6 @@ bool hive_msg_is_exit(const hive_message_t *msg);
 
 // Decode exit message into struct
 hive_status_t hive_decode_exit(const hive_message_t *msg, hive_exit_msg_t *out);
-
-// Convert exit reason to string (for logging/debugging)
-const char *hive_exit_reason_str(hive_exit_reason_t reason);
 ```
 
 **The monitor_id field** distinguishes exit notifications from links vs monitors:
@@ -217,11 +216,11 @@ if (hive_msg_is_exit(&msg)) {
     hive_exit_msg_t exit_info;
     hive_decode_exit(&msg, &exit_info);
     if (exit_info.monitor_id == 0) {
-        printf("Linked actor %u died: %s\n", exit_info.actor,
-               hive_exit_reason_str(exit_info.reason));
+        printf("Linked actor %u died (reason=%u)\n", exit_info.actor,
+               (unsigned)exit_info.reason);
     } else {
-        printf("Monitored actor %u died (id=%u): %s\n", exit_info.actor,
-               exit_info.monitor_id, hive_exit_reason_str(exit_info.reason));
+        printf("Monitored actor %u died (id=%u, reason=%u)\n", exit_info.actor,
+               exit_info.monitor_id, (unsigned)exit_info.reason);
     }
 }
 ```
@@ -1706,7 +1705,7 @@ void worker(void *args, const hive_spawn_info_t *siblings, size_t sibling_count)
 
     // Do work, may crash...
 
-    hive_exit();
+    return;
 }
 
 void orchestrator(void *args, const hive_spawn_info_t *siblings, size_t sibling_count) {
@@ -1749,7 +1748,7 @@ void orchestrator(void *args, const hive_spawn_info_t *siblings, size_t sibling_
     hive_message_t msg;
     hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_EXIT, HIVE_TAG_ANY, &msg, -1);
 
-    hive_exit();
+    return;
 }
 ```
 

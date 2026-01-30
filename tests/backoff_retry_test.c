@@ -94,7 +94,7 @@ void receiver_actor(void *args, const hive_spawn_info_t *siblings,
 
     printf("Receiver: Exiting\n");
 
-    hive_exit();
+    return;
 }
 
 void sender_actor(void *arg, const hive_spawn_info_t *siblings,
@@ -219,7 +219,7 @@ void sender_actor(void *arg, const hive_spawn_info_t *siblings,
                retry_count);
     }
 
-    hive_exit();
+    return;
 }
 
 int main(void) {

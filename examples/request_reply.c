@@ -95,7 +95,7 @@ static void consumer_actor(void *args, const hive_spawn_info_t *siblings,
     }
 
     printf("Consumer: Done processing, exiting\n");
-    hive_exit();
+    return;
 }
 
 // Fast producer that sends work requests
@@ -137,7 +137,7 @@ static void producer_actor(void *args, const hive_spawn_info_t *siblings,
     }
 
     printf("Producer: All jobs sent and completed, exiting\n");
-    hive_exit();
+    return;
 }
 
 // Demo simple message passing (async notify vs request/reply)
@@ -162,7 +162,7 @@ static void demo_actor(void *args, const hive_spawn_info_t *siblings,
     }
 
     printf("--- End Demo ---\n\n");
-    hive_exit();
+    return;
 }
 
 int main(void) {

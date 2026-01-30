@@ -79,7 +79,7 @@ static void test1_ipc_wildcard(void *args, const hive_spawn_info_t *siblings,
         TEST_FAIL("data or tag mismatch");
     }
 
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -131,7 +131,7 @@ static void test2_ipc_filtered(void *args, const hive_spawn_info_t *siblings,
         TEST_FAIL("TAG_A should still be in mailbox");
     }
 
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -153,7 +153,7 @@ static void test3_publisher(void *args, const hive_spawn_info_t *siblings,
 
     int data = 99;
     hive_bus_publish(s_test_bus, &data, sizeof(data));
-    hive_exit();
+    return;
 }
 
 static void test3_bus_source(void *args, const hive_spawn_info_t *siblings,
@@ -168,14 +168,14 @@ static void test3_bus_source(void *args, const hive_spawn_info_t *siblings,
     hive_status_t status = hive_bus_create(&cfg, &s_test_bus);
     if (HIVE_FAILED(status)) {
         TEST_FAIL("failed to create bus");
-        hive_exit();
+        return;
     }
 
     status = hive_bus_subscribe(s_test_bus);
     if (HIVE_FAILED(status)) {
         TEST_FAIL("failed to subscribe to bus");
         hive_bus_destroy(s_test_bus);
-        hive_exit();
+        return;
     }
 
     // Spawn publisher
@@ -222,7 +222,7 @@ static void test3_bus_source(void *args, const hive_spawn_info_t *siblings,
     hive_bus_destroy(s_test_bus);
     s_test_bus = HIVE_BUS_ID_INVALID;
 
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -265,7 +265,7 @@ static void test4_ipc_multi_first(void *args, const hive_spawn_info_t *siblings,
         TEST_FAIL("wrong tag");
     }
 
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -309,7 +309,7 @@ static void test5_ipc_multi_second(void *args,
         TEST_FAIL("wrong tag");
     }
 
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -332,7 +332,7 @@ static void test6_bus_publisher(void *args, const hive_spawn_info_t *siblings,
 
     int data = which_bus == 1 ? 111 : 222;
     hive_bus_publish(which_bus == 1 ? s_bus1 : s_bus2, &data, sizeof(data));
-    hive_exit();
+    return;
 }
 
 static void test6_bus_multi(void *args, const hive_spawn_info_t *siblings,
@@ -382,7 +382,7 @@ static void test6_bus_multi(void *args, const hive_spawn_info_t *siblings,
     hive_bus_destroy(s_bus2);
     s_bus1 = s_bus2 = HIVE_BUS_ID_INVALID;
 
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -402,7 +402,7 @@ static void test7_mixed_sender(void *args, const hive_spawn_info_t *siblings,
 
     int data = 777;
     hive_ipc_notify(target, TAG_A, &data, sizeof(data));
-    hive_exit();
+    return;
 }
 
 static void test7_mixed_sources(void *args, const hive_spawn_info_t *siblings,
@@ -451,7 +451,7 @@ static void test7_mixed_sources(void *args, const hive_spawn_info_t *siblings,
     hive_bus_unsubscribe(bus);
     hive_bus_destroy(bus);
 
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -517,7 +517,7 @@ static void test8_priority_order(void *args, const hive_spawn_info_t *siblings,
     hive_bus_unsubscribe(bus);
     hive_bus_destroy(bus);
 
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -566,7 +566,7 @@ static void test9_timeout(void *args, const hive_spawn_info_t *siblings,
         TEST_FAIL("timeout duration incorrect");
     }
 
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -619,7 +619,7 @@ static void test10_error_cases(void *args, const hive_spawn_info_t *siblings,
         TEST_FAIL("expected INVALID for unsubscribed bus");
     }
 
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -663,7 +663,7 @@ static void test11_immediate_return(void *args,
         TEST_FAIL("should return immediately");
     }
 
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -701,7 +701,7 @@ static void run_all_tests(void *args, const hive_spawn_info_t *siblings,
         hive_ipc_recv(&msg, 10000);
     }
 
-    hive_exit();
+    return;
 }
 
 int main(void) {

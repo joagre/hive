@@ -45,7 +45,7 @@ void position_actor(void *args, const hive_spawn_info_t *siblings,
     if (HIVE_FAILED(hive_bus_subscribe(state->state_bus)) ||
         HIVE_FAILED(hive_bus_subscribe(state->position_target_bus))) {
         HIVE_LOG_ERROR("[POS] Bus subscribe failed");
-        return;
+        hive_exit(HIVE_EXIT_REASON_CRASH);
     }
 
     // Current target (updated from waypoint actor)
@@ -62,7 +62,7 @@ void position_actor(void *args, const hive_spawn_info_t *siblings,
                                HIVE_TIMEOUT_INFINITE);
         if (HIVE_FAILED(status)) {
             HIVE_LOG_ERROR("[POS] bus read failed: %s", HIVE_ERR_STR(status));
-            return;
+            hive_exit(HIVE_EXIT_REASON_CRASH);
         }
 
         // Read target from waypoint actor (non-blocking, use last known)

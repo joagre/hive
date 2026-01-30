@@ -185,6 +185,7 @@ Convenience macros:
 - Actors receive sibling info at startup (for supervised actors: all siblings; for standalone: self only)
 - Use `hive_find_sibling(siblings, count, name)` to find sibling by name
 - Actors can link (bidirectional) or monitor (unidirectional) other actors for death notifications
+- Actor termination (Erlang semantics): returning from actor function = `HIVE_EXIT_REASON_NORMAL`; call `hive_exit(HIVE_EXIT_REASON_CRASH)` to signal failure
 - When an actor dies: mailbox cleared, links/monitors notified, bus subscriptions removed, timers cancelled, resources freed
 
 ### Stack Watermarking
@@ -201,14 +202,13 @@ Exit messages are received when linked/monitored actors die:
 if (hive_msg_is_exit(&msg)) {
     hive_exit_msg_t exit_info;
     hive_decode_exit(&msg, &exit_info);
-    printf("Actor %u died: %s (monitor_id=%u)\n", exit_info.actor,
-           hive_exit_reason_str(exit_info.reason), exit_info.monitor_id);
+    printf("Actor %u died (reason=%u, monitor_id=%u)\n", exit_info.actor,
+           (unsigned)exit_info.reason, exit_info.monitor_id);
 }
 ```
 - `hive_msg_is_exit(msg)` checks if message is an exit notification
 - `hive_decode_exit(msg, out)` decodes exit message into `hive_exit_msg_t` struct
-- `hive_exit_reason_str(reason)` returns "NORMAL", "CRASH", or "KILLED"
-- Exit reasons: `HIVE_EXIT_NORMAL`, `HIVE_EXIT_CRASH`, `HIVE_EXIT_KILLED`
+- Exit reasons: `HIVE_EXIT_REASON_NORMAL`, `HIVE_EXIT_REASON_CRASH`, `HIVE_EXIT_REASON_KILLED`, `HIVE_EXIT_REASON_STACK_OVERFLOW`, or app-defined (0-0xFFFB)
 - `exit_info.monitor_id`: 0 = from link, non-zero = from monitor (matches `hive_monitor()` return value)
 
 ### IPC Message Format

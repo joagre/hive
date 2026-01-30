@@ -41,12 +41,12 @@ static void worker_actor(void *args, const hive_spawn_info_t *siblings,
         // Randomly crash (1 in 3 chance per iteration)
         if (rand() % 3 == 0) {
             printf("Worker %d: CRASHING!\n", worker_id);
-            return; // Crash (return without hive_exit)
+            hive_exit(HIVE_EXIT_REASON_CRASH);
         }
     }
 
     printf("Worker %d: Completed all work, exiting normally\n", worker_id);
-    hive_exit();
+    return;
 }
 
 // Callback when supervisor shuts down
@@ -132,7 +132,7 @@ static void orchestrator_actor(void *args, const hive_spawn_info_t *siblings,
         hive_supervisor_start(&sup_config, NULL, &supervisor);
     if (HIVE_FAILED(status)) {
         printf("Failed to start supervisor: %s\n", HIVE_ERR_STR(status));
-        hive_exit();
+        return;
     }
 
     printf("Supervisor started (Actor ID: %u)\n\n", supervisor);
@@ -164,15 +164,15 @@ static void orchestrator_actor(void *args, const hive_spawn_info_t *siblings,
             hive_exit_msg_t exit_info;
             hive_decode_exit(&msg, &exit_info);
             if (exit_info.actor == supervisor) {
-                printf("Supervisor exited (reason: %s)\n",
-                       hive_exit_reason_str(exit_info.reason));
+                printf("Supervisor exited (reason: %u)\n",
+                       (unsigned)exit_info.reason);
                 break;
             }
         }
     }
 
     printf("\n=== Demo completed ===\n");
-    hive_exit();
+    return;
 }
 
 int main(void) {

@@ -48,7 +48,7 @@ static void standalone_actor(void *args, const hive_spawn_info_t *siblings,
         }
     }
 
-    hive_exit();
+    return;
 }
 
 static void test1_standalone_siblings(void *args,
@@ -66,7 +66,7 @@ static void test1_standalone_siblings(void *args,
     hive_status_t s = hive_spawn(standalone_actor, NULL, NULL, NULL, &id);
     if (HIVE_FAILED(s)) {
         TEST_FAIL("spawn failed");
-        hive_exit();
+        return;
     }
 
     hive_link(id);
@@ -86,7 +86,7 @@ static void test1_standalone_siblings(void *args,
         TEST_FAIL("standalone actor not in its own sibling array");
     }
 
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -121,7 +121,7 @@ static void child_actor(void *args, const hive_spawn_info_t *siblings,
     // Wait for shutdown
     hive_message_t msg;
     hive_ipc_recv(&msg, 5000);
-    hive_exit();
+    return;
 }
 
 static void *child_init(void *init_args) {
@@ -187,7 +187,7 @@ static void test2_supervisor_siblings(void *args,
     hive_status_t s = hive_supervisor_start(&cfg, NULL, &sup_id);
     if (HIVE_FAILED(s)) {
         TEST_FAIL("supervisor start failed");
-        hive_exit();
+        return;
     }
 
     // Give children time to start and record sibling info
@@ -224,7 +224,7 @@ static void test2_supervisor_siblings(void *args,
     hive_supervisor_stop(sup_id);
     hive_sleep(100000);
 
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -241,7 +241,7 @@ static void finder_actor(void *args, const hive_spawn_info_t *siblings,
 
     hive_message_t msg;
     hive_ipc_recv(&msg, 5000);
-    hive_exit();
+    return;
 }
 
 static void target_actor(void *args, const hive_spawn_info_t *siblings,
@@ -251,7 +251,7 @@ static void target_actor(void *args, const hive_spawn_info_t *siblings,
     (void)sibling_count;
     hive_message_t msg;
     hive_ipc_recv(&msg, 5000);
-    hive_exit();
+    return;
 }
 
 static void test3_find_sibling(void *args, const hive_spawn_info_t *siblings,
@@ -296,7 +296,7 @@ static void test3_find_sibling(void *args, const hive_spawn_info_t *siblings,
     hive_status_t s = hive_supervisor_start(&cfg, NULL, &sup_id);
     if (HIVE_FAILED(s)) {
         TEST_FAIL("supervisor start failed");
-        hive_exit();
+        return;
     }
 
     hive_sleep(200000);
@@ -310,7 +310,7 @@ static void test3_find_sibling(void *args, const hive_spawn_info_t *siblings,
     hive_supervisor_stop(sup_id);
     hive_sleep(100000);
 
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -327,7 +327,7 @@ static void not_finder_actor(void *args, const hive_spawn_info_t *siblings,
         hive_find_sibling(siblings, sibling_count, "nonexistent");
     s_not_found_returned_null = (found == HIVE_ACTOR_ID_INVALID);
 
-    hive_exit();
+    return;
 }
 
 static void test4_find_sibling_not_found(void *args,
@@ -347,7 +347,7 @@ static void test4_find_sibling_not_found(void *args,
     hive_status_t s = hive_spawn(not_finder_actor, NULL, NULL, &cfg, &id);
     if (HIVE_FAILED(s)) {
         TEST_FAIL("spawn failed");
-        hive_exit();
+        return;
     }
 
     hive_link(id);
@@ -360,7 +360,7 @@ static void test4_find_sibling_not_found(void *args,
         TEST_FAIL("hive_find_sibling did not return NULL");
     }
 
-    hive_exit();
+    return;
 }
 
 // ============================================================================
@@ -397,7 +397,7 @@ static void run_next_test(void *args, const hive_spawn_info_t *siblings,
         hive_spawn(run_next_test, NULL, NULL, NULL, &id);
     }
 
-    hive_exit();
+    return;
 }
 
 int main(void) {

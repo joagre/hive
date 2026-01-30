@@ -55,7 +55,7 @@ static void logging_actor(void *args, const hive_spawn_info_t *siblings,
     status = hive_timer_every(SYNC_INTERVAL_US, &sync_timer);
     if (HIVE_FAILED(status)) {
         HIVE_LOG_ERROR("Failed to create sync timer: %s", HIVE_ERR_STR(status));
-        hive_exit();
+        return;
     }
 
     // Demonstrate different log levels
@@ -100,7 +100,7 @@ static void logging_actor(void *args, const hive_spawn_info_t *siblings,
     printf("\nLogging complete. Decode the binary log with:\n");
     printf("  python3 tools/decode_log.py %s\n\n", LOG_FILE_PATH);
 
-    hive_exit();
+    return;
 }
 
 int main(void) {

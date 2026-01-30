@@ -43,7 +43,7 @@ void rate_actor(void *args, const hive_spawn_info_t *siblings,
         HIVE_FAILED(hive_bus_subscribe(state->thrust_bus)) ||
         HIVE_FAILED(hive_bus_subscribe(state->rate_setpoint_bus))) {
         HIVE_LOG_ERROR("[RATE] Bus subscribe failed");
-        return;
+        hive_exit(HIVE_EXIT_REASON_CRASH);
     }
 
     pid_state_t roll_pid, pitch_pid, yaw_pid;
@@ -73,7 +73,7 @@ void rate_actor(void *args, const hive_spawn_info_t *siblings,
                                HIVE_TIMEOUT_INFINITE);
         if (HIVE_FAILED(status)) {
             HIVE_LOG_ERROR("[RATE] bus read failed: %s", HIVE_ERR_STR(status));
-            return;
+            hive_exit(HIVE_EXIT_REASON_CRASH);
         }
 
         // Measure actual dt

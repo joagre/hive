@@ -1,7 +1,7 @@
 .\" Man page for linking and monitoring functions
 .TH HIVE_LINK 3 "January 2026" "Hive 1.0" "Actor Runtime Manual"
 .SH NAME
-hive_link, hive_unlink, hive_monitor, hive_demonitor, hive_msg_is_exit, hive_decode_exit, hive_exit_reason_str \- actor linking and monitoring
+hive_link, hive_unlink, hive_monitor, hive_demonitor, hive_msg_is_exit, hive_decode_exit \- actor linking and monitoring
 .SH SYNOPSIS
 .nf
 .B #include <hive_link.h>
@@ -12,7 +12,6 @@ hive_link, hive_unlink, hive_monitor, hive_demonitor, hive_msg_is_exit, hive_dec
 .BI "hive_status_t hive_demonitor(uint32_t " id ");"
 .BI "bool hive_msg_is_exit(const hive_message_t *" msg ");"
 .BI "hive_status_t hive_decode_exit(const hive_message_t *" msg ", hive_exit_msg_t *" out ");"
-.BI "const char *hive_exit_reason_str(hive_exit_reason_t " reason ");"
 .fi
 .SH DESCRIPTION
 These functions enable actors to be notified when other actors die, supporting
@@ -81,20 +80,27 @@ if (hive_msg_is_exit(&msg)) {
 }
 .fi
 .SS Exit Reasons
+Exit reasons are uint16_t values. Reserved system values use the high range (0xFFFC-0xFFFF),
+leaving values 0 to 0xFFFB for application-defined exit reasons.
 .TP
-.B HIVE_EXIT_NORMAL
-Actor called
-.BR hive_exit ().
+.B HIVE_EXIT_REASON_NORMAL (0xFFFF)
+Normal termination. Actor called
+.BR hive_exit ()
+with this reason, or actor function returned (Erlang semantics).
 .TP
-.B HIVE_EXIT_CRASH
-Actor function returned without calling
-.BR hive_exit ().
+.B HIVE_EXIT_REASON_CRASH (0xFFFD)
+Abnormal termination. Actor explicitly signaled failure by calling
+.BR hive_exit (HIVE_EXIT_REASON_CRASH).
 .TP
-.B HIVE_EXIT_CRASH_STACK
-Stack overflow detected (reserved for future hardware-based detection).
+.B HIVE_EXIT_REASON_STACK_OVERFLOW (0xFFFC)
+Stack overflow detected (reserved for future MPU-based detection).
 .TP
-.B HIVE_EXIT_KILLED
-Actor was killed externally (reserved for future use).
+.B HIVE_EXIT_REASON_KILLED (0xFFFE)
+Actor was killed externally via
+.BR hive_actor_kill ().
+.TP
+.B Application-defined (0 to 0xFFFB)
+Applications can define custom exit reasons to signal specific exit conditions.
 .SS Helper Functions
 .BR hive_msg_is_exit ()
 returns true if
@@ -110,10 +116,6 @@ Returns
 on success, or
 .B HIVE_ERR_INVALID
 if the message is not an exit message.
-.PP
-.BR hive_exit_reason_str ()
-returns a human-readable string for the exit reason:
-"NORMAL", "CRASH", "STACK_OVERFLOW", or "KILLED".
 .SH RETURN VALUE
 .BR hive_link (),
 .BR hive_unlink (),
@@ -127,9 +129,6 @@ structure.
 .PP
 .BR hive_msg_is_exit ()
 returns true if the message is an exit notification.
-.PP
-.BR hive_exit_reason_str ()
-returns a constant string describing the exit reason.
 .SH ERRORS
 .TP
 .B HIVE_ERR_INVALID
@@ -205,7 +204,7 @@ void worker(void *arg, const hive_spawn_info_t *siblings,
     int id = *(int *)arg;
     printf("Worker %d started\\n", id);
     /* Simulate work then exit normally */
-    hive_exit();
+    return;
 }
 
 void manager(void *arg, const hive_spawn_info_t *siblings,
@@ -230,11 +229,11 @@ void manager(void *arg, const hive_spawn_info_t *siblings,
         if (hive_msg_is_exit(&msg)) {
             hive_exit_msg_t info;
             hive_decode_exit(&msg, &info);
-            printf("Manager: worker %u exited (%s)\\n",
-                   info.actor, hive_exit_reason_str(info.reason));
+            printf("Manager: worker %u exited (reason=%u)\\n",
+                   info.actor, (unsigned)info.reason);
             exited++;
 
-            if (info.reason != HIVE_EXIT_NORMAL) {
+            if (info.reason != HIVE_EXIT_REASON_NORMAL) {
                 /* Could restart worker here */
                 printf("Manager: would restart crashed worker\\n");
             }
@@ -242,7 +241,7 @@ void manager(void *arg, const hive_spawn_info_t *siblings,
     }
 
     printf("Manager: all workers done\\n");
-    hive_exit();
+    return;
 }
 
 int main(void) {

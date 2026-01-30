@@ -29,7 +29,7 @@ static void publisher_actor(void *args, const hive_spawn_info_t *siblings,
     hive_status_t status = hive_timer_every(200000, &timer);
     if (HIVE_FAILED(status)) {
         printf("Publisher: Failed to create timer: %s\n", HIVE_ERR_STR(status));
-        hive_exit();
+        return;
     }
 
     printf("Publisher: Created periodic timer (200ms)\n");
@@ -65,7 +65,7 @@ static void publisher_actor(void *args, const hive_spawn_info_t *siblings,
     hive_timer_cancel(timer);
     printf("Publisher: Done publishing\n");
 
-    hive_exit();
+    return;
 }
 
 // Subscriber actor - reads sensor data
@@ -81,7 +81,7 @@ static void subscriber_actor(void *args, const hive_spawn_info_t *siblings,
     hive_status_t status = hive_bus_subscribe(s_sensor_bus);
     if (HIVE_FAILED(status)) {
         printf("%s: Failed to subscribe: %s\n", name, HIVE_ERR_STR(status));
-        hive_exit();
+        return;
     }
 
     printf("%s: Subscribed to sensor bus\n", name);
@@ -113,7 +113,7 @@ static void subscriber_actor(void *args, const hive_spawn_info_t *siblings,
     hive_bus_unsubscribe(s_sensor_bus);
     printf("%s: Done reading\n", name);
 
-    hive_exit();
+    return;
 }
 
 int main(void) {
