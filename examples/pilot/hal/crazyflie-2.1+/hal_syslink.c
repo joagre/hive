@@ -297,6 +297,11 @@ static void syslink_rx_byte(uint8_t byte) {
         break;
 
     case RX_DATA:
+        // Bounds check to prevent buffer overflow (defense in depth)
+        if (s_rx_index >= SYSLINK_MTU) {
+            s_rx_state = RX_START1;
+            break;
+        }
         s_rx_data[s_rx_index++] = byte;
         s_rx_ck_a += byte;
         s_rx_ck_b += s_rx_ck_a;

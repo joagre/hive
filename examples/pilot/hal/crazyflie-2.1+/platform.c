@@ -838,10 +838,15 @@ static int8_t bmi08_i2c_read(uint8_t reg_addr, uint8_t *data, uint32_t len,
     return 0;
 }
 
+// Max I2C write buffer size (reg addr + data)
+#define I2C_WRITE_BUF_MAX 32
+
 static int8_t bmi08_i2c_write(uint8_t reg_addr, const uint8_t *data,
                               uint32_t len, void *intf_ptr) {
+    if (len >= I2C_WRITE_BUF_MAX)
+        return -1; // Buffer would overflow
     uint8_t dev_addr = *(uint8_t *)intf_ptr;
-    uint8_t buf[len + 1];
+    uint8_t buf[I2C_WRITE_BUF_MAX];
     buf[0] = reg_addr;
     for (uint32_t i = 0; i < len; i++)
         buf[i + 1] = data[i];
@@ -870,8 +875,10 @@ static int8_t bmp3_i2c_read(uint8_t reg_addr, uint8_t *data, uint32_t len,
 
 static int8_t bmp3_i2c_write(uint8_t reg_addr, const uint8_t *data,
                              uint32_t len, void *intf_ptr) {
+    if (len >= I2C_WRITE_BUF_MAX)
+        return -1; // Buffer would overflow
     uint8_t dev_addr = *(uint8_t *)intf_ptr;
-    uint8_t buf[len + 1];
+    uint8_t buf[I2C_WRITE_BUF_MAX];
     buf[0] = reg_addr;
     for (uint32_t i = 0; i < len; i++)
         buf[i + 1] = data[i];
@@ -891,7 +898,9 @@ static void bmp3_delay_us(uint32_t period, void *intf_ptr) {
 
 static int vl53l1x_i2c_write(uint8_t dev_addr, uint16_t reg_addr,
                              const uint8_t *data, uint16_t len) {
-    uint8_t buf[len + 2];
+    if (len + 2 > I2C_WRITE_BUF_MAX)
+        return -1; // Buffer would overflow
+    uint8_t buf[I2C_WRITE_BUF_MAX];
     buf[0] = (uint8_t)(reg_addr >> 8);
     buf[1] = (uint8_t)(reg_addr & 0xFF);
     for (uint16_t i = 0; i < len; i++)
