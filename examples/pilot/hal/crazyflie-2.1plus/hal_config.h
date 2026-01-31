@@ -6,11 +6,11 @@
 // Motor thrust base value (matching Bitcraze)
 #define HAL_BASE_THRUST 36000
 
-// Motor mapping:
-// M1 (TIM2_CH1) - Front Right (CW)
-// M2 (TIM2_CH2) - Back Right (CCW)
-// M3 (TIM2_CH3) - Back Left (CW)
-// M4 (TIM2_CH4) - Front Left (CCW)
+// Motor mapping (rotation viewed from above):
+// M1 (TIM2_CH1) - Front Right (CCW)
+// M2 (TIM2_CH2) - Back Right (CW)
+// M3 (TIM2_CH3) - Back Left (CCW)
+// M4 (TIM2_CH4) - Front Left (CW)
 
 // Sensor update rate (Hz)
 #define HAL_SENSOR_RATE 1000

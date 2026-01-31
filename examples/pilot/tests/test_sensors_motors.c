@@ -275,36 +275,86 @@ int test_sensors_motors_run(bool standalone) {
     hal_delay_ms(1000); // Extra delay before motors
 
     // ========================================================================
-    // Phase 5: Motor Test
+    // Phase 5: Motor Test (Individual motors for CW/CCW inspection)
     // ========================================================================
 
 #if ENABLE_MOTOR_TEST
-    HIVE_LOG_INFO("Phase 5: Motor test (%d ms at %.0f%% thrust)",
-                  MOTOR_TEST_DURATION_MS, MOTOR_TEST_THRUST * 100);
+    // Motor mapping from hal_config.h (rotation viewed from above):
+    // M1 (motor[0]) - Front Right (CCW)
+    // M2 (motor[1]) - Back Right (CW)
+    // M3 (motor[2]) - Back Left (CCW)
+    // M4 (motor[3]) - Front Left (CW)
+    static const char *motor_names[] = {
+        "M1 Front-Right (CCW)", "M2 Back-Right (CW)", "M3 Back-Left (CCW)",
+        "M4 Front-Left (CW)"};
+
+    HIVE_LOG_INFO("Phase 5: Individual motor test (%.0f%% thrust each)",
+                  MOTOR_TEST_THRUST * 100);
+    HIVE_LOG_INFO("Each motor runs for %d ms - verify CW/CCW rotation",
+                  MOTOR_TEST_DURATION_MS);
+
     hal_arm();
 
-    // Run motors at low thrust for MOTOR_TEST_DURATION_MS
-    torque_cmd_t cmd = {
-        .thrust = MOTOR_TEST_THRUST, .roll = 0.0f, .pitch = 0.0f, .yaw = 0.0f};
+    // Test each motor individually
+    for (int m = 0; m < 4; m++) {
+        HIVE_LOG_INFO("Starting: %s", motor_names[m]);
 
-    start_time = hal_get_time_ms();
-    last_blink = start_time;
+        motor_cmd_t cmd = MOTOR_CMD_ZERO;
+        cmd.motor[m] = MOTOR_TEST_THRUST;
 
-    while ((hal_get_time_ms() - start_time) < MOTOR_TEST_DURATION_MS) {
-        hal_write_torque(&cmd);
+        start_time = hal_get_time_ms();
+        last_blink = start_time;
 
-        // Medium blink (5 Hz)
-        if ((hal_get_time_ms() - last_blink) >= 100) {
-            hal_led_toggle();
-            last_blink = hal_get_time_ms();
+        while ((hal_get_time_ms() - start_time) < MOTOR_TEST_DURATION_MS) {
+            platform_write_motors(&cmd);
+
+            // Blink pattern: number of blinks = motor number (1-4)
+            if ((hal_get_time_ms() - last_blink) >= 100) {
+                hal_led_toggle();
+                last_blink = hal_get_time_ms();
+            }
+
+            hal_delay_ms(4);
         }
 
-        hal_delay_ms(4);
+        // Stop this motor
+        cmd.motor[m] = 0.0f;
+        platform_write_motors(&cmd);
+        hal_led_off();
+
+        HIVE_LOG_INFO("Stopped: %s", motor_names[m]);
+
+        // Pause between motors (except after last)
+        if (m < 3) {
+            HIVE_LOG_INFO("Pause 2s before next motor...");
+            hal_delay_ms(2000);
+        }
     }
 
-    // Stop motors
-    cmd.thrust = 0.0f;
-    hal_write_torque(&cmd);
+    // All motors test
+    HIVE_LOG_INFO("All motors together for %d ms...", MOTOR_TEST_DURATION_MS);
+    {
+        motor_cmd_t cmd = {.motor = {MOTOR_TEST_THRUST, MOTOR_TEST_THRUST,
+                                     MOTOR_TEST_THRUST, MOTOR_TEST_THRUST}};
+
+        start_time = hal_get_time_ms();
+        last_blink = start_time;
+
+        while ((hal_get_time_ms() - start_time) < MOTOR_TEST_DURATION_MS) {
+            platform_write_motors(&cmd);
+
+            if ((hal_get_time_ms() - last_blink) >= 50) {
+                hal_led_toggle();
+                last_blink = hal_get_time_ms();
+            }
+
+            hal_delay_ms(4);
+        }
+    }
+
+    // Stop all motors
+    motor_cmd_t stop_cmd = MOTOR_CMD_ZERO;
+    platform_write_motors(&stop_cmd);
     hal_disarm();
 
     hal_led_off();
