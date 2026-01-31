@@ -20,11 +20,11 @@ Telemetry packet formats:
   Type 0x02 - Position/Altitude (17 bytes):
     type(1) + timestamp_ms(4) + altitude(2) + vz(2) + vx(2) + vy(2) + thrust(2) + battery_mv(2)
 
-Log download packet formats:
+Log download packet formats (must match comms_actor.c):
   Type 0x10 - CMD_REQUEST_LOG (1 byte): Ground -> Drone to request log
-  Type 0x11 - LOG_CHUNK (31 bytes): Drone -> Ground log data chunk
+  Type 0x11 - PACKET_LOG_CHUNK (31 bytes): Drone -> Ground log data chunk
     type(1) + sequence(2) + data(28)
-  Type 0x12 - LOG_COMPLETE (3 bytes): Drone -> Ground download complete
+  Type 0x12 - PACKET_LOG_DONE (3 bytes): Drone -> Ground download complete
     type(1) + total_chunks(2)
 
 Requirements:
@@ -57,10 +57,10 @@ except ImportError:
 PACKET_TYPE_ATTITUDE = 0x01
 PACKET_TYPE_POSITION = 0x02
 
-# Packet type identifiers - log download
+# Packet type identifiers - log download (must match comms_actor.c)
 CMD_REQUEST_LOG = 0x10
 PACKET_LOG_CHUNK = 0x11
-PACKET_LOG_COMPLETE = 0x12
+PACKET_LOG_DONE = 0x12
 
 # Log chunk data size
 LOG_CHUNK_DATA_SIZE = 28
@@ -74,21 +74,17 @@ SCALE_THRUST = 65535.0 # 0-65535 -> 0.0-1.0
 
 
 def decode_attitude_packet(data: bytes) -> dict:
-    """Decode attitude/rates packet (type 0x01)."""
+    """Decode attitude/rates packet (type 0x01).
+
+    Format matches comms_actor.c telemetry_attitude_t:
+      type(1) + timestamp_ms(4) + gyro_xyz(6) + roll/pitch/yaw(6) = 17 bytes
+    """
     if len(data) < 17:
         return None
 
     _, timestamp_ms, gx, gy, gz, roll, pitch, yaw = struct.unpack(
-        "<BIHHHHHH", data[:17]
+        "<BIhhhhhh", data[:17]
     )
-
-    # Convert from unsigned to signed
-    gx = gx if gx < 32768 else gx - 65536
-    gy = gy if gy < 32768 else gy - 65536
-    gz = gz if gz < 32768 else gz - 65536
-    roll = roll if roll < 32768 else roll - 65536
-    pitch = pitch if pitch < 32768 else pitch - 65536
-    yaw = yaw if yaw < 32768 else yaw - 65536
 
     return {
         "type": "attitude",
@@ -103,7 +99,11 @@ def decode_attitude_packet(data: bytes) -> dict:
 
 
 def decode_position_packet(data: bytes) -> dict:
-    """Decode position/altitude packet (type 0x02)."""
+    """Decode position/altitude packet (type 0x02).
+
+    Format matches comms_actor.c telemetry_position_t:
+      type(1) + timestamp_ms(4) + alt(2) + vz(2) + vx(2) + vy(2) + thrust(2) + battery_mv(2) = 17 bytes
+    """
     if len(data) < 17:
         return None
 
@@ -391,7 +391,7 @@ class TelemetryReceiver:
                             print(f"  Received {chunks_received} chunks "
                                   f"({total_bytes} bytes)...", file=sys.stderr)
 
-                    elif pkt_type == PACKET_LOG_COMPLETE:
+                    elif pkt_type == PACKET_LOG_DONE:
                         if len(data) >= 3:
                             total_chunks = struct.unpack("<H", data[1:3])[0]
                             print(f"Download complete: {total_chunks} chunks, "
