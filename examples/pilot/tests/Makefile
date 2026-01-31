@@ -21,11 +21,17 @@
 #   esb            - ESB radio communication test (interrupt-based syslink)
 #   main           - Combined test runner (all applicable tests)
 
-# Default target shows help
+# Default target: build if PLATFORM set, otherwise show help
 # FORCE target - always out of date, triggers submake to check real deps
 .PHONY: all help clean FORCE
 
+ifeq ($(PLATFORM),crazyflie)
+all: crazyflie
+else ifeq ($(PLATFORM),webots)
+all: webots
+else
 all: help
+endif
 
 help:
 	@echo "Pilot HAL Tests"
