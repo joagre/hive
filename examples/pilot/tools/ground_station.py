@@ -10,8 +10,8 @@ Telemetry packet formats:
   Type 0x01 - Attitude/Rates (17 bytes):
     type(1) + timestamp_ms(4) + gyro_xyz(6) + roll/pitch/yaw(6)
 
-  Type 0x02 - Position/Altitude (15 bytes):
-    type(1) + timestamp_ms(4) + altitude(2) + vz(2) + vx(2) + vy(2) + thrust(2)
+  Type 0x02 - Position/Altitude (17 bytes):
+    type(1) + timestamp_ms(4) + altitude(2) + vz(2) + vx(2) + vy(2) + thrust(2) + battery_mv(2)
 
 Log download packet formats:
   Type 0x10 - CMD_REQUEST_LOG (1 byte): Ground -> Drone to request log
@@ -98,11 +98,11 @@ def decode_attitude_packet(data: bytes) -> dict:
 
 def decode_position_packet(data: bytes) -> dict:
     """Decode position/altitude packet (type 0x02)."""
-    if len(data) < 15:
+    if len(data) < 17:
         return None
 
-    _, timestamp_ms, alt, vz, vx, vy, thrust = struct.unpack(
-        "<BIhhhhH", data[:15]
+    _, timestamp_ms, alt, vz, vx, vy, thrust, battery_mv = struct.unpack(
+        "<BIhhhhHH", data[:17]
     )
 
     return {
@@ -113,6 +113,7 @@ def decode_position_packet(data: bytes) -> dict:
         "vx": vx / SCALE_VEL,
         "vy": vy / SCALE_VEL,
         "thrust": thrust / SCALE_THRUST,
+        "battery_v": battery_mv / 1000.0,
     }
 
 
@@ -146,7 +147,7 @@ def format_position(pkt: dict) -> str:
         f"[{pkt['timestamp_ms']:8d}ms] POS  "
         f"alt={pkt['altitude']:+5.2f}m  vz={pkt['vz']:+5.2f}m/s  "
         f"vxy=({pkt['vx']:+5.2f}, {pkt['vy']:+5.2f})m/s  "
-        f"thrust={pkt['thrust']:.1%}"
+        f"thrust={pkt['thrust']:.1%}  bat={pkt['battery_v']:.2f}V"
     )
 
 
@@ -275,6 +276,7 @@ class TelemetryReceiver:
                 "vx": pkt["vx"],
                 "vy": pkt["vy"],
                 "thrust": pkt["thrust"],
+                "battery_v": pkt["battery_v"],
             })
 
         writer.writerow(row)
@@ -412,7 +414,7 @@ def main():
         fieldnames = [
             "receive_time", "timestamp_ms", "type",
             "gyro_x", "gyro_y", "gyro_z", "roll", "pitch", "yaw",
-            "altitude", "vz", "vx", "vy", "thrust"
+            "altitude", "vz", "vx", "vy", "thrust", "battery_v"
         ]
         csv_writer = csv.DictWriter(csv_file, fieldnames=fieldnames, extrasaction="ignore")
         csv_writer.writeheader()

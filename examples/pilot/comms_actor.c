@@ -73,7 +73,7 @@ typedef struct __attribute__((packed)) {
     int16_t yaw;           // Yaw angle (millirad)
 } telemetry_attitude_t;
 
-// Packet type 0x02: Position and altitude (15 bytes)
+// Packet type 0x02: Position and altitude (17 bytes)
 typedef struct __attribute__((packed)) {
     uint8_t type;          // 0x02
     uint32_t timestamp_ms; // Milliseconds since boot
@@ -82,6 +82,7 @@ typedef struct __attribute__((packed)) {
     int16_t vx;            // X velocity (mm/s)
     int16_t vy;            // Y velocity (mm/s)
     uint16_t thrust;       // Thrust (0-65535)
+    uint16_t battery_mv;   // Battery voltage (millivolts)
 } telemetry_position_t;
 
 // Packet type 0x11: Log chunk (31 bytes)
@@ -338,6 +339,7 @@ void comms_actor(void *args, const hive_spawn_info_t *siblings,
                     .vx = float_to_i16(latest_state.x_velocity, SCALE_VEL),
                     .vy = float_to_i16(latest_state.y_velocity, SCALE_VEL),
                     .thrust = float_to_u16(latest_thrust.thrust),
+                    .battery_mv = (uint16_t)(hal_power_get_battery() * 1000.0f),
                 };
                 hal_esb_send(&pkt, sizeof(pkt));
             }
