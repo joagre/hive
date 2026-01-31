@@ -150,12 +150,26 @@ static void radio_rx_callback(const void *data, size_t len, void *user_data) {
 
     if (cmd == CMD_REQUEST_LOG) {
         // Ground station requests log download
-        // Open log file and switch to download mode
+        // Find log file path (must match flight_manager_actor.c)
+        const char *log_path = NULL;
+        if (HIVE_SUCCEEDED(hive_file_mount_available("/sd"))) {
+            log_path = "/sd/flm.log";
+        } else if (HIVE_SUCCEEDED(hive_file_mount_available("/log"))) {
+            log_path = "/log";
+        } else if (HIVE_SUCCEEDED(hive_file_mount_available("/tmp"))) {
+            log_path = "/tmp/flm.log";
+        }
+
+        if (!log_path) {
+            HIVE_LOG_WARN("[COMMS] Log download failed: no storage available");
+            return;
+        }
+
         int fd;
-        hive_status_t s = hive_file_open("/log", HIVE_O_RDONLY, 0, &fd);
+        hive_status_t s = hive_file_open(log_path, HIVE_O_RDONLY, 0, &fd);
         if (HIVE_FAILED(s)) {
-            HIVE_LOG_WARN(
-                "[COMMS] Log download request failed: cannot open /log");
+            HIVE_LOG_WARN("[COMMS] Log download failed: cannot open %s",
+                          log_path);
             return;
         }
 
@@ -163,7 +177,7 @@ static void radio_rx_callback(const void *data, size_t len, void *user_data) {
         state->log_offset = 0;
         state->log_sequence = 0;
         state->mode = COMMS_MODE_LOG_DOWNLOAD;
-        HIVE_LOG_INFO("[COMMS] Log download started");
+        HIVE_LOG_INFO("[COMMS] Log download started: %s", log_path);
     }
 }
 
