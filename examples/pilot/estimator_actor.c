@@ -9,9 +9,7 @@
 #include "config.h"
 #include "math_utils.h"
 #include "fusion/complementary_filter.h"
-#if USE_ALTITUDE_KF
 #include "fusion/altitude_kf.h"
-#endif
 #include "hive_runtime.h"
 #include "hive_bus.h"
 #include "hive_log.h"
@@ -54,7 +52,6 @@ void estimator_actor(void *args, const hive_spawn_info_t *siblings,
     cf_config.use_mag = true; // Use magnetometer for yaw if available
     cf_init(&filter, &cf_config);
 
-#if USE_ALTITUDE_KF
     // Initialize altitude Kalman filter
     altitude_kf_state_t alt_kf;
     altitude_kf_config_t kf_config = {.q_altitude = ALT_KF_Q_ALTITUDE,
@@ -65,13 +62,6 @@ void estimator_actor(void *args, const hive_spawn_info_t *siblings,
                                       .p0_velocity = ALT_KF_P0_VELOCITY,
                                       .p0_bias = ALT_KF_P0_BIAS};
     altitude_kf_init(&alt_kf, &kf_config);
-    HIVE_LOG_INFO("[EST] Using altitude Kalman filter");
-#else
-    // State for velocity estimation (differentiate position)
-    float prev_altitude = 0.0f;
-    float vertical_velocity = 0.0f;
-    HIVE_LOG_INFO("[EST] Using LPF velocity estimation");
-#endif
 
     // Horizontal velocity (still using differentiation + LPF for now)
     float prev_x = 0.0f;
@@ -141,9 +131,8 @@ void estimator_actor(void *args, const hive_spawn_info_t *siblings,
         }
 
         // -----------------------------------------------------------------
-        // Altitude and vertical velocity estimation
+        // Altitude and vertical velocity estimation (Kalman filter)
         // -----------------------------------------------------------------
-#if USE_ALTITUDE_KF
         // Compute vertical acceleration in world frame
         // Body frame accel_z points down when level, world frame z points up
         // Need to rotate body accel to world frame and extract vertical component
@@ -172,20 +161,6 @@ void estimator_actor(void *args, const hive_spawn_info_t *siblings,
         // Get estimates from KF
         altitude_kf_get_state(&alt_kf, &est.altitude, &est.vertical_velocity,
                               NULL);
-#else
-        // Simple differentiation + LPF fallback
-        est.altitude = measured_altitude;
-
-        if (first_sample) {
-            vertical_velocity = 0.0f;
-        } else if (dt > 0.0f) {
-            float raw_vvel = (est.altitude - prev_altitude) / dt;
-            vertical_velocity =
-                LPF(vertical_velocity, raw_vvel, VVEL_FILTER_ALPHA);
-        }
-        prev_altitude = est.altitude;
-        est.vertical_velocity = vertical_velocity;
-#endif
 
         // -----------------------------------------------------------------
         // Horizontal velocity
