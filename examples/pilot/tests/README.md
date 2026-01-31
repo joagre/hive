@@ -214,11 +214,29 @@ filenames) to save ~2KB flash. Use short names like `data.bin`, `log001.txt`.
 
 ### esb
 
-Tests ESB radio communication with Crazyradio PA/2.0 via interrupt-based syslink.
+Tests ESB radio communication with Crazyradio PA/2.0.
 
 The Crazyflie communicates with the ground via the nRF51822 co-processor using
 the syslink protocol over USART6 at 1Mbaud. This test validates the DMA-based
-RX implementation required for reliable high-speed reception.
+syslink implementation and ESB protocol.
+
+**ESB Protocol:**
+
+The nRF51 on the Crazyflie is configured as PRX (Primary Receiver), while the
+Crazyradio on the ground station is PTX (Primary Transmitter). This means:
+
+- Ground station initiates all communication by sending packets
+- Drone can only respond via ACK payloads (cannot send spontaneously)
+- Telemetry from drone piggybacks on ACK packets
+- Ground station poll rate determines maximum telemetry rate
+
+```
+Ground (PTX)                    Drone nRF51 (PRX)
+     |                                |
+     |-------- poll packet --------->|
+     |<------- ACK + telemetry ------|
+     |                                |
+```
 
 **Requirements:**
 - Crazyradio PA or Crazyradio 2.0 USB dongle
@@ -232,72 +250,72 @@ make flash-crazyflie TEST=esb
 
 **Run ground station (on laptop):**
 ```bash
-python test_radio_ground.py [--uri URI] [--duration SECONDS]
+sudo python test_radio_ground.py [--uri URI] [--duration SECONDS] [--rate HZ]
 ```
 
-**Test sequence (Crazyflie side):**
-1. Initialize HAL and Hive runtime
-2. Initialize DMA-based ESB radio (`hal_esb_init()`)
-3. Wait for battery packet from nRF51 (proves DMA RX works)
-4. Wait for ground station connection (RADIO_RAW packet)
-5. Send telemetry packets at 10Hz for 30 seconds:
-   - Attitude packets (gyro, roll/pitch/yaw)
-   - Echo packets (sequence + data)
-6. Report TX/RX statistics
+**Test sequence (Crazyflie):**
+1. Initialize HAL and radio (`hal_esb_init()`)
+2. Wait for battery voltage from nRF51 (proves internal syslink works)
+3. Queue battery packets at 100Hz via `hal_esb_send()`
+4. Packets are sent when ground station polls (ACK payload)
 
 **Test sequence (ground station):**
 1. Scan for Crazyflie (or use specified URI)
 2. Connect via Crazyradio
-3. Receive and decode telemetry packets
-4. Display real-time statistics
+3. Poll at specified rate (default 100Hz)
+4. Receive and decode battery packets from ACK payloads
 
-**Packet types:**
-| Type | ID | Contents |
-|------|-----|----------|
-| Attitude | 0x01 | timestamp, gyro_xyz, roll/pitch/yaw |
-| Position | 0x02 | timestamp, altitude, velocities, thrust |
-| Echo | 0xE0 | sequence, data string |
+**Packet format:**
+| Byte | Contents |
+|------|----------|
+| 0 | Type (0x03 = battery) |
+| 1-4 | Voltage (float, little-endian) |
 
 **LED feedback:**
 | Pattern | Meaning |
 |---------|---------|
 | 1 blink | Starting test |
-| 2 blinks | Radio initialized (DMA enabled) |
-| 3 blinks | Battery packet received |
-| 4 blinks | Ground station connected |
-| Fast blink | Sending/receiving packets |
-| LED on solid | Test complete (success) |
-| Slow blink | Error |
+| 2 blinks | Radio initialized |
+| 3 blinks | Battery received from nRF51 |
+| Fast blink | Sending telemetry |
+| LED on solid | Test complete |
 
-**Example ground station output:**
+**Example output:**
 ```
-============================================================
-  Radio Communication Test - Ground Station
-============================================================
+==================================================
+  ESB Radio Test - Ground Station
+==================================================
+
+Protocol:
+  Ground station polls -> Drone ACKs with telemetry
 
 Scanning for Crazyflie...
 Found 1 Crazyflie(s):
-  [0] radio://0/80/2M/E7E7E7E7E7
-Connecting to radio://0/80/2M/E7E7E7E7E7...
+  [0] radio://0/80/2M
+Connecting to radio://0/80/2M...
 Connected!
 
-Receiving packets for 60 seconds...
+Polling at 100 Hz for 30 seconds...
 Press Ctrl+C to stop
 
-[ 30.0s] RX:   300 (att: 150 pos:   0 echo: 150) | R:+0.00 P:+0.00 Y:+1.50
+[ 30.0s] Battery:  341  Unknown:    0  | 4.14V
 
-============================================================
+==================================================
   TEST COMPLETE
-============================================================
-  Duration:     30.0 seconds
-  Total RX:     300
-  Attitude:     150
-  Position:     0
-  Echo:         150
-  Unknown:      0
-  Rate:         10.0 packets/sec
-============================================================
+==================================================
+  Duration:     30.0s
+  Poll rate:    100 Hz
+  Polls sent:   2950
+  Battery pkts: 341
+  Unknown pkts: 0
+  Packet rate:  11.4 pkts/sec
+  Last voltage: 4.14V
+==================================================
 ```
+
+**Note:** The effective packet rate (~11 pkts/sec) is lower than the poll rate
+(100 Hz) because the nRF51 ACK payload buffer holds only one packet. Empty
+polls (when no new telemetry is queued) return no data.
 
 ### main (Combined Test Runner)
 

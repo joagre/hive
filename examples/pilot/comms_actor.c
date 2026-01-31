@@ -189,12 +189,7 @@ void comms_actor(void *args, const hive_spawn_info_t *siblings,
 
     comms_state_t *state = args;
 
-    // Initialize radio
-    if (hal_esb_init() != 0) {
-        HIVE_LOG_ERROR("[COMMS] Radio init failed");
-        hive_exit(HIVE_EXIT_REASON_CRASH); // Signal failure to supervisor
-    }
-
+    // Radio already initialized from main() via hal_esb_init()
     // Register RX callback for ground station commands
     hal_esb_set_rx_callback(radio_rx_callback, state);
 

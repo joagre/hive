@@ -1,129 +1,79 @@
 /**
- * Syslink Communication Test
+ * ESB Radio Communication Test
  *
- * Tests the interrupt-based syslink radio communication with Crazyradio PA/2.0.
+ * Tests syslink radio communication with ground station.
+ * Sends simple battery voltage packets to validate the protocol.
  *
- * Test sequence:
- *   1. Initialize HAL and Hive runtime
- *   2. Initialize radio (hal_esb_init)
- *   3. Wait for battery packet (proves RX works)
- *   4. Wait for ground station connection (RADIO_RAW packet)
- *   5. Send telemetry packets when TX allowed
- *   6. Receive and echo commands from ground station
+ * ESB Protocol:
+ *   - Ground station is PTX (Primary Transmitter) - initiates all communication
+ *   - Drone's nRF51 is PRX (Primary Receiver) - responds via ACK payloads
+ *   - Drone queues telemetry via hal_esb_send()
+ *   - nRF51 attaches queued payload to ACK when ground station polls
  *
- * LED patterns:
- *   - 1 blink: Starting test
- *   - 2 blinks: Radio initialized
- *   - 3 blinks: Battery packet received
- *   - 4 blinks: Ground station connected
- *   - Fast blink: Sending/receiving packets
- *   - Solid: Test complete (success)
- *   - Slow blink: Error
+ * Packet format (must match test_radio_ground.py):
+ *   Byte 0: Type (0x03 = battery)
+ *   Bytes 1-4: Voltage (float, little-endian)
  *
  * Usage:
  *   make PLATFORM=crazyflie TEST=esb
  *   make flash-crazyflie TEST=esb
  *
- * Ground station test (Python):
- *   import cflib
- *   # Connect to Crazyflie and observe telemetry
+ * Ground station:
+ *   sudo python test_radio_ground.py --rate 100 --duration 30
  */
 
 #include "hal/hal.h"
 #include "hive_log.h"
 #include "hive_runtime.h"
-#include "hive_timer.h"
 
 #include <stdbool.h>
 #include <stdint.h>
-#include <string.h>
-
-#include "printf.h" // Use lib/printf (snprintf_) on STM32
 
 // ============================================================================
-// Test Configuration
+// Configuration
 // ============================================================================
 
-#define TEST_DURATION_MS 30000      // Run test for 30 seconds
-#define TELEMETRY_INTERVAL_MS 100   // Send telemetry every 100ms
-#define BATTERY_TIMEOUT_MS 5000     // Wait 5s for battery packet
-#define CONNECTION_TIMEOUT_MS 30000 // Wait 30s for ground station
+#define TEST_DURATION_MS 60000   // Run for 60 seconds
+#define TELEMETRY_INTERVAL_MS 10 // Queue telemetry every 10ms (100Hz)
+#define BATTERY_TIMEOUT_MS 5000  // Wait 5s for battery from nRF51
 
-// Packet types (matching comms_actor.c)
-#define PACKET_TYPE_ATTITUDE 0x01
-#define PACKET_TYPE_POSITION 0x02
-#define PACKET_TYPE_ECHO 0xE0 // Echo test packet
+// ============================================================================
+// Packet Definition
+// ============================================================================
+
+#define PACKET_TYPE_BATTERY 0x03
+
+// Battery packet: type(1) + voltage(4) = 5 bytes
+typedef struct __attribute__((packed)) {
+    uint8_t type;
+    float voltage;
+} battery_packet_t;
+
+_Static_assert(sizeof(battery_packet_t) == 5, "Battery packet size mismatch");
 
 // ============================================================================
 // Test State
 // ============================================================================
 
-typedef struct {
-    volatile bool battery_received;
-    volatile bool ground_connected;
-    volatile uint32_t rx_count;
-    volatile uint32_t tx_count;
-    volatile uint8_t last_rx_type;
-    volatile uint8_t last_rx_data[32];
-    volatile size_t last_rx_len;
-} radio_test_state_t;
-
-static radio_test_state_t s_state = {0};
-
-// ============================================================================
-// Packet Structures
-// ============================================================================
-
-// Simple attitude packet for testing (17 bytes)
-typedef struct __attribute__((packed)) {
-    uint8_t type; // PACKET_TYPE_ATTITUDE
-    uint32_t timestamp_ms;
-    int16_t gyro_x;
-    int16_t gyro_y;
-    int16_t gyro_z;
-    int16_t roll;
-    int16_t pitch;
-    int16_t yaw;
-} test_attitude_t;
-
-// Echo packet (variable length, max 31 bytes)
-typedef struct __attribute__((packed)) {
-    uint8_t type; // PACKET_TYPE_ECHO
-    uint8_t sequence;
-    uint8_t data[29]; // Echo back received data
-} test_echo_t;
+static volatile uint32_t s_rx_count = 0;
+static volatile uint32_t s_tx_count = 0;
 
 // ============================================================================
 // RX Callback
 // ============================================================================
 
 static void radio_rx_callback(const void *data, size_t len, void *user_data) {
+    (void)data;
+    (void)len;
     (void)user_data;
-
-    if (len < 1) {
-        return;
-    }
-
-    const uint8_t *bytes = (const uint8_t *)data;
-    s_state.rx_count++;
-    s_state.last_rx_type = bytes[0];
-    s_state.last_rx_len = len;
-
-    if (len <= sizeof(s_state.last_rx_data)) {
-        memcpy((void *)s_state.last_rx_data, data, len);
-    }
-
-    // Mark ground station as connected on first packet
-    if (!s_state.ground_connected) {
-        s_state.ground_connected = true;
-    }
+    s_rx_count++;
 }
 
 // ============================================================================
 // LED Helpers
 // ============================================================================
 
-static void test_blink(int n, int on_ms, int off_ms) {
+static void blink(int n, int on_ms, int off_ms) {
     for (int i = 0; i < n; i++) {
         hal_led_on();
         hal_delay_ms(on_ms);
@@ -132,89 +82,46 @@ static void test_blink(int n, int on_ms, int off_ms) {
     }
 }
 
-static void error_blink_forever(void) {
-    while (1) {
-        hal_led_toggle();
-        hal_delay_ms(500);
-    }
-}
-
 // ============================================================================
-// Test Phases
+// Wait for battery voltage from nRF51
 // ============================================================================
 
 static bool wait_for_battery(void) {
-    HIVE_LOG_INFO("[RADIO] Waiting for battery packet...");
+    HIVE_LOG_INFO("[ESB] Waiting for battery from nRF51...");
 
     uint32_t start = hal_get_time_ms();
-    uint32_t last_log = 0;
 
     while ((hal_get_time_ms() - start) < BATTERY_TIMEOUT_MS) {
         hal_esb_poll();
 
         float voltage = hal_power_get_battery();
         if (voltage > 0.1f) {
-            s_state.battery_received = true;
-            HIVE_LOG_INFO("[RADIO] Battery: %.2fV", voltage);
+            HIVE_LOG_INFO("[ESB] Battery: %.2fV", voltage);
             return true;
-        }
-
-        // Log debug info every second
-        uint32_t elapsed = hal_get_time_ms() - start;
-        if (elapsed - last_log >= 1000) {
-            last_log = elapsed;
-            HIVE_LOG_INFO("[DEBUG] @%lums: ISR=%lu Bytes=%lu Pkts=%lu Errs=%lu",
-                          elapsed, hal_esb_debug_isr_count(),
-                          hal_esb_debug_rx_bytes(), hal_esb_debug_packets(),
-                          hal_esb_debug_errors());
         }
 
         hal_delay_ms(10);
     }
 
-    HIVE_LOG_WARN("[RADIO] Battery packet timeout (nRF51 may not be running)");
-    HIVE_LOG_INFO("[DEBUG] Final: ISR=%lu Bytes=%lu Pkts=%lu Errs=%lu",
-                  hal_esb_debug_isr_count(), hal_esb_debug_rx_bytes(),
-                  hal_esb_debug_packets(), hal_esb_debug_errors());
+    HIVE_LOG_WARN("[ESB] Battery timeout");
     return false;
 }
 
-static bool wait_for_connection(void) {
-    HIVE_LOG_INFO("[RADIO] Waiting for ground station connection...");
-    HIVE_LOG_INFO("[RADIO] Connect with Crazyradio PA/2.0 now");
+// ============================================================================
+// Telemetry Loop
+// ============================================================================
 
-    uint32_t start = hal_get_time_ms();
-
-    while ((hal_get_time_ms() - start) < CONNECTION_TIMEOUT_MS) {
-        hal_esb_poll();
-
-        if (s_state.ground_connected) {
-            HIVE_LOG_INFO("[RADIO] Ground station connected!");
-            return true;
-        }
-
-        // Blink while waiting
-        if (((hal_get_time_ms() - start) / 500) % 2) {
-            hal_led_on();
-        } else {
-            hal_led_off();
-        }
-
-        hal_delay_ms(10);
-    }
-
-    HIVE_LOG_WARN("[RADIO] Connection timeout");
-    return false;
-}
-
-static void run_communication_test(void) {
-    HIVE_LOG_INFO("[RADIO] Starting communication test (30s)...");
+static void run_telemetry_loop(void) {
+    HIVE_LOG_INFO("[ESB] Telemetry loop starting (%ds)",
+                  TEST_DURATION_MS / 1000);
+    HIVE_LOG_INFO("[ESB] Sending battery packets at %d Hz",
+                  1000 / TELEMETRY_INTERVAL_MS);
 
     uint32_t start = hal_get_time_ms();
     uint32_t last_tx = 0;
-    uint32_t tx_success = 0;
-    uint32_t tx_fail = 0;
-    uint8_t sequence = 0;
+    uint32_t last_log = 0;
+    uint32_t tx_ok = 0;
+    uint32_t tx_busy = 0;
 
     while ((hal_get_time_ms() - start) < TEST_DURATION_MS) {
         uint32_t now = hal_get_time_ms();
@@ -222,176 +129,124 @@ static void run_communication_test(void) {
         // Poll for incoming packets
         hal_esb_poll();
 
-        // Send telemetry at regular intervals
+        // Queue telemetry at fixed interval
         if ((now - last_tx) >= TELEMETRY_INTERVAL_MS) {
             last_tx = now;
 
-            if (hal_esb_tx_ready()) {
-                // Alternate between attitude and position packets
-                if (sequence % 2 == 0) {
-                    test_attitude_t pkt = {
-                        .type = PACKET_TYPE_ATTITUDE,
-                        .timestamp_ms = now,
-                        .gyro_x = (int16_t)(sequence * 10),
-                        .gyro_y = (int16_t)(sequence * 20),
-                        .gyro_z = (int16_t)(sequence * 30),
-                        .roll = 0,
-                        .pitch = 0,
-                        .yaw = (int16_t)(sequence * 100),
-                    };
+            if (!hal_esb_tx_ready()) {
+                tx_busy++;
+                continue;
+            }
 
-                    if (hal_esb_send(&pkt, sizeof(pkt)) == 0) {
-                        tx_success++;
-                        s_state.tx_count++;
-                        hal_led_toggle();
-                    } else {
-                        tx_fail++;
-                    }
-                } else {
-                    // Send echo request
-                    test_echo_t pkt = {
-                        .type = PACKET_TYPE_ECHO,
-                        .sequence = sequence,
-                    };
-                    snprintf_((char *)pkt.data, sizeof(pkt.data), "SEQ=%u",
-                              sequence);
+            battery_packet_t pkt = {
+                .type = PACKET_TYPE_BATTERY,
+                .voltage = hal_power_get_battery(),
+            };
 
-                    if (hal_esb_send(&pkt, sizeof(pkt)) == 0) {
-                        tx_success++;
-                        s_state.tx_count++;
-                        hal_led_toggle();
-                    } else {
-                        tx_fail++;
-                    }
-                }
-
-                sequence++;
+            if (hal_esb_send(&pkt, sizeof(pkt)) == 0) {
+                tx_ok++;
+                s_tx_count++;
+                hal_led_toggle();
             }
         }
 
         // Log status every 5 seconds
-        if ((now - start) % 5000 < 10) {
-            HIVE_LOG_INFO("[RADIO] TX: %lu/%lu, RX: %lu, Battery: %.2fV",
-                          tx_success, tx_success + tx_fail, s_state.rx_count,
-                          hal_power_get_battery());
-            HIVE_LOG_INFO("[DEBUG] ISR: %lu, Bytes: %lu, Pkts: %lu, Errs: %lu",
-                          hal_esb_debug_isr_count(), hal_esb_debug_rx_bytes(),
-                          hal_esb_debug_packets(), hal_esb_debug_errors());
+        if ((now - last_log) >= 5000) {
+            last_log = now;
+            HIVE_LOG_INFO("[ESB] TX:%lu busy:%lu RX:%lu Batt:%.2fV", tx_ok,
+                          tx_busy, s_rx_count, hal_power_get_battery());
         }
 
         hal_delay_ms(1);
     }
 
-    HIVE_LOG_INFO("[RADIO] Test complete!");
-    HIVE_LOG_INFO("[RADIO] TX success: %lu, TX fail: %lu", tx_success, tx_fail);
-    HIVE_LOG_INFO("[RADIO] RX count: %lu", s_state.rx_count);
-    HIVE_LOG_INFO("[RADIO] Final battery: %.2fV", hal_power_get_battery());
-    HIVE_LOG_INFO("[DEBUG] Final - ISR: %lu, Bytes: %lu, Pkts: %lu, Errs: %lu",
-                  hal_esb_debug_isr_count(), hal_esb_debug_rx_bytes(),
-                  hal_esb_debug_packets(), hal_esb_debug_errors());
+    HIVE_LOG_INFO("========================================");
+    HIVE_LOG_INFO("  TEST COMPLETE");
+    HIVE_LOG_INFO("========================================");
+    HIVE_LOG_INFO("  TX sent:  %lu", tx_ok);
+    HIVE_LOG_INFO("  TX busy:  %lu", tx_busy);
+    HIVE_LOG_INFO("  RX count: %lu", s_rx_count);
+    HIVE_LOG_INFO("  Battery:  %.2fV", hal_power_get_battery());
 }
 
 // ============================================================================
-// Radio Test Actor (calls hal_esb_init from actor context like pilot does)
+// Test Actor
 // ============================================================================
 
-static void radio_test_actor(void *args, const hive_spawn_info_t *siblings,
-                             size_t sibling_count) {
+static void esb_test_actor(void *args, const hive_spawn_info_t *siblings,
+                           size_t sibling_count) {
     (void)args;
     (void)siblings;
     (void)sibling_count;
 
     HIVE_LOG_INFO("========================================");
-    HIVE_LOG_INFO("  Radio Communication Test");
+    HIVE_LOG_INFO("  ESB Radio Test");
     HIVE_LOG_INFO("========================================");
-    HIVE_LOG_INFO("[RADIO] Interrupt-based USART6 syslink");
 
-    // 1 blink = starting
-    test_blink(1, 200, 200);
-    hal_delay_ms(500);
-
-    // Initialize radio (from actor context like pilot's comms_actor)
-    HIVE_LOG_INFO("[RADIO] Initializing radio...");
-    if (hal_esb_init() != 0) {
-        HIVE_LOG_ERROR("[RADIO] Radio init failed!");
-        error_blink_forever();
-    }
-
-    // Register RX callback
     hal_esb_set_rx_callback(radio_rx_callback, NULL);
 
-    HIVE_LOG_INFO("[RADIO] Radio initialized");
-
     // 2 blinks = radio ready
-    test_blink(2, 200, 200);
+    blink(2, 200, 200);
     hal_delay_ms(500);
 
-    // Wait for battery packet (proves RX works)
+    // Wait for battery from nRF51
     if (wait_for_battery()) {
-        // 3 blinks = battery received
-        test_blink(3, 200, 200);
+        blink(3, 200, 200);
         hal_delay_ms(500);
     }
 
-    // Wait for ground station connection
-    if (!wait_for_connection()) {
-        HIVE_LOG_WARN("[RADIO] No ground station - running TX-only test");
-    } else {
-        // 4 blinks = connected
-        test_blink(4, 200, 200);
-        hal_delay_ms(500);
-    }
+    run_telemetry_loop();
 
-    // Run communication test
-    run_communication_test();
-
-    // Success
-    HIVE_LOG_INFO("[RADIO] TEST PASSED");
-
-    // Solid LED = success
+    HIVE_LOG_INFO("[ESB] TEST PASSED");
     hal_led_on();
+
     while (1) {
         hal_delay_ms(1000);
     }
 }
 
 // ============================================================================
-// Main Test Entry Point
+// Main
 // ============================================================================
 
 int test_esb_run(bool standalone) {
     if (standalone) {
-        // Initialize HAL
         hal_debug_init();
         if (hal_init() != 0) {
             return -1;
         }
 
-        // Initialize Hive runtime
+        blink(1, 200, 200);
+        hal_delay_ms(300);
+
+        HIVE_LOG_INFO("[ESB] Initializing radio...");
+        if (hal_esb_init() != 0) {
+            HIVE_LOG_ERROR("[ESB] hal_esb_init failed!");
+            while (1) {
+                hal_led_toggle();
+                hal_delay_ms(100);
+            }
+        }
+        HIVE_LOG_INFO("[ESB] Radio OK");
+
         hive_status_t status = hive_init();
         if (HIVE_FAILED(status)) {
             return -1;
         }
 
-        // Spawn the radio test actor
         actor_id_t actor;
         hive_actor_config_t cfg = {.stack_size = 4096};
-        status = hive_spawn(radio_test_actor, NULL, NULL, &cfg, &actor);
+        status = hive_spawn(esb_test_actor, NULL, NULL, &cfg, &actor);
         if (HIVE_FAILED(status)) {
             return -1;
         }
 
-        // Run the scheduler
         hive_run();
         hive_cleanup();
     }
 
     return 0;
 }
-
-// ============================================================================
-// Standalone Main (when built as TEST=esb)
-// ============================================================================
 
 #ifndef TEST_MAIN_BUILD
 int main(void) {

@@ -6,7 +6,11 @@
 // UART: USART6 at 1Mbaud (PC6=TX, PC7=RX)
 // Flow control: PA4 (TXEN) indicates nRF51 ready to receive
 //
-// RX uses interrupt-driven receive (RXNE) matching Bitcraze's default.
+// RX uses DMA2 Stream 2 in circular buffer mode for reliable reception
+// at 1Mbaud. The DMA initialization provides natural clock domain
+// synchronization (blocking register reads), allowing hal_esb_init()
+// to be called from main() before hive_run().
+//
 // TX uses polling (we control timing, so no overrun risk).
 //
 // Blocking: Each send blocks for ~370us (37 bytes at 1Mbaud).
@@ -14,12 +18,13 @@
 
 #include "platform.h"
 #include "stm32f4xx.h"
-#include "stm32f4xx_gpio.h"
-#include "stm32f4xx_usart.h"
-#include "stm32f4xx_rcc.h"
-#include "misc.h"
 #include <stdbool.h>
 #include <string.h>
+
+// CMSIS position defines (not in older STM32F4 headers)
+#ifndef DMA_SxCR_CHSEL_Pos
+#define DMA_SxCR_CHSEL_Pos 25U
+#endif
 
 // ----------------------------------------------------------------------------
 // Syslink Constants
@@ -42,6 +47,7 @@
 // BRR = APB2_CLK / BAUD = 84,000,000 / 1,000,000 = 84
 
 #define SYSLINK_USART USART6
+#define SYSLINK_BAUD_DIV 84
 
 // GPIO pins (matching Bitcraze firmware)
 #define SYSLINK_TX_PIN 6   // PC6
@@ -49,14 +55,18 @@
 #define SYSLINK_TXEN_PIN 4 // PA4 (flow control: LOW=ready, HIGH=busy)
 
 // ----------------------------------------------------------------------------
-// RX Ring Buffer (filled by interrupt)
+// DMA Configuration
 // ----------------------------------------------------------------------------
 
-#define RX_BUFFER_SIZE 256 // Must be power of 2 for efficient wrap handling
+// DMA2 Stream 2, Channel 5 = USART6_RX
+// Circular buffer mode for continuous reception
+#define DMA_RX_STREAM DMA2_Stream2
+#define DMA_RX_CHANNEL 5
+#define DMA_RX_BUFFER_SIZE 256 // Must be power of 2 for efficient wrap handling
 
-static volatile uint8_t s_rx_buffer[RX_BUFFER_SIZE];
-static volatile uint32_t s_rx_write_pos = 0;
-static volatile uint32_t s_rx_read_pos = 0;
+// DMA RX circular buffer
+static uint8_t s_dma_rx_buffer[DMA_RX_BUFFER_SIZE];
+static volatile uint32_t s_dma_rx_read_pos = 0;
 
 // ----------------------------------------------------------------------------
 // State
@@ -66,7 +76,6 @@ static volatile bool s_initialized = false;
 static volatile float s_battery_voltage = 0.0f;
 
 // Debug counters for RX diagnostics
-static volatile uint32_t s_isr_count = 0;
 static volatile uint32_t s_rx_byte_count = 0;
 static volatile uint32_t s_rx_errors = 0;
 static volatile uint32_t s_packet_count = 0;
@@ -96,93 +105,90 @@ static uint8_t s_rx_index;
 static uint8_t s_rx_ck_a, s_rx_ck_b;
 
 // ----------------------------------------------------------------------------
-// USART6 Interrupt Handler
+// DMA Initialization
 // ----------------------------------------------------------------------------
 
-void __attribute__((used)) USART6_IRQHandler(void) {
-    s_isr_count++; // Track ISR calls for debugging
+static void dma_rx_init(void) {
+    // Enable DMA2 clock
+    RCC->AHB1ENR |= RCC_AHB1ENR_DMA2EN;
 
-    // Check RXNE (receive not empty) flag
-    if (SYSLINK_USART->SR & USART_SR_RXNE) {
-        uint8_t byte = (uint8_t)(SYSLINK_USART->DR & 0xFF);
-        s_rx_byte_count++; // Track bytes received
+    // Disable stream before configuration.
+    // This blocking wait provides natural clock domain synchronization
+    // between the CPU and APB2 peripherals. Without DMA, we would need
+    // explicit DSB + dummy reads to achieve the same effect.
+    DMA_RX_STREAM->CR &= ~DMA_SxCR_EN;
+    while (DMA_RX_STREAM->CR & DMA_SxCR_EN)
+        ; // Wait for disable
 
-        // Store in ring buffer (drop if full)
-        uint32_t next_write = (s_rx_write_pos + 1) & (RX_BUFFER_SIZE - 1);
-        if (next_write != s_rx_read_pos) {
-            s_rx_buffer[s_rx_write_pos] = byte;
-            s_rx_write_pos = next_write;
-        }
-    }
+    // Clear all interrupt flags for Stream 2
+    // Stream 2 uses LIFCR (low interrupt flag clear register)
+    DMA2->LIFCR = DMA_LIFCR_CTCIF2 | DMA_LIFCR_CHTIF2 | DMA_LIFCR_CTEIF2 |
+                  DMA_LIFCR_CDMEIF2 | DMA_LIFCR_CFEIF2;
 
-    // Clear any error flags by reading SR then DR
-    if (SYSLINK_USART->SR &
-        (USART_SR_ORE | USART_SR_NE | USART_SR_FE | USART_SR_PE)) {
-        s_rx_errors++;           // Track errors
-        (void)SYSLINK_USART->DR; // Clear error flags
-    }
+    // Configure DMA stream
+    // - Channel 5 (bits 27:25)
+    // - Circular mode (CIRC)
+    // - Memory increment (MINC)
+    // - Peripheral to memory (DIR = 00)
+    // - Byte size for both (MSIZE = 00, PSIZE = 00)
+    DMA_RX_STREAM->CR = (DMA_RX_CHANNEL << DMA_SxCR_CHSEL_Pos) | // Channel 5
+                        DMA_SxCR_CIRC | // Circular mode
+                        DMA_SxCR_MINC;  // Memory increment
+
+    // Peripheral address (USART6 data register)
+    DMA_RX_STREAM->PAR = (uint32_t)&SYSLINK_USART->DR;
+
+    // Memory address (our buffer)
+    DMA_RX_STREAM->M0AR = (uint32_t)s_dma_rx_buffer;
+
+    // Number of data items
+    DMA_RX_STREAM->NDTR = DMA_RX_BUFFER_SIZE;
+
+    // Enable the stream
+    DMA_RX_STREAM->CR |= DMA_SxCR_EN;
+
+    // Reset read position
+    s_dma_rx_read_pos = 0;
 }
 
 // ----------------------------------------------------------------------------
-// Low-Level UART (interrupt RX, polled TX)
+// Low-Level UART with DMA RX
 // ----------------------------------------------------------------------------
 
 static void uart_init(void) {
-    // Use STM32 Standard Peripheral Library - exactly matching Bitcraze firmware
-    USART_InitTypeDef USART_InitStructure;
-    GPIO_InitTypeDef GPIO_InitStructure;
-    NVIC_InitTypeDef NVIC_InitStructure;
+    // Enable USART6 clock (APB2)
+    RCC->APB2ENR |= RCC_APB2ENR_USART6EN;
 
-    // Enable GPIO and USART clocks
-    RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_GPIOC, ENABLE);
-    RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_GPIOA, ENABLE);
-    RCC_APB2PeriphClockCmd(RCC_APB2Periph_USART6, ENABLE);
+    // Enable GPIO clocks
+    RCC->AHB1ENR |= RCC_AHB1ENR_GPIOAEN | RCC_AHB1ENR_GPIOCEN;
 
-    // Configure PC7 (RX) as alternate function with pull-up
-    GPIO_InitStructure.GPIO_Pin = GPIO_Pin_7;
-    GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AF;
-    GPIO_InitStructure.GPIO_PuPd = GPIO_PuPd_UP;
-    GPIO_Init(GPIOC, &GPIO_InitStructure);
+    // Configure PC6 (TX) and PC7 (RX) for USART6 (AF8)
+    GPIOC->MODER &= ~(GPIO_MODER_MODER6 | GPIO_MODER_MODER7);
+    GPIOC->MODER |= (GPIO_MODER_MODER6_1 | GPIO_MODER_MODER7_1); // AF mode
+    GPIOC->AFR[0] &= ~((0xFU << (6 * 4)) | (0xFU << (7 * 4)));
+    GPIOC->AFR[0] |= (8U << (6 * 4)) | (8U << (7 * 4)); // AF8 = USART6
+    GPIOC->OSPEEDR |= GPIO_OSPEEDER_OSPEEDR6 | GPIO_OSPEEDER_OSPEEDR7;
 
-    // Configure PC6 (TX) as alternate function push-pull
-    GPIO_InitStructure.GPIO_Pin = GPIO_Pin_6;
-    GPIO_InitStructure.GPIO_Speed = GPIO_Speed_25MHz;
-    GPIO_InitStructure.GPIO_OType = GPIO_OType_PP;
-    GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AF;
-    GPIO_Init(GPIOC, &GPIO_InitStructure);
-
-    // Map PC6 and PC7 to USART6 (AF8)
-    GPIO_PinAFConfig(GPIOC, GPIO_PinSource6, GPIO_AF_USART6);
-    GPIO_PinAFConfig(GPIOC, GPIO_PinSource7, GPIO_AF_USART6);
+    // Configure PA4 (TXEN) as input with pull-up
+    // TXEN LOW = nRF51 ready to receive (Bitcraze convention)
+    // TXEN HIGH = nRF51 buffer full, don't send
+    GPIOA->MODER &= ~GPIO_MODER_MODER4; // Input mode
+    GPIOA->PUPDR &= ~GPIO_PUPDR_PUPDR4;
+    GPIOA->PUPDR |= GPIO_PUPDR_PUPDR4_0; // Pull-up
 
     // Configure USART6: 1Mbaud, 8N1
-    USART_InitStructure.USART_BaudRate = 1000000;
-    USART_InitStructure.USART_Mode = USART_Mode_Rx | USART_Mode_Tx;
-    USART_InitStructure.USART_WordLength = USART_WordLength_8b;
-    USART_InitStructure.USART_StopBits = USART_StopBits_1;
-    USART_InitStructure.USART_Parity = USART_Parity_No;
-    USART_InitStructure.USART_HardwareFlowControl =
-        USART_HardwareFlowControl_None;
-    USART_Init(USART6, &USART_InitStructure);
+    SYSLINK_USART->CR1 = 0; // Disable USART first
+    SYSLINK_USART->BRR = SYSLINK_BAUD_DIV;
+    SYSLINK_USART->CR2 = 0;              // 1 stop bit
+    SYSLINK_USART->CR3 = USART_CR3_DMAR; // Enable DMA for RX
 
-    // Configure NVIC for USART6 interrupt (matching Bitcraze priority 5)
-    NVIC_InitStructure.NVIC_IRQChannel = USART6_IRQn;
-    NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 5;
-    NVIC_InitStructure.NVIC_IRQChannelSubPriority = 0;
-    NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;
-    NVIC_Init(&NVIC_InitStructure);
+    // Initialize DMA before enabling USART.
+    // The DMA init has blocking register reads that provide
+    // clock domain synchronization with APB2 peripherals.
+    dma_rx_init();
 
-    // Enable RXNE interrupt
-    USART_ITConfig(USART6, USART_IT_RXNE, ENABLE);
-
-    // Configure PA4 (TXEN) as input with pull-up for flow control
-    GPIO_InitStructure.GPIO_Pin = GPIO_Pin_4;
-    GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IN;
-    GPIO_InitStructure.GPIO_PuPd = GPIO_PuPd_UP;
-    GPIO_Init(GPIOA, &GPIO_InitStructure);
-
-    // Enable USART6
-    USART_Cmd(USART6, ENABLE);
+    // Enable USART, TX, RX
+    SYSLINK_USART->CR1 = USART_CR1_UE | USART_CR1_TE | USART_CR1_RE;
 }
 
 static inline void uart_putc(uint8_t c) {
@@ -195,6 +201,13 @@ static inline bool txen_ready(void) {
     // TXEN LOW = nRF51 ready to receive (Bitcraze convention)
     // TXEN HIGH = nRF51 buffer full, don't send
     return (GPIOA->IDR & (1U << SYSLINK_TXEN_PIN)) == 0;
+}
+
+// Get current DMA write position in buffer
+static inline uint32_t dma_get_write_pos(void) {
+    // NDTR counts down from buffer size
+    // Write position = buffer_size - NDTR
+    return DMA_RX_BUFFER_SIZE - DMA_RX_STREAM->NDTR;
 }
 
 // ----------------------------------------------------------------------------
@@ -343,8 +356,8 @@ int hal_esb_init(void) {
 
     // Enable battery status autoupdate from nRF51.
     // The nRF51 won't send battery packets until this command is received.
-    // Delay ~600us at 168MHz for UART to stabilize after init.
-    for (volatile int i = 0; i < 100000; i++) {
+    // Small delay for UART to stabilize after init.
+    for (volatile int i = 0; i < 10000; i++) {
         __NOP();
     }
 
@@ -376,14 +389,22 @@ void hal_esb_poll(void) {
         return;
     }
 
-    // Process all bytes in ring buffer
-    while (s_rx_read_pos != s_rx_write_pos) {
-        uint8_t byte = s_rx_buffer[s_rx_read_pos];
+    // Get current DMA write position
+    uint32_t write_pos = dma_get_write_pos();
+    uint32_t read_pos = s_dma_rx_read_pos;
+
+    // Process all bytes between read and write positions
+    while (read_pos != write_pos) {
+        uint8_t byte = s_dma_rx_buffer[read_pos];
+        s_rx_byte_count++; // Track bytes received
         syslink_rx_byte(byte);
 
         // Advance read position with wrap
-        s_rx_read_pos = (s_rx_read_pos + 1) & (RX_BUFFER_SIZE - 1);
+        read_pos = (read_pos + 1) & (DMA_RX_BUFFER_SIZE - 1);
     }
+
+    // Update read position
+    s_dma_rx_read_pos = read_pos;
 }
 
 void hal_esb_set_rx_callback(void (*callback)(const void *data, size_t len,
@@ -402,7 +423,8 @@ float hal_power_get_battery(void) {
 // ----------------------------------------------------------------------------
 
 uint32_t hal_esb_debug_isr_count(void) {
-    return s_isr_count;
+    // DMA doesn't use ISRs for RX - return 0 to indicate DMA mode
+    return 0;
 }
 
 uint32_t hal_esb_debug_rx_bytes(void) {

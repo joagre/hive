@@ -116,6 +116,14 @@ int main(void) {
     hal_calibrate();
     hal_arm();
 
+#ifdef HAL_HAS_RADIO
+    // Initialize radio (must be before hive_run for clock domain sync)
+    if (hal_esb_init() != 0) {
+        hal_cleanup();
+        return 1;
+    }
+#endif
+
     // Initialize actor runtime
     hive_init();
 

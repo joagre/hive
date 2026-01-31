@@ -1,25 +1,20 @@
 #!/usr/bin/env python3
 """
-Radio Communication Test - Ground Station
+ESB Radio Communication Test - Ground Station
 
-Tests interrupt-based syslink radio communication with Crazyflie running test_esb.
+Tests radio communication with Crazyflie running test_esb firmware.
 
-Requirements:
-    pip install cflib
+ESB Protocol:
+    - Ground station is PTX (Primary Transmitter) - initiates all communication
+    - Drone's nRF51 is PRX (Primary Receiver) - responds via ACK payloads
+    - Ground station must poll continuously; telemetry piggybacks on ACK packets
+
+Packet format (must match test_esb.c):
+    Byte 0: Type (0x03 = battery)
+    Bytes 1-4: Voltage (float, little-endian)
 
 Usage:
-    python test_radio_ground.py [--uri URI]
-
-The script will:
-    1. Scan for Crazyflie
-    2. Connect via Crazyradio PA/2.0
-    3. Receive and decode telemetry packets
-    4. Display statistics
-
-Packet types (matching test_esb.c):
-    0x01: Attitude (gyro, roll/pitch/yaw)
-    0x02: Position (altitude, velocities, thrust)
-    0xE0: Echo test packet
+    python test_radio_ground.py [--uri URI] [--duration SECONDS] [--rate HZ]
 """
 
 import argparse
@@ -30,43 +25,48 @@ from collections import defaultdict
 
 try:
     import cflib.crtp
-    from cflib.crtp.crtpstack import CRTPPacket, CRTPPort
-    from cflib.drivers.crazyradio import Crazyradio
+    from cflib.crtp.crtpstack import CRTPPacket
 except ImportError:
     print("Error: cflib not installed")
     print("Install with: pip install cflib")
     sys.exit(1)
 
 
-# Packet types (must match test_esb.c)
-PACKET_TYPE_ATTITUDE = 0x01
-PACKET_TYPE_POSITION = 0x02
-PACKET_TYPE_ECHO = 0xE0
-
-# Attitude packet format: type(1) + timestamp(4) + gyro_xyz(6) + rpy(6) = 17 bytes
-ATTITUDE_FORMAT = "<BIhhhhhh"
-ATTITUDE_SIZE = struct.calcsize(ATTITUDE_FORMAT)
-
-# Position packet format: type(1) + timestamp(4) + alt(2) + vz(2) + vx(2) + vy(2) + thrust(2) = 15 bytes
-POSITION_FORMAT = "<BIhhhhhH"
-POSITION_SIZE = struct.calcsize(POSITION_FORMAT)
-
-# Echo packet format: type(1) + sequence(1) + data(29) = 31 bytes
-ECHO_FORMAT = "<BB29s"
-ECHO_SIZE = struct.calcsize(ECHO_FORMAT)
+# Packet type (must match test_esb.c)
+PACKET_TYPE_BATTERY = 0x03
 
 
-class RadioTest:
-    def __init__(self, uri=None):
+def decode_packet(data):
+    """Decode a telemetry packet from drone."""
+    if not data or len(data) < 1:
+        return None
+
+    pkt_type = data[0]
+
+    # Battery packet: type(1) + voltage(4) = 5 bytes
+    if pkt_type == PACKET_TYPE_BATTERY and len(data) >= 5:
+        try:
+            _, voltage = struct.unpack("<Bf", data[:5])
+            if 2.0 < voltage < 5.0:
+                return {'type': 'battery', 'voltage': voltage}
+        except struct.error:
+            pass
+
+    # Debug: show unknown packet contents
+    hex_dump = ' '.join(f'{b:02x}' for b in data[:min(len(data), 16)])
+    print(f"\nUnknown: type={pkt_type} len={len(data)} hex=[{hex_dump}]")
+    return {'type': 'unknown', 'first_byte': pkt_type, 'len': len(data)}
+
+
+class GroundStation:
+    def __init__(self, uri=None, poll_rate_hz=100):
         self.uri = uri
-        self.radio = None
+        self.poll_rate_hz = poll_rate_hz
+        self.poll_interval = 1.0 / poll_rate_hz
+        self.link = None
         self.running = False
-
-        # Statistics
         self.stats = defaultdict(int)
-        self.last_attitude = None
-        self.last_position = None
-        self.last_echo = None
+        self.last_voltage = None
         self.start_time = None
 
     def scan(self):
@@ -83,7 +83,7 @@ class RadioTest:
         for i, uri in enumerate(available):
             print(f"  [{i}] {uri[0]}")
 
-        return available[0][0]  # Return first URI
+        return available[0][0]
 
     def connect(self):
         """Connect to Crazyflie."""
@@ -93,11 +93,8 @@ class RadioTest:
                 return False
 
         print(f"Connecting to {self.uri}...")
-
-        # Initialize the low-level radio driver
         cflib.crtp.init_drivers()
 
-        # Get the link driver
         self.link = cflib.crtp.get_link_driver(self.uri)
         if not self.link:
             print("Failed to get link driver")
@@ -106,179 +103,112 @@ class RadioTest:
         print("Connected!")
         return True
 
-    def decode_attitude(self, data):
-        """Decode attitude packet."""
-        if len(data) < ATTITUDE_SIZE:
-            return None
+    def poll(self):
+        """
+        Send heartbeat and receive telemetry.
 
-        try:
-            pkt_type, ts, gx, gy, gz, roll, pitch, yaw = struct.unpack(
-                ATTITUDE_FORMAT, data[:ATTITUDE_SIZE]
-            )
-            return {
-                'type': 'attitude',
-                'timestamp_ms': ts,
-                'gyro': (gx / 1000.0, gy / 1000.0, gz / 1000.0),  # millirad/s -> rad/s
-                'roll': roll / 1000.0,   # millirad -> rad
-                'pitch': pitch / 1000.0,
-                'yaw': yaw / 1000.0,
-            }
-        except struct.error:
-            return None
+        ESB protocol: we send a packet, drone responds with ACK + telemetry.
+        """
+        # Send heartbeat
+        pk = CRTPPacket()
+        pk.port = 0
+        pk.data = bytes([0x00])
+        self.link.send_packet(pk)
 
-    def decode_position(self, data):
-        """Decode position packet."""
-        if len(data) < POSITION_SIZE:
-            return None
-
-        try:
-            pkt_type, ts, alt, vz, vx, vy, thrust = struct.unpack(
-                POSITION_FORMAT, data[:POSITION_SIZE]
-            )
-            return {
-                'type': 'position',
-                'timestamp_ms': ts,
-                'altitude': alt / 1000.0,  # mm -> m
-                'vz': vz / 1000.0,         # mm/s -> m/s
-                'vx': vx / 1000.0,
-                'vy': vy / 1000.0,
-                'thrust': thrust / 65535.0,  # 0-65535 -> 0.0-1.0
-            }
-        except struct.error:
-            return None
-
-    def decode_echo(self, data):
-        """Decode echo packet."""
-        if len(data) < 3:
-            return None
-
-        try:
-            pkt_type, seq, payload = struct.unpack(ECHO_FORMAT, data[:ECHO_SIZE])
-            return {
-                'type': 'echo',
-                'sequence': seq,
-                'data': payload.rstrip(b'\x00').decode('ascii', errors='replace'),
-            }
-        except struct.error:
-            return None
-
-    def decode_packet(self, data):
-        """Decode a received packet based on type byte."""
-        if not data or len(data) < 1:
-            return None
-
-        pkt_type = data[0]
-
-        if pkt_type == PACKET_TYPE_ATTITUDE:
-            return self.decode_attitude(data)
-        elif pkt_type == PACKET_TYPE_POSITION:
-            return self.decode_position(data)
-        elif pkt_type == PACKET_TYPE_ECHO:
-            return self.decode_echo(data)
-        else:
-            return {'type': 'unknown', 'raw': data.hex()}
-
-    def print_status(self):
-        """Print current status."""
-        elapsed = time.time() - self.start_time if self.start_time else 0
-
-        print(f"\r[{elapsed:6.1f}s] ", end='')
-        print(f"RX: {self.stats['total']:5d} ", end='')
-        print(f"(att:{self.stats['attitude']:4d} pos:{self.stats['position']:4d} echo:{self.stats['echo']:4d}) ", end='')
-
-        if self.last_attitude:
-            att = self.last_attitude
-            print(f"| R:{att['roll']:+5.2f} P:{att['pitch']:+5.2f} Y:{att['yaw']:+5.2f} ", end='')
-
-        print("", end='', flush=True)
+        # Receive ACK payload
+        pk = self.link.receive_packet(wait=0.005)
+        if pk is not None and pk.data:
+            # CRTP uses first byte as header; our type ends up in pk.channel
+            pkt_type = pk.channel
+            full_data = bytes([pkt_type]) + pk.data
+            return decode_packet(full_data)
+        return None
 
     def run(self, duration=60):
-        """Run the test for specified duration."""
+        """Run ground station for specified duration."""
         if not self.connect():
             return False
 
-        print(f"\nReceiving packets for {duration} seconds...")
+        print(f"\nPolling at {self.poll_rate_hz} Hz for {duration} seconds...")
         print("Press Ctrl+C to stop\n")
 
         self.start_time = time.time()
         self.running = True
+        last_status = 0
+        poll_count = 0
 
         try:
             while self.running and (time.time() - self.start_time) < duration:
-                # Receive packet (with timeout)
-                pk = self.link.receive_packet(wait=0.1)
+                loop_start = time.time()
 
-                if pk is not None:
-                    # Decode the packet
-                    decoded = self.decode_packet(pk.data)
+                telemetry = self.poll()
+                poll_count += 1
 
-                    if decoded:
-                        self.stats['total'] += 1
-                        self.stats[decoded['type']] += 1
+                if telemetry:
+                    self.stats[telemetry['type']] += 1
+                    if telemetry['type'] == 'battery':
+                        self.last_voltage = telemetry['voltage']
 
-                        if decoded['type'] == 'attitude':
-                            self.last_attitude = decoded
-                        elif decoded['type'] == 'position':
-                            self.last_position = decoded
-                        elif decoded['type'] == 'echo':
-                            self.last_echo = decoded
+                # Update display every 0.5 seconds
+                now = time.time()
+                if now - last_status >= 0.5:
+                    last_status = now
+                    elapsed = now - self.start_time
+                    voltage_str = f"{self.last_voltage:.2f}V" if self.last_voltage else "---"
+                    print(f"\r[{elapsed:5.1f}s] Battery: {self.stats['battery']:4d}  "
+                          f"Unknown: {self.stats['unknown']:4d}  | {voltage_str}", end='', flush=True)
 
-                # Update display periodically
-                if self.stats['total'] % 10 == 0 or self.stats['total'] == 1:
-                    self.print_status()
+                # Maintain poll rate
+                sleep_time = self.poll_interval - (time.time() - loop_start)
+                if sleep_time > 0:
+                    time.sleep(sleep_time)
 
         except KeyboardInterrupt:
-            print("\n\nInterrupted by user")
+            print("\n\nInterrupted")
 
         self.running = False
-
-        # Final statistics
         elapsed = time.time() - self.start_time
+
         print("\n")
-        print("=" * 60)
+        print("=" * 50)
         print("  TEST COMPLETE")
-        print("=" * 60)
-        print(f"  Duration:     {elapsed:.1f} seconds")
-        print(f"  Total RX:     {self.stats['total']}")
-        print(f"  Attitude:     {self.stats['attitude']}")
-        print(f"  Position:     {self.stats['position']}")
-        print(f"  Echo:         {self.stats['echo']}")
-        print(f"  Unknown:      {self.stats['unknown']}")
+        print("=" * 50)
+        print(f"  Duration:     {elapsed:.1f}s")
+        print(f"  Poll rate:    {self.poll_rate_hz} Hz")
+        print(f"  Polls sent:   {poll_count}")
+        print(f"  Battery pkts: {self.stats['battery']}")
+        print(f"  Unknown pkts: {self.stats['unknown']}")
         if elapsed > 0:
-            print(f"  Rate:         {self.stats['total'] / elapsed:.1f} packets/sec")
-        print("=" * 60)
+            print(f"  Packet rate:  {self.stats['battery'] / elapsed:.1f} pkts/sec")
+        if self.last_voltage:
+            print(f"  Last voltage: {self.last_voltage:.2f}V")
+        print("=" * 50)
 
-        # Cleanup
         self.link.close()
-
-        return self.stats['total'] > 0
+        return self.stats['battery'] > 0
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description='Radio communication test - ground station'
-    )
-    parser.add_argument(
-        '--uri', '-u',
-        default=None,
-        help='Crazyflie URI (e.g., radio://0/80/2M). Auto-scan if not specified.'
-    )
-    parser.add_argument(
-        '--duration', '-d',
-        type=int,
-        default=60,
-        help='Test duration in seconds (default: 60)'
-    )
+    parser = argparse.ArgumentParser(description='ESB radio test ground station')
+    parser.add_argument('--uri', '-u', default=None,
+                        help='Crazyflie URI (auto-scan if not specified)')
+    parser.add_argument('--duration', '-d', type=int, default=30,
+                        help='Test duration in seconds (default: 30)')
+    parser.add_argument('--rate', '-r', type=int, default=100,
+                        help='Poll rate in Hz (default: 100)')
 
     args = parser.parse_args()
 
-    print("=" * 60)
-    print("  Radio Communication Test - Ground Station")
-    print("=" * 60)
+    print("=" * 50)
+    print("  ESB Radio Test - Ground Station")
+    print("=" * 50)
+    print()
+    print("Protocol:")
+    print("  Ground station polls -> Drone ACKs with telemetry")
     print()
 
-    test = RadioTest(uri=args.uri)
-    success = test.run(duration=args.duration)
+    gs = GroundStation(uri=args.uri, poll_rate_hz=args.rate)
+    success = gs.run(duration=args.duration)
 
     sys.exit(0 if success else 1)
 
