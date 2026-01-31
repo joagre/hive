@@ -183,16 +183,25 @@ Tests the Hive file API with SD card storage (`/sd` path).
 - FAT32-formatted SD card inserted
 - Hive built with `ENABLE_SD=1`
 
+**Note:** The SD card deck shares SPI1 with the Flow deck. Both decks can be
+used simultaneously - the test works with or without the Flow deck attached.
+
 ```bash
 make PLATFORM=crazyflie TEST=sd ENABLE_SD=1
 make flash-crazyflie TEST=sd
+../tools/st-trace.sh
 ```
+
+**Filename limitation:** FatFS is configured for 8.3 filenames only (no long
+filenames) to save ~2KB flash. Use short names like `data.bin`, `log001.txt`.
 
 **Test sequence:**
 1. Initialize Hive runtime
 2. Check if `/sd` mount is available
 3. If not available: report status (built without `ENABLE_SD=1` or card not present)
-4. If available: write 4KB test file, read back, verify
+4. If available: write 4KB test file (`/sd/test.bin`), read back, verify
+
+**Typical performance:** Write ~450 KB/s, Read ~1000 KB/s.
 
 **LED feedback:**
 | Pattern | Meaning |

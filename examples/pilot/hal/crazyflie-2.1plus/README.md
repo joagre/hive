@@ -47,7 +47,7 @@ Key resources:
 |-----|---------|--------|-----------|
 | **I2C3** | On-board sensors (BMI088, BMP388) | DMA + interrupt | Reliable under load, matches Bitcraze |
 | **I2C1** | Flow deck (VL53L1x) | Polling | Infrequent reads (~40Hz), simpler |
-| **SPI1** | Flow deck (PMW3901) | Polling | Short transactions, adequate |
+| **SPI1** | Flow deck (PMW3901) + SD card deck | Polling | Shared bus, CS-based selection |
 
 The DMA-based I2C3 driver (`i2c_drv.c`, `i2cdev.c`) is derived from the Bitcraze
 firmware, providing proven reliability for the high-frequency sensor reads.
@@ -171,7 +171,7 @@ the lengthy configuration sequence.
 | `i2cdev.c` | I2C device abstraction layer |
 | `debug_swo.c` | SWO debug output with printf support |
 | `hal_syslink.c` | NRF51 radio communication (DMA UART) - not yet in build |
-| `spi_ll_sd.c` | SD card SPI3 driver - not yet in build |
+| `spi_ll_sd.c` | SD card low-level SPI driver (shares SPI1 with flow deck) |
 
 ### Vendor Drivers
 
@@ -203,12 +203,13 @@ PB7  - I2C1_SDA
 VL53L1x ToF: 0x29
 ```
 
-### SPI1 (Flow deck PMW3901 - Polling)
+### SPI1 (Flow deck + SD card deck - Polling)
 ```
-PA5  - SPI1_SCK
-PA6  - SPI1_MISO
-PA7  - SPI1_MOSI
-PB4  - PMW3901_CS
+PA5  - SPI1_SCK   (shared)
+PA6  - SPI1_MISO  (shared)
+PA7  - SPI1_MOSI  (shared)
+PB4  - PMW3901_CS (flow deck)
+PC12 - SD_CS      (SD card deck, IO4 on expansion)
 ```
 
 ### TIM2/TIM4 PWM (Motors)
@@ -299,6 +300,34 @@ The Flow deck v2 is auto-detected during initialization:
 If flow deck is not present, initialization continues without it.
 
 **Height filtering**: Readings > 5000mm are discarded as outliers.
+
+## SD Card Deck Support
+
+The Micro SD Card Deck shares SPI1 with the Flow deck:
+
+- **SPI1** - Shared bus (PA5/PA6/PA7)
+- **PC12** - SD card CS (IO4 on expansion connector)
+
+Both decks can be used simultaneously - the SPI bus is shared with CS-based selection.
+
+**Requirements:**
+- Micro SD Card Deck attached to expansion connector
+- FAT32-formatted SD card inserted
+- Build with `ENABLE_SD=1`
+
+**Limitations:**
+- 8.3 filenames only (no long filenames) to save ~2KB flash
+- Examples: `data.bin`, `log00001.txt`, `config.ini`
+
+**Test:**
+```bash
+cd ../../../tests
+make PLATFORM=crazyflie TEST=sd ENABLE_SD=1
+make flash-crazyflie TEST=sd
+../tools/st-trace.sh
+```
+
+Typical performance: Write ~450 KB/s, Read ~1000 KB/s.
 
 ## LED Feedback
 
