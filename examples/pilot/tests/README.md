@@ -189,7 +189,7 @@ used simultaneously - the test works with or without the Flow deck attached.
 ```bash
 make PLATFORM=crazyflie TEST=sd ENABLE_SD=1
 make flash-crazyflie TEST=sd
-../tools/st-trace.sh
+./st-trace.sh
 ```
 
 **Filename limitation:** FatFS is configured for 8.3 filenames only (no long
@@ -413,8 +413,8 @@ progress. On Webots, output goes to stdout.
 **Viewing SWO output on Crazyflie:**
 ```bash
 # After flashing, run trace from any directory:
-../tools/st-trace.sh -t 30    # 30s timeout
-../tools/st-trace.sh -t 0     # No timeout (Ctrl-C to stop)
+./st-trace.sh -t 30    # 30s timeout
+./st-trace.sh -t 0     # No timeout (Ctrl-C to stop)
 ```
 
 Example output for `flash` test:
