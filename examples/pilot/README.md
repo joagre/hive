@@ -363,7 +363,7 @@ to the nRF51822 radio chip, which transmits via ESB to a Crazyradio 2.0 on the g
 
 **Packet types** (31-byte ESB limit requires two packet types):
 - Type 0x01: Attitude/rates (gyro XYZ, roll/pitch/yaw)
-- Type 0x02: Position (altitude, velocities, thrust)
+- Type 0x02: Position (altitude, velocities, thrust, battery voltage)
 
 **Note** - Position targets (waypoints) are not included in radio telemetry due to the
 31-byte packet size limit. This means radio telemetry is suitable for tuning altitude,

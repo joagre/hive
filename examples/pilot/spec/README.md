@@ -33,12 +33,12 @@ and fail-safe supervision. Supports Webots simulation (default) and STM32 hardwa
 | Feature | Webots | Crazyflie 2.1+ |
 |---------|--------|----------------|
 | `comms_actor` | No | Yes |
-| `telemetry_logger_actor` | Yes | No |
+| `telemetry_logger_actor` | Yes | Optional (with SD card) |
 | Position source | Simulated GPS | Optical flow (Flow deck v2) |
 | Altitude source | Simulated rangefinder | ToF sensor (Flow deck v2) |
 | Flash logging | No | Yes |
 | SD card logging | No | Optional (ENABLE_SD=1) |
-| CSV telemetry | Yes | No |
+| CSV telemetry | Yes (/tmp) | Optional (/sd, ENABLE_SD=1) |
 | Radio telemetry | No | Yes |
 
 ### Timing Terminology
