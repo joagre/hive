@@ -139,6 +139,13 @@ void hal_esb_set_rx_callback(void (*callback)(const void *data, size_t len,
                                               void *user_data),
                              void *user_data);
 
+// Debug functions for RX diagnostics.
+// Returns counters tracking ISR activity.
+uint32_t hal_esb_debug_isr_count(void); // Total ISR invocations
+uint32_t hal_esb_debug_rx_bytes(void);  // Bytes received via RXNE
+uint32_t hal_esb_debug_errors(void);    // UART error flags (ORE/NE/FE/PE)
+uint32_t hal_esb_debug_packets(void);   // Complete syslink packets decoded
+
 #endif // HAL_HAS_RADIO
 
 // ----------------------------------------------------------------------------

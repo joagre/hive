@@ -14,6 +14,10 @@
 
 #include "platform.h"
 #include "stm32f4xx.h"
+#include "stm32f4xx_gpio.h"
+#include "stm32f4xx_usart.h"
+#include "stm32f4xx_rcc.h"
+#include "misc.h"
 #include <stdbool.h>
 #include <string.h>
 
@@ -24,7 +28,8 @@
 #define SYSLINK_START1 0xBC
 #define SYSLINK_START2 0xCF
 #define SYSLINK_RADIO_RAW 0x00
-#define SYSLINK_PM_BATTERY 0x13
+#define SYSLINK_PM_BATTERY_STATE 0x13
+#define SYSLINK_PM_BATTERY_AUTOUPDATE 0x14
 #define SYSLINK_MTU 64
 #define RADIO_MTU 31 // Max payload for ESB packet
 
@@ -42,8 +47,8 @@
 // GPIO pins (matching Bitcraze firmware)
 #define SYSLINK_TX_PIN 6 // PC6
 #define SYSLINK_RX_PIN 7 // PC7
-#define SYSLINK_TXEN_PIN                         \
-    4   // PA4 (flow control from nRF51)         \
+#define SYSLINK_TXEN_PIN \
+    4 // PA4 (flow control from nRF51)         \
         // HIGH = nRF51 buffer full (don't send) \
         // LOW = nRF51 ready (can send)
 
@@ -63,6 +68,12 @@ static volatile uint32_t s_rx_read_pos = 0;
 
 static volatile bool s_initialized = false;
 static volatile float s_battery_voltage = 0.0f;
+
+// Debug counters for RX diagnostics
+static volatile uint32_t s_isr_count = 0;
+static volatile uint32_t s_rx_byte_count = 0;
+static volatile uint32_t s_rx_errors = 0;
+static volatile uint32_t s_packet_count = 0;
 
 // RX callback with user data
 typedef void (*radio_rx_callback_t)(const void *data, size_t len,
@@ -93,9 +104,12 @@ static uint8_t s_rx_ck_a, s_rx_ck_b;
 // ----------------------------------------------------------------------------
 
 void __attribute__((used)) USART6_IRQHandler(void) {
+    s_isr_count++; // Track ISR calls for debugging
+
     // Check RXNE (receive not empty) flag
     if (SYSLINK_USART->SR & USART_SR_RXNE) {
         uint8_t byte = (uint8_t)(SYSLINK_USART->DR & 0xFF);
+        s_rx_byte_count++; // Track bytes received
 
         // Store in ring buffer (drop if full)
         uint32_t next_write = (s_rx_write_pos + 1) & (RX_BUFFER_SIZE - 1);
@@ -108,6 +122,7 @@ void __attribute__((used)) USART6_IRQHandler(void) {
     // Clear any error flags by reading SR then DR
     if (SYSLINK_USART->SR &
         (USART_SR_ORE | USART_SR_NE | USART_SR_FE | USART_SR_PE)) {
+        s_rx_errors++;           // Track errors
         (void)SYSLINK_USART->DR; // Clear error flags
     }
 }
@@ -117,42 +132,61 @@ void __attribute__((used)) USART6_IRQHandler(void) {
 // ----------------------------------------------------------------------------
 
 static void uart_init(void) {
-    // Enable USART6 clock (APB2)
-    RCC->APB2ENR |= RCC_APB2ENR_USART6EN;
+    // Use STM32 Standard Peripheral Library - exactly matching Bitcraze firmware
+    USART_InitTypeDef USART_InitStructure;
+    GPIO_InitTypeDef GPIO_InitStructure;
+    NVIC_InitTypeDef NVIC_InitStructure;
 
-    // Enable GPIO clocks
-    RCC->AHB1ENR |= RCC_AHB1ENR_GPIOAEN | RCC_AHB1ENR_GPIOCEN;
+    // Enable GPIO and USART clocks
+    RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_GPIOC, ENABLE);
+    RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_GPIOA, ENABLE);
+    RCC_APB2PeriphClockCmd(RCC_APB2Periph_USART6, ENABLE);
 
-    // Configure PC6 (TX) and PC7 (RX) for USART6 (AF8)
-    GPIOC->MODER &= ~(GPIO_MODER_MODER6 | GPIO_MODER_MODER7);
-    GPIOC->MODER |= (GPIO_MODER_MODER6_1 | GPIO_MODER_MODER7_1); // AF mode
-    GPIOC->AFR[0] &= ~((0xFU << (6 * 4)) | (0xFU << (7 * 4)));
-    GPIOC->AFR[0] |= (8U << (6 * 4)) | (8U << (7 * 4)); // AF8 = USART6
-    GPIOC->OSPEEDR |= GPIO_OSPEEDER_OSPEEDR6 | GPIO_OSPEEDER_OSPEEDR7;
-    // Pull-up on RX pin (PC7) - matches Bitcraze firmware
-    GPIOC->PUPDR &= ~GPIO_PUPDR_PUPDR7;
-    GPIOC->PUPDR |= GPIO_PUPDR_PUPDR7_0; // Pull-up
+    // Configure PC7 (RX) as alternate function with pull-up
+    GPIO_InitStructure.GPIO_Pin = GPIO_Pin_7;
+    GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AF;
+    GPIO_InitStructure.GPIO_PuPd = GPIO_PuPd_UP;
+    GPIO_Init(GPIOC, &GPIO_InitStructure);
 
-    // Configure PA4 (TXEN) as input with pull-up
-    // TXEN LOW = nRF51 ready to receive (matching Bitcraze firmware)
-    GPIOA->MODER &= ~GPIO_MODER_MODER4; // Input mode
-    GPIOA->PUPDR &= ~GPIO_PUPDR_PUPDR4;
-    GPIOA->PUPDR |= GPIO_PUPDR_PUPDR4_0; // Pull-up
+    // Configure PC6 (TX) as alternate function push-pull
+    GPIO_InitStructure.GPIO_Pin = GPIO_Pin_6;
+    GPIO_InitStructure.GPIO_Speed = GPIO_Speed_25MHz;
+    GPIO_InitStructure.GPIO_OType = GPIO_OType_PP;
+    GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AF;
+    GPIO_Init(GPIOC, &GPIO_InitStructure);
+
+    // Map PC6 and PC7 to USART6 (AF8)
+    GPIO_PinAFConfig(GPIOC, GPIO_PinSource6, GPIO_AF_USART6);
+    GPIO_PinAFConfig(GPIOC, GPIO_PinSource7, GPIO_AF_USART6);
 
     // Configure USART6: 1Mbaud, 8N1
-    SYSLINK_USART->CR1 = 0; // Disable USART first
-    SYSLINK_USART->BRR = SYSLINK_BAUD_DIV;
-    SYSLINK_USART->CR2 = 0; // 1 stop bit
-    SYSLINK_USART->CR3 = 0; // No DMA, no hardware flow control
+    USART_InitStructure.USART_BaudRate = 1000000;
+    USART_InitStructure.USART_Mode = USART_Mode_Rx | USART_Mode_Tx;
+    USART_InitStructure.USART_WordLength = USART_WordLength_8b;
+    USART_InitStructure.USART_StopBits = USART_StopBits_1;
+    USART_InitStructure.USART_Parity = USART_Parity_No;
+    USART_InitStructure.USART_HardwareFlowControl =
+        USART_HardwareFlowControl_None;
+    USART_Init(USART6, &USART_InitStructure);
 
-    // Configure NVIC for USART6 interrupt
-    // USART6_IRQn = 71, priority matching Bitcraze (NVIC_SYSLINK_UART_PRI)
-    NVIC_SetPriority(USART6_IRQn, 5);
-    NVIC_EnableIRQ(USART6_IRQn);
+    // Configure NVIC for USART6 interrupt (matching Bitcraze priority 5)
+    NVIC_InitStructure.NVIC_IRQChannel = USART6_IRQn;
+    NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 5;
+    NVIC_InitStructure.NVIC_IRQChannelSubPriority = 0;
+    NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;
+    NVIC_Init(&NVIC_InitStructure);
 
-    // Enable USART, TX, RX, and RXNE interrupt
-    SYSLINK_USART->CR1 =
-        USART_CR1_UE | USART_CR1_TE | USART_CR1_RE | USART_CR1_RXNEIE;
+    // Enable RXNE interrupt
+    USART_ITConfig(USART6, USART_IT_RXNE, ENABLE);
+
+    // Configure PA4 (TXEN) as input with pull-up for flow control
+    GPIO_InitStructure.GPIO_Pin = GPIO_Pin_4;
+    GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IN;
+    GPIO_InitStructure.GPIO_PuPd = GPIO_PuPd_UP;
+    GPIO_Init(GPIOA, &GPIO_InitStructure);
+
+    // Enable USART6
+    USART_Cmd(USART6, ENABLE);
 }
 
 static inline void uart_putc(uint8_t c) {
@@ -220,7 +254,7 @@ static void syslink_process_packet(void) {
         }
         break;
 
-    case SYSLINK_PM_BATTERY:
+    case SYSLINK_PM_BATTERY_STATE:
         // Battery state packet: flags (1 byte) + voltage (4 bytes float)
         // Type 0x13 = SYSLINK_PM_BATTERY_STATE in Bitcraze firmware
         if (s_rx_length >= 5) {
@@ -290,6 +324,7 @@ static void syslink_rx_byte(uint8_t byte) {
 
     case RX_CKSUM_B:
         if (byte == s_rx_ck_b) {
+            s_packet_count++; // Track successful packets
             syslink_process_packet();
         }
         s_rx_state = RX_START1;
@@ -301,6 +336,9 @@ static void syslink_rx_byte(uint8_t byte) {
 // Public API
 // ----------------------------------------------------------------------------
 
+// External for debug output
+extern void hal_printf(const char *fmt, ...);
+
 int hal_esb_init(void) {
     uart_init();
 
@@ -309,6 +347,14 @@ int hal_esb_init(void) {
     s_rx_callback_user_data = NULL;
     s_battery_voltage = 0.0f;
     s_initialized = true;
+
+    // Enable battery status autoupdate from nRF51.
+    // The nRF51 won't send battery packets until this command is received.
+    // Brief delay for UART to stabilize after init.
+    for (volatile int i = 0; i < 100000; i++)
+        __NOP();
+
+    syslink_send(SYSLINK_PM_BATTERY_AUTOUPDATE, NULL, 0);
 
     return 0;
 }
@@ -355,4 +401,24 @@ void hal_esb_set_rx_callback(void (*callback)(const void *data, size_t len,
 
 float hal_power_get_battery(void) {
     return s_battery_voltage;
+}
+
+// ----------------------------------------------------------------------------
+// Debug API (for RX diagnostics)
+// ----------------------------------------------------------------------------
+
+uint32_t hal_esb_debug_isr_count(void) {
+    return s_isr_count;
+}
+
+uint32_t hal_esb_debug_rx_bytes(void) {
+    return s_rx_byte_count;
+}
+
+uint32_t hal_esb_debug_errors(void) {
+    return s_rx_errors;
+}
+
+uint32_t hal_esb_debug_packets(void) {
+    return s_packet_count;
 }

@@ -147,6 +147,7 @@ static bool wait_for_battery(void) {
     HIVE_LOG_INFO("[RADIO] Waiting for battery packet...");
 
     uint32_t start = hal_get_time_ms();
+    uint32_t last_log = 0;
 
     while ((hal_get_time_ms() - start) < BATTERY_TIMEOUT_MS) {
         hal_esb_poll();
@@ -158,10 +159,23 @@ static bool wait_for_battery(void) {
             return true;
         }
 
+        // Log debug info every second
+        uint32_t elapsed = hal_get_time_ms() - start;
+        if (elapsed - last_log >= 1000) {
+            last_log = elapsed;
+            HIVE_LOG_INFO("[DEBUG] @%lums: ISR=%lu Bytes=%lu Pkts=%lu Errs=%lu",
+                          elapsed, hal_esb_debug_isr_count(),
+                          hal_esb_debug_rx_bytes(), hal_esb_debug_packets(),
+                          hal_esb_debug_errors());
+        }
+
         hal_delay_ms(10);
     }
 
     HIVE_LOG_WARN("[RADIO] Battery packet timeout (nRF51 may not be running)");
+    HIVE_LOG_INFO("[DEBUG] Final: ISR=%lu Bytes=%lu Pkts=%lu Errs=%lu",
+                  hal_esb_debug_isr_count(), hal_esb_debug_rx_bytes(),
+                  hal_esb_debug_packets(), hal_esb_debug_errors());
     return false;
 }
 
@@ -260,6 +274,9 @@ static void run_communication_test(void) {
             HIVE_LOG_INFO("[RADIO] TX: %lu/%lu, RX: %lu, Battery: %.2fV",
                           tx_success, tx_success + tx_fail, s_state.rx_count,
                           hal_power_get_battery());
+            HIVE_LOG_INFO("[DEBUG] ISR: %lu, Bytes: %lu, Pkts: %lu, Errs: %lu",
+                          hal_esb_debug_isr_count(), hal_esb_debug_rx_bytes(),
+                          hal_esb_debug_packets(), hal_esb_debug_errors());
         }
 
         hal_delay_ms(1);
@@ -269,6 +286,9 @@ static void run_communication_test(void) {
     HIVE_LOG_INFO("[RADIO] TX success: %lu, TX fail: %lu", tx_success, tx_fail);
     HIVE_LOG_INFO("[RADIO] RX count: %lu", s_state.rx_count);
     HIVE_LOG_INFO("[RADIO] Final battery: %.2fV", hal_power_get_battery());
+    HIVE_LOG_INFO("[DEBUG] Final - ISR: %lu, Bytes: %lu, Pkts: %lu, Errs: %lu",
+                  hal_esb_debug_isr_count(), hal_esb_debug_rx_bytes(),
+                  hal_esb_debug_packets(), hal_esb_debug_errors());
 }
 
 // ============================================================================

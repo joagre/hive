@@ -51,4 +51,10 @@ void SystemInit(void) {
 
     // Update SystemCoreClock for other code that depends on it
     SystemCoreClock = 168000000;
+
+    // Configure NVIC priority grouping (must be done before any NVIC operations)
+    // NVIC_PriorityGroup_4: 4 bits preemption, 0 bits subpriority (matches Bitcraze)
+    // This is required for NVIC_SetPriority() and NVIC_EnableIRQ() to work correctly
+    SCB->AIRCR = (0x5FAUL << 16) | // VECTKEY - required to write AIRCR
+                 (3UL << 8);       // PRIGROUP = 3 (4 bits preemption priority)
 }

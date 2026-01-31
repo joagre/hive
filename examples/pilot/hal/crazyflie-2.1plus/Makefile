@@ -87,7 +87,8 @@ C_SOURCES += \
     vendor/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_dma.c \
     vendor/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rcc.c \
     vendor/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_misc.c \
-    vendor/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_spi.c
+    vendor/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_spi.c \
+    vendor/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_usart.c
 
 # Source files - SD card SPI low-level driver (optional)
 ifeq ($(ENABLE_SD),1)
