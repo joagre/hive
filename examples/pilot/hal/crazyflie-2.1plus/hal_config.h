@@ -6,6 +6,10 @@
 // Motor thrust base value (matching Bitcraze)
 #define HAL_BASE_THRUST 36000
 
+// Calibrated hover thrust (normalized 0.0-1.0)
+// Measured with thrust test - drone light on skids at this value
+#define HAL_HOVER_THRUST 0.38f
+
 // Motor mapping (rotation viewed from above):
 // M1 (TIM2_CH1) - Front Right (CCW)
 // M2 (TIM2_CH2) - Back Right (CW)
