@@ -35,6 +35,9 @@ ifeq ($(PLATFORM),linux)
   ENABLE_TCP ?= 1
   ENABLE_FILE ?= 1
 
+  # Board-specific mounts (optional)
+  BOARD_MOUNTS_SRC ?=
+
 else ifeq ($(PLATFORM),stm32)
   # STM32 toolchain
   CC ?= arm-none-eabi-gcc
@@ -103,7 +106,14 @@ endif
 include hive_sources.mk
 
 ifeq ($(PLATFORM),linux)
-  SRCS := $(HIVE_CORE_SRCS) $(HIVE_HAL_LINUX_SRCS)
+  SRCS := $(HIVE_CORE_SRCS)
+  ifneq ($(BOARD_MOUNTS_SRC),)
+    # Use board-specific mounts, exclude default from HAL sources
+    SRCS += $(filter-out hal/linux/hive_mounts.c,$(HIVE_HAL_LINUX_SRCS))
+    SRCS += $(BOARD_MOUNTS_SRC)
+  else
+    SRCS += $(HIVE_HAL_LINUX_SRCS)
+  endif
   ASM_SRCS := $(HIVE_HAL_LINUX_ASM)
   ifeq ($(ENABLE_TCP),1)
     SRCS += $(HIVE_TCP_SRCS) $(HIVE_HAL_LINUX_TCP_SRCS)

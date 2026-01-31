@@ -3,11 +3,11 @@
 //
 // Demonstrates waypoint navigation for a quadcopter using the hive actor
 // runtime. Nine flight-critical actors work together in a control pipeline,
-// supervised by one supervisor. Optional telemetry actors add logging:
-//   - Crazyflie: comms_actor sends radio telemetry at 100Hz
-//   - Webots: telemetry_logger_actor writes CSV at 25Hz
+// supervised by one supervisor. Telemetry actors add logging:
+//   - telemetry_logger_actor writes CSV at 25Hz (to /sd or /tmp)
+//   - comms_actor sends radio telemetry at 100Hz (Crazyflie only)
 //
-// Actor list (10-11 actors depending on platform):
+// Actor list (11-12 actors depending on platform):
 //
 //   sensor_actor          - Reads raw sensors via HAL -> sensor bus
 //   estimator_actor       - Complementary filter fusion -> state bus
@@ -19,7 +19,7 @@
 //   motor_actor           - Output to hardware via HAL
 //   flight_manager_actor  - Flight authority and safety monitoring
 //   comms_actor           - Radio telemetry (Crazyflie only)
-//   telemetry_logger_actor- CSV logging (Webots only)
+//   telemetry_logger_actor- CSV logging (to /sd or /tmp if available)
 //   supervisor            - Monitors all workers (ONE_FOR_ALL restart)
 //
 // Data flow through buses:
@@ -42,7 +42,7 @@
 //                  │                                   │
 //                  v                                   v
 //           Telemetry Logger                    Comms (radio)
-//           (Webots, 25Hz)                    (Crazyflie, 100Hz)
+//           (/sd or /tmp, 25Hz)               (Crazyflie, 100Hz)
 //           reads: Sensor, State,             reads: Sensor, State,
 //                  Thrust, Pos Target                Thrust
 //
@@ -89,15 +89,6 @@
 
 // Bus configuration from HAL (platform-specific)
 #define PILOT_BUS_CONFIG HAL_BUS_CONFIG
-
-// Telemetry log path (platform-specific)
-#if ENABLE_TELEMETRY_LOG
-#ifdef SIMULATED_TIME
-#define TELEMETRY_LOG_PATH "/tmp/pilot_telemetry.csv"
-#else
-#define TELEMETRY_LOG_PATH "/var/tmp/pilot_telemetry.csv"
-#endif
-#endif
 
 // ============================================================================
 // SUPERVISOR CALLBACK
@@ -174,12 +165,9 @@ int main(void) {
     }
 
     // Telemetry logger configuration
-#if ENABLE_TELEMETRY_LOG
     static telemetry_logger_config_t tlog_config = {
         .buses = &buses,
-        .log_path = TELEMETRY_LOG_PATH,
     };
-#endif
 
     // clang-format off
     // Define child specs for supervisor (9 flight actors + optional comms)
@@ -291,7 +279,6 @@ int main(void) {
                        .name = "comms",
                        .pool_block = true}},
 #endif
-#if ENABLE_TELEMETRY_LOG
         {.start = telemetry_logger_actor,
          .init = telemetry_logger_init,
          .init_args = &tlog_config,
@@ -302,7 +289,6 @@ int main(void) {
          .actor_cfg = {.priority = HIVE_PRIORITY_LOW,
                        .name = "tlog",
                        .pool_block = true}},
-#endif
     };
 
     // Configure supervisor with ONE_FOR_ALL strategy:
@@ -327,11 +313,11 @@ int main(void) {
     }
     (void)supervisor;
 
-    // Log actor count (9 flight actors + optional telemetry + 1 supervisor)
-#if defined(HAL_HAS_RADIO) || ENABLE_TELEMETRY_LOG
-    HIVE_LOG_INFO("11 actors spawned (10 children + 1 supervisor)");
+    // Log actor count (9 flight actors + tlog + optional comms + 1 supervisor)
+#ifdef HAL_HAS_RADIO
+    HIVE_LOG_INFO("12 actors spawned (11 children + 1 supervisor)");
 #else
-    HIVE_LOG_INFO("10 actors spawned (9 children + 1 supervisor)");
+    HIVE_LOG_INFO("11 actors spawned (10 children + 1 supervisor)");
 #endif
 
     // Main loop - time control differs between real-time and simulation

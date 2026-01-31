@@ -29,10 +29,6 @@ CFLAGS += -MMD -MP
 CFLAGS += -DSIMULATED_TIME
 CFLAGS += -DHIVE_PLATFORM_LINUX
 
-# Telemetry CSV logging (default: enabled)
-TELEMETRY ?= 1
-CFLAGS += -DENABLE_TELEMETRY_LOG=$(TELEMETRY)
-
 # Flight profile (default: FULL_3D for simulation)
 ifdef FLIGHT_PROFILE
 CFLAGS += -DFLIGHT_PROFILE=$(FLIGHT_PROFILE)
@@ -126,10 +122,14 @@ build: check-webots $(TARGET)
 # FORCE target - always out of date, triggers submake to check real deps
 FORCE:
 
+# Board-specific mount configuration (webots uses /tmp)
+BOARD_MOUNTS_SRC := $(abspath hal/webots-crazyflie/hive_mounts.c)
+
 # Build hive library (delegate to src/Makefile)
 # Submake handles actual dependency checking; if it rebuilds, dependents rebuild
 $(HIVE_LIB): FORCE
 	@$(MAKE) -C $(HIVE_SRC_DIR) BUILD_DIR=$(abspath $(BUILD_DIR)) \
+		BOARD_MOUNTS_SRC=$(BOARD_MOUNTS_SRC) \
 		CFLAGS="$(HIVE_CFLAGS_EXPORT)"
 
 # Compile pilot sources

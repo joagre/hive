@@ -1,13 +1,10 @@
 // Telemetry logger actor - CSV logging for PID tuning
 //
 // Logs flight data to CSV file at 25Hz for analysis.
-// Enabled by default for Webots, disabled for Crazyflie (no SD card).
-// Enable on Crazyflie with -DENABLE_TELEMETRY_LOG=1
+// Automatically selects storage: /sd (SD card) or /tmp (local filesystem).
+// If no storage is available, logs a warning and exits gracefully.
 
 #include "telemetry_logger_actor.h"
-
-#if ENABLE_TELEMETRY_LOG
-
 #include "types.h"
 #include "config.h"
 #include "hive_runtime.h"
@@ -18,11 +15,16 @@
 #include "hive_log.h"
 #include "printf.h"
 
+#include <string.h>
+
 // Logging interval in microseconds (25Hz = 40ms)
 #define LOG_INTERVAL_US (1000000 / TELEMETRY_LOG_RATE_HZ)
 
 // Line buffer size (enough for one CSV row)
 #define LINE_BUF_SIZE 512
+
+// Log filename (8.3 compatible for SD card)
+#define TLOG_FILENAME "tlog.csv"
 
 // Actor state
 typedef struct {
@@ -30,7 +32,7 @@ typedef struct {
     bus_id_t sensor_bus;
     bus_id_t thrust_bus;
     bus_id_t position_target_bus;
-    const char *log_path;
+    char log_path[64];
     int log_fd;
 } telemetry_logger_state_t;
 
@@ -41,7 +43,7 @@ void *telemetry_logger_init(void *init_args) {
     state.sensor_bus = cfg->buses->sensor_bus;
     state.thrust_bus = cfg->buses->thrust_bus;
     state.position_target_bus = cfg->buses->position_target_bus;
-    state.log_path = cfg->log_path;
+    state.log_path[0] = '\0';
     state.log_fd = -1;
     return &state;
 }
@@ -54,14 +56,28 @@ void telemetry_logger_actor(void *args, const hive_spawn_info_t *siblings,
     telemetry_logger_state_t *state = args;
     char line_buf[LINE_BUF_SIZE];
 
+    // Select storage path based on mount availability
+    // Prefer SD card, fall back to /tmp (simulation)
+    if (HIVE_SUCCEEDED(hive_file_mount_available("/sd"))) {
+        snprintf_(state->log_path, sizeof(state->log_path), "/sd/%s",
+                  TLOG_FILENAME);
+    } else if (HIVE_SUCCEEDED(hive_file_mount_available("/tmp"))) {
+        snprintf_(state->log_path, sizeof(state->log_path), "/tmp/%s",
+                  TLOG_FILENAME);
+    } else {
+        HIVE_LOG_WARN("[TLOG] No storage available (/sd or /tmp) - "
+                      "telemetry logging disabled");
+        return;
+    }
+
     // Open CSV file
     hive_status_t status = hive_file_open(
         state->log_path, HIVE_O_WRONLY | HIVE_O_CREAT | HIVE_O_TRUNC, 0644,
         &state->log_fd);
     if (HIVE_FAILED(status)) {
-        HIVE_LOG_ERROR("[TLOG] Failed to open %s: %s", state->log_path,
-                       HIVE_ERR_STR(status));
-        hive_exit(HIVE_EXIT_REASON_CRASH);
+        HIVE_LOG_WARN("[TLOG] Cannot open %s: %s - telemetry logging disabled",
+                      state->log_path, HIVE_ERR_STR(status));
+        return;
     }
 
     // Write CSV header
@@ -200,5 +216,3 @@ void telemetry_logger_actor(void *args, const hive_spawn_info_t *siblings,
     hive_file_close(state->log_fd);
     HIVE_LOG_INFO("[TLOG] Closed log file (%u samples)", log_count);
 }
-
-#endif // ENABLE_TELEMETRY_LOG
