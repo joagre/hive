@@ -67,7 +67,7 @@ LDFLAGS += --specs=nano.specs --specs=nosys.specs -lm -lc
 PILOT_SRCS := pilot.c pid.c stack_profile.c \
 	sensor_actor.c estimator_actor.c altitude_actor.c waypoint_actor.c \
 	position_actor.c attitude_actor.c rate_actor.c motor_actor.c \
-	flight_manager_actor.c comms_actor.c \
+	flight_manager_actor.c comms_actor.c telemetry_logger_actor.c \
 	fusion/complementary_filter.c fusion/altitude_kf.c
 
 PILOT_OBJS := $(PILOT_SRCS:%.c=$(BUILD_DIR)/pilot/%.o)
@@ -76,6 +76,7 @@ PILOT_DEPS := $(PILOT_OBJS:.o=.d)
 # Libraries
 HIVE_LIB := $(BUILD_DIR)/libhive.a
 HAL_LIB := $(HAL_DIR)/build/libhal.a
+STARTUP_OBJ := $(HAL_DIR)/build/startup_stm32f405.o
 
 # CFLAGS to pass to hive build (include paths + all HIVE_CFLAGS)
 HIVE_CFLAGS_EXPORT := $(MCU)
@@ -112,10 +113,10 @@ $(BUILD_DIR)/pilot/%.o: %.c
 	@echo "CC $<"
 	@$(CC) $(CFLAGS) -c $< -o $@
 
-# Link
-$(BUILD_DIR)/$(TARGET).elf: $(PILOT_OBJS) $(HIVE_LIB) $(HAL_LIB)
+# Link (startup object must come first for correct vector table placement)
+$(BUILD_DIR)/$(TARGET).elf: $(PILOT_OBJS) $(HIVE_LIB) $(HAL_LIB) $(STARTUP_OBJ)
 	@echo "LD $@"
-	@$(CC) $(PILOT_OBJS) $(HIVE_LIB) $(HAL_LIB) $(LDFLAGS) -o $@
+	@$(CC) $(STARTUP_OBJ) $(PILOT_OBJS) $(HIVE_LIB) $(HAL_LIB) $(LDFLAGS) -o $@
 
 $(BUILD_DIR)/$(TARGET).hex: $(BUILD_DIR)/$(TARGET).elf
 	@$(CP) -O ihex $< $@

@@ -33,7 +33,7 @@ Code is split into focused modules:
 | `motor_actor.c/h` | Output: torque -> HAL -> motors |
 | `flight_manager_actor.c/h` | Startup delay, flight window cutoff |
 | `comms_actor.c/h` | Radio telemetry (Crazyflie only) |
-| `telemetry_logger_actor.c/h` | CSV logging for PID tuning (Webots only) |
+| `telemetry_logger_actor.c/h` | CSV logging for PID tuning (to /sd or /tmp) |
 | `pid.c/h` | Reusable PID controller |
 | `types.h` | Portable data types |
 | `config.h` | Configuration constants (timing, thresholds) |
@@ -222,7 +222,7 @@ examples/pilot/
     motor_actor.c        # Output: torque -> HAL -> motors
     flight_manager_actor.c # Startup delay, flight window cutoff
     comms_actor.c        # Radio telemetry (Crazyflie only)
-    telemetry_logger_actor.c # CSV logging (Webots only)
+    telemetry_logger_actor.c # CSV logging (to /sd or /tmp)
     pid.c                # Reusable PID controller
     stack_profile.c      # Stack usage profiling
     include/             # Header files

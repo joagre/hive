@@ -170,7 +170,7 @@ the lengthy configuration sequence.
 | `i2c_drv.c` | DMA/interrupt I2C3 driver (Bitcraze-derived) |
 | `i2cdev.c` | I2C device abstraction layer |
 | `debug_swo.c` | SWO debug output with printf support |
-| `hal_syslink.c` | NRF51 radio communication (DMA UART) - not yet in build |
+| `hal_syslink.c` | NRF51 radio communication (DMA UART) for ESB telemetry |
 | `spi_ll_sd.c` | SD card low-level SPI driver (shares SPI1 with flow deck) |
 
 ### Vendor Drivers
@@ -299,7 +299,30 @@ The Flow deck v2 is auto-detected during initialization:
 
 If flow deck is not present, initialization continues without it.
 
-**Height filtering**: Readings > 5000mm are discarded as outliers.
+**Height filtering**: Readings > HAL_TOF_MAX_RANGE_MM (1300mm) are discarded as outliers.
+
+### Flow Deck Integration
+
+When the flow deck is present, `platform_read_sensors()` integrates flow data to provide
+position and velocity information:
+
+1. **ToF height** - VL53L1x provides ground-relative altitude (m)
+2. **Optical flow** - PMW3901 pixel deltas converted to body-frame velocity using:
+   ```
+   velocity = pixel_delta * HAL_FLOW_SCALE * height
+   ```
+3. **World-frame rotation** - Body velocity rotated using integrated yaw from gyro
+4. **Position integration** - World-frame velocity integrated to pseudo-GPS position
+
+The flow integration provides:
+- `sensors->velocity_x/y` - World-frame velocity (m/s)
+- `sensors->velocity_valid` - True when flow + height valid
+- `sensors->gps_x/y/z` - Integrated position (m), z = ToF height
+- `sensors->gps_valid` - True when ToF height valid
+
+**Configuration** (in `hal_config.h`):
+- `HAL_FLOW_SCALE` - Pixel-to-velocity conversion (0.0005)
+- `HAL_TOF_MAX_RANGE_MM` - Maximum valid ToF reading (1300mm)
 
 ## SD Card Deck Support
 

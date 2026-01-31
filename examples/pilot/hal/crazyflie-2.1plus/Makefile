@@ -62,6 +62,7 @@ C_SOURCES = \
     hal_time.c \
     hal_led.c \
     hal_debug.c \
+    hal_syslink.c \
     platform.c \
     i2c_drv.c \
     i2cdev.c \

@@ -4,6 +4,7 @@
 // Implements platform interface for BMI088 IMU and BMP388 barometer.
 
 #include "platform.h"
+#include "hal_config.h"
 #include "i2cdev.h"
 #include "debug_swo.h"
 #include "stm32f4xx.h"
@@ -95,6 +96,12 @@ static bool s_flow_deck_present = false;
 static bool s_i2c1_initialized = false;
 static pmw3901_dev_t s_pmw3901_dev;
 static vl53l1x_dev_t s_vl53l1x_dev;
+
+// Flow deck integration state (provides pseudo-GPS position)
+static float s_integrated_x = 0.0f; // Integrated X position (m, world frame)
+static float s_integrated_y = 0.0f; // Integrated Y position (m, world frame)
+static float s_prev_yaw = 0.0f;     // Previous yaw for body-to-world rotation
+static uint32_t s_prev_flow_time_us = 0;
 
 // ----------------------------------------------------------------------------
 // SysTick Handler
@@ -1249,10 +1256,80 @@ void platform_read_sensors(sensor_data_t *sensors) {
         sensors->baro_valid = false;
     }
 
-    // Flow deck and GPS not implemented in v2 yet
-    sensors->gps_valid = false;
-    sensors->velocity_valid = false;
+    // No magnetometer on Crazyflie 2.1+
+    sensors->mag[0] = 0.0f;
+    sensors->mag[1] = 0.0f;
+    sensors->mag[2] = 0.0f;
     sensors->mag_valid = false;
+
+    // Flow deck integration - provides pseudo-GPS position
+    // The flow deck (PMW3901 + VL53L1x) is integrated here in the HAL to
+    // provide a generic position interface matching the Webots GPS.
+
+    // Read rangefinder height (VL53L1x)
+    uint16_t height_mm = 0;
+    bool range_ok = platform_read_height(&height_mm);
+    float height_m = 0.0f;
+    if (range_ok && height_mm > 0 && height_mm < HAL_TOF_MAX_RANGE_MM) {
+        height_m = height_mm / 1000.0f;
+    }
+
+    // Read optical flow (PMW3901) and integrate to position
+    int16_t delta_x = 0, delta_y = 0;
+    bool flow_ok = platform_read_flow(&delta_x, &delta_y);
+
+    // Initialize velocity as invalid
+    sensors->velocity_x = 0.0f;
+    sensors->velocity_y = 0.0f;
+    sensors->velocity_valid = false;
+
+    if (flow_ok && height_m > 0.05f) {
+        // Compute dt from previous flow read
+        uint32_t now_us = platform_get_time_us();
+        float dt = 0.0f;
+        if (s_prev_flow_time_us > 0) {
+            dt = (now_us - s_prev_flow_time_us) / 1000000.0f;
+        }
+        s_prev_flow_time_us = now_us;
+
+        if (dt > 0.0f && dt < 0.1f) { // Sanity check: dt between 0 and 100ms
+            // Convert pixel deltas to velocity (m/s, body frame)
+            // Formula: velocity = pixel_delta * SCALE * height
+            float vx_body = delta_x * HAL_FLOW_SCALE * height_m;
+            float vy_body = delta_y * HAL_FLOW_SCALE * height_m;
+
+            // Integrate yaw from gyro (simple dead-reckoning)
+            // Note: This drifts over time, but flow-based position drifts anyway
+            s_prev_yaw += sensors->gyro[2] * dt;
+
+            // Rotate body velocity to world frame
+            float cos_yaw = cosf(s_prev_yaw);
+            float sin_yaw = sinf(s_prev_yaw);
+            float vx_world = vx_body * cos_yaw - vy_body * sin_yaw;
+            float vy_world = vx_body * sin_yaw + vy_body * cos_yaw;
+
+            // Provide direct velocity (higher quality than differentiated position)
+            sensors->velocity_x = vx_world;
+            sensors->velocity_y = vy_world;
+            sensors->velocity_valid = true;
+
+            // Integrate velocity to position
+            s_integrated_x += vx_world * dt;
+            s_integrated_y += vy_world * dt;
+        }
+
+        // Provide integrated position as pseudo-GPS
+        sensors->gps_x = s_integrated_x;
+        sensors->gps_y = s_integrated_y;
+        sensors->gps_z = height_m;
+        sensors->gps_valid = true;
+    } else {
+        // No valid flow/range - provide last known position with range altitude
+        sensors->gps_x = s_integrated_x;
+        sensors->gps_y = s_integrated_y;
+        sensors->gps_z = height_m;
+        sensors->gps_valid = (height_m > 0.0f);
+    }
 }
 
 void platform_write_motors(const motor_cmd_t *cmd) {

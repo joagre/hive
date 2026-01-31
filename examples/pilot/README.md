@@ -54,7 +54,7 @@ Demonstrates waypoint navigation with a quadcopter using 10-11 actors (8 flight-
 8. **Motor actor** reads torque bus, writes to hardware via HAL (checks for STOP signal)
 9. **Flight manager actor** handles startup delay (60s), landing coordination, log file management
 10. **Comms actor** (Crazyflie only) sends flight data over radio at 100Hz for ground station logging
-11. **Telemetry logger actor** (Webots only) writes CSV at 25Hz for PID tuning analysis
+11. **Telemetry logger actor** writes CSV at 25Hz for PID tuning analysis (to /sd or /tmp)
 12. **Supervisor actor** monitors all workers, restarts flight-critical actors on crash (ONE_FOR_ALL)
 
 Workers use `hive_find_sibling()` for IPC coordination via sibling info passed
@@ -175,7 +175,7 @@ Spawn order determines execution order (round-robin within priority level):
 | 8     | motor     | CRITICAL | PERMANENT | Needs torque + STOP signal, writes hardware last |
 | 9     | flight_mgr| CRITICAL | TRANSIENT | Normal exit = mission complete |
 | 10    | comms     | LOW      | TEMPORARY | Crazyflie only, not flight-critical |
-| 11    | tlog      | LOW      | TEMPORARY | Webots only, CSV logging for PID tuning |
+| 11    | tlog      | LOW      | TEMPORARY | CSV logging for PID tuning (to /sd or /tmp) |
 
 Workers use `hive_find_sibling()` to look up sibling actor IDs for IPC coordination.
 
@@ -399,10 +399,14 @@ LOG_CHUNK packets (28 bytes each) until the entire file is transferred.
 Log download operates at the same 100Hz rate as telemetry. A typical 8KB log file
 downloads in about 3 seconds (8192 bytes / 28 bytes per chunk / 100 chunks per second).
 
-## CSV Telemetry Logging (Webots only)
+## CSV Telemetry Logging
 
-The Webots build includes a telemetry logger actor that writes flight data to CSV
-at 25Hz for PID tuning and flight analysis. The log file is written to `/tmp/pilot_telemetry.csv`.
+The telemetry logger actor writes flight data to CSV at 25Hz for PID tuning and
+flight analysis. Storage is selected automatically based on mount availability:
+
+- **Crazyflie with SD card deck**: `/sd/tlog.csv` (build with `ENABLE_SD=1`)
+- **Webots simulation**: `/tmp/tlog.csv`
+- **Crazyflie without SD**: Telemetry logging disabled (graceful exit)
 
 Unlike radio telemetry, CSV logging includes position targets (waypoints), making it
 the right tool for tuning position control. Use Webots to tune position gains, then
@@ -426,13 +430,13 @@ make
 webots worlds/hover_test.wbt
 
 # Analyze PID performance (overshoot, rise time, settling time)
-python3 tools/analyze_pid.py /tmp/pilot_telemetry.csv
+python3 tools/analyze_pid.py /tmp/tlog.csv
 
 # Visualize telemetry (6-panel plot)
-python3 tools/plot_telemetry.py /tmp/pilot_telemetry.csv
+python3 tools/plot_telemetry.py /tmp/tlog.csv
 
 # Full flight summary with 3D trajectory
-python3 tools/plot_flight.py /tmp/pilot_telemetry.csv
+python3 tools/plot_flight.py /tmp/tlog.csv
 ```
 
 See `tools/README.md` for the full PID tuning workflow.
@@ -455,9 +459,9 @@ doesn't affect flight-critical control loops and won't trigger restarts if it fa
 | `attitude_actor.c` | Attitude PIDs -> rate setpoints |
 | `rate_actor.c` | Rate PIDs -> torque commands |
 | `motor_actor.c` | Output: torque -> HAL -> motors |
-| `flight_manager_actor.c` | Startup delay, flight window cutoff |
+| `flight_manager_actor.c` | Startup delay, flight window cutoff, log file (flm.log) |
 | `comms_actor.c` | Radio telemetry (Crazyflie only) |
-| `telemetry_logger_actor.c` | CSV logging for PID tuning (Webots only) |
+| `telemetry_logger_actor.c` | CSV logging for PID tuning (to /sd or /tmp) |
 | `pid.c` | Reusable PID controller |
 | `stack_profile.c` | Stack usage profiling |
 | `fusion/complementary_filter.c` | Portable attitude estimation (accel+gyro fusion) |

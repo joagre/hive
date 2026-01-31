@@ -21,7 +21,7 @@
 #include "hive_select.h"
 #include "hive_timer.h"
 #include "hive_log.h"
-#include "hive_static_config.h"
+#include "hive_file.h"
 #include "stack_profile.h"
 
 // Flight duration per profile (flight manager decides when to land)
@@ -80,14 +80,33 @@ void flight_manager_actor(void *args, const hive_spawn_info_t *siblings,
 #endif
 
     // === ARM PHASE: Open log file ===
-    // On STM32, this erases the flash sector (blocks 1-4 seconds)
-    HIVE_LOG_INFO("[FLM] Opening log file: %s", HIVE_LOG_FILE_PATH);
-    hive_status_t log_status = hive_log_file_open(HIVE_LOG_FILE_PATH);
-    if (HIVE_FAILED(log_status)) {
-        HIVE_LOG_WARN("[FLM] Failed to open log file: %s",
-                      HIVE_ERR_STR(log_status));
+    // Select storage path based on mount availability
+    // Prefer SD card, fall back to flash (/log), then /tmp (simulation)
+    // On STM32, opening /log erases the flash sector (blocks 1-4 seconds)
+    const char *log_path = NULL;
+    bool log_file_open = false;
+
+    if (HIVE_SUCCEEDED(hive_file_mount_available("/sd"))) {
+        log_path = "/sd/flm.log";
+    } else if (HIVE_SUCCEEDED(hive_file_mount_available("/log"))) {
+        log_path = "/log";
+    } else if (HIVE_SUCCEEDED(hive_file_mount_available("/tmp"))) {
+        log_path = "/tmp/flm.log";
+    }
+
+    if (log_path) {
+        HIVE_LOG_INFO("[FLM] Opening log file: %s", log_path);
+        hive_status_t log_status = hive_log_file_open(log_path);
+        if (HIVE_SUCCEEDED(log_status)) {
+            log_file_open = true;
+            HIVE_LOG_INFO("[FLM] Log file opened");
+        } else {
+            HIVE_LOG_WARN("[FLM] Failed to open log file: %s",
+                          HIVE_ERR_STR(log_status));
+        }
     } else {
-        HIVE_LOG_INFO("[FLM] Log file opened");
+        HIVE_LOG_WARN("[FLM] No storage available - continuing without file "
+                      "logging");
     }
 
     // Start periodic log sync timer (every 4 seconds)
@@ -137,7 +156,9 @@ void flight_manager_actor(void *args, const hive_spawn_info_t *siblings,
         }
 
         if (result.index == SEL_SYNC_TIMER) {
-            hive_log_file_sync();
+            if (log_file_open) {
+                hive_log_file_sync();
+            }
         } else {
             flight_timer_fired = true;
         }
@@ -168,7 +189,9 @@ void flight_manager_actor(void *args, const hive_spawn_info_t *siblings,
         }
 
         if (result.index == SEL_SYNC) {
-            hive_log_file_sync();
+            if (log_file_open) {
+                hive_log_file_sync();
+            }
         } else {
             landed = true;
         }
@@ -181,9 +204,11 @@ void flight_manager_actor(void *args, const hive_spawn_info_t *siblings,
 
     // === DISARM PHASE: Close log file ===
     hive_timer_cancel(sync_timer);
-    HIVE_LOG_INFO("[FLM] Closing log file...");
-    hive_log_file_close();
-    HIVE_LOG_INFO("[FLM] Log file closed");
+    if (log_file_open) {
+        HIVE_LOG_INFO("[FLM] Closing log file...");
+        hive_log_file_close();
+        HIVE_LOG_INFO("[FLM] Log file closed");
+    }
 
     stack_profile_capture("flight_mgr");
     stack_profile_request();

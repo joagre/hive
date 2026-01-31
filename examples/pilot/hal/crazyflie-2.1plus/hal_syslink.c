@@ -20,6 +20,11 @@
 #include <stdbool.h>
 #include <string.h>
 
+// CMSIS position defines (not in older STM32F4 headers)
+#ifndef DMA_SxCR_CHSEL_Pos
+#define DMA_SxCR_CHSEL_Pos 25U
+#endif
+
 // ----------------------------------------------------------------------------
 // Syslink Constants
 // ----------------------------------------------------------------------------

@@ -454,7 +454,7 @@ No structured data export for analysis
 
 **After**
 ```
-State Bus ──┬──► Telemetry Logger ──► /tmp/pilot_telemetry.csv
+State Bus ──┬──► Telemetry Logger ──► /sd/tlog.csv or /tmp/tlog.csv
 Sensor Bus ─┤      (25Hz)
 Thrust Bus ─┤
 Position Target Bus ─┘
@@ -463,8 +463,11 @@ Position Target Bus ─┘
 **Implementation**
 - Subscribes to sensor, state, thrust, and position target buses
 - Writes CSV at 25Hz with all flight data
-- Enabled by default for Webots (`SIMULATED_TIME`), disabled for Crazyflie
-- Log path passed via `telemetry_logger_config` struct at spawn time
+- Storage selected at runtime via `hive_file_mount_available()`:
+  - Prefers `/sd` (Crazyflie with SD card deck, build with `ENABLE_SD=1`)
+  - Falls back to `/tmp` (Webots simulation)
+  - Exits gracefully if no storage available
+- Filename: `tlog.csv` (8.3 compatible for SD card)
 - Runs at LOW priority, TEMPORARY restart (not flight-critical)
 - Flushes to disk every second (25 samples)
 
@@ -486,13 +489,13 @@ make
 webots worlds/hover_test.wbt
 
 # Analyze PID performance
-python3 tools/analyze_pid.py /tmp/pilot_telemetry.csv
+python3 tools/analyze_pid.py /tmp/tlog.csv
 
 # Visualize telemetry (6-panel plot)
-python3 tools/plot_telemetry.py /tmp/pilot_telemetry.csv
+python3 tools/plot_telemetry.py /tmp/tlog.csv
 
 # Full flight summary with 3D trajectory
-python3 tools/plot_flight.py /tmp/pilot_telemetry.csv
+python3 tools/plot_flight.py /tmp/tlog.csv
 ```
 
 **Benefits**
