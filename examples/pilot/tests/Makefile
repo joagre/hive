@@ -53,7 +53,7 @@ help:
 	@echo "  make PLATFORM=crazyflie TEST=sensors_motors"
 	@echo "  make PLATFORM=crazyflie TEST=sensors_motors ENABLE_MOTOR_TEST=1"
 	@echo "  make PLATFORM=crazyflie TEST=thrust"
-	@echo "  make PLATFORM=crazyflie TEST=thrust CFLAGS+='-DTHRUST_TEST_VALUE=0.40f'"
+	@echo "  make PLATFORM=crazyflie TEST=thrust EXTRA_CFLAGS='-DTHRUST_TEST_VALUE=0.40f'"
 	@echo "  make install-webots"
 	@echo "  make flash-crazyflie TEST=thrust"
 
@@ -116,6 +116,9 @@ CFLAGS += -I$(HAL_DIR)/vendor/CMSIS/STM32F4xx/Include
 CFLAGS += -I$(HIVE_ROOT)/include
 CFLAGS += -I$(HIVE_SRC_DIR)/hal/stm32
 CFLAGS += -I$(HIVE_ROOT)/lib -I$(HIVE_ROOT)/lib/printf -DPRINTF_INCLUDE_CONFIG_H
+
+# Extra CFLAGS from command line (e.g., EXTRA_CFLAGS='-DTHRUST_TEST_VALUE=0.40f')
+CFLAGS += $(EXTRA_CFLAGS)
 
 # Hive memory configuration (minimal for tests)
 HIVE_CFLAGS = -DHIVE_MAX_ACTORS=4
