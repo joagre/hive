@@ -14,7 +14,7 @@ Packet format (must match test_esb.c):
     Bytes 1-4: Voltage (float, little-endian)
 
 Usage:
-    python test_radio_ground.py [--uri URI] [--duration SECONDS] [--rate HZ]
+    sudo python test_radio_ground.py [--uri URI] [--duration SECONDS] [--rate HZ]
 """
 
 import argparse
@@ -25,7 +25,7 @@ from collections import defaultdict
 
 try:
     import cflib.crtp
-    from cflib.crtp.crtpstack import CRTPPacket
+    from cflib.drivers.crazyradio import Crazyradio
 except ImportError:
     print("Error: cflib not installed")
     print("Install with: pip install cflib")
@@ -54,16 +54,37 @@ def decode_packet(data):
 
     # Debug: show unknown packet contents
     hex_dump = ' '.join(f'{b:02x}' for b in data[:min(len(data), 16)])
-    print(f"\nUnknown: type={pkt_type} len={len(data)} hex=[{hex_dump}]")
+    print(f"\nUnknown: type=0x{pkt_type:02x} len={len(data)} hex=[{hex_dump}]")
     return {'type': 'unknown', 'first_byte': pkt_type, 'len': len(data)}
 
 
+def parse_uri(uri):
+    """Parse radio URI to extract parameters.
+
+    Format: radio://dongle/channel/datarate
+    Example: radio://0/80/2M
+    """
+    parts = uri.replace("radio://", "").split("/")
+    dongle_id = int(parts[0]) if len(parts) > 0 else 0
+    channel = int(parts[1]) if len(parts) > 1 else 80
+    datarate_str = parts[2] if len(parts) > 2 else "2M"
+
+    datarate_map = {
+        "250K": Crazyradio.DR_250KPS,
+        "1M": Crazyradio.DR_1MPS,
+        "2M": Crazyradio.DR_2MPS,
+    }
+    datarate = datarate_map.get(datarate_str.upper(), Crazyradio.DR_2MPS)
+
+    return dongle_id, channel, datarate, datarate_str
+
+
 class GroundStation:
-    def __init__(self, uri=None, poll_rate_hz=100):
+    def __init__(self, uri="radio://0/80/2M", poll_rate_hz=100):
         self.uri = uri
         self.poll_rate_hz = poll_rate_hz
         self.poll_interval = 1.0 / poll_rate_hz
-        self.link = None
+        self.radio = None
         self.running = False
         self.stats = defaultdict(int)
         self.last_voltage = None
@@ -86,42 +107,40 @@ class GroundStation:
         return available[0][0]
 
     def connect(self):
-        """Connect to Crazyflie."""
+        """Connect to Crazyflie via Crazyradio."""
         if not self.uri:
             self.uri = self.scan()
             if not self.uri:
                 return False
 
-        print(f"Connecting to {self.uri}...")
-        cflib.crtp.init_drivers()
+        dongle_id, channel, datarate, datarate_str = parse_uri(self.uri)
 
-        self.link = cflib.crtp.get_link_driver(self.uri)
-        if not self.link:
-            print("Failed to get link driver")
+        print(f"Connecting to channel {channel}, {datarate_str}...")
+
+        self.radio = Crazyradio(devid=dongle_id)
+        if self.radio is None:
+            print("Could not find Crazyradio dongle")
             return False
+
+        self.radio.set_channel(channel)
+        self.radio.set_data_rate(datarate)
+        self.radio.set_address((0xE7, 0xE7, 0xE7, 0xE7, 0xE7))
 
         print("Connected!")
         return True
 
     def poll(self):
-        """
-        Send heartbeat and receive telemetry.
+        """Send poll packet and receive telemetry.
 
         ESB protocol: we send a packet, drone responds with ACK + telemetry.
+        Using Crazyradio direct: response.data contains raw bytes.
         """
-        # Send heartbeat
-        pk = CRTPPacket()
-        pk.port = 0
-        pk.data = bytes([0x00])
-        self.link.send_packet(pk)
+        # Send poll packet
+        response = self.radio.send_packet((0xFF,))
 
-        # Receive ACK payload
-        pk = self.link.receive_packet(wait=0.005)
-        if pk is not None and pk.data:
-            # CRTP uses first byte as header; our type ends up in pk.channel
-            pkt_type = pk.channel
-            full_data = bytes([pkt_type]) + pk.data
-            return decode_packet(full_data)
+        if response and response.ack and response.data:
+            data = bytes(response.data)
+            return decode_packet(data)
         return None
 
     def run(self, duration=60):
@@ -184,7 +203,7 @@ class GroundStation:
             print(f"  Last voltage: {self.last_voltage:.2f}V")
         print("=" * 50)
 
-        self.link.close()
+        self.radio.close()
         return self.stats['battery'] > 0
 
 

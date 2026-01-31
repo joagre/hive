@@ -11,6 +11,8 @@ ESB Protocol:
   Drone's nRF51 is PRX (Primary Receiver) - responds via ACK payloads.
   Telemetry from drone piggybacks on ACK packets when ground station polls.
 
+  Uses Crazyradio direct API for raw byte access (no CRTP layer).
+
 Telemetry packet formats:
   Type 0x01 - Attitude/Rates (17 bytes):
     type(1) + timestamp_ms(4) + gyro_xyz(6) + roll/pitch/yaw(6)
@@ -29,10 +31,10 @@ Requirements:
   pip install cflib
 
 Usage:
-  ./ground_station.py                         # Display telemetry to stdout
-  ./ground_station.py -o flight.csv           # Log telemetry to CSV file
-  ./ground_station.py --download-log log.bin  # Download binary log file
-  ./ground_station.py --uri radio://0/80/2M   # Custom radio URI
+  sudo ./ground_station.py                         # Display telemetry to stdout
+  sudo ./ground_station.py -o flight.csv           # Log telemetry to CSV file
+  sudo ./ground_station.py --download-log log.bin  # Download binary log file
+  sudo ./ground_station.py --uri radio://0/80/2M   # Custom radio URI
 
 Default radio URI: radio://0/80/2M (channel 80, 2Mbps)
 """
@@ -46,7 +48,7 @@ from datetime import datetime
 
 try:
     import cflib.crtp
-    from cflib.crtp.crtpstack import CRTPPacket
+    from cflib.drivers.crazyradio import Crazyradio
 except ImportError:
     print("Error: cflib not installed. Run: pip install cflib", file=sys.stderr)
     sys.exit(1)
@@ -164,12 +166,33 @@ def format_packet(pkt: dict) -> str:
     return str(pkt)
 
 
+def parse_uri(uri):
+    """Parse radio URI to extract parameters.
+
+    Format: radio://dongle/channel/datarate
+    Example: radio://0/80/2M
+    """
+    parts = uri.replace("radio://", "").split("/")
+    dongle_id = int(parts[0]) if len(parts) > 0 else 0
+    channel = int(parts[1]) if len(parts) > 1 else 80
+    datarate_str = parts[2] if len(parts) > 2 else "2M"
+
+    datarate_map = {
+        "250K": Crazyradio.DR_250KPS,
+        "1M": Crazyradio.DR_1MPS,
+        "2M": Crazyradio.DR_2MPS,
+    }
+    datarate = datarate_map.get(datarate_str.upper(), Crazyradio.DR_2MPS)
+
+    return dongle_id, channel, datarate, datarate_str
+
+
 class TelemetryReceiver:
     """Receives telemetry from Crazyflie via Crazyradio."""
 
-    def __init__(self, uri: str = "radio://0/80/2M"):
+    def __init__(self, uri: str = None):
         self.uri = uri
-        self.link = None
+        self.radio = None
         self.running = False
 
         # Statistics
@@ -198,46 +221,41 @@ class TelemetryReceiver:
 
     def connect(self):
         """Initialize radio and connect to Crazyflie."""
-        uri = self.uri
-        if not uri:
-            uri = self.scan()
-            if not uri:
+        if not self.uri:
+            self.uri = self.scan()
+            if not self.uri:
                 raise RuntimeError("No Crazyflie found")
-            self.uri = uri
 
-        print(f"Connecting to {self.uri}...", file=sys.stderr)
-        cflib.crtp.init_drivers()
+        dongle_id, channel, datarate, datarate_str = parse_uri(self.uri)
 
-        self.link = cflib.crtp.get_link_driver(self.uri)
-        if not self.link:
-            raise RuntimeError("Failed to get link driver")
+        print(f"Connecting to channel {channel}, {datarate_str}...", file=sys.stderr)
+
+        self.radio = Crazyradio(devid=dongle_id)
+        if self.radio is None:
+            raise RuntimeError("Could not find Crazyradio dongle")
+
+        self.radio.set_channel(channel)
+        self.radio.set_data_rate(datarate)
+        self.radio.set_address((0xE7, 0xE7, 0xE7, 0xE7, 0xE7))
 
         print("Connected!", file=sys.stderr)
 
     def disconnect(self):
         """Disconnect from radio."""
-        if self.link:
-            self.link.close()
-            self.link = None
+        if self.radio:
+            self.radio.close()
+            self.radio = None
 
     def poll(self):
-        """Send heartbeat and receive telemetry.
+        """Send poll packet and receive telemetry.
 
         ESB protocol: we send a packet, drone responds with ACK + telemetry.
+        Using Crazyradio direct: response.data contains raw bytes.
         """
-        # Send heartbeat packet
-        pk = CRTPPacket()
-        pk.port = 0
-        pk.data = bytes([0x00])
-        self.link.send_packet(pk)
+        response = self.radio.send_packet((0xFF,))
 
-        # Receive ACK payload
-        pk = self.link.receive_packet(wait=0.005)
-        if pk is not None and pk.data:
-            # CRTP uses first byte as header; our type ends up in pk.channel
-            pkt_type = pk.channel
-            full_data = bytes([pkt_type]) + pk.data
-            return full_data
+        if response and response.ack and response.data:
+            return bytes(response.data)
         return None
 
     def receive_loop(self, callback, csv_writer=None):
@@ -328,11 +346,11 @@ class TelemetryReceiver:
         print(f"Requesting log download...", file=sys.stderr)
 
         # Send request command
-        pk = CRTPPacket()
-        pk.port = 0
-        pk.channel = CMD_REQUEST_LOG
-        pk.data = bytes([])
-        self.link.send_packet(pk)
+        response = self.radio.send_packet((CMD_REQUEST_LOG,))
+
+        if not response or not response.ack:
+            print("Error: No ACK for log request", file=sys.stderr)
+            return False
 
         # Open output file
         with open(output_path, "wb") as f:
