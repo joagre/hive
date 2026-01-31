@@ -49,9 +49,16 @@ Validates the complete pilot HAL API stack.
 3. `hal_calibrate()` - Calibrate sensors (keep still and level!)
 4. `hal_arm()` - Arm motors
 5. Sensor loop - Read sensors for 5 seconds
-6. Motor test - Brief motor spin (2 seconds at 15% thrust)
-7. `hal_disarm()` - Disarm motors
-8. `hal_cleanup()` - Cleanup
+6. Individual motor test - Each motor separately (2s each, 2s pause between)
+   - M1 Front-Right (CCW), M2 Back-Right (CW), M3 Back-Left (CCW), M4 Front-Left (CW)
+7. All motors test - All 4 motors together (2 seconds at 15% thrust)
+8. `hal_disarm()` - Disarm motors
+9. `hal_cleanup()` - Cleanup
+
+**Motor test is disabled by default.** Enable with `ENABLE_MOTOR_TEST=1`:
+```bash
+make PLATFORM=crazyflie TEST=sensors_motors ENABLE_MOTOR_TEST=1
+```
 
 **LED feedback:**
 | Pattern | Meaning |
@@ -61,7 +68,8 @@ Validates the complete pilot HAL API stack.
 | 4 blinks | Calibration done, starting sensor read |
 | Fast blink | Sensor read loop |
 | 5 blinks | Sensor test done, starting motor test |
-| Medium blink | Motors running |
+| Medium blink | Individual motor running |
+| Fast blink | All motors running |
 | 6 blinks | Motor test done |
 | LED on solid | All tests passed! |
 
