@@ -1,7 +1,7 @@
 /**
  * Syslink Communication Test
  *
- * Tests the DMA-based syslink radio communication with Crazyradio PA/2.0.
+ * Tests the interrupt-based syslink radio communication with Crazyradio PA/2.0.
  *
  * Test sequence:
  *   1. Initialize HAL and Hive runtime
@@ -315,7 +315,7 @@ int test_esb_run(bool standalone) {
     HIVE_LOG_INFO("========================================");
     HIVE_LOG_INFO("  Radio Communication Test");
     HIVE_LOG_INFO("========================================");
-    HIVE_LOG_INFO("[RADIO] DMA-based USART6 syslink");
+    HIVE_LOG_INFO("[RADIO] Interrupt-based USART6 syslink");
 
     // 1 blink = starting
     test_blink(1, 200, 200);

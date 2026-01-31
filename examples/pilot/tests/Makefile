@@ -18,7 +18,7 @@
 #   thrust         - Thrust calibration test (find HAL_BASE_THRUST)
 #   flash          - Hive file API test with flash backend (/log)
 #   sd             - Hive file API test with SD backend (/sd)
-#   esb            - ESB radio communication test (DMA-based syslink)
+#   esb            - ESB radio communication test (interrupt-based syslink)
 #   main           - Combined test runner (all applicable tests)
 
 # Default target shows help

@@ -2,7 +2,7 @@
 """
 Radio Communication Test - Ground Station
 
-Tests DMA-based syslink radio communication with Crazyflie running test_esb.
+Tests interrupt-based syslink radio communication with Crazyflie running test_esb.
 
 Requirements:
     pip install cflib

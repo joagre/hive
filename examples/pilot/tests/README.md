@@ -12,7 +12,7 @@ These tests are organized by what they validate:
 | `thrust` | Pilot HAL | Thrust calibration (find HAL_BASE_THRUST for hover) |
 | `flash` | Hive File API | Tests flash-backed `/log` via `hive_file_*()` |
 | `sd` | Hive File API | Tests SD-backed `/sd` via `hive_file_*()` |
-| `esb` | Pilot HAL + Hive | ESB radio communication test (DMA-based syslink) |
+| `esb` | Pilot HAL + Hive | ESB radio communication test (interrupt-based syslink) |
 | `main` | Combined | Runs all applicable tests (Webots dummy pilot) |
 
 **Key distinction:**
@@ -214,7 +214,7 @@ filenames) to save ~2KB flash. Use short names like `data.bin`, `log001.txt`.
 
 ### esb
 
-Tests ESB radio communication with Crazyradio PA/2.0 via DMA-based syslink.
+Tests ESB radio communication with Crazyradio PA/2.0 via interrupt-based syslink.
 
 The Crazyflie communicates with the ground via the nRF51822 co-processor using
 the syslink protocol over USART6 at 1Mbaud. This test validates the DMA-based

@@ -170,7 +170,7 @@ the lengthy configuration sequence.
 | `i2c_drv.c` | DMA/interrupt I2C3 driver (Bitcraze-derived) |
 | `i2cdev.c` | I2C device abstraction layer |
 | `debug_swo.c` | SWO debug output with printf support |
-| `hal_syslink.c` | NRF51 radio communication (DMA UART) for ESB telemetry |
+| `hal_syslink.c` | NRF51 radio communication (interrupt RX, polled TX) for ESB telemetry |
 | `spi_ll_sd.c` | SD card low-level SPI driver (shares SPI1 with flow deck) |
 
 ### Vendor Drivers
