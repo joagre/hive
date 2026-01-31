@@ -6,6 +6,11 @@ Connects to the Crazyflie using ESB radio protocol and decodes binary
 telemetry packets. Displays real-time data and optionally logs to CSV.
 Can also download the binary flight log from flash storage.
 
+ESB Protocol:
+  Ground station is PTX (Primary Transmitter) - initiates all communication.
+  Drone's nRF51 is PRX (Primary Receiver) - responds via ACK payloads.
+  Telemetry from drone piggybacks on ACK packets when ground station polls.
+
 Telemetry packet formats:
   Type 0x01 - Attitude/Rates (17 bytes):
     type(1) + timestamp_ms(4) + gyro_xyz(6) + roll/pitch/yaw(6)
@@ -24,10 +29,10 @@ Requirements:
   pip install cflib
 
 Usage:
-  ./telemetry_receiver.py                         # Display telemetry to stdout
-  ./telemetry_receiver.py -o flight.csv           # Log telemetry to CSV file
-  ./telemetry_receiver.py --download-log log.bin  # Download binary log file
-  ./telemetry_receiver.py --uri radio://0/80/2M   # Custom radio URI
+  ./ground_station.py                         # Display telemetry to stdout
+  ./ground_station.py -o flight.csv           # Log telemetry to CSV file
+  ./ground_station.py --download-log log.bin  # Download binary log file
+  ./ground_station.py --uri radio://0/80/2M   # Custom radio URI
 
 Default radio URI: radio://0/80/2M (channel 80, 2Mbps)
 """
@@ -41,8 +46,7 @@ from datetime import datetime
 
 try:
     import cflib.crtp
-    from cflib.crtp.radiodriver import RadioDriver
-    from cflib.drivers.crazyradio import Crazyradio
+    from cflib.crtp.crtpstack import CRTPPacket
 except ImportError:
     print("Error: cflib not installed. Run: pip install cflib", file=sys.stderr)
     sys.exit(1)
@@ -165,68 +169,87 @@ class TelemetryReceiver:
 
     def __init__(self, uri: str = "radio://0/80/2M"):
         self.uri = uri
-        self.radio = None
+        self.link = None
         self.running = False
 
         # Statistics
         self.packets_received = 0
         self.attitude_count = 0
         self.position_count = 0
+        self.unknown_count = 0
         self.errors = 0
         self.start_time = None
 
-    def connect(self):
-        """Initialize radio and connect to Crazyflie."""
+    def scan(self):
+        """Scan for available Crazyflies."""
+        print("Scanning for Crazyflie...", file=sys.stderr)
         cflib.crtp.init_drivers()
 
-        # Parse URI to extract radio parameters
-        # Format: radio://dongle/channel/datarate
-        parts = self.uri.replace("radio://", "").split("/")
-        dongle_id = int(parts[0]) if len(parts) > 0 else 0
-        channel = int(parts[1]) if len(parts) > 1 else 80
-        datarate_str = parts[2] if len(parts) > 2 else "2M"
+        available = cflib.crtp.scan_interfaces()
+        if not available:
+            print("No Crazyflie found!", file=sys.stderr)
+            return None
 
-        # Map datarate string to cflib constant
-        datarate_map = {
-            "250K": Crazyradio.DR_250KPS,
-            "1M": Crazyradio.DR_1MPS,
-            "2M": Crazyradio.DR_2MPS,
-        }
-        datarate = datarate_map.get(datarate_str.upper(), Crazyradio.DR_2MPS)
+        print(f"Found {len(available)} Crazyflie(s):", file=sys.stderr)
+        for i, uri in enumerate(available):
+            print(f"  [{i}] {uri[0]}", file=sys.stderr)
 
-        # Open Crazyradio
-        self.radio = Crazyradio(devid=dongle_id)
-        if self.radio is None:
-            raise RuntimeError("Could not find Crazyradio dongle")
+        return available[0][0]
 
-        self.radio.set_channel(channel)
-        self.radio.set_data_rate(datarate)
-        self.radio.set_address((0xE7, 0xE7, 0xE7, 0xE7, 0xE7))  # Default Crazyflie address
+    def connect(self):
+        """Initialize radio and connect to Crazyflie."""
+        uri = self.uri
+        if not uri:
+            uri = self.scan()
+            if not uri:
+                raise RuntimeError("No Crazyflie found")
+            self.uri = uri
 
-        print(f"Connected to Crazyradio on channel {channel}, {datarate_str}", file=sys.stderr)
+        print(f"Connecting to {self.uri}...", file=sys.stderr)
+        cflib.crtp.init_drivers()
+
+        self.link = cflib.crtp.get_link_driver(self.uri)
+        if not self.link:
+            raise RuntimeError("Failed to get link driver")
+
+        print("Connected!", file=sys.stderr)
 
     def disconnect(self):
         """Disconnect from radio."""
-        if self.radio:
-            self.radio.close()
-            self.radio = None
+        if self.link:
+            self.link.close()
+            self.link = None
+
+    def poll(self):
+        """Send heartbeat and receive telemetry.
+
+        ESB protocol: we send a packet, drone responds with ACK + telemetry.
+        """
+        # Send heartbeat packet
+        pk = CRTPPacket()
+        pk.port = 0
+        pk.data = bytes([0x00])
+        self.link.send_packet(pk)
+
+        # Receive ACK payload
+        pk = self.link.receive_packet(wait=0.005)
+        if pk is not None and pk.data:
+            # CRTP uses first byte as header; our type ends up in pk.channel
+            pkt_type = pk.channel
+            full_data = bytes([pkt_type]) + pk.data
+            return full_data
+        return None
 
     def receive_loop(self, callback, csv_writer=None):
         """Main receive loop. Calls callback for each decoded packet."""
         self.running = True
         self.start_time = time.time()
 
-        # Send empty packet to enable communication
-        empty_packet = bytes([0xFF])
-
         while self.running:
             try:
-                # Send empty packet, receive response
-                # This is how syslink flow control works - we send to receive
-                response = self.radio.send_packet(empty_packet)
+                data = self.poll()
 
-                if response and response.ack and response.data:
-                    data = bytes(response.data)
+                if data:
                     pkt = decode_packet(data)
 
                     if pkt:
@@ -241,10 +264,12 @@ class TelemetryReceiver:
                         if csv_writer:
                             self._write_csv_row(csv_writer, pkt)
                     else:
-                        self.errors += 1
-
-                # Small delay to avoid hammering the radio
-                time.sleep(0.005)  # 5ms = 200Hz polling
+                        # Unknown packet - show for debugging
+                        self.unknown_count += 1
+                        pkt_type = data[0] if data else 0
+                        hex_dump = ' '.join(f'{b:02x}' for b in data[:min(len(data), 16)])
+                        print(f"\nUnknown: type=0x{pkt_type:02x} len={len(data)} hex=[{hex_dump}]",
+                              file=sys.stderr)
 
             except KeyboardInterrupt:
                 self.running = False
@@ -291,6 +316,7 @@ class TelemetryReceiver:
         print(f"Packets received: {self.packets_received} ({rate:.1f}/s)", file=sys.stderr)
         print(f"  Attitude: {self.attitude_count}", file=sys.stderr)
         print(f"  Position: {self.position_count}", file=sys.stderr)
+        print(f"  Unknown: {self.unknown_count}", file=sys.stderr)
         print(f"Errors: {self.errors}", file=sys.stderr)
 
     def download_log(self, output_path: str) -> bool:
@@ -302,12 +328,11 @@ class TelemetryReceiver:
         print(f"Requesting log download...", file=sys.stderr)
 
         # Send request command
-        request = bytes([CMD_REQUEST_LOG])
-        response = self.radio.send_packet(request)
-
-        if not response or not response.ack:
-            print("Error: No ACK for log request", file=sys.stderr)
-            return False
+        pk = CRTPPacket()
+        pk.port = 0
+        pk.channel = CMD_REQUEST_LOG
+        pk.data = bytes([])
+        self.link.send_packet(pk)
 
         # Open output file
         with open(output_path, "wb") as f:
@@ -317,16 +342,10 @@ class TelemetryReceiver:
 
             while True:
                 try:
-                    # Send empty packet to receive next chunk
-                    empty_packet = bytes([0xFF])
-                    response = self.radio.send_packet(empty_packet)
+                    # Poll for next chunk
+                    data = self.poll()
 
-                    if not response or not response.ack or not response.data:
-                        time.sleep(0.005)
-                        continue
-
-                    data = bytes(response.data)
-                    if len(data) < 1:
+                    if not data or len(data) < 1:
                         continue
 
                     pkt_type = data[0]
@@ -368,8 +387,6 @@ class TelemetryReceiver:
                         # Ignore telemetry packets during download
                         pass
 
-                    time.sleep(0.005)
-
                 except KeyboardInterrupt:
                     print("\nDownload interrupted", file=sys.stderr)
                     return False
@@ -388,8 +405,8 @@ def main():
         epilog=__doc__
     )
     parser.add_argument(
-        "--uri", default="radio://0/80/2M",
-        help="Crazyflie radio URI (default: radio://0/80/2M)"
+        "--uri", "-u", default=None,
+        help="Crazyflie radio URI (auto-scan if not specified)"
     )
     parser.add_argument(
         "-o", "--output", type=str,
