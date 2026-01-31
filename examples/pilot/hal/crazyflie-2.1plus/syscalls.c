@@ -6,14 +6,26 @@
 #include <sys/stat.h>
 #include <errno.h>
 
-// Heap end (from linker script)
-extern char _end;
+// Heap boundaries (from linker script)
+// Note: Stack is in CCM (separate memory), heap is in RAM - they can't collide.
+// We check against _heap_end which is the linker-defined heap limit.
+extern char _end;      // End of .bss, start of heap
+extern char _heap_end; // End of heap region (from linker script)
 static char *heap_ptr = &_end;
 
 // sbrk - heap allocation for malloc
+// Returns (void*)-1 on failure (heap limit exceeded)
 void *_sbrk(int incr) {
     char *prev_heap_ptr = heap_ptr;
-    heap_ptr += incr;
+    char *new_heap_ptr = heap_ptr + incr;
+
+    // Check for heap overflow
+    if (new_heap_ptr > &_heap_end) {
+        errno = ENOMEM;
+        return (void *)-1;
+    }
+
+    heap_ptr = new_heap_ptr;
     return prev_heap_ptr;
 }
 
@@ -60,10 +72,11 @@ int _kill(int pid, int sig) {
     errno = EINVAL;
     return -1;
 }
-void _exit(int status) {
+void __attribute__((noreturn)) _exit(int status) {
     (void)status;
-    while (1)
-        ;
+    while (1) {
+        __asm__ volatile("wfi");
+    }
 }
 
 // ST Standard Peripheral Library assert handler

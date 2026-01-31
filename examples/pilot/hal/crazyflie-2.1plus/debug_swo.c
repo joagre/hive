@@ -8,6 +8,7 @@
 
 #include "debug_swo.h"
 #include "stm32f4xx.h"
+#include <stdint.h>
 
 // SWO configuration
 static uint32_t s_swo_initialized = 0;
@@ -128,6 +129,9 @@ static void debug_swo_print_float(float val, int precision) {
         integer++;
         frac -= mult;
     }
+    if (frac < 0) {
+        frac = 0; // Clamp negative rounding errors
+    }
     debug_swo_print_uint((uint32_t)integer, 10, 0, '0');
     if (precision > 0) {
         debug_swo_putc('.');
@@ -216,6 +220,31 @@ void debug_swo_vprintf(const char *fmt, va_list args) {
                 break;
             case 'c':
                 debug_swo_putc((char)va_arg(args, int));
+                break;
+            case 'p': {
+                // Pointer: print as 0x followed by hex
+                debug_swo_puts("0x");
+                debug_swo_print_uint((uint32_t)(uintptr_t)va_arg(args, void *),
+                                     16, 8, '0');
+                break;
+            }
+            case 'l':
+                // Handle %ld, %lu, %lx (same as 32-bit on Cortex-M)
+                fmt++;
+                if (*fmt == 'd' || *fmt == 'i') {
+                    debug_swo_print_int(va_arg(args, long));
+                } else if (*fmt == 'u') {
+                    debug_swo_print_uint(va_arg(args, unsigned long), 10, width,
+                                         pad);
+                } else if (*fmt == 'x' || *fmt == 'X') {
+                    debug_swo_print_uint(va_arg(args, unsigned long), 16, width,
+                                         pad);
+                } else {
+                    // Unknown %l? - print literally
+                    debug_swo_putc('%');
+                    debug_swo_putc('l');
+                    debug_swo_putc(*fmt);
+                }
                 break;
             case '%':
                 debug_swo_putc('%');

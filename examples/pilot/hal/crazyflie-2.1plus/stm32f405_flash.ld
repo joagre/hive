@@ -142,8 +142,10 @@ SECTIONS
         . = ALIGN(8);
         PROVIDE(end = .);
         PROVIDE(_end = .);
+        PROVIDE(_heap_start = .);
         . = . + _Min_Heap_Size;
         . = ALIGN(8);
+        PROVIDE(_heap_end = .);
     } > RAM
 
     /* Stack (in CCM for faster access) */

@@ -19,7 +19,6 @@
 
 #include <stdbool.h>
 #include <stdarg.h>
-#include <stdio.h>
 #include <math.h>
 
 // CPU and SWO configuration
@@ -61,6 +60,9 @@
 
 // I2C timeout for polling operations
 #define I2C_TIMEOUT_US 100000
+
+// VL53L1x register addresses
+#define VL53L1X_REG_MODEL_ID 0x010F // Expected value: 0xEACC
 
 // I2C addresses (use Bitcraze driver defines)
 // BMI088_ACCEL_I2C_ADDR_PRIMARY = 0x18
@@ -170,27 +172,32 @@ static void i2c1_bus_recovery(void) {
     I2C1_SDA_PORT->MODER &= ~(3U << (I2C1_SDA_PIN_NUM * 2));
 
     // Clock out up to 9 bits to release stuck slave
+    // Delay ~3us per half-cycle at 168MHz (100 NOPs ~= 0.6us, need ~500 for 3us)
     for (int i = 0; i < 9; i++) {
         if (I2C1_SDA_PORT->IDR & (1U << I2C1_SDA_PIN_NUM)) {
             break;
         }
         I2C1_SCL_PORT->ODR &= ~(1U << I2C1_SCL_PIN_NUM);
-        for (volatile int d = 0; d < 100; d++)
+        for (volatile int d = 0; d < 100; d++) {
             __NOP();
+        }
         I2C1_SCL_PORT->ODR |= (1U << I2C1_SCL_PIN_NUM);
-        for (volatile int d = 0; d < 100; d++)
+        for (volatile int d = 0; d < 100; d++) {
             __NOP();
+        }
     }
 
-    // Generate STOP condition
+    // Generate STOP condition (SDA low->high while SCL high)
     I2C1_SDA_PORT->MODER |= (1U << (I2C1_SDA_PIN_NUM * 2));
     I2C1_SDA_PORT->OTYPER |= (1U << I2C1_SDA_PIN_NUM);
     I2C1_SDA_PORT->ODR &= ~(1U << I2C1_SDA_PIN_NUM);
-    for (volatile int d = 0; d < 100; d++)
+    for (volatile int d = 0; d < 100; d++) {
         __NOP();
+    }
     I2C1_SDA_PORT->ODR |= (1U << I2C1_SDA_PIN_NUM);
-    for (volatile int d = 0; d < 100; d++)
+    for (volatile int d = 0; d < 100; d++) {
         __NOP();
+    }
 
     // Restore pins to AF mode
     I2C1_SCL_PORT->MODER &= ~(3U << (I2C1_SCL_PIN_NUM * 2));
@@ -516,13 +523,12 @@ static const pmw3901_platform_t s_pmw3901_platform = {
 // Probe for VL53L1x at a specific address by reading model ID
 // Returns true if VL53L1x found at this address
 static bool vl53l1x_probe_address(uint8_t addr) {
-    // Read model ID register (0x010F) - should return 0xEACC for VL53L1x
     uint8_t id[2];
-    if (vl53l1x_i2c_read(addr, 0x010F, id, 2) != 0) {
+    if (vl53l1x_i2c_read(addr, VL53L1X_REG_MODEL_ID, id, 2) != 0) {
         return false;
     }
     uint16_t model_id = (uint16_t)(id[0] << 8) | id[1];
-    return (model_id == 0xEACC);
+    return (model_id == 0xEACC); // Expected VL53L1x model ID
 }
 
 static bool flow_deck_init(void) {
@@ -1368,7 +1374,8 @@ uint32_t platform_get_time_us(void) {
     uint32_t ms = s_sys_tick_ms;
     uint32_t ticks = SysTick->VAL;
     uint32_t load = SysTick->LOAD;
-    uint32_t us_in_tick = ((load - ticks) * 1000) / load;
+    // Use 64-bit arithmetic to avoid overflow (load can be 168000)
+    uint32_t us_in_tick = (uint32_t)(((uint64_t)(load - ticks) * 1000) / load);
     return ms * 1000 + us_in_tick;
 }
 
@@ -1438,9 +1445,6 @@ void platform_debug_init(void) {
 void platform_debug_printf(const char *fmt, ...) {
     va_list args;
     va_start(args, fmt);
-    // Use a local buffer for formatting
-    char buf[128];
-    vsnprintf(buf, sizeof(buf), fmt, args);
+    debug_swo_vprintf(fmt, args);
     va_end(args);
-    debug_swo_printf("%s", buf);
 }

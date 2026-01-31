@@ -187,6 +187,7 @@ static void i2cdrvStartTransfer(I2cDrv *i2c) {
         // Prepare DMA configuration but don't enable yet
         // DMA will be enabled in ADDR handler when ready to receive
         DMA_Cmd(i2c->def->dmaRxStream, DISABLE);
+        // Clear all DMA flags for stream 2 (TC, HT, TE, DME, FE)
         DMA_ClearFlag(i2c->def->dmaRxStream,
                       DMA_FLAG_TCIF2 | DMA_FLAG_HTIF2 | DMA_FLAG_TEIF2 |
                           DMA_FLAG_DMEIF2 | DMA_FLAG_FEIF2);
@@ -362,7 +363,7 @@ static void i2cdrvdevUnlockBus(GPIO_TypeDef *portSCL, GPIO_TypeDef *portSDA,
 
 static void i2cdrvClearDMA(I2cDrv *i2c) {
     DMA_Cmd(i2c->def->dmaRxStream, DISABLE);
-    // Clear ALL DMA flags for this stream (TC, HT, TE, DME, FE)
+    // Clear all DMA flags for stream 2 (TC, HT, TE, DME, FE)
     DMA_ClearFlag(i2c->def->dmaRxStream, DMA_FLAG_TCIF2 | DMA_FLAG_HTIF2 |
                                              DMA_FLAG_TEIF2 | DMA_FLAG_DMEIF2 |
                                              DMA_FLAG_FEIF2);
@@ -497,8 +498,8 @@ void i2cdrvEventIsrHandler(I2cDrv *i2c) {
                 i2cTryNextMessage(i2c);
             }
         }
-        // A second BTF interrupt might occur if we don't wait for it to clear
-        while (i2c->def->i2cPort->CR1 & 0x0100) {
+        // A second BTF interrupt might occur if we don't wait for START to clear
+        while (i2c->def->i2cPort->CR1 & I2C_CR1_START) {
             ;
         }
     }

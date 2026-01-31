@@ -42,15 +42,11 @@
 // BRR = APB2_CLK / BAUD = 84,000,000 / 1,000,000 = 84
 
 #define SYSLINK_USART USART6
-#define SYSLINK_BAUD_DIV 84
 
 // GPIO pins (matching Bitcraze firmware)
-#define SYSLINK_TX_PIN 6 // PC6
-#define SYSLINK_RX_PIN 7 // PC7
-#define SYSLINK_TXEN_PIN \
-    4 // PA4 (flow control from nRF51)         \
-        // HIGH = nRF51 buffer full (don't send) \
-        // LOW = nRF51 ready (can send)
+#define SYSLINK_TX_PIN 6   // PC6
+#define SYSLINK_RX_PIN 7   // PC7
+#define SYSLINK_TXEN_PIN 4 // PA4 (flow control: LOW=ready, HIGH=busy)
 
 // ----------------------------------------------------------------------------
 // RX Ring Buffer (filled by interrupt)
@@ -128,7 +124,7 @@ void __attribute__((used)) USART6_IRQHandler(void) {
 }
 
 // ----------------------------------------------------------------------------
-// Low-Level UART with DMA
+// Low-Level UART (interrupt RX, polled TX)
 // ----------------------------------------------------------------------------
 
 static void uart_init(void) {
@@ -336,9 +332,6 @@ static void syslink_rx_byte(uint8_t byte) {
 // Public API
 // ----------------------------------------------------------------------------
 
-// External for debug output
-extern void hal_printf(const char *fmt, ...);
-
 int hal_esb_init(void) {
     uart_init();
 
@@ -350,9 +343,10 @@ int hal_esb_init(void) {
 
     // Enable battery status autoupdate from nRF51.
     // The nRF51 won't send battery packets until this command is received.
-    // Brief delay for UART to stabilize after init.
-    for (volatile int i = 0; i < 100000; i++)
+    // Delay ~600us at 168MHz for UART to stabilize after init.
+    for (volatile int i = 0; i < 100000; i++) {
         __NOP();
+    }
 
     syslink_send(SYSLINK_PM_BATTERY_AUTOUPDATE, NULL, 0);
 

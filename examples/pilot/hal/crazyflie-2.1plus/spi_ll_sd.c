@@ -6,6 +6,10 @@
 //   PA7 = MOSI (AF5) - shared
 //   PC12 = CS  (GPIO output, IO4 on deck connector)
 //
+// WARNING: This driver reconfigures SPI1 clock speed. If used alongside
+// flow deck, ensure proper CS management - only one device active at a time.
+// Flow deck uses ~1.3 MHz (Mode 0), SD card uses 328 kHz init / 21 MHz fast.
+//
 // Reference: https://www.bitcraze.io/products/micro-sd-card-deck/
 
 #include "hive_static_config.h"
