@@ -85,7 +85,14 @@ C_SOURCES += \
     vendor/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_gpio.c \
     vendor/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_dma.c \
     vendor/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_rcc.c \
-    vendor/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_misc.c
+    vendor/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_misc.c \
+    vendor/STM32F4xx_StdPeriph_Driver/src/stm32f4xx_spi.c
+
+# Source files - SD card SPI low-level driver (optional)
+ifeq ($(ENABLE_SD),1)
+C_SOURCES += spi_ll_sd.c
+CFLAGS += -DHIVE_ENABLE_SD=1
+endif
 
 # Startup assembly - built separately, not included in libhal.a
 ASM_SOURCES = \

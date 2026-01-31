@@ -53,7 +53,8 @@ int test_sd_run(bool standalone);
 
 #define TEST_PATTERN_SIZE 4096
 #define BLOCK_SIZE 512
-#define TEST_FILE_PATH "/sd/hive_test.bin"
+// Note: FatFS is configured for 8.3 filenames only (no LFN) to save flash
+#define TEST_FILE_PATH "/sd/test.bin"
 
 // ============================================================================
 // Test Data

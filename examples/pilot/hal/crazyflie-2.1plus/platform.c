@@ -404,14 +404,14 @@ static void spi1_init(void) {
     GPIOB->OSPEEDR |= (3U << (FLOW_SPI_CS_PIN * 2));
     GPIOB->ODR |= (1 << FLOW_SPI_CS_PIN); // CS high (deselected)
 
-    // Configure SPI1: Master, 8-bit, CPOL=1, CPHA=1 (Mode 3), ~1.3 MHz (84/64)
+    // Configure SPI1: Master, 8-bit, CPOL=0, CPHA=0 (Mode 0), ~1.3 MHz (84/64)
+    // Mode 0 is used by Bitcraze firmware for deck SPI (PMW3901 + SD card)
     // PMW3901 max SPI clock is 2 MHz per datasheet
     SPI1->CR1 = SPI_CR1_MSTR |                // Master mode
                 SPI_CR1_BR_2 | SPI_CR1_BR_0 | // Baud rate = fPCLK/64 = 1.3 MHz
-                SPI_CR1_CPOL |                // CPOL=1
-                SPI_CR1_CPHA |                // CPHA=1
                 SPI_CR1_SSM |                 // Software slave management
                 SPI_CR1_SSI;                  // Internal slave select
+    // CPOL=0, CPHA=0 (Mode 0) - both bits clear
 
     SPI1->CR1 |= SPI_CR1_SPE; // Enable SPI
 }

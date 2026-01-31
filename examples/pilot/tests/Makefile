@@ -192,7 +192,7 @@ $(BUILD_DIR_CF)/test_sd.o: test_sd.c | $(BUILD_DIR_CF)
 
 $(TARGET_ELF): test_main.c $(TEST_MAIN_OBJS) $(HAL_LIB) $(HIVE_LIB) | $(BUILD_DIR_CF)
 	@echo "CC test_main.c (Crazyflie - combined)"
-	@$(CC) $(CFLAGS) $< $(TEST_MAIN_OBJS) $(HAL_STARTUP) $(HIVE_LIB) $(HAL_LIB) $(LDFLAGS) -o $@
+	@$(CC) $(CFLAGS) $< $(TEST_MAIN_OBJS) $(HAL_STARTUP) -Wl,--start-group $(HIVE_LIB) $(HAL_LIB) -Wl,--end-group $(LDFLAGS) -o $@
 
 else ifeq ($(NEEDS_HIVE),)
 # sensors_motors standalone: only needs HAL
@@ -214,7 +214,7 @@ crazyflie: $(HAL_LIB) $(HIVE_LIB) $(TARGET_BIN)
 
 $(TARGET_ELF): test_$(TEST).c $(HAL_LIB) $(HIVE_LIB) | $(BUILD_DIR_CF)
 	@echo "CC test_$(TEST).c (Crazyflie - HAL + Hive)"
-	@$(CC) $(CFLAGS) $< $(HAL_STARTUP) $(HIVE_LIB) $(HAL_LIB) $(LDFLAGS) -o $@
+	@$(CC) $(CFLAGS) $< $(HAL_STARTUP) -Wl,--start-group $(HIVE_LIB) $(HAL_LIB) -Wl,--end-group $(LDFLAGS) -o $@
 
 endif
 
@@ -245,7 +245,7 @@ $(HIVE_LIB): FORCE | $(BUILD_DIR_CF)
 		AR=$(AR) \
 		BOARD_MOUNTS_SRC=$(BOARD_MOUNTS_SRC) \
 		ENABLE_SD=$(ENABLE_SD) \
-		CFLAGS="$(MCU) -std=c11 -Os -g3 -ffunction-sections -fdata-sections -DSTM32F405xx -DHIVE_PLATFORM_STM32 -DHIVE_LOG_TO_STDOUT=1 $(HIVE_CFLAGS) -I$(abspath $(HAL_DIR))/vendor/CMSIS/Include -I$(abspath $(HAL_DIR))/vendor/CMSIS/Device/ST/STM32F4xx/Include"
+		CFLAGS="$(MCU) -std=c11 -Os -g3 -ffunction-sections -fdata-sections -DSTM32F405xx -DHIVE_PLATFORM_STM32 -DHIVE_LOG_TO_STDOUT=1 $(HIVE_CFLAGS) $(EXTRA_CFLAGS) -I$(abspath $(HAL_DIR))/vendor/CMSIS/Include -I$(abspath $(HAL_DIR))/vendor/CMSIS/Device/ST/STM32F4xx/Include"
 
 $(TARGET_BIN): $(TARGET_ELF)
 	@echo "BIN test_$(TEST).bin"

@@ -14,6 +14,16 @@
 #include <string.h>
 #include <stdbool.h>
 
+// Debug output - uses platform debug printf
+// Enable SD_DEBUG_ENABLE to see initialization details
+#if defined(SD_DEBUG_ENABLE) && SD_DEBUG_ENABLE
+extern void platform_debug_printf(const char *fmt, ...);
+#define SD_DEBUG(fmt, ...) \
+    platform_debug_printf("[SD] " fmt "\n", ##__VA_ARGS__)
+#else
+#define SD_DEBUG(fmt, ...) ((void)0)
+#endif
+
 // ---------------------------------------------------------------------------
 // SD Card Commands (SPI Mode)
 // ---------------------------------------------------------------------------
@@ -109,7 +119,7 @@ static uint8_t send_cmd(uint8_t cmd, uint32_t arg) {
     // Send dummy clock
     spi_ll_xfer(0xFF);
 
-    // Wait for card ready
+    // Wait for card ready (skip for CMD0/CMD12)
     if (cmd != CMD0 && cmd != CMD12) {
         wait_ready(500);
     }
@@ -117,9 +127,10 @@ static uint8_t send_cmd(uint8_t cmd, uint32_t arg) {
     // Send command
     spi_send(buf, 6);
 
-    // Wait for response (not 0xFF)
+    // Wait for response (not 0xFF) - need many iterations for slow cards
+    // Bitcraze uses 0x1FFF (~8191) iterations
     uint8_t r1 = 0xFF;
-    for (int i = 0; i < 10; i++) {
+    for (int i = 0; i < 8192; i++) {
         r1 = spi_ll_xfer(0xFF);
         if ((r1 & 0x80) == 0) {
             break;
@@ -173,38 +184,103 @@ int spi_sd_init(void) {
     uint8_t r1;
     uint8_t ocr[4];
 
+    SD_DEBUG("Initializing SPI SD card...");
+
     // Initialize SPI hardware at low speed
     spi_ll_init();
     spi_ll_set_slow();
 
-    // CS high, send 80+ clocks to enter native mode
+    // Add a longer power-on delay for card stabilization
+    SD_DEBUG("Power-on delay (100ms equivalent)...");
+    for (volatile int d = 0; d < 2000000; d++)
+        __asm__("nop");
+
+    // Toggle CS a few times to verify pin is working
+    SD_DEBUG("Testing CS pin toggle...");
+    for (int i = 0; i < 5; i++) {
+        spi_ll_cs_low();
+        for (volatile int d = 0; d < 50000; d++)
+            __asm__("nop");
+        spi_ll_cs_high();
+        for (volatile int d = 0; d < 50000; d++)
+            __asm__("nop");
+    }
+
+    // Power-on delay - some cards need 1ms+ after power stabilizes
+    for (volatile int d = 0; d < 200000; d++)
+        __asm__("nop");
+
+    // Test SPI transfer with CS high - should read back 0xFF (floating line)
     spi_ll_cs_high();
-    for (int i = 0; i < 10; i++) {
+    (void)spi_ll_xfer(0xFF); // Discard result; used only for SPI bus activity
+
+    // CS high, send 80+ clocks to wake up card and enter native mode
+    // SD spec requires at least 74 clocks, send 200 (25 bytes) to be safe
+    SD_DEBUG("Sending %d wake-up clocks...", 25 * 8);
+    for (int i = 0; i < 25; i++) {
         spi_ll_xfer(0xFF);
     }
 
+    // Small delay after wake-up clocks
+    for (volatile int d = 0; d < 50000; d++)
+        __asm__("nop");
+
+    SD_DEBUG("Sending CMD0 (GO_IDLE_STATE)...");
+
+    // Small delay before CMD0
+    for (volatile int d = 0; d < 10000; d++)
+        __asm__("nop");
+
     // Enter SPI mode (CMD0)
     spi_ll_cs_low();
+
+    // Small delay after CS low
+    for (volatile int d = 0; d < 10000; d++)
+        __asm__("nop");
+
     r1 = send_cmd(CMD0, 0);
     spi_ll_cs_high();
 
+    SD_DEBUG("CMD0 response: 0x%02X (expect 0x01)", r1);
+
+    // 0x00 from CMD0 is suspicious - try sending more clocks and retry
+    if (r1 == 0x00 || r1 == 0xFF) {
+        SD_DEBUG("CMD0 got 0x%02X, sending more clocks and retrying...", r1);
+        spi_ll_cs_high();
+        for (int i = 0; i < 50; i++) {
+            spi_ll_xfer(0xFF);
+        }
+        spi_ll_cs_low();
+        r1 = send_cmd(CMD0, 0);
+        spi_ll_cs_high();
+        SD_DEBUG("CMD0 retry response: 0x%02X", r1);
+    }
+
+    // If still not in idle state, continue anyway and see what happens
     if (r1 != R1_IDLE_STATE) {
-        return -1;
+        SD_DEBUG("CMD0 unexpected response 0x%02X, trying CMD8 anyway", r1);
     }
 
     // Check voltage (CMD8)
+    SD_DEBUG("Sending CMD8 (SEND_IF_COND)...");
     spi_ll_cs_low();
     r1 = send_cmd(CMD8, 0x1AA);
+    SD_DEBUG("CMD8 response: 0x%02X", r1);
     if (r1 == R1_IDLE_STATE) {
         // SD v2.0+
         spi_recv(ocr, 4);
         spi_ll_cs_high();
 
+        SD_DEBUG("CMD8 OCR: %02X %02X %02X %02X", ocr[0], ocr[1], ocr[2],
+                 ocr[3]);
+
         if (ocr[2] != 0x01 || ocr[3] != 0xAA) {
+            SD_DEBUG("CMD8 voltage check failed");
             return -1; // Voltage not accepted
         }
 
         // Wait for card ready (ACMD41 with HCS=1)
+        SD_DEBUG("Sending ACMD41 (SD_SEND_OP_COND)...");
         for (int i = 0; i < 1000; i++) {
             spi_ll_cs_low();
             r1 = send_acmd(ACMD41, 0x40000000);
@@ -213,7 +289,10 @@ int spi_sd_init(void) {
                 break;
         }
 
+        SD_DEBUG("ACMD41 final response: 0x%02X", r1);
+
         if (r1 != 0) {
+            SD_DEBUG("ACMD41 failed: card not ready");
             return -1;
         }
 
@@ -224,8 +303,11 @@ int spi_sd_init(void) {
         spi_ll_cs_high();
 
         s_card_type = (ocr[0] & 0x40) ? SD_CARD_V2_HC : SD_CARD_V2_SC;
+        SD_DEBUG("Card type: %s",
+                 s_card_type == SD_CARD_V2_HC ? "SDHC" : "SD v2.0");
     } else {
         spi_ll_cs_high();
+        SD_DEBUG("Card is SD v1.x or MMC");
         // SD v1.x or MMC
         spi_ll_cs_low();
         r1 = send_acmd(ACMD41, 0);
@@ -243,10 +325,12 @@ int spi_sd_init(void) {
             s_card_type = SD_CARD_V1;
         } else {
             // MMC (not supported)
+            SD_DEBUG("MMC cards not supported");
             return -1;
         }
 
         if (r1 != 0) {
+            SD_DEBUG("ACMD41 failed for SD v1.x");
             return -1;
         }
     }
@@ -294,13 +378,17 @@ int spi_sd_init(void) {
     spi_ll_set_fast();
 
     s_initialized = true;
+    SD_DEBUG("SD card initialized: %lu sectors (%lu MB)", s_sector_count,
+             s_sector_count / 2048);
     return 0;
 }
 
 int spi_sd_read_blocks(uint8_t *buf, uint32_t sector, uint32_t count) {
     if (!s_initialized || count == 0) {
+        SD_DEBUG("read_blocks: not initialized or count=0");
         return -1;
     }
+    SD_DEBUG("read_blocks: sector=%lu count=%lu", sector, count);
 
     // Convert to byte address for v1/v2-SC cards
     uint32_t addr = sector;
@@ -312,12 +400,15 @@ int spi_sd_read_blocks(uint8_t *buf, uint32_t sector, uint32_t count) {
 
     if (count == 1) {
         // Single block read
-        if (send_cmd(CMD17, addr) != 0) {
+        uint8_t r = send_cmd(CMD17, addr);
+        if (r != 0) {
+            SD_DEBUG("CMD17 failed: 0x%02X", r);
             spi_ll_cs_high();
             return -1;
         }
 
         if (wait_data_token(TOKEN_SINGLE_BLOCK, 500) != 0) {
+            SD_DEBUG("wait_data_token failed");
             spi_ll_cs_high();
             return -1;
         }

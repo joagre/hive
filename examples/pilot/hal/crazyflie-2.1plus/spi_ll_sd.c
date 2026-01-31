@@ -1,10 +1,10 @@
 // SPI Low-Level Implementation for Crazyflie 2.1+ SD Card Deck
 //
-// Micro SD Card Deck uses SPI3:
-//   PB3 = SCK  (AF6)
-//   PB4 = MISO (AF6)
-//   PB5 = MOSI (AF6)
-//   PB6 = CS   (GPIO output)
+// Micro SD Card Deck shares SPI1 with Flow Deck (PMW3901):
+//   PA5 = SCK  (AF5) - shared
+//   PA6 = MISO (AF5) - shared
+//   PA7 = MOSI (AF5) - shared
+//   PC12 = CS  (GPIO output, IO4 on deck connector)
 //
 // Reference: https://www.bitcraze.io/products/micro-sd-card-deck/
 
@@ -12,152 +12,115 @@
 
 #if HIVE_ENABLE_SD
 
+#include "stm32f4xx.h"
 #include <stdint.h>
-
-// ---------------------------------------------------------------------------
-// STM32F405 Register Definitions
-// ---------------------------------------------------------------------------
-
-// RCC
-#define RCC_BASE 0x40023800UL
-#define RCC_AHB1ENR (*(volatile uint32_t *)(RCC_BASE + 0x30))
-#define RCC_APB1ENR (*(volatile uint32_t *)(RCC_BASE + 0x40))
-
-#define RCC_AHB1ENR_GPIOBEN (1UL << 1)
-#define RCC_APB1ENR_SPI3EN (1UL << 15)
-
-// GPIO
-typedef struct {
-    volatile uint32_t MODER;
-    volatile uint32_t OTYPER;
-    volatile uint32_t OSPEEDR;
-    volatile uint32_t PUPDR;
-    volatile uint32_t IDR;
-    volatile uint32_t ODR;
-    volatile uint32_t BSRR;
-    volatile uint32_t LCKR;
-    volatile uint32_t AFR[2];
-} GPIO_TypeDef;
-
-#define GPIOB_BASE 0x40020400UL
-#define GPIOB ((GPIO_TypeDef *)GPIOB_BASE)
-
-// SPI
-typedef struct {
-    volatile uint32_t CR1;
-    volatile uint32_t CR2;
-    volatile uint32_t SR;
-    volatile uint32_t DR;
-    volatile uint32_t CRCPR;
-    volatile uint32_t RXCRCR;
-    volatile uint32_t TXCRCR;
-    volatile uint32_t I2SCFGR;
-    volatile uint32_t I2SPR;
-} SPI_TypeDef;
-
-#define SPI3_BASE 0x40003C00UL
-#define SPI3 ((SPI_TypeDef *)SPI3_BASE)
-
-// SPI CR1 bits
-#define SPI_CR1_MSTR (1UL << 2)
-#define SPI_CR1_BR_0 (1UL << 3)
-#define SPI_CR1_BR_1 (1UL << 4)
-#define SPI_CR1_BR_2 (1UL << 5)
-#define SPI_CR1_SPE (1UL << 6)
-#define SPI_CR1_SSI (1UL << 8)
-#define SPI_CR1_SSM (1UL << 9)
-
-// SPI SR bits
-#define SPI_SR_RXNE (1UL << 0)
-#define SPI_SR_TXE (1UL << 1)
 
 // ---------------------------------------------------------------------------
 // Pin Configuration
 // ---------------------------------------------------------------------------
 
-// SPI3 pins on Crazyflie SD deck
-#define SD_SCK_PIN 3  // PB3
-#define SD_MISO_PIN 4 // PB4
-#define SD_MOSI_PIN 5 // PB5
-#define SD_CS_PIN 6   // PB6
-#define SPI3_AF 6     // Alternate function 6 for SPI3
+// SD card CS pin on PC12 (IO4 on deck connector)
+#define SD_CS_PIN GPIO_Pin_12
+#define SD_CS_PORT GPIOC
 
 // ---------------------------------------------------------------------------
-// SPI Low-Level Implementation
+// SPI Low-Level Implementation (shares SPI1 with flow deck)
 // ---------------------------------------------------------------------------
 
 void spi_ll_init(void) {
     // Enable clocks
-    RCC_AHB1ENR |= RCC_AHB1ENR_GPIOBEN;
-    RCC_APB1ENR |= RCC_APB1ENR_SPI3EN;
+    RCC->AHB1ENR |= RCC_AHB1ENR_GPIOAEN | RCC_AHB1ENR_GPIOCEN;
+    RCC->APB2ENR |= RCC_APB2ENR_SPI1EN;
 
-    // Configure SPI3 pins as alternate function
-    // PB3, PB4, PB5 -> AF6 (SPI3)
-    GPIOB->MODER &= ~((3UL << (SD_SCK_PIN * 2)) | (3UL << (SD_MISO_PIN * 2)) |
-                      (3UL << (SD_MOSI_PIN * 2)));
-    GPIOB->MODER |= ((2UL << (SD_SCK_PIN * 2)) | (2UL << (SD_MISO_PIN * 2)) |
-                     (2UL << (SD_MOSI_PIN * 2)));
+    // Configure SPI1 GPIO using direct register access
+    // PA5=SCK, PA6=MISO, PA7=MOSI all as AF5 (alternate function mode)
 
-    // High speed output
-    GPIOB->OSPEEDR |= ((3UL << (SD_SCK_PIN * 2)) | (3UL << (SD_MISO_PIN * 2)) |
-                       (3UL << (SD_MOSI_PIN * 2)));
+    // Clear mode bits for PA5, PA6, PA7, then set AF mode (10)
+    GPIOA->MODER &=
+        ~(GPIO_MODER_MODER5 | GPIO_MODER_MODER6 | GPIO_MODER_MODER7);
+    GPIOA->MODER |=
+        (GPIO_MODER_MODER5_1 | GPIO_MODER_MODER6_1 | GPIO_MODER_MODER7_1);
 
-    // Set alternate function 6 (SPI3)
-    GPIOB->AFR[0] &=
-        ~((0xFUL << (SD_SCK_PIN * 4)) | (0xFUL << (SD_MISO_PIN * 4)) |
-          (0xFUL << (SD_MOSI_PIN * 4)));
-    GPIOB->AFR[0] |=
-        ((SPI3_AF << (SD_SCK_PIN * 4)) | (SPI3_AF << (SD_MISO_PIN * 4)) |
-         (SPI3_AF << (SD_MOSI_PIN * 4)));
+    // Set AF5 (SPI1) for PA5, PA6, PA7
+    GPIOA->AFR[0] &= ~((0xF << (5 * 4)) | (0xF << (6 * 4)) | (0xF << (7 * 4)));
+    GPIOA->AFR[0] |= ((5 << (5 * 4)) | (5 << (6 * 4)) | (5 << (7 * 4)));
 
-    // Pull-up on MISO
-    GPIOB->PUPDR &= ~(3UL << (SD_MISO_PIN * 2));
-    GPIOB->PUPDR |= (1UL << (SD_MISO_PIN * 2));
+    // Set high speed for PA5, PA6, PA7
+    GPIOA->OSPEEDR |= (GPIO_OSPEEDER_OSPEEDR5 | GPIO_OSPEEDER_OSPEEDR6 |
+                       GPIO_OSPEEDER_OSPEEDR7);
 
-    // Configure CS pin as output, high (deselected)
-    GPIOB->MODER &= ~(3UL << (SD_CS_PIN * 2));
-    GPIOB->MODER |= (1UL << (SD_CS_PIN * 2));
-    GPIOB->OSPEEDR |= (3UL << (SD_CS_PIN * 2));
-    GPIOB->ODR |= (1UL << SD_CS_PIN);
+    // Pull-down on SCK (PA5) and MOSI (PA7) for Mode 0 idle, no pull on MISO (PA6)
+    GPIOA->PUPDR &=
+        ~(GPIO_PUPDR_PUPDR5 | GPIO_PUPDR_PUPDR6 | GPIO_PUPDR_PUPDR7);
+    GPIOA->PUPDR |=
+        (GPIO_PUPDR_PUPDR5_1 | GPIO_PUPDR_PUPDR7_1); // Pull-down = 10
 
-    // Configure SPI3: Master, 8-bit, Mode 0 (CPOL=0, CPHA=0)
-    // Start with slow clock for initialization
-    SPI3->CR1 = SPI_CR1_MSTR | SPI_CR1_BR_2 | SPI_CR1_BR_1 |
-                SPI_CR1_BR_0 | // div 256
-                SPI_CR1_SSM | SPI_CR1_SSI;
+    // Configure SD CS pin (PC12) as push-pull output, high speed
+    GPIOC->MODER &= ~GPIO_MODER_MODER12;
+    GPIOC->MODER |= GPIO_MODER_MODER12_0;
+    GPIOC->OTYPER &= ~GPIO_OTYPER_OT_12;
+    GPIOC->OSPEEDR |= GPIO_OSPEEDER_OSPEEDR12;
 
-    SPI3->CR1 |= SPI_CR1_SPE;
+    // Start with CS high (deselected)
+    GPIO_SetBits(SD_CS_PORT, SD_CS_PIN);
 }
 
 void spi_ll_set_slow(void) {
-    SPI3->CR1 &= ~SPI_CR1_SPE;
-    SPI3->CR1 &= ~(SPI_CR1_BR_2 | SPI_CR1_BR_1 | SPI_CR1_BR_0);
-    SPI3->CR1 |= SPI_CR1_BR_2 | SPI_CR1_BR_1 | SPI_CR1_BR_0; // div 256 ~164 kHz
-    SPI3->CR1 |= SPI_CR1_SPE;
+    // Wait for SPI not busy then disable
+    while (SPI1->SR & SPI_SR_BSY)
+        ;
+    SPI1->CR1 &= ~SPI_CR1_SPE;
+
+    // Full reconfigure: Mode 0, Master, 8-bit, div 256 ~328 kHz
+    SPI1->CR1 = SPI_CR1_MSTR |                               // Master mode
+                SPI_CR1_BR_2 | SPI_CR1_BR_1 | SPI_CR1_BR_0 | // div 256
+                SPI_CR1_SSM | SPI_CR1_SSI;                   // Software SS
+    // CPOL=0, CPHA=0 (Mode 0) - both bits are 0
+
+    SPI1->CR1 |= SPI_CR1_SPE; // Enable SPI
 }
 
 void spi_ll_set_fast(void) {
-    SPI3->CR1 &= ~SPI_CR1_SPE;
-    SPI3->CR1 &= ~(SPI_CR1_BR_2 | SPI_CR1_BR_1 | SPI_CR1_BR_0);
-    SPI3->CR1 |= SPI_CR1_BR_0; // div 4 ~10.5 MHz
-    SPI3->CR1 |= SPI_CR1_SPE;
+    // Wait for SPI not busy then disable
+    while (SPI1->SR & SPI_SR_BSY)
+        ;
+    SPI1->CR1 &= ~SPI_CR1_SPE;
+
+    // Mode 0, Master, 8-bit, div 4 ~21 MHz (max for SD high speed)
+    SPI1->CR1 = SPI_CR1_MSTR |             // Master mode
+                SPI_CR1_BR_0 |             // div 4
+                SPI_CR1_SSM | SPI_CR1_SSI; // Software SS
+
+    SPI1->CR1 |= SPI_CR1_SPE; // Enable SPI
 }
 
 void spi_ll_cs_low(void) {
-    GPIOB->ODR &= ~(1UL << SD_CS_PIN);
+    GPIO_ResetBits(SD_CS_PORT, SD_CS_PIN);
 }
 
 void spi_ll_cs_high(void) {
-    GPIOB->ODR |= (1UL << SD_CS_PIN);
+    GPIO_SetBits(SD_CS_PORT, SD_CS_PIN);
 }
 
 uint8_t spi_ll_xfer(uint8_t data) {
-    while (!(SPI3->SR & SPI_SR_TXE))
+    // Clear any pending RX data first
+    while (SPI1->SR & SPI_SR_RXNE) {
+        (void)SPI1->DR;
+    }
+
+    // Wait for TX empty
+    while (!(SPI1->SR & SPI_SR_TXE))
         ;
-    SPI3->DR = data;
-    while (!(SPI3->SR & SPI_SR_RXNE))
+
+    // Write data (byte access for 8-bit mode)
+    *((volatile uint8_t *)&SPI1->DR) = data;
+
+    // Wait for RX not empty
+    while (!(SPI1->SR & SPI_SR_RXNE))
         ;
-    return (uint8_t)SPI3->DR;
+
+    // Read received byte
+    return *((volatile uint8_t *)&SPI1->DR);
 }
 
 #else

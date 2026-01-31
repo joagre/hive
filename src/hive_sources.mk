@@ -54,6 +54,7 @@ HIVE_HAL_STM32_SD_SRCS := hal/stm32/spi_sd.c
 
 # FatFS library sources (conditional on HIVE_ENABLE_SD)
 # Note: ff.c must be fetched separately - see lib/fatfs/README.md
+# Note: 8.3 filenames only (no LFN) to save ~2KB flash
 HIVE_FATFS_SRCS := ../lib/fatfs/ff.c ../lib/fatfs/diskio.c
 
 HIVE_HAL_STM32_ASM := hal/stm32/hive_context_arm_cm.S

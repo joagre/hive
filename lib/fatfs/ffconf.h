@@ -34,8 +34,13 @@
 // ---------------------------------------------------------------------------
 
 #define FF_CODE_PAGE 437 // US English (ASCII subset)
-#define FF_USE_LFN 0     // 0: Disable LFN (saves ~4KB flash)
-#define FF_MAX_LFN 255   // Max LFN length (ignored when LFN disabled)
+
+// Long File Name (LFN) support is disabled to save ~2KB flash.
+// Filenames must follow 8.3 format: up to 8 chars name + 3 chars extension.
+// Examples: "data.bin", "log00001.txt", "config.ini"
+// To enable LFN: set FF_USE_LFN=2 and add ffunicode.c to build.
+#define FF_USE_LFN 0   // 0: Disable LFN (8.3 only), 2: Enable with stack buffer
+#define FF_MAX_LFN 255 // Max LFN length (ignored when LFN disabled)
 #define FF_LFN_UNICODE 0 // 0: ANSI/OEM encoding
 #define FF_LFN_BUF 255   // LFN buffer size
 #define FF_SFN_BUF 12    // SFN buffer size
