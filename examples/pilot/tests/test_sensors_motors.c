@@ -216,6 +216,12 @@ int test_sensors_motors_run(bool standalone) {
             if (has_flow) {
                 HIVE_LOG_INFO("Flow: dx=%d dy=%d Height: %u mm", flow_x, flow_y,
                               height_mm);
+                // Also show integrated values from hal_read_sensors()
+                HIVE_LOG_INFO("Integrated: pos=(%.3f, %.3f, %.3f) vel=(%.3f, "
+                              "%.3f) valid=%d,%d",
+                              sensors.gps_x, sensors.gps_y, sensors.gps_z,
+                              sensors.velocity_x, sensors.velocity_y,
+                              sensors.gps_valid, sensors.velocity_valid);
             }
             last_print = hal_get_time_ms();
         }
@@ -257,6 +263,15 @@ int test_sensors_motors_run(bool standalone) {
         if (first_height == 0 || first_height > 4000) {
             HIVE_LOG_WARN("Height reading may be invalid: %u mm", first_height);
         }
+        // Check integrated values from hal_read_sensors()
+        HIVE_LOG_INFO("First sample - Integrated pos: (%.3f, %.3f, %.3f) m",
+                      first_sensors.gps_x, first_sensors.gps_y,
+                      first_sensors.gps_z);
+        HIVE_LOG_INFO(
+            "First sample - Integrated vel: (%.3f, %.3f) m/s, valid=%d",
+            first_sensors.velocity_x, first_sensors.velocity_y,
+            first_sensors.velocity_valid);
+        HIVE_LOG_INFO("First sample - GPS valid: %d", first_sensors.gps_valid);
     }
 
     if (!accel_ok || !gyro_ok) {
