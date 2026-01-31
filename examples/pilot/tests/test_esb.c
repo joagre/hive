@@ -292,25 +292,14 @@ static void run_communication_test(void) {
 }
 
 // ============================================================================
-// Main Test Entry Point
+// Radio Test Actor (calls hal_esb_init from actor context like pilot does)
 // ============================================================================
 
-int test_esb_run(bool standalone) {
-    int result = 0;
-
-    if (standalone) {
-        // Initialize HAL
-        hal_debug_init();
-        if (hal_init() != 0) {
-            return -1;
-        }
-
-        // Initialize Hive runtime (for logging)
-        hive_status_t status = hive_init();
-        if (HIVE_FAILED(status)) {
-            return -1;
-        }
-    }
+static void radio_test_actor(void *args, const hive_spawn_info_t *siblings,
+                             size_t sibling_count) {
+    (void)args;
+    (void)siblings;
+    (void)sibling_count;
 
     HIVE_LOG_INFO("========================================");
     HIVE_LOG_INFO("  Radio Communication Test");
@@ -321,30 +310,28 @@ int test_esb_run(bool standalone) {
     test_blink(1, 200, 200);
     hal_delay_ms(500);
 
-    // Initialize radio
+    // Initialize radio (from actor context like pilot's comms_actor)
     HIVE_LOG_INFO("[RADIO] Initializing radio...");
     if (hal_esb_init() != 0) {
         HIVE_LOG_ERROR("[RADIO] Radio init failed!");
-        result = -1;
-        goto done;
+        error_blink_forever();
     }
 
     // Register RX callback
     hal_esb_set_rx_callback(radio_rx_callback, NULL);
 
-    HIVE_LOG_INFO("[RADIO] Radio initialized (DMA RX enabled)");
+    HIVE_LOG_INFO("[RADIO] Radio initialized");
 
     // 2 blinks = radio ready
     test_blink(2, 200, 200);
     hal_delay_ms(500);
 
-    // Wait for battery packet (proves DMA RX works)
+    // Wait for battery packet (proves RX works)
     if (wait_for_battery()) {
         // 3 blinks = battery received
         test_blink(3, 200, 200);
         hal_delay_ms(500);
     }
-    // Continue even without battery packet (nRF51 might not send it)
 
     // Wait for ground station connection
     if (!wait_for_connection()) {
@@ -361,23 +348,45 @@ int test_esb_run(bool standalone) {
     // Success
     HIVE_LOG_INFO("[RADIO] TEST PASSED");
 
-done:
-    if (standalone) {
-        hive_cleanup();
+    // Solid LED = success
+    hal_led_on();
+    while (1) {
+        hal_delay_ms(1000);
+    }
+}
 
-        if (result == 0) {
-            // Solid LED = success
-            hal_led_on();
-            while (1) {
-                hal_delay_ms(1000);
-            }
-        } else {
-            // Slow blink = failure
-            error_blink_forever();
+// ============================================================================
+// Main Test Entry Point
+// ============================================================================
+
+int test_esb_run(bool standalone) {
+    if (standalone) {
+        // Initialize HAL
+        hal_debug_init();
+        if (hal_init() != 0) {
+            return -1;
         }
+
+        // Initialize Hive runtime
+        hive_status_t status = hive_init();
+        if (HIVE_FAILED(status)) {
+            return -1;
+        }
+
+        // Spawn the radio test actor
+        actor_id_t actor;
+        hive_actor_config_t cfg = {.stack_size = 4096};
+        status = hive_spawn(radio_test_actor, NULL, NULL, &cfg, &actor);
+        if (HIVE_FAILED(status)) {
+            return -1;
+        }
+
+        // Run the scheduler
+        hive_run();
+        hive_cleanup();
     }
 
-    return result;
+    return 0;
 }
 
 // ============================================================================

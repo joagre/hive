@@ -131,9 +131,14 @@ HIVE_CFLAGS += '-DHIVE_STACK_ARENA_SIZE=(16*1024)'
 # Board-specific configuration (flash, SD)
 include $(HAL_DIR)/hive_board_config.mk
 
-# Radio test needs HAL_HAS_RADIO and doesn't need SD
+# Radio test needs HAL_HAS_RADIO, larger stack, and doesn't need SD
 ifeq ($(TEST),esb)
 CFLAGS += -DHAL_HAS_RADIO
+# ESB test needs larger stack for printf/logging in HAL init
+HIVE_CFLAGS := $(filter-out -DHIVE_DEFAULT_STACK_SIZE=%, $(HIVE_CFLAGS))
+HIVE_CFLAGS += -DHIVE_DEFAULT_STACK_SIZE=6144
+HIVE_CFLAGS := $(filter-out -DHIVE_STACK_ARENA_SIZE=%, $(HIVE_CFLAGS))
+HIVE_CFLAGS += '-DHIVE_STACK_ARENA_SIZE=(32*1024)'
 ENABLE_SD = 0
 endif
 
