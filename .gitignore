@@ -17,6 +17,8 @@ core.*
 # Editor files
 examples/pilot/controllers/
 examples/pilot/pilot
+examples/pilot/crazyflie
+examples/pilot/webots
 examples/pilot/crazyflie-2.1+
 # Executables
 *.idb

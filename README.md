@@ -18,7 +18,7 @@
 
 **Real-world example** - The [pilot example](examples/pilot/) is a quadcopter flight controller running on a Crazyflie 2.1: 11 actors, sensor fusion, cascaded PID, 60KB flash.
 
-See [spec/](spec/) for design details.
+See [docs/spec/](docs/spec/) for design details.
 
 ---
 
@@ -133,7 +133,7 @@ Actors run until they **yield** - there is no preemption. Operations that yield:
 | `hive_tcp_*()` | |
 | `hive_exit()` | |
 
-**File I/O** (`hive_file_*`) is synchronous and briefly stalls the scheduler. This is fine for short, bursty operations; use LOW priority actors for file work. See [spec/design.md](spec/design.md#scheduler-stalling-calls) for details.
+**File I/O** (`hive_file_*`) is synchronous and briefly stalls the scheduler. This is fine for short, bursty operations; use LOW priority actors for file work. See [docs/spec/design.md](docs/spec/design.md#scheduler-stalling-calls) for details.
 
 ## Performance
 
@@ -688,10 +688,10 @@ flash before continuing. Virtual file paths are hardcoded (`/log`, `/config`), e
 
 **STM32 SD Card** (optional) - Build with `ENABLE_SD=1` to enable SD card support via SPI using FatFS.
 SD card files are accessed via the `/sd` mount point. Use `hive_file_mount_available("/sd")` to check
-if the card is present before opening files. See [spec/api.md](spec/api.md#stm32-sd-card-support-optional)
+if the card is present before opening files. See [docs/spec/api.md](docs/spec/api.md#stm32-sd-card-support-optional)
 for details and limitations.
 
-See `examples/pilot/Makefile.crazyflie-2.1plus` for a complete example and [spec/api.md](spec/api.md#file-api) for full platform differences.
+See `examples/pilot/Makefile.crazyflie-2.1plus` for a complete example and [docs/spec/api.md](docs/spec/api.md#file-api) for full platform differences.
 
 ### Logging
 
@@ -787,7 +787,7 @@ The runtime is **completely single-threaded**. All actors run cooperatively in a
 
 All runtime APIs must be called from actor context. External threads must use platform IPC (sockets/pipes) with dedicated reader actors.
 
-See [spec/design.md](spec/design.md#thread-safety) for complete thread safety contract and external thread communication patterns.
+See [docs/spec/design.md](docs/spec/design.md#thread-safety) for complete thread safety contract and external thread communication patterns.
 
 ### Hardware Abstraction Layer (HAL)
 
@@ -925,7 +925,7 @@ Compatible examples exclude `echo`, `fileio`, and `logging` (same reason).
 
 ## Quick Links
 
-- **[Full Specification](spec/)** - Complete design and implementation details
+- **[Full Specification](docs/spec/)** - Complete design and implementation details
 - **[Examples Directory](examples/)** - Working examples (pingpong, bus, echo server, etc.)
 - **[Static Configuration](include/hive_static_config.h)** - Compile-time memory limits and pool sizes
 - **[Man Pages](man/man3/)** - API reference documentation

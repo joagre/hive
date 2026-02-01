@@ -480,7 +480,7 @@ Implementation completed 2026-01-17:
 - [x] `man/man3/hive_ipc.3` - Added note about wrapper implementation
 - [x] `man/man3/hive_bus.3` - Added note about wrapper implementation
 - [x] `man/man3/hive_types.3` - Added select types documentation
-- [ ] `spec/api.md` - Add hive_select() section (optional - can be done later)
+- [ ] `docs/spec/api.md` - Add hive_select() section (optional - can be done later)
 - [ ] `README.md` - Add hive_select() to API overview (optional - can be done later)
 - [ ] `CLAUDE.md` - Add hive_select() to IPC/Bus documentation (optional - can be done later)
 

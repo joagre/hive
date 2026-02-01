@@ -9,7 +9,7 @@ adding new features.
 ## Documentation Structure
 
 ```
-spec/                           # Runtime specification (source of truth)
+docs/spec/                           # Runtime specification (source of truth)
   README.md                     # Overview and navigation
   design.md                     # Architecture, scheduling, memory model
   api.md                        # Complete API reference
@@ -22,7 +22,7 @@ docs/                           # Internal working documents
 
 examples/pilot/
   README.md                     # Usage and build instructions
-  spec/                         # Pilot specification
+  docs/spec/                         # Pilot specification
     README.md                   # Overview
     design.md                   # Architecture, supervision, error handling
     implementation.md           # Control algorithms, HAL, file structure
@@ -37,9 +37,9 @@ man/man3/                       # API man pages
 
 ## Top-Level Runtime Documentation
 
-**Source of truth** - `spec/` directory
+**Source of truth** - `docs/spec/` directory
 
-**Must stay in sync with spec/**
+**Must stay in sync with docs/spec/**
 
 | Document | What to sync |
 |----------|--------------|
@@ -70,7 +70,7 @@ man/man3/                       # API man pages
 - All internal types: `arena_block_t`, `bus_entry_t`, etc.
 
 **Files to check for type name consistency:**
-- `spec/api.md` - all code examples
+- `docs/spec/api.md` - all code examples
 - `README.md` - API overview examples
 - `CLAUDE.md` - key concepts examples
 - `man/man3/*.3` - all man page examples
@@ -81,14 +81,14 @@ man/man3/                       # API man pages
 
 ## Pilot Example Documentation
 
-**Source of truth** - `examples/pilot/spec/` + code
+**Source of truth** - `examples/pilot/docs/spec/` + code
 
 **Must stay in sync**
 
 | Document | What to sync |
 |----------|--------------|
 | `examples/pilot/README.md` | Actor list, bus diagram, HAL functions, stack measurements |
-| `examples/pilot/spec/` | Architecture diagrams, actor tables, stack measurements |
+| `examples/pilot/docs/spec/` | Architecture diagrams, actor tables, stack measurements |
 
 **Common drift points**
 - [ ] Actor count (currently 10-11 depending on platform)
@@ -101,8 +101,8 @@ man/man3/                       # API man pages
 
 **Diagrams to verify against code**
 - [ ] `README.md` mermaid diagram - all bus connections
-- [ ] `spec/design.md` Architecture Overview diagram - all bus connections
-- [ ] `spec/evolution.md` Future Architecture diagram - intentionally simplified
+- [ ] `docs/spec/design.md` Architecture Overview diagram - all bus connections
+- [ ] `docs/spec/evolution.md` Future Architecture diagram - intentionally simplified
 
 **Code files to check for bus subscriptions**
 ```
@@ -124,7 +124,7 @@ flight_manager_actor.c   - no bus usage (uses IPC for control commands)
 ## Sync Procedure
 
 ### After API changes:
-1. Update `spec/` first (source of truth)
+1. Update `docs/spec/` first (source of truth)
 2. Update `README.md` to match
 3. Update `CLAUDE.md` key concepts
 4. Update relevant man pages
@@ -143,7 +143,7 @@ flight_manager_actor.c   - no bus usage (uses IPC for control commands)
 1. Update code
 2. Run with `STACK_PROFILE=1`, capture measurements
 3. Update `examples/pilot/README.md` stack table
-4. Update `examples/pilot/spec/implementation.md` stack table
+4. Update `examples/pilot/docs/spec/implementation.md` stack table
 5. Verify diagrams match bus subscriptions in code
 6. Update actor counts if changed
 
@@ -160,13 +160,13 @@ flight_manager_actor.c   - no bus usage (uses IPC for control commands)
 
 ```bash
 # Check actor counts across docs
-grep -rn "10-11 actors\|11 actors\|10 actors" README.md spec/ examples/pilot/
+grep -rn "10-11 actors\|11 actors\|10 actors" README.md docs/spec/ examples/pilot/
 
 # Check memory footprint consistency
 grep -rn "60KB\|58KB\|52KB" README.md examples/pilot/
 
 # Check stack measurements match
-grep -A15 "Stack Usage" examples/pilot/README.md examples/pilot/spec/implementation.md
+grep -A15 "Stack Usage" examples/pilot/README.md examples/pilot/docs/spec/implementation.md
 
 # Find all bus subscriptions in pilot code
 grep -rn "hive_bus_subscribe\|hive_bus_publish" examples/pilot/*.c
@@ -200,10 +200,10 @@ grep -rn 'typedef' include/ src/hal/ | grep '} [a-z_]*;$' | grep -v '_t;$'
 
 **Previous sync (2026-01-24)**
 - Documentation reorganization:
-  - Split former top-level SPEC.md into `spec/` directory
-  - Split former pilot SPEC.md into `examples/pilot/spec/`
+  - Split former top-level SPEC.md into `docs/spec/` directory
+  - Split former pilot SPEC.md into `examples/pilot/docs/spec/`
   - Organized `docs/` -> `design/` and `reviews/` subdirectories
-- Converted ASCII diagram to mermaid in `spec/design.md`
+- Converted ASCII diagram to mermaid in `docs/spec/design.md`
 - Updated README.md with "Why Hive?" section
 
 **Previous sync (2026-01-23)**

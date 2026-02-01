@@ -16,7 +16,7 @@ This is an actor-based runtime for embedded systems, targeting STM32 (ARM Cortex
 
 ## Documentation
 
-- **spec/** - Complete design specification (design.md, api.md, internals.md)
+- \*\*docs/spec/\*\* - Complete design specification (design.md, api.md, internals.md)
 - **README.md** - Quick start and API overview
 - **man/man3/** - Unix man pages for all API functions
 - **examples/** - Working examples (pingpong, bus, supervisor, etc.)
@@ -415,7 +415,7 @@ The runtime is **completely single-threaded**. All runtime APIs must be called f
 - CANNOT call runtime APIs (hive_ipc_notify NOT THREAD-SAFE - no locking/atomics)
 - Must use platform-specific IPC (sockets, pipes) with dedicated reader actors
 
-See spec/design.md "Thread Safety" section for full details.
+See docs/spec/design.md "Thread Safety" section for full details.
 
 ### Hardware Abstraction Layer (HAL)
 
@@ -493,7 +493,7 @@ STM32 restrictions:
 - `hive_file_pwrite()` returns error (ring buffer doesn't support random writes)
 - Single writer at a time
 
-See spec/api.md "File API" section for full platform differences table.
+See docs/spec/api.md "File API" section for full platform differences table.
 
 Build commands:
 - `make` or `make PLATFORM=linux` - Build for x86-64 Linux

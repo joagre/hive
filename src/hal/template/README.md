@@ -241,4 +241,4 @@ See `src/hal/stm32/`:
 
 - Check existing implementations in `src/hal/linux/` and `src/hal/stm32/`
 - Consult your architecture's ABI documentation
-- Review spec/ for runtime requirements
+- Review docs/spec/ for runtime requirements
