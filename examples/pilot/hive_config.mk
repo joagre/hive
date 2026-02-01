@@ -22,15 +22,15 @@
 #   sensor_bus, state_bus, thrust_bus, position_target_bus,
 #   attitude_setpoint_bus, rate_setpoint_bus, torque_bus
 #
-# Bus subscribers (max 6 per bus on state_bus, 7 configured):
-#   sensor_bus:           estimator, [tlog] (1-2)
-#   state_bus:            altitude, attitude, position, rate, waypoint, [tlog] (5-6)
-#   thrust_bus:           rate, [tlog] (1-2)
+# Bus subscribers (max 7 per bus on state_bus, 8 configured):
+#   sensor_bus:           estimator, [comms], [tlog] (1-3)
+#   state_bus:            altitude, attitude, position, rate, waypoint, [comms], [tlog] (5-7)
+#   thrust_bus:           rate, [comms], [tlog] (1-3)
 #   position_target_bus:  altitude, position, [tlog] (2-3)
 #   attitude_setpoint_bus: attitude (1)
 #   rate_setpoint_bus:    rate (1)
 #   torque_bus:           motor (1)
-#   [tlog] = telemetry_logger (only with SIMULATED_TIME, i.e. Webots)
+#   [comms] = comms_actor (HAL_HAS_RADIO), [tlog] = telemetry_logger (always)
 #
 # Timers (4-6 concurrent peak, 10 configured):
 #   sensor: tick timer (1 periodic)
@@ -74,8 +74,8 @@ HIVE_CFLAGS += -DHIVE_LINK_ENTRY_POOL_SIZE=8
 HIVE_CFLAGS += -DHIVE_MONITOR_ENTRY_POOL_SIZE=12
 HIVE_CFLAGS += -DHIVE_TIMER_ENTRY_POOL_SIZE=10
 
-# Bus configuration (increased for telemetry subscriptions)
-HIVE_CFLAGS += -DHIVE_MAX_BUS_SUBSCRIBERS=7
+# Bus configuration (7 subscribers on state_bus when comms+tlog both active)
+HIVE_CFLAGS += -DHIVE_MAX_BUS_SUBSCRIBERS=8
 HIVE_CFLAGS += -DHIVE_MAX_BUS_ENTRIES=4
 
 # Message size - enough for sensor_data_t (~64 bytes)

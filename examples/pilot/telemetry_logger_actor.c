@@ -99,11 +99,33 @@ void telemetry_logger_actor(void *args, const hive_spawn_info_t *siblings,
                   TELEMETRY_LOG_RATE_HZ);
 
     // Subscribe to buses
-    if (HIVE_FAILED(hive_bus_subscribe(state->state_bus)) ||
-        HIVE_FAILED(hive_bus_subscribe(state->sensor_bus)) ||
-        HIVE_FAILED(hive_bus_subscribe(state->thrust_bus)) ||
-        HIVE_FAILED(hive_bus_subscribe(state->position_target_bus))) {
-        HIVE_LOG_ERROR("[TLOG] Bus subscribe failed");
+    hive_status_t sub_status;
+    sub_status = hive_bus_subscribe(state->state_bus);
+    if (HIVE_FAILED(sub_status)) {
+        HIVE_LOG_ERROR("[TLOG] state_bus(%u) subscribe: %s",
+                       (unsigned)state->state_bus, HIVE_ERR_STR(sub_status));
+        hive_file_close(state->log_fd);
+        hive_exit(HIVE_EXIT_REASON_CRASH);
+    }
+    sub_status = hive_bus_subscribe(state->sensor_bus);
+    if (HIVE_FAILED(sub_status)) {
+        HIVE_LOG_ERROR("[TLOG] sensor_bus(%u) subscribe: %s",
+                       (unsigned)state->sensor_bus, HIVE_ERR_STR(sub_status));
+        hive_file_close(state->log_fd);
+        hive_exit(HIVE_EXIT_REASON_CRASH);
+    }
+    sub_status = hive_bus_subscribe(state->thrust_bus);
+    if (HIVE_FAILED(sub_status)) {
+        HIVE_LOG_ERROR("[TLOG] thrust_bus(%u) subscribe: %s",
+                       (unsigned)state->thrust_bus, HIVE_ERR_STR(sub_status));
+        hive_file_close(state->log_fd);
+        hive_exit(HIVE_EXIT_REASON_CRASH);
+    }
+    sub_status = hive_bus_subscribe(state->position_target_bus);
+    if (HIVE_FAILED(sub_status)) {
+        HIVE_LOG_ERROR("[TLOG] position_target_bus(%u) subscribe: %s",
+                       (unsigned)state->position_target_bus,
+                       HIVE_ERR_STR(sub_status));
         hive_file_close(state->log_fd);
         hive_exit(HIVE_EXIT_REASON_CRASH);
     }

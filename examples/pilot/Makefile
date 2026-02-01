@@ -135,7 +135,10 @@ $(HIVE_LIB): FORCE
 		BOARD_MOUNTS_SRC=$(BOARD_MOUNTS_SRC) \
 		CFLAGS="$(CFLAGS)"
 
-%.o: %.c
+# Config files that affect all builds
+CONFIG_DEPS := hive_config.mk
+
+%.o: %.c $(CONFIG_DEPS)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
 
