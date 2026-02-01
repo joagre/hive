@@ -14,7 +14,18 @@ typedef struct {
     float yaw;     // Heading (radians)
 } waypoint_t;
 
-#if FLIGHT_PROFILE == FLIGHT_PROFILE_FIRST_TEST
+#if FLIGHT_PROFILE == FLIGHT_PROFILE_GROUND_TEST
+// Ground test: motors disabled, for testing ESB telemetry without flight.
+// Drone sits on floor, control loops run, telemetry streams to ground station.
+// Build with: make FLIGHT_PROFILE=FLIGHT_PROFILE_GROUND_TEST
+static const waypoint_t waypoints[] = {
+    {0.0f, 0.0f, 0.0f, 0.0f}, // Stay on ground
+};
+#define WAYPOINT_HOVER_TIME_US (60 * 1000000) // 60 seconds
+#define FLIGHT_PROFILE_NAME "GROUND_TEST"
+#define MOTORS_DISABLED 1
+
+#elif FLIGHT_PROFILE == FLIGHT_PROFILE_FIRST_TEST
 // First flight test: hover at low altitude until flight manager initiates
 // landing. Safe profile for initial hardware validation (tethered recommended)
 static const waypoint_t waypoints[] = {

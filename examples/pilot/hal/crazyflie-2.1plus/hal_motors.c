@@ -4,6 +4,12 @@
 
 #include "../hal.h"
 #include "platform.h"
+#include "../../include/flight_profiles.h"
+
+// Default MOTORS_DISABLED to 0 if not set by flight profile
+#ifndef MOTORS_DISABLED
+#define MOTORS_DISABLED 0
+#endif
 
 // Crazyflie 2.1+ X-configuration mixer
 //
@@ -34,6 +40,11 @@ static inline float clampf(float x, float lo, float hi) {
 }
 
 void hal_write_torque(const torque_cmd_t *cmd) {
+#if MOTORS_DISABLED
+    (void)cmd; // Ground test mode - motors disabled
+    return;
+#endif
+
     // Apply mixer: convert torque to individual motor commands
     motor_cmd_t motors;
 

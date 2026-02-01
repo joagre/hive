@@ -12,9 +12,10 @@
 // ----------------------------------------------------------------------------
 // Select profile with -DFLIGHT_PROFILE=X (see Makefile)
 
-#define FLIGHT_PROFILE_FIRST_TEST 1 // First flight test (hover, land)
-#define FLIGHT_PROFILE_ALTITUDE 2   // Altitude-only waypoints
-#define FLIGHT_PROFILE_FULL_3D 3    // Full 3D waypoint navigation
+#define FLIGHT_PROFILE_GROUND_TEST 0 // Ground test (motors disabled, ESB only)
+#define FLIGHT_PROFILE_FIRST_TEST 1  // First flight test (hover, land)
+#define FLIGHT_PROFILE_ALTITUDE 2    // Altitude-only waypoints
+#define FLIGHT_PROFILE_FULL_3D 3     // Full 3D waypoint navigation
 
 // Auto-select default profile based on platform if not specified
 #ifndef FLIGHT_PROFILE
