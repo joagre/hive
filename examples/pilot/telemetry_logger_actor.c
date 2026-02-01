@@ -189,17 +189,17 @@ void telemetry_logger_actor(void *args, const hive_spawn_info_t *siblings,
                         "%.4f,%.4f,%.4f,%.4f,"
                         "%.4f,%.4f,%.4f,"
                         "%.4f,%.4f,%.4f\n",
-                        time_ms, latest_state.roll, latest_state.pitch,
-                        latest_state.yaw, latest_state.roll_rate,
-                        latest_state.pitch_rate, latest_state.yaw_rate,
-                        latest_state.x, latest_state.y, latest_state.altitude,
-                        latest_state.x_velocity, latest_state.y_velocity,
-                        latest_state.vertical_velocity, latest_thrust.thrust,
-                        latest_target.x, latest_target.y, latest_target.z,
-                        latest_target.yaw, latest_sensors.gyro[0],
-                        latest_sensors.gyro[1], latest_sensors.gyro[2],
-                        latest_sensors.accel[0], latest_sensors.accel[1],
-                        latest_sensors.accel[2]);
+                        (unsigned)time_ms, latest_state.roll,
+                        latest_state.pitch, latest_state.yaw,
+                        latest_state.roll_rate, latest_state.pitch_rate,
+                        latest_state.yaw_rate, latest_state.x, latest_state.y,
+                        latest_state.altitude, latest_state.x_velocity,
+                        latest_state.y_velocity, latest_state.vertical_velocity,
+                        latest_thrust.thrust, latest_target.x, latest_target.y,
+                        latest_target.z, latest_target.yaw,
+                        latest_sensors.gyro[0], latest_sensors.gyro[1],
+                        latest_sensors.gyro[2], latest_sensors.accel[0],
+                        latest_sensors.accel[1], latest_sensors.accel[2]);
 
         // Write CSV row
         hive_file_write(state->log_fd, line_buf, (size_t)len, &bytes_written);
@@ -214,5 +214,5 @@ void telemetry_logger_actor(void *args, const hive_spawn_info_t *siblings,
 
     // Cleanup
     hive_file_close(state->log_fd);
-    HIVE_LOG_INFO("[TLOG] Closed log file (%u samples)", log_count);
+    HIVE_LOG_INFO("[TLOG] Closed log file (%u samples)", (unsigned)log_count);
 }

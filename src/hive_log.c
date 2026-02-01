@@ -90,7 +90,8 @@ static void log_to_file(hive_log_level_t level, const char *text,
     // Build line: [MM:SS.mmm] LEVEL text\n
     char line[HIVE_LOG_MAX_ENTRY_SIZE + 32];
     int header_len = snprintf_(line, sizeof(line), "[%02u:%02u.%03u] %-5s ",
-                               minutes, seconds, millis, s_level_names[level]);
+                               (unsigned)minutes, (unsigned)seconds,
+                               (unsigned)millis, s_level_names[level]);
     if (header_len < 0)
         header_len = 0;
 
