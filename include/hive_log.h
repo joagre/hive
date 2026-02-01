@@ -17,27 +17,12 @@
 typedef int hive_log_level_t;
 
 // -----------------------------------------------------------------------------
-// Log File Entry Format (for binary log files)
-// -----------------------------------------------------------------------------
-// Each log entry in a file is prefixed with a 12-byte header, followed by text
-// payload. Magic bytes allow recovery of entries from corrupted flash.
-//
-// Wire format (little-endian, explicit byte serialization for portability):
-//   Offset  Size  Field
-//   0       2     magic       (0x47, 0x4C = "LG" in little-endian)
-//   2       2     seq         Monotonic sequence number (detects drops)
-//   4       4     timestamp   Microseconds since boot
-//   8       2     len         Payload length (text, excluding null terminator)
-//   10      1     level       Log level (TRACE=0, DEBUG=1, INFO=2, WARN=3,
-//   ERROR=4) 11      1     reserved    Padding (always 0) 12      len   payload
-//   Log message text (no null terminator)
-
-#define HIVE_LOG_MAGIC 0x4C47 // "LG" - Log entry marker
-#define HIVE_LOG_HEADER_SIZE 12
-
-// -----------------------------------------------------------------------------
 // Log File API (lifecycle managed by supervisor/application)
 // -----------------------------------------------------------------------------
+// Log file format is plain text with one entry per line:
+//   [MM:SS.mmm] LEVEL message text here
+//
+// Files can be viewed directly with cat, tail, less, etc.
 
 // Initialize logging subsystem (call once at startup)
 hive_status_t hive_log_init(void);

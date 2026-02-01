@@ -888,12 +888,11 @@ if (mode == TELEM_MODE_LOG_DOWNLOAD) {
 
 ### Log File Format
 
-The downloaded file is the raw binary log from flash (`/log`). Use the existing
-decoder tool:
+The downloaded file is plain text from flash (`/log`). View directly:
 
 ```bash
-# Decode downloaded log
-python3 tools/decode_log.py flight.log
+# View downloaded log
+cat flight.log
 ```
 
 ---

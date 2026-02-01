@@ -177,7 +177,7 @@ python3 flight_debug.py /tmp/pilot_telemetry.csv --interval 1.0
 
 ### ground_station.py
 
-Receive real-time telemetry and download flight logs from Crazyflie hardware via Crazyradio 2.0. Decodes binary telemetry packets (attitude/rates and position/altitude) and optionally logs to CSV.
+Receive real-time telemetry and download flight logs from Crazyflie hardware via Crazyradio 2.0. Decodes telemetry packets (attitude/rates and position/altitude) and optionally logs to CSV.
 
 ```bash
 # Display real-time telemetry to stdout
@@ -189,8 +189,8 @@ python3 ground_station.py -o flight.csv
 # Quiet mode (log only, no console output)
 python3 ground_station.py -o flight.csv --quiet
 
-# Download binary flight log from drone flash storage
-python3 ground_station.py --download-log log.bin
+# Download flight log from drone flash storage (plain text)
+python3 ground_station.py --download-log flight.log
 
 # Use custom radio URI (default: radio://0/80/2M)
 python3 ground_station.py --uri radio://0/80/2M
@@ -200,7 +200,7 @@ python3 ground_station.py --uri radio://0/80/2M
 - Attitude (0x01): timestamp, gyro XYZ, roll/pitch/yaw
 - Position (0x02): timestamp, altitude, vz, vx, vy, thrust, battery_mv
 
-**Log download** - Sends CMD_REQUEST_LOG command to drone, receives binary log chunks, and saves to file. Use with `tools/decode_log.py` (in hive root) to decode the binary log format.
+**Log download** - Sends CMD_REQUEST_LOG command to drone, receives log chunks, and saves to file. The log file is plain text and can be viewed directly with `cat`, `less`, etc.
 
 ## PID Tuning Workflow
 

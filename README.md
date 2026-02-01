@@ -573,7 +573,7 @@ hive_supervisor_stop(supervisor);
 # Priority scheduling example (4 levels, starvation demo)
 ./build/priority
 
-# Logging example (HIVE_LOG_* macros, binary log file)
+# Logging example (HIVE_LOG_* macros, log file)
 ./build/logging
 
 # Name registry example (service discovery pattern)
@@ -717,7 +717,7 @@ no JSON - just compile-time filtered levels with binary file output for space ef
 - `HIVE_LOG_TO_FILE` - File logging (default: 1 on both)
 - `HIVE_LOG_FILE_PATH` - Log file path (default: `/var/tmp/hive.log` on Linux, `/log` on STM32)
 
-**Binary log format** - 12-byte header + text payload. Use `tools/decode_log.py` to decode.
+**Log file format** - Plain text, `[MM:SS.mmm] LEVEL message`. View with `cat`, `tail`, etc.
 
 ### TCP
 

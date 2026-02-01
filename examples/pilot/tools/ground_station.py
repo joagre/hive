@@ -4,7 +4,7 @@ Receive telemetry and download logs from Crazyflie via Crazyradio 2.0.
 
 Connects to the Crazyflie using ESB radio protocol and decodes binary
 telemetry packets. Displays real-time data and optionally logs to CSV.
-Can also download the binary flight log from flash storage.
+Can also download the flight log from flash storage.
 
 ESB Protocol:
   Ground station is PTX (Primary Transmitter) - initiates all communication.
@@ -33,7 +33,7 @@ Requirements:
 Usage:
   sudo ./ground_station.py                         # Display telemetry to stdout
   sudo ./ground_station.py -o flight.csv           # Log telemetry to CSV file
-  sudo ./ground_station.py --download-log log.bin  # Download binary log file
+  sudo ./ground_station.py --download-log flight.log  # Download log file
   sudo ./ground_station.py --uri radio://0/80/2M   # Custom radio URI
 
 Default radio URI: radio://0/80/2M (channel 80, 2Mbps)
@@ -338,7 +338,7 @@ class TelemetryReceiver:
         print(f"Errors: {self.errors}", file=sys.stderr)
 
     def download_log(self, output_path: str) -> bool:
-        """Download binary log file from drone.
+        """Download log file from drone.
 
         Sends CMD_REQUEST_LOG command and receives LOG_CHUNK packets until
         LOG_COMPLETE is received. Returns True on success.
@@ -436,7 +436,7 @@ def main():
     )
     parser.add_argument(
         "--download-log", type=str, metavar="FILE",
-        help="Download binary log file from drone flash storage"
+        help="Download log file from drone flash storage"
     )
 
     args = parser.parse_args()

@@ -2,8 +2,7 @@
 //
 // Supports dual output (controlled by compile-time flags):
 // - Console (stderr) with optional ANSI colors (HIVE_LOG_TO_STDOUT)
-// - Binary log file with explicit little-endian serialization
-// (HIVE_LOG_TO_FILE)
+// - Plain text log file (HIVE_LOG_TO_FILE)
 
 #include "hive_log.h"
 #include "hive_internal.h"
@@ -38,14 +37,18 @@ static uint16_t s_seq = 0; // Monotonic sequence number
 #endif
 
 // -----------------------------------------------------------------------------
-// Console output helpers
+// Common helpers
 // -----------------------------------------------------------------------------
-
-#if HIVE_LOG_TO_STDOUT
 
 // Level names for output
 static const char *s_level_names[] = {"TRACE", "DEBUG", "INFO", "WARN",
                                       "ERROR"};
+
+// -----------------------------------------------------------------------------
+// Console output helpers
+// -----------------------------------------------------------------------------
+
+#if HIVE_LOG_TO_STDOUT
 
 // Extract basename from file path
 static const char *basename_simple(const char *path) {
@@ -67,48 +70,41 @@ static void log_to_console(hive_log_level_t level, const char *file, int line,
 #endif // HIVE_LOG_TO_STDOUT
 
 // -----------------------------------------------------------------------------
-// Binary log file helpers (explicit little-endian serialization)
+// Plain text log file helpers
 // -----------------------------------------------------------------------------
 
 #if HIVE_LOG_TO_FILE
-
-// Write 16-bit little-endian value to buffer
-static void write_u16_le(uint8_t *buf, uint16_t val) {
-    buf[0] = (uint8_t)(val & 0xFF);
-    buf[1] = (uint8_t)((val >> 8) & 0xFF);
-}
-
-// Write 32-bit little-endian value to buffer
-static void write_u32_le(uint8_t *buf, uint32_t val) {
-    buf[0] = (uint8_t)(val & 0xFF);
-    buf[1] = (uint8_t)((val >> 8) & 0xFF);
-    buf[2] = (uint8_t)((val >> 16) & 0xFF);
-    buf[3] = (uint8_t)((val >> 24) & 0xFF);
-}
 
 static void log_to_file(hive_log_level_t level, const char *text,
                         size_t text_len) {
     if (s_log_fd < 0)
         return;
 
-    // Build header with explicit byte serialization
-    uint8_t header[HIVE_LOG_HEADER_SIZE];
-    uint32_t timestamp = (uint32_t)hive_get_time(); // Truncate to 32 bits
-    uint16_t len = (uint16_t)(text_len > 0xFFFF ? 0xFFFF : text_len);
+    // Format: [MM:SS.mmm] LEVEL text\n
+    uint64_t timestamp_us = hive_get_time();
+    uint32_t total_ms = (uint32_t)(timestamp_us / 1000);
+    uint32_t minutes = total_ms / 60000;
+    uint32_t seconds = (total_ms / 1000) % 60;
+    uint32_t millis = total_ms % 1000;
 
-    write_u16_le(&header[0], HIVE_LOG_MAGIC); // magic
-    write_u16_le(&header[2], s_seq++);        // seq
-    write_u32_le(&header[4], timestamp);      // timestamp
-    write_u16_le(&header[8], len);            // len
-    header[10] = (uint8_t)level;              // level
-    header[11] = 0;                           // reserved
+    // Build line: [MM:SS.mmm] LEVEL text\n
+    char line[HIVE_LOG_MAX_ENTRY_SIZE + 32];
+    int header_len = snprintf_(line, sizeof(line), "[%02u:%02u.%03u] %-5s ",
+                               minutes, seconds, millis, s_level_names[level]);
+    if (header_len < 0)
+        header_len = 0;
 
-    // Write header and payload
+    // Append text (truncate if needed)
+    size_t remaining = sizeof(line) - (size_t)header_len - 2; // -2 for \n\0
+    size_t copy_len = text_len < remaining ? text_len : remaining;
+    memcpy(line + header_len, text, copy_len);
+    line[header_len + copy_len] = '\n';
+
+    // Write line
     size_t written;
-    hive_file_write(s_log_fd, header, HIVE_LOG_HEADER_SIZE, &written);
-    if (written == HIVE_LOG_HEADER_SIZE) {
-        hive_file_write(s_log_fd, text, len, &written);
-    }
+    hive_file_write(s_log_fd, line, (size_t)header_len + copy_len + 1,
+                    &written);
+    s_seq++; // Keep sequence for potential debugging
 }
 
 #endif // HIVE_LOG_TO_FILE

@@ -2066,27 +2066,22 @@ hive_status_t hive_log_file_close(void);        // Close log file
 void hive_log_cleanup(void);                  // Cleanup (call at shutdown)
 ```
 
-### Binary Log Format
+### Log File Format
 
-Log files use a binary format with 12-byte headers for efficient storage and crash recovery:
+Log files use plain text format with one entry per line:
 
 ```
-Offset  Size  Field
-0       2     magic       0x4C47 ("LG" little-endian)
-2       2     seq         Monotonic sequence number
-4       4     timestamp   Microseconds since boot
-8       2     len         Payload length
-10      1     level       Log level (0-4)
-11      1     reserved    Always 0
-12      len   payload     Log message text (no null terminator)
+[MM:SS.mmm] LEVEL message text here
 ```
 
-**Decoding:** Use `tools/decode_log.py` to convert binary logs to text:
-```bash
-python3 tools/decode_log.py flight.bin              # Decode to stdout
-python3 tools/decode_log.py flight.bin -o out.txt   # Decode to file
-python3 tools/decode_log.py flight.bin --stats      # Show statistics
+Example output:
 ```
+[00:00.015] INFO  System initialized
+[00:00.123] DEBUG Sensor calibration complete
+[00:01.456] WARN  Battery low: 3.2V
+```
+
+Files can be viewed directly with `cat`, `tail`, `less`, etc. No decoder needed.
 
 ### Compile-Time Configuration (`hive_static_config.h`)
 

@@ -434,8 +434,8 @@ Thrust Bus ─┘
 ```bash
 pip install cflib
 ./tools/ground_station.py -o flight.csv        # Receive telemetry
-./tools/ground_station.py --download-log log.bin  # Download log file
-../../tools/decode_log.py log.bin > log.txt    # Decode binary log
+./tools/ground_station.py --download-log log.txt  # Download log file (plain text)
+cat log.txt                                     # View log directly
 ```
 
 **Benefits**

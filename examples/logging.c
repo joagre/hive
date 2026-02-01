@@ -2,12 +2,12 @@
 //
 // Shows:
 // - HIVE_LOG_* macros at different levels (TRACE, DEBUG, INFO, WARN, ERROR)
-// - Opening a binary log file
+// - Opening a log file
 // - Periodic log sync using timers
 // - Closing the log file
 //
-// The log file is written in binary format. Use tools/decode_log.py to read it:
-//   python3 tools/decode_log.py /tmp/hive_logging_example.log
+// The log file is plain text. View with cat, tail, etc.:
+//   cat /tmp/hive_logging_example.log
 //
 // Build with different log levels:
 //   make CFLAGS="-DHIVE_LOG_LEVEL=HIVE_LOG_LEVEL_DEBUG ..."
@@ -39,7 +39,7 @@ static void logging_actor(void *args, const hive_spawn_info_t *siblings,
 
     HIVE_LOG_INFO("Logging actor started (ID: %u)", hive_self());
 
-    // Open log file for binary output
+    // Open log file
     // On STM32, this would erase the flash sector (blocks briefly)
     HIVE_LOG_INFO("Opening log file: %s", LOG_FILE_PATH);
     hive_status_t status = hive_log_file_open(LOG_FILE_PATH);
@@ -97,8 +97,8 @@ static void logging_actor(void *args, const hive_spawn_info_t *siblings,
     hive_log_file_close();
     HIVE_LOG_INFO("Log file closed");
 
-    printf("\nLogging complete. Decode the binary log with:\n");
-    printf("  python3 tools/decode_log.py %s\n\n", LOG_FILE_PATH);
+    printf("\nLogging complete. View the log with:\n");
+    printf("  cat %s\n\n", LOG_FILE_PATH);
 
     return;
 }

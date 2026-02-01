@@ -523,7 +523,7 @@ Do NOT use `HIVE_TAG_ANY` for timer messages - always use the timer_id_t to avoi
 
 ### Logging
 
-Structured logging with compile-time level filtering and dual output (console + binary file).
+Structured logging with compile-time level filtering and dual output (console + file).
 
 **Log Macros** (compile out based on `HIVE_LOG_LEVEL`)
 ```c
@@ -542,10 +542,11 @@ hive_log_file_sync();       // Flush to storage (call periodically)
 hive_log_file_close();      // Close log file
 ```
 
-**Binary Log Format** (12-byte header + text payload)
-- Magic: `0x4C47` ("LG" little-endian)
-- Sequence number, timestamp (us), length, level
-- Use `tools/decode_log.py` to decode
+**Log File Format** - Plain text, one entry per line:
+```
+[MM:SS.mmm] LEVEL message text
+```
+Files can be viewed directly with `cat`, `tail`, `less`, etc.
 
 **Platform Defaults**
 | Config | Linux | STM32 |

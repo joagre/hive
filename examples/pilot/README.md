@@ -382,19 +382,16 @@ of flight-critical actors - comms simply stops if it fails.
 
 ## Log Download (Crazyflie 2.1+ only)
 
-After flight, the binary log file stored in flash can be downloaded over radio.
+After flight, the log file stored in flash can be downloaded over radio.
 The ground station sends a CMD_REQUEST_LOG command, and the drone responds with
 LOG_CHUNK packets (28 bytes each) until the entire file is transferred.
 
 **Download log file**
 ```bash
-./tools/ground_station.py --download-log flight.bin
+./tools/ground_station.py --download-log flight.log
 ```
 
-**Decode binary log**
-```bash
-../../tools/decode_log.py flight.bin > flight.txt
-```
+The log file is plain text and can be viewed directly with `cat`, `less`, etc.
 
 Log download operates at the same 100Hz rate as telemetry. A typical 8KB log file
 downloads in about 3 seconds (8192 bytes / 28 bytes per chunk / 100 chunks per second).
