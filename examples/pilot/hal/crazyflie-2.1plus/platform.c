@@ -109,8 +109,12 @@ static uint32_t s_prev_flow_time_us = 0;
 // SysTick Handler
 // ----------------------------------------------------------------------------
 
+// Hive timer tick - called every 1ms to drive actor timers
+extern void hive_timer_tick_isr(void);
+
 void SysTick_Handler(void) {
     s_sys_tick_ms++;
+    hive_timer_tick_isr();
 }
 
 // ----------------------------------------------------------------------------

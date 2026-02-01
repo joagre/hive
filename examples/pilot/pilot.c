@@ -109,20 +109,43 @@ int main(void) {
     if (hal_init() != 0) {
         return 1;
     }
+
+#ifdef HAL_HAS_RADIO
+    // Initialize ESB radio early so nRF51 can initialize while we self-test
+    hal_printf("[PILOT] Calling hal_esb_init...\n");
+    if (hal_esb_init() != 0) {
+        return 1;
+    }
+    hal_printf("[PILOT] hal_esb_init OK\n");
+
+    // Wait for nRF51 to be ready (battery packet confirms bidirectional link)
+    hal_printf("[PILOT] Waiting for nRF51...\n");
+    {
+        uint32_t start = hal_get_time_ms();
+        bool ready = false;
+        while ((hal_get_time_ms() - start) < 5000) {
+            hal_esb_poll();
+            if (hal_power_get_battery() > 0.1f) {
+                hal_printf("[PILOT] nRF51 ready, battery=%.2fV\n",
+                           hal_power_get_battery());
+                ready = true;
+                break;
+            }
+            for (volatile int i = 0; i < 10000; i++) {
+            }
+        }
+        if (!ready) {
+            hal_printf("[PILOT] nRF51 timeout (continuing anyway)\n");
+        }
+    }
+#endif
+
     if (!hal_self_test()) {
         hal_cleanup();
         return 1;
     }
     hal_calibrate();
     hal_arm();
-
-#ifdef HAL_HAS_RADIO
-    // Initialize radio (must be before hive_run for clock domain sync)
-    if (hal_esb_init() != 0) {
-        hal_cleanup();
-        return 1;
-    }
-#endif
 
     // Initialize actor runtime
     hive_init();
@@ -282,7 +305,7 @@ int main(void) {
          .init_args_size = sizeof(buses),
          .name = "comms",
          .auto_register = false,
-         .restart = HIVE_CHILD_TEMPORARY, // Not flight-critical, don't restart
+         .restart = HIVE_CHILD_TEMPORARY,
          .actor_cfg = {.priority = HIVE_PRIORITY_LOW,
                        .name = "comms",
                        .pool_block = true}},

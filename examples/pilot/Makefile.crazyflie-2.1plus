@@ -1,10 +1,26 @@
 # Makefile.crazyflie-2.1plus - Build pilot for Crazyflie 2.1+ (STM32F405)
 #
 # Usage:
-#   make -f Makefile.crazyflie-2.1plus          # Build firmware
-#   make -f Makefile.crazyflie-2.1plus help     # Show all build options
+#   make -f Makefile.crazyflie-2.1plus
+#   make -f Makefile.crazyflie-2.1plus FLIGHT_PROFILE=FLIGHT_PROFILE_GROUND_TEST
+#   make -f Makefile.crazyflie-2.1plus flash
+#   make -f Makefile.crazyflie-2.1plus help
 
+# =============================================================================
+# Build Configuration (override via command line)
+# =============================================================================
+
+FLIGHT_PROFILE := FLIGHT_PROFILE_GROUND_TEST
+LOG_LEVEL := INFO
+LOG_TO_STDOUT := 1
+LOG_TO_FILE := 1
+ENABLE_SD := 0
+STACK_PROFILE := 0
+
+# =============================================================================
 # Paths
+# =============================================================================
+
 HIVE_ROOT := ../..
 HIVE_SRC_DIR := $(HIVE_ROOT)/src
 HAL_DIR := hal/crazyflie-2.1plus
@@ -12,58 +28,86 @@ HAL_DIR := hal/crazyflie-2.1plus
 TARGET := pilot_crazyflie-2.1plus
 BUILD_DIR := build_crazyflie-2.1plus
 
+# =============================================================================
 # Toolchain
+# =============================================================================
+
 PREFIX := arm-none-eabi-
 CC := $(PREFIX)gcc
 AR := $(PREFIX)ar
 CP := $(PREFIX)objcopy
 SZ := $(PREFIX)size
 
-# MCU flags (STM32F405RG - Cortex-M4F)
+# =============================================================================
+# Hive Library Config (shared with Webots build)
+# =============================================================================
+
+include hive_config.mk
+
+# =============================================================================
+# Board Config (flash addresses, SD card)
+# =============================================================================
+
+include $(HAL_DIR)/hive_board_config.mk
+
+# =============================================================================
+# STM32 Stack Config
+# =============================================================================
+
+# 12 actors x 6KB = 72KB, plus ~4KB headroom for allocator
+HIVE_CFLAGS += -DHIVE_DEFAULT_STACK_SIZE=6144
+HIVE_CFLAGS += '-DHIVE_STACK_ARENA_SIZE=(76*1024)'
+
+# =============================================================================
+# Compiler Flags
+# =============================================================================
+
+# MCU
 MCU := -mcpu=cortex-m4 -mthumb -mfpu=fpv4-sp-d16 -mfloat-abi=hard
 
-# Pilot CFLAGS
-CFLAGS := -std=c11 -Wall -Wextra -Wpedantic
-CFLAGS += $(MCU)
+# Base
+CFLAGS := $(MCU)
+CFLAGS += -std=c11 -Wall -Wextra -Wpedantic
 CFLAGS += -O2 -g3 -gdwarf-2
 CFLAGS += -ffunction-sections -fdata-sections
 CFLAGS += -MMD -MP
+
+# Platform
 CFLAGS += -DSTM32F405xx -DPLATFORM_CRAZYFLIE_2_1 -DARM_MATH_CM4
 CFLAGS += -DHIVE_PLATFORM_STM32 -DHAL_HAS_RADIO
 
-# Include paths
+# Includes
 CFLAGS += -I$(HIVE_ROOT)/include -I$(HIVE_SRC_DIR)/hal/stm32
 CFLAGS += -I. -Iinclude -I$(HAL_DIR)
 CFLAGS += -I$(HIVE_ROOT)/lib -I$(HIVE_ROOT)/lib/printf -DPRINTF_INCLUDE_CONFIG_H
 
-# Flight profile (default: FIRST_TEST for safety)
-FLIGHT_PROFILE ?= FLIGHT_PROFILE_FIRST_TEST
+# Pilot config
 CFLAGS += -DFLIGHT_PROFILE=$(FLIGHT_PROFILE)
-
-# Log level (default: INFO)
-LOG_LEVEL ?= INFO
 CFLAGS += -DHIVE_LOG_LEVEL=HIVE_LOG_LEVEL_$(LOG_LEVEL)
+CFLAGS += -DHIVE_LOG_TO_STDOUT=$(LOG_TO_STDOUT)
+CFLAGS += -DHIVE_LOG_TO_FILE=$(LOG_TO_FILE)
 
-# Hive memory configuration (pilot actor requirements)
-include hive_config.mk
-
-# Board-specific configuration (flash, SD)
-include $(HAL_DIR)/hive_board_config.mk
-
-# Stack configuration for pilot
-HIVE_CFLAGS += -DHIVE_DEFAULT_STACK_SIZE=6144
-HIVE_CFLAGS += '-DHIVE_STACK_ARENA_SIZE=(72*1024)'
-
-# Add all Hive config to CFLAGS
+# Hive library config
 CFLAGS += $(HIVE_CFLAGS)
 
-# Linker flags
+# Optional stack profiling
+ifeq ($(STACK_PROFILE),1)
+CFLAGS += -DHIVE_STACK_WATERMARK=1
+endif
+
+# =============================================================================
+# Linker Flags
+# =============================================================================
+
 LDSCRIPT := $(HAL_DIR)/stm32f405_flash.ld
 LDFLAGS := $(MCU) -T$(LDSCRIPT)
 LDFLAGS += -Wl,--gc-sections -Wl,-Map=$(BUILD_DIR)/$(TARGET).map,--cref
 LDFLAGS += --specs=nano.specs --specs=nosys.specs -lm -lc
 
-# Pilot sources
+# =============================================================================
+# Sources
+# =============================================================================
+
 PILOT_SRCS := pilot.c pid.c stack_profile.c \
 	sensor_actor.c estimator_actor.c altitude_actor.c waypoint_actor.c \
 	position_actor.c attitude_actor.c rate_actor.c motor_actor.c \
@@ -73,47 +117,35 @@ PILOT_SRCS := pilot.c pid.c stack_profile.c \
 PILOT_OBJS := $(PILOT_SRCS:%.c=$(BUILD_DIR)/pilot/%.o)
 PILOT_DEPS := $(PILOT_OBJS:.o=.d)
 
-# Libraries
 HIVE_LIB := $(BUILD_DIR)/libhive.a
 HAL_LIB := $(HAL_DIR)/build/libhal.a
 STARTUP_OBJ := $(HAL_DIR)/build/startup_stm32f405.o
+BOARD_MOUNTS_SRC := $(abspath $(HAL_DIR)/hive_mounts.c)
 
-# CFLAGS to pass to hive build (include paths + all HIVE_CFLAGS)
-HIVE_CFLAGS_EXPORT := $(MCU)
-HIVE_CFLAGS_EXPORT += -I$(abspath $(HIVE_ROOT)/include)
-HIVE_CFLAGS_EXPORT += -I$(abspath $(HIVE_ROOT)/lib) -I$(abspath $(HIVE_ROOT)/lib/printf)
-HIVE_CFLAGS_EXPORT += -I$(abspath $(HAL_DIR))
-HIVE_CFLAGS_EXPORT += $(HIVE_CFLAGS)
-HIVE_CFLAGS_EXPORT += -DHIVE_LOG_LEVEL=HIVE_LOG_LEVEL_$(LOG_LEVEL)
-
+# =============================================================================
 # Targets
-.PHONY: all clean flash size
+# =============================================================================
+
+.PHONY: all clean flash size help
 
 all: $(BUILD_DIR)/$(TARGET).elf $(BUILD_DIR)/$(TARGET).hex $(BUILD_DIR)/$(TARGET).bin size
 
-# Board-specific mount configuration
-BOARD_MOUNTS_SRC := $(abspath $(HAL_DIR)/hive_mounts.c)
-
-# Build hive library (delegate to src/Makefile)
 $(HIVE_LIB):
 	@$(MAKE) -C $(HIVE_SRC_DIR) PLATFORM=stm32 \
 		BUILD_DIR=$(abspath $(BUILD_DIR)) \
 		CC=$(CC) AR=$(AR) \
 		BOARD_MOUNTS_SRC=$(BOARD_MOUNTS_SRC) \
 		ENABLE_SD=$(ENABLE_SD) \
-		CFLAGS="$(HIVE_CFLAGS_EXPORT)"
+		CFLAGS="$(CFLAGS)"
 
-# Build HAL library (delegate to HAL Makefile)
 $(HAL_LIB):
-	@$(MAKE) -C $(HAL_DIR) ENABLE_SD=$(ENABLE_SD)
+	@$(MAKE) -C $(HAL_DIR) ENABLE_SD=$(ENABLE_SD) FLIGHT_PROFILE=$(FLIGHT_PROFILE)
 
-# Compile pilot sources
 $(BUILD_DIR)/pilot/%.o: %.c
 	@mkdir -p $(dir $@)
 	@echo "CC $<"
 	@$(CC) $(CFLAGS) -c $< -o $@
 
-# Link (startup object must come first for correct vector table placement)
 $(BUILD_DIR)/$(TARGET).elf: $(PILOT_OBJS) $(HIVE_LIB) $(HAL_LIB) $(STARTUP_OBJ)
 	@echo "LD $@"
 	@$(CC) $(STARTUP_OBJ) $(PILOT_OBJS) $(HIVE_LIB) $(HAL_LIB) $(LDFLAGS) -o $@
@@ -135,41 +167,36 @@ clean:
 	rm -rf $(BUILD_DIR)
 	@$(MAKE) -C $(HAL_DIR) clean
 
-.PHONY: help
 help:
-	@echo "Pilot Crazyflie 2.1+ Firmware - Build System"
+	@echo "Pilot Crazyflie 2.1+ Firmware"
+	@echo ""
+	@echo "Usage:"
+	@echo "  make -f Makefile.crazyflie-2.1plus [options] [target]"
 	@echo ""
 	@echo "Targets:"
-	@echo "  make -f Makefile.crazyflie-2.1plus          Build firmware"
-	@echo "  make -f Makefile.crazyflie-2.1plus flash    Flash via ST-Link"
-	@echo "  make -f Makefile.crazyflie-2.1plus size     Show memory usage"
-	@echo "  make -f Makefile.crazyflie-2.1plus clean    Remove build artifacts"
-	@echo "  make -f Makefile.crazyflie-2.1plus help     Show this help"
+	@echo "  all     Build firmware (default)"
+	@echo "  flash   Flash via ST-Link"
+	@echo "  clean   Remove build artifacts"
+	@echo "  help    Show this help"
 	@echo ""
-	@echo "Build Options:"
-	@echo "  FLIGHT_PROFILE=<profile>  Flight profile (default: FLIGHT_PROFILE_FIRST_TEST)"
-	@echo "      FLIGHT_PROFILE_FIRST_TEST   - First flight test (hover at 0.5m, land)"
-	@echo "      FLIGHT_PROFILE_ALTITUDE     - Altitude-only waypoints (0.5m, 0.8m, 1.2m)"
-	@echo "      FLIGHT_PROFILE_FULL_3D      - Full 3D square pattern with altitude"
+	@echo "Options (current defaults shown):"
+	@echo "  FLIGHT_PROFILE=$(FLIGHT_PROFILE)"
+	@echo "      FLIGHT_PROFILE_GROUND_TEST  - Motors disabled"
+	@echo "      FLIGHT_PROFILE_FIRST_TEST   - Hover 0.5m, land"
+	@echo "      FLIGHT_PROFILE_ALTITUDE     - Altitude waypoints"
+	@echo "      FLIGHT_PROFILE_FULL_3D      - Full 3D pattern"
 	@echo ""
-	@echo "  LOG_LEVEL=<level>         Log verbosity (default: INFO)"
+	@echo "  LOG_LEVEL=$(LOG_LEVEL)"
 	@echo "      TRACE, DEBUG, INFO, WARN, ERROR, NONE"
 	@echo ""
-	@echo "  ENABLE_SD=<0|1>           SD card support (default: 0)"
-	@echo "      Requires Micro SD Card Deck attached"
-	@echo "      Enables /sd mount point (FatFS filesystem)"
-	@echo "      Max concurrent files: HIVE_MAX_SD_FILES (default: 4)"
-	@echo ""
-	@echo "Hardware Info:"
-	@echo "  MCU:        STM32F405RG (Cortex-M4F, 168MHz)"
-	@echo "  Flash:      1MB (firmware + 128KB log partition)"
-	@echo "  RAM:        128KB CCM + 64KB SRAM"
-	@echo "  Sensors:    BMI088 IMU, BMP388 baro, Flow deck (PMW3901 + VL53L1x)"
+	@echo "  LOG_TO_STDOUT=$(LOG_TO_STDOUT)  (SWO debug output)"
+	@echo "  LOG_TO_FILE=$(LOG_TO_FILE)      (flash storage)"
+	@echo "  ENABLE_SD=$(ENABLE_SD)          (SD card deck)"
+	@echo "  STACK_PROFILE=$(STACK_PROFILE)  (stack watermarking)"
 	@echo ""
 	@echo "Examples:"
 	@echo "  make -f Makefile.crazyflie-2.1plus"
-	@echo "  make -f Makefile.crazyflie-2.1plus FLIGHT_PROFILE=FLIGHT_PROFILE_ALTITUDE"
-	@echo "  make -f Makefile.crazyflie-2.1plus LOG_LEVEL=DEBUG"
-	@echo "  make -f Makefile.crazyflie-2.1plus flash"
+	@echo "  make -f Makefile.crazyflie-2.1plus FLIGHT_PROFILE=FLIGHT_PROFILE_GROUND_TEST"
+	@echo "  make -f Makefile.crazyflie-2.1plus LOG_TO_STDOUT=1 flash"
 
 -include $(PILOT_DEPS)

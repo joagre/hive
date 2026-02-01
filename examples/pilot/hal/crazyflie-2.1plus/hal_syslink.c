@@ -236,16 +236,32 @@ static int syslink_send(uint8_t type, const void *data, size_t len) {
         ck_b += ck_a;
     }
 
-    // Send packet
+    // Send packet with short delays to allow nRF51 UART to keep up
     uart_putc(SYSLINK_START1);
     uart_putc(SYSLINK_START2);
     uart_putc(type);
     uart_putc((uint8_t)len);
     for (size_t i = 0; i < len; i++) {
         uart_putc(bytes[i]);
+        // Small delay every 8 bytes to prevent nRF51 UART buffer overflow
+        if ((i & 7) == 7) {
+            for (volatile int d = 0; d < 50; d++) {
+                __NOP();
+            }
+        }
     }
     uart_putc(ck_a);
     uart_putc(ck_b);
+
+    // Wait for transmit complete (last byte fully shifted out)
+    while (!(SYSLINK_USART->SR & USART_SR_TC))
+        ;
+
+    // Wait for nRF51 to process packet (TXEN goes low when ready)
+    // This prevents overflow when sending larger packets
+    uint32_t timeout = 10000;
+    while (!txen_ready() && --timeout > 0)
+        ;
 
     return 0;
 }

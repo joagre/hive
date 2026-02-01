@@ -37,6 +37,11 @@ CFLAGS += -DUSE_STDPERIPH_DRIVER
 CFLAGS += -DHSE_VALUE=8000000
 CFLAGS += -DHAL_HAS_RADIO
 
+# Flight profile (passed from pilot Makefile)
+ifdef FLIGHT_PROFILE
+CFLAGS += -DFLIGHT_PROFILE=$(FLIGHT_PROFILE)
+endif
+
 # Include paths (Bitcraze vendor library structure + ARM CMSIS core)
 CFLAGS += -I.
 CFLAGS += -I../..

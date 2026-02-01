@@ -361,13 +361,18 @@ The Crazyflie build includes a comms actor that sends flight data over radio
 at 100Hz for real-time ground station logging. This uses the syslink protocol
 to the nRF51822 radio chip, which transmits via ESB to a Crazyradio 2.0 on the ground.
 
-**Packet types** (31-byte ESB limit requires two packet types):
+**Packet types** (13 bytes each, alternating at 50Hz):
 - Type 0x01: Attitude/rates (gyro XYZ, roll/pitch/yaw)
 - Type 0x02: Position (altitude, velocities, thrust, battery voltage)
 
-**Note** - Position targets (waypoints) are not included in radio telemetry due to the
-31-byte packet size limit. This means radio telemetry is suitable for tuning altitude,
-attitude, and rate control loops, but not position control. For position control tuning,
+**Important: 16-byte syslink limit** - The nRF51 syslink implementation silently
+drops RADIO_RAW packets larger than 16 bytes. This is an undocumented limitation
+in the Bitcraze nRF51 firmware. Telemetry packets are designed to fit within this
+limit (13 bytes each). Timestamps are derived from receive rate on the ground station.
+
+**Note** - Position targets (waypoints) are not included in radio telemetry due to
+packet size constraints. Radio telemetry is suitable for tuning altitude, attitude,
+and rate control loops, but not position control. For position control tuning,
 use Webots CSV telemetry which includes full position targets.
 
 **Ground station receiver**

@@ -413,16 +413,20 @@ Thrust Bus ─┘
 - Subscribes to sensor, state, and thrust buses (not position target bus)
 - Sends binary packets at 100Hz over syslink protocol
 
-**Constraint** - ESB payload limit is 31 bytes per packet.
+**Constraint** - While ESB supports 31-byte payloads, the nRF51 syslink implementation
+silently drops RADIO_RAW packets larger than 16 bytes. This is an undocumented limitation
+in the Bitcraze nRF51 firmware. Telemetry packets are designed to fit within 16 bytes.
 
-**Design choice** - Prioritize attitude, rates, and thrust in telemetry packets. Position targets are omitted due to packet size limit--use Webots CSV telemetry for position control tuning. A future revision could add a third packet type for targets if needed.
+**Design choice** - Prioritize attitude, rates, and thrust in telemetry packets. Position
+targets are omitted due to packet size limit - use Webots CSV telemetry for position
+control tuning. Timestamps are derived from receive rate on the ground station.
 - Two operating modes:
-  - Flight mode: Sends telemetry packets at 100Hz
+  - Flight mode: Sends telemetry packets at 100Hz (alternating types at 50Hz each)
   - Download mode: Transfers flash log file to ground station on request
-- Telemetry packet types (31-byte ESB limit):
+- Telemetry packet types (13 bytes each, fits 16-byte syslink limit):
   - Type 0x01: Attitude/rates (gyro XYZ, roll/pitch/yaw)
-  - Type 0x02: Position (altitude, velocities, thrust)
-- Log download packet types:
+  - Type 0x02: Position (altitude, velocities, thrust, battery voltage)
+- Log download packet types (use different flow, can be up to 31 bytes):
   - Type 0x10: CMD_REQUEST_LOG (ground -> drone)
   - Type 0x11: LOG_CHUNK (drone -> ground, 28 bytes data)
   - Type 0x12: LOG_COMPLETE (drone -> ground)
