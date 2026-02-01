@@ -8,9 +8,14 @@
 // Runs at LOW priority so control loops run first each cycle.
 // Radio send blocks ~370us (37 bytes * 10 bits/byte / 1Mbaud).
 //
+// IMPORTANT: Telemetry packets are limited to 16 bytes maximum.
+// The nRF51 syslink implementation drops RADIO_RAW packets larger than
+// 16 bytes. This appears to be an undocumented limitation in the Bitcraze
+// nRF51 firmware. Packets 17+ bytes are silently lost.
+//
 // Packet types:
-//   0x01: Attitude/rates (gyro, roll/pitch/yaw) - telemetry downlink
-//   0x02: Position/altitude (height, velocities, thrust) - telemetry downlink
+//   0x01: Attitude/rates (13 bytes) - gyro xyz, roll/pitch/yaw
+//   0x02: Position/altitude (13 bytes) - alt, velocities, thrust, battery
 //   0x10: CMD_REQUEST_LOG - ground station requests log download
 //   0x11: LOG_CHUNK - drone sends log data chunk
 //   0x12: LOG_COMPLETE - drone signals end of log file
@@ -57,32 +62,36 @@ typedef enum {
 #define SCALE_VEL 1000     // m/s -> mm/s
 #define SCALE_THRUST 65535 // 0.0-1.0 -> 0-65535
 
-// Packed structs for wire format (must fit in 31-byte ESB limit).
+// Packed structs for wire format.
+// IMPORTANT: Keep packets <= 16 bytes due to nRF51 syslink limitation.
 // Packed is appropriate here: bandwidth is tight, both ends are controlled
 // by this codebase, and ARM Cortex-M handles unaligned access.
 
-// Packet type 0x01: Attitude and rates (17 bytes)
+// Maximum telemetry packet size (nRF51 syslink limitation)
+#define MAX_TELEMETRY_SIZE 16
+
+// Packet type 0x01: Attitude and rates (13 bytes)
+// Note: No timestamp - ground station derives timing from receive rate
 typedef struct __attribute__((packed)) {
-    uint8_t type;          // 0x01
-    uint32_t timestamp_ms; // Milliseconds since boot
-    int16_t gyro_x;        // Raw gyro X (millirad/s)
-    int16_t gyro_y;        // Raw gyro Y (millirad/s)
-    int16_t gyro_z;        // Raw gyro Z (millirad/s)
-    int16_t roll;          // Roll angle (millirad)
-    int16_t pitch;         // Pitch angle (millirad)
-    int16_t yaw;           // Yaw angle (millirad)
+    uint8_t type;   // 0x01
+    int16_t gyro_x; // Raw gyro X (millirad/s)
+    int16_t gyro_y; // Raw gyro Y (millirad/s)
+    int16_t gyro_z; // Raw gyro Z (millirad/s)
+    int16_t roll;   // Roll angle (millirad)
+    int16_t pitch;  // Pitch angle (millirad)
+    int16_t yaw;    // Yaw angle (millirad)
 } telemetry_attitude_t;
 
-// Packet type 0x02: Position and altitude (17 bytes)
+// Packet type 0x02: Position and altitude (13 bytes)
+// Note: No timestamp - ground station derives timing from receive rate
 typedef struct __attribute__((packed)) {
-    uint8_t type;          // 0x02
-    uint32_t timestamp_ms; // Milliseconds since boot
-    int16_t altitude;      // Altitude (mm)
-    int16_t vz;            // Vertical velocity (mm/s)
-    int16_t vx;            // X velocity (mm/s)
-    int16_t vy;            // Y velocity (mm/s)
-    uint16_t thrust;       // Thrust (0-65535)
-    uint16_t battery_mv;   // Battery voltage (millivolts)
+    uint8_t type;        // 0x02
+    int16_t altitude;    // Altitude (mm)
+    int16_t vz;          // Vertical velocity (mm/s)
+    int16_t vx;          // X velocity (mm/s)
+    int16_t vy;          // Y velocity (mm/s)
+    uint16_t thrust;     // Thrust (0-65535)
+    uint16_t battery_mv; // Battery voltage (millivolts)
 } telemetry_position_t;
 
 // Packet type 0x11: Log chunk (31 bytes)
@@ -99,8 +108,12 @@ typedef struct __attribute__((packed)) {
 } log_complete_packet_t;
 
 // Verify packet sizes at compile time
-_Static_assert(sizeof(telemetry_attitude_t) <= 31, "Attitude packet too large");
-_Static_assert(sizeof(telemetry_position_t) <= 31, "Position packet too large");
+// Telemetry packets must be <= 16 bytes (nRF51 syslink limitation)
+// Log packets can be up to 31 bytes (ESB limit) since they use different flow
+_Static_assert(sizeof(telemetry_attitude_t) <= MAX_TELEMETRY_SIZE,
+               "Attitude packet too large for nRF51 syslink");
+_Static_assert(sizeof(telemetry_position_t) <= MAX_TELEMETRY_SIZE,
+               "Position packet too large for nRF51 syslink");
 _Static_assert(sizeof(log_chunk_packet_t) <= 31, "Log chunk packet too large");
 _Static_assert(sizeof(log_complete_packet_t) <= 31,
                "Log complete packet too large");
@@ -276,9 +289,9 @@ void comms_actor(void *args, const hive_spawn_info_t *siblings,
             }
         }
 
-        // Check if radio is ready (flow control)
+        // Check hardware flow control before sending
         if (!hal_esb_tx_ready()) {
-            continue; // Skip this cycle, try again next tick
+            continue;
         }
 
         // Handle current mode
@@ -321,14 +334,11 @@ void comms_actor(void *args, const hive_spawn_info_t *siblings,
                 state->log_sequence++;
             }
         } else {
-            // Flight telemetry mode: send attitude/position packets
-            uint32_t now_ms = state->tick_count * 10;
-
+            // Flight telemetry mode: alternate between attitude and position
             if (state->next_is_attitude) {
-                // Send attitude/rates packet
+                // Send attitude packet (13 bytes)
                 telemetry_attitude_t pkt = {
                     .type = PACKET_TYPE_ATTITUDE,
-                    .timestamp_ms = now_ms,
                     .gyro_x = float_to_i16(latest_sensors.gyro[0], SCALE_RATE),
                     .gyro_y = float_to_i16(latest_sensors.gyro[1], SCALE_RATE),
                     .gyro_z = float_to_i16(latest_sensors.gyro[2], SCALE_RATE),
@@ -338,10 +348,9 @@ void comms_actor(void *args, const hive_spawn_info_t *siblings,
                 };
                 hal_esb_send(&pkt, sizeof(pkt));
             } else {
-                // Send position/altitude packet
+                // Send position packet (13 bytes)
                 telemetry_position_t pkt = {
                     .type = PACKET_TYPE_POSITION,
-                    .timestamp_ms = now_ms,
                     .altitude = float_to_i16(latest_state.altitude, SCALE_POS),
                     .vz =
                         float_to_i16(latest_state.vertical_velocity, SCALE_VEL),

@@ -13,12 +13,12 @@ ESB Protocol:
 
   Uses Crazyradio direct API for raw byte access (no CRTP layer).
 
-Telemetry packet formats:
-  Type 0x01 - Attitude/Rates (17 bytes):
-    type(1) + timestamp_ms(4) + gyro_xyz(6) + roll/pitch/yaw(6)
+Telemetry packet formats (13 bytes each, no timestamp due to nRF51 16-byte limit):
+  Type 0x01 - Attitude/Rates (13 bytes):
+    type(1) + gyro_xyz(6) + roll/pitch/yaw(6)
 
-  Type 0x02 - Position/Altitude (17 bytes):
-    type(1) + timestamp_ms(4) + altitude(2) + vz(2) + vx(2) + vy(2) + thrust(2) + battery_mv(2)
+  Type 0x02 - Position/Altitude (13 bytes):
+    type(1) + altitude(2) + vz(2) + vx(2) + vy(2) + thrust(2) + battery_mv(2)
 
 Log download packet formats (must match comms_actor.c):
   Type 0x10 - CMD_REQUEST_LOG (1 byte): Ground -> Drone to request log
@@ -77,18 +77,18 @@ def decode_attitude_packet(data: bytes) -> dict:
     """Decode attitude/rates packet (type 0x01).
 
     Format matches comms_actor.c telemetry_attitude_t:
-      type(1) + timestamp_ms(4) + gyro_xyz(6) + roll/pitch/yaw(6) = 17 bytes
+      type(1) + gyro_xyz(6) + roll/pitch/yaw(6) = 13 bytes
+    Note: No timestamp due to nRF51 16-byte syslink limit.
     """
-    if len(data) < 17:
+    if len(data) < 13:
         return None
 
-    _, timestamp_ms, gx, gy, gz, roll, pitch, yaw = struct.unpack(
-        "<BIhhhhhh", data[:17]
+    _, gx, gy, gz, roll, pitch, yaw = struct.unpack(
+        "<Bhhhhhh", data[:13]
     )
 
     return {
         "type": "attitude",
-        "timestamp_ms": timestamp_ms,
         "gyro_x": gx / SCALE_RATE,
         "gyro_y": gy / SCALE_RATE,
         "gyro_z": gz / SCALE_RATE,
@@ -102,18 +102,18 @@ def decode_position_packet(data: bytes) -> dict:
     """Decode position/altitude packet (type 0x02).
 
     Format matches comms_actor.c telemetry_position_t:
-      type(1) + timestamp_ms(4) + alt(2) + vz(2) + vx(2) + vy(2) + thrust(2) + battery_mv(2) = 17 bytes
+      type(1) + alt(2) + vz(2) + vx(2) + vy(2) + thrust(2) + battery_mv(2) = 13 bytes
+    Note: No timestamp due to nRF51 16-byte syslink limit.
     """
-    if len(data) < 17:
+    if len(data) < 13:
         return None
 
-    _, timestamp_ms, alt, vz, vx, vy, thrust, battery_mv = struct.unpack(
-        "<BIhhhhHH", data[:17]
+    _, alt, vz, vx, vy, thrust, battery_mv = struct.unpack(
+        "<BhhhhHH", data[:13]
     )
 
     return {
         "type": "position",
-        "timestamp_ms": timestamp_ms,
         "altitude": alt / SCALE_POS,
         "vz": vz / SCALE_VEL,
         "vx": vx / SCALE_VEL,
@@ -141,7 +141,7 @@ def decode_packet(data: bytes) -> dict:
 def format_attitude(pkt: dict) -> str:
     """Format attitude packet for display."""
     return (
-        f"[{pkt['timestamp_ms']:8d}ms] ATT  "
+        f"ATT  "
         f"gyro=({pkt['gyro_x']:+6.2f}, {pkt['gyro_y']:+6.2f}, {pkt['gyro_z']:+6.2f}) rad/s  "
         f"rpy=({pkt['roll']:+5.2f}, {pkt['pitch']:+5.2f}, {pkt['yaw']:+5.2f}) rad"
     )
@@ -150,7 +150,7 @@ def format_attitude(pkt: dict) -> str:
 def format_position(pkt: dict) -> str:
     """Format position packet for display."""
     return (
-        f"[{pkt['timestamp_ms']:8d}ms] POS  "
+        f"POS  "
         f"alt={pkt['altitude']:+5.2f}m  vz={pkt['vz']:+5.2f}m/s  "
         f"vxy=({pkt['vx']:+5.2f}, {pkt['vy']:+5.2f})m/s  "
         f"thrust={pkt['thrust']:.1%}  bat={pkt['battery_v']:.2f}V"
@@ -299,7 +299,6 @@ class TelemetryReceiver:
         """Write packet to CSV file."""
         row = {
             "receive_time": datetime.now().isoformat(),
-            "timestamp_ms": pkt["timestamp_ms"],
             "type": pkt["type"],
         }
 
@@ -447,7 +446,7 @@ def main():
     if args.output:
         csv_file = open(args.output, "w", newline="")
         fieldnames = [
-            "receive_time", "timestamp_ms", "type",
+            "receive_time", "type",
             "gyro_x", "gyro_y", "gyro_z", "roll", "pitch", "yaw",
             "altitude", "vz", "vx", "vy", "thrust", "battery_v"
         ]
