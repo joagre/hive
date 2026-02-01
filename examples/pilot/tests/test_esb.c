@@ -2,7 +2,7 @@
  * ESB Radio Communication Test
  *
  * Tests syslink radio communication with ground station.
- * Sends simple battery voltage packets to validate the protocol.
+ * Sends telemetry packets in the same format as comms_actor.c.
  *
  * ESB Protocol:
  *   - Ground station is PTX (Primary Transmitter) - initiates all communication
@@ -10,16 +10,21 @@
  *   - Drone queues telemetry via hal_esb_send()
  *   - nRF51 attaches queued payload to ACK when ground station polls
  *
- * Packet format (must match test_radio_ground.py):
- *   Byte 0: Type (0x03 = battery)
- *   Bytes 1-4: Voltage (float, little-endian)
+ * IMPORTANT: Telemetry packets are limited to 16 bytes maximum.
+ * The nRF51 syslink implementation drops RADIO_RAW packets larger than
+ * 16 bytes. This appears to be an undocumented limitation in the Bitcraze
+ * nRF51 firmware.
+ *
+ * Packet formats (must match comms_actor.c and ground_station.py):
+ *   Type 0x01 - Attitude (13 bytes): type + gyro_xyz + roll/pitch/yaw
+ *   Type 0x02 - Position (13 bytes): type + alt + vz/vx/vy + thrust + battery
  *
  * Usage:
  *   make PLATFORM=crazyflie TEST=esb
  *   make flash-crazyflie TEST=esb
  *
  * Ground station:
- *   sudo python test_radio_ground.py --rate 100 --duration 30
+ *   python3 ../tools/ground_station.py --uri radio://0/80/2M
  */
 
 #include "hal/hal.h"
@@ -38,18 +43,43 @@
 #define BATTERY_TIMEOUT_MS 5000  // Wait 5s for battery from nRF51
 
 // ============================================================================
-// Packet Definition
+// Packet Definitions (must match comms_actor.c)
 // ============================================================================
 
-#define PACKET_TYPE_BATTERY 0x03
+// Maximum telemetry packet size (nRF51 syslink limitation)
+#define MAX_TELEMETRY_SIZE 16
 
-// Battery packet: type(1) + voltage(4) = 5 bytes
+// Packet type identifiers
+#define PACKET_TYPE_ATTITUDE 0x01
+#define PACKET_TYPE_POSITION 0x02
+
+// Packet type 0x01: Attitude and rates (13 bytes)
 typedef struct __attribute__((packed)) {
-    uint8_t type;
-    float voltage;
-} battery_packet_t;
+    uint8_t type;   // 0x01
+    int16_t gyro_x; // Raw gyro X (millirad/s)
+    int16_t gyro_y; // Raw gyro Y (millirad/s)
+    int16_t gyro_z; // Raw gyro Z (millirad/s)
+    int16_t roll;   // Roll angle (millirad)
+    int16_t pitch;  // Pitch angle (millirad)
+    int16_t yaw;    // Yaw angle (millirad)
+} telemetry_attitude_t;
 
-_Static_assert(sizeof(battery_packet_t) == 5, "Battery packet size mismatch");
+// Packet type 0x02: Position and altitude (13 bytes)
+typedef struct __attribute__((packed)) {
+    uint8_t type;        // 0x02
+    int16_t altitude;    // Altitude (mm)
+    int16_t vz;          // Vertical velocity (mm/s)
+    int16_t vx;          // X velocity (mm/s)
+    int16_t vy;          // Y velocity (mm/s)
+    uint16_t thrust;     // Thrust (0-65535)
+    uint16_t battery_mv; // Battery voltage (millivolts)
+} telemetry_position_t;
+
+// Verify packet sizes at compile time
+_Static_assert(sizeof(telemetry_attitude_t) <= MAX_TELEMETRY_SIZE,
+               "Attitude packet too large for nRF51 syslink");
+_Static_assert(sizeof(telemetry_position_t) <= MAX_TELEMETRY_SIZE,
+               "Position packet too large for nRF51 syslink");
 
 // ============================================================================
 // Test State
@@ -114,7 +144,7 @@ static bool wait_for_battery(void) {
 static void run_telemetry_loop(void) {
     HIVE_LOG_INFO("[ESB] Telemetry loop starting (%ds)",
                   TEST_DURATION_MS / 1000);
-    HIVE_LOG_INFO("[ESB] Sending battery packets at %d Hz",
+    HIVE_LOG_INFO("[ESB] Sending ATT/POS packets at %d Hz",
                   1000 / TELEMETRY_INTERVAL_MS);
 
     uint32_t start = hal_get_time_ms();
@@ -122,6 +152,7 @@ static void run_telemetry_loop(void) {
     uint32_t last_log = 0;
     uint32_t tx_ok = 0;
     uint32_t tx_busy = 0;
+    bool next_is_attitude = true;
 
     while ((hal_get_time_ms() - start) < TEST_DURATION_MS) {
         uint32_t now = hal_get_time_ms();
@@ -138,16 +169,42 @@ static void run_telemetry_loop(void) {
                 continue;
             }
 
-            battery_packet_t pkt = {
-                .type = PACKET_TYPE_BATTERY,
-                .voltage = hal_power_get_battery(),
-            };
-
-            if (hal_esb_send(&pkt, sizeof(pkt)) == 0) {
-                tx_ok++;
-                s_tx_count++;
-                hal_led_toggle();
+            if (next_is_attitude) {
+                // Send attitude packet with zeros (no sensors in test)
+                telemetry_attitude_t pkt = {
+                    .type = PACKET_TYPE_ATTITUDE,
+                    .gyro_x = 0,
+                    .gyro_y = 0,
+                    .gyro_z = 0,
+                    .roll = 0,
+                    .pitch = 0,
+                    .yaw = 0,
+                };
+                if (hal_esb_send(&pkt, sizeof(pkt)) == 0) {
+                    tx_ok++;
+                    s_tx_count++;
+                    hal_led_toggle();
+                }
+            } else {
+                // Send position packet with battery voltage
+                float voltage = hal_power_get_battery();
+                telemetry_position_t pkt = {
+                    .type = PACKET_TYPE_POSITION,
+                    .altitude = 0,
+                    .vz = 0,
+                    .vx = 0,
+                    .vy = 0,
+                    .thrust = 0,
+                    .battery_mv = (uint16_t)(voltage * 1000.0f),
+                };
+                if (hal_esb_send(&pkt, sizeof(pkt)) == 0) {
+                    tx_ok++;
+                    s_tx_count++;
+                    hal_led_toggle();
+                }
             }
+
+            next_is_attitude = !next_is_attitude;
         }
 
         // Log status every 5 seconds

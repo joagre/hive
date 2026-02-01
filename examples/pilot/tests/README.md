@@ -250,26 +250,30 @@ make flash-crazyflie TEST=esb
 
 **Run ground station (on laptop):**
 ```bash
-sudo python test_radio_ground.py [--uri URI] [--duration SECONDS] [--rate HZ]
+python3 ../tools/ground_station.py --uri radio://0/80/2M
 ```
 
 **Test sequence (Crazyflie):**
 1. Initialize HAL and radio (`hal_esb_init()`)
 2. Wait for battery voltage from nRF51 (proves internal syslink works)
-3. Queue battery packets at 100Hz via `hal_esb_send()`
+3. Queue telemetry packets at 100Hz via `hal_esb_send()`
 4. Packets are sent when ground station polls (ACK payload)
 
 **Test sequence (ground station):**
 1. Scan for Crazyflie (or use specified URI)
 2. Connect via Crazyradio
-3. Poll at specified rate (default 100Hz)
-4. Receive and decode battery packets from ACK payloads
+3. Poll continuously
+4. Receive and decode telemetry packets from ACK payloads
 
-**Packet format:**
-| Byte | Contents |
-|------|----------|
-| 0 | Type (0x03 = battery) |
-| 1-4 | Voltage (float, little-endian) |
+**Packet formats (must match comms_actor.c and ground_station.py):**
+
+IMPORTANT: Telemetry packets are limited to 16 bytes maximum due to an
+undocumented nRF51 syslink limitation.
+
+| Type | Name | Size | Contents |
+|------|------|------|----------|
+| 0x01 | Attitude | 13 bytes | type + gyro_xyz + roll/pitch/yaw (all int16) |
+| 0x02 | Position | 13 bytes | type + alt + vz/vx/vy + thrust + battery_mv |
 
 **LED feedback:**
 | Pattern | Meaning |
@@ -280,42 +284,20 @@ sudo python test_radio_ground.py [--uri URI] [--duration SECONDS] [--rate HZ]
 | Fast blink | Sending telemetry |
 | LED on solid | Test complete |
 
-**Example output:**
+**Example output (ground_station.py):**
 ```
-==================================================
-  ESB Radio Test - Ground Station
-==================================================
-
-Protocol:
-  Ground station polls -> Drone ACKs with telemetry
-
-Scanning for Crazyflie...
-Found 1 Crazyflie(s):
-  [0] radio://0/80/2M
-Connecting to radio://0/80/2M...
+Connecting to channel 80, 2M...
 Connected!
-
-Polling at 100 Hz for 30 seconds...
-Press Ctrl+C to stop
-
-[ 30.0s] Battery:  341  Unknown:    0  | 4.14V
-
-==================================================
-  TEST COMPLETE
-==================================================
-  Duration:     30.0s
-  Poll rate:    100 Hz
-  Polls sent:   2950
-  Battery pkts: 341
-  Unknown pkts: 0
-  Packet rate:  11.4 pkts/sec
-  Last voltage: 4.14V
-==================================================
+Waiting for telemetry... (Ctrl+C to stop)
+ATT  gyro=( +0.00,  +0.00,  +0.00) rad/s  rpy=(+0.00, +0.00, +0.00) rad
+POS  alt=+0.00m  vz=+0.00m/s  vxy=(+0.00, +0.00)m/s  thrust=0.0%  bat=4.15V
+ATT  gyro=( +0.00,  +0.00,  +0.00) rad/s  rpy=(+0.00, +0.00, +0.00) rad
+POS  alt=+0.00m  vz=+0.00m/s  vxy=(+0.00, +0.00)m/s  thrust=0.0%  bat=4.15V
+...
 ```
 
-**Note:** The effective packet rate (~11 pkts/sec) is lower than the poll rate
-(100 Hz) because the nRF51 ACK payload buffer holds only one packet. Empty
-polls (when no new telemetry is queued) return no data.
+**Note:** Test sends zeros for sensor values since no sensors are read. Battery
+voltage in position packets shows the actual nRF51-reported battery level.
 
 ### main (Combined Test Runner)
 
