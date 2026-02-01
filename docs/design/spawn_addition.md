@@ -366,8 +366,8 @@ void my_actor(void *args, const hive_spawn_info_t *siblings, size_t count) {
 - [x] `benchmarks/bench.c` - Update all actor signatures and spawn calls
 
 ### QEMU Updates
-- [x] `qemu/test_main.c`
-- [x] `qemu/test_runner.c`
-- [x] `qemu/hive_select.c` - New select test for QEMU
+- [x] `tests/qemu/test_main.c`
+- [x] `tests/qemu/test_runner.c`
+- [x] `tests/qemu/hive_select.c` - New select test for QEMU
 - [x] Verify all QEMU tests pass
 - [x] Verify all QEMU examples pass

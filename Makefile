@@ -70,37 +70,37 @@ tests: $(LIB)
 	$(MAKE) -C tests
 
 # ============================================================================
-# QEMU Targets (delegate to qemu/)
+# QEMU Targets (delegate to tests/qemu/)
 # ============================================================================
 
 .PHONY: qemu-build
 qemu-build:
-	$(MAKE) -C qemu build
+	$(MAKE) -C tests/qemu build
 
 .PHONY: qemu-test
 qemu-test:
-	$(MAKE) -C qemu test
+	$(MAKE) -C tests/qemu test
 
 .PHONY: qemu-test-ci
 qemu-test-ci:
-	$(MAKE) -C qemu test-ci
+	$(MAKE) -C tests/qemu test-ci
 
 .PHONY: qemu-test-suite
 qemu-test-suite:
-	$(MAKE) -C qemu test-suite
+	$(MAKE) -C tests/qemu test-suite
 
 .PHONY: qemu-example-suite
 qemu-example-suite:
-	$(MAKE) -C qemu example-suite
+	$(MAKE) -C tests/qemu example-suite
 
 # Pattern rules for QEMU targets
 .PHONY: qemu-run-%
 qemu-run-%:
-	$(MAKE) -C qemu run-$*
+	$(MAKE) -C tests/qemu run-$*
 
 .PHONY: qemu-example-%
 qemu-example-%:
-	$(MAKE) -C qemu example-$*
+	$(MAKE) -C tests/qemu example-$*
 
 # ============================================================================
 # Utility Targets
@@ -174,7 +174,7 @@ help:
 	@echo "  make -C examples   - Build/run examples directly"
 	@echo "  make -C benchmarks - Build/run benchmarks directly"
 	@echo "  make -C man        - Install/view man pages"
-	@echo "  make -C qemu       - QEMU cross-compile directly"
+	@echo "  make -C tests/qemu - QEMU cross-compile directly"
 
 # Print variables for debugging
 .PHONY: print-%

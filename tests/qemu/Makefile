@@ -6,10 +6,10 @@
 #   sudo apt install gcc-arm-none-eabi qemu-system-arm
 
 # Directories
-SRC_DIR ?= ../src
-TESTS_DIR ?= ../tests
-EXAMPLES_DIR ?= ../examples
-BUILD_DIR ?= ../build/qemu
+SRC_DIR ?= ../../src
+TESTS_DIR ?= ../../tests
+EXAMPLES_DIR ?= ../../examples
+BUILD_DIR ?= ../../build/qemu
 
 # ARM cross-compiler
 ARM_CC := arm-none-eabi-gcc
@@ -40,8 +40,8 @@ HIVE_CFLAGS += -DHIVE_MAX_SUPERVISOR_CHILDREN=4
 
 # CFLAGS to pass to src/Makefile (PLATFORM=stm32)
 HIVE_CFLAGS_EXPORT := $(MCU)
-HIVE_CFLAGS_EXPORT += -I$(abspath ../include)
-HIVE_CFLAGS_EXPORT += -I$(abspath ../lib) -I$(abspath ../lib/printf)
+HIVE_CFLAGS_EXPORT += -I$(abspath ../../include)
+HIVE_CFLAGS_EXPORT += -I$(abspath ../../lib) -I$(abspath ../../lib/printf)
 HIVE_CFLAGS_EXPORT += $(HIVE_CFLAGS)
 
 # ============================================================================
@@ -56,8 +56,8 @@ ARM_CFLAGS += -ffreestanding -nostdlib
 ARM_CFLAGS += -MMD -MP
 
 # Include paths and defines for local sources
-ARM_CPPFLAGS := -I../include -I../lib -I../lib/printf -DPRINTF_INCLUDE_CONFIG_H -I.
-ARM_CPPFLAGS += -I../src/hal/stm32
+ARM_CPPFLAGS := -I../../include -I../../lib -I../../lib/printf -DPRINTF_INCLUDE_CONFIG_H -I.
+ARM_CPPFLAGS += -I../../src/hal/stm32
 ARM_CPPFLAGS += -DHIVE_PLATFORM_STM32 -DHIVE_ENABLE_TCP=0 -DHIVE_ENABLE_FILE=0
 ARM_CPPFLAGS += $(HIVE_CFLAGS)
 
