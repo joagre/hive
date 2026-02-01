@@ -331,7 +331,7 @@ Tests structured logging API.
 - HIVE_LOG_* macros write to file
 - hive_log_file_sync flushes to disk
 - hive_log_file_close finalizes file
-- Log file contains valid binary entries (magic bytes)
+- Log file contains valid plain text entries
 
 ---
 

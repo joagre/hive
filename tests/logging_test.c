@@ -5,7 +5,7 @@
 // 2. HIVE_LOG_* macros write to file
 // 3. hive_log_file_sync flushes to disk
 // 4. hive_log_file_close finalizes file
-// 5. Log file contains valid binary entries (magic bytes)
+// 5. Log file contains valid plain text entries
 
 #include "hive_runtime.h"
 #include "hive_log.h"
@@ -34,10 +34,8 @@ static int tests_failed = 0;
 // Test file path
 static const char *TEST_LOG_FILE = "/tmp/hive_logging_test.log";
 
-// Log entry header (from hive_log.h)
-// Magic: 0x4C47 ("LG"), followed by seq, timestamp, len, level, reserved
-#define LOG_MAGIC 0x4C47
-#define LOG_HEADER_SIZE 12
+// Log format is now plain text: [MM:SS.mmm] LEVEL message
+// Example: [00:00.001] INFO  Test info message: 42
 
 static void run_logging_tests(void *args, const hive_spawn_info_t *siblings,
                               size_t sibling_count) {
@@ -132,41 +130,39 @@ static void run_logging_tests(void *args, const hive_spawn_info_t *siblings,
     }
 
     // ========================================================================
-    // Test 6: Verify binary format (magic bytes)
+    // Test 6: Verify plain text format
     // ========================================================================
-    printf("\nTest 6: Verify binary format (magic bytes)\n");
+    printf("\nTest 6: Verify plain text format\n");
     {
         int fd = open(TEST_LOG_FILE, O_RDONLY);
         if (fd < 0) {
             TEST_FAIL("cannot open log file for verification");
         } else {
-            uint8_t header[LOG_HEADER_SIZE];
-            ssize_t nread = read(fd, header, LOG_HEADER_SIZE);
+            char line[256];
+            ssize_t nread = read(fd, line, sizeof(line) - 1);
 
-            if (nread < LOG_HEADER_SIZE) {
-                TEST_FAIL("log file too small for header");
+            if (nread <= 0) {
+                TEST_FAIL("log file is empty");
             } else {
-                // Check magic bytes (little-endian: 0x47, 0x4C = "LG")
-                uint16_t magic = header[0] | (header[1] << 8);
-                if (magic == LOG_MAGIC) {
-                    printf("    Magic: 0x%04X (correct)\n", magic);
+                line[nread] = '\0';
+                // Check for timestamp format [MM:SS.mmm] or [MMM:SS.mmm] etc.
+                // The first char should be '[' and we should find ':' and '.'
+                bool has_bracket = (line[0] == '[');
+                bool has_colon = (strchr(line, ':') != NULL);
+                bool has_dot = (strchr(line, '.') != NULL);
 
-                    // Extract other fields for display
-                    uint16_t seq = header[2] | (header[3] << 8);
-                    uint32_t timestamp = header[4] | (header[5] << 8) |
-                                         (header[6] << 16) | (header[7] << 24);
-                    uint16_t len = header[8] | (header[9] << 8);
-                    uint8_t level = header[10];
-
-                    printf(
-                        "    First entry: seq=%u, ts=%u us, len=%u, level=%u\n",
-                        seq, timestamp, len, level);
-
-                    TEST_PASS("binary format has correct magic");
+                if (has_bracket && has_colon && has_dot) {
+                    // Truncate at newline for display
+                    char *nl = strchr(line, '\n');
+                    if (nl)
+                        *nl = '\0';
+                    printf("    First line: %s\n", line);
+                    TEST_PASS("plain text format has correct timestamp");
                 } else {
-                    printf("    Magic: 0x%04X (expected 0x%04X)\n", magic,
-                           LOG_MAGIC);
-                    TEST_FAIL("incorrect magic bytes");
+                    printf("    First bytes: %02x %02x %02x %02x\n",
+                           (uint8_t)line[0], (uint8_t)line[1], (uint8_t)line[2],
+                           (uint8_t)line[3]);
+                    TEST_FAIL("unexpected format - expected [MM:SS.mmm]");
                 }
             }
             close(fd);
@@ -174,36 +170,30 @@ static void run_logging_tests(void *args, const hive_spawn_info_t *siblings,
     }
 
     // ========================================================================
-    // Test 7: Count log entries
+    // Test 7: Count log lines
     // ========================================================================
-    printf("\nTest 7: Count log entries\n");
+    printf("\nTest 7: Count log lines\n");
     {
         int fd = open(TEST_LOG_FILE, O_RDONLY);
         if (fd < 0) {
             TEST_FAIL("cannot open log file");
         } else {
-            int entry_count = 0;
-            uint8_t header[LOG_HEADER_SIZE];
+            char buf[4096];
+            ssize_t nread = read(fd, buf, sizeof(buf));
+            int line_count = 0;
 
-            while (read(fd, header, LOG_HEADER_SIZE) == LOG_HEADER_SIZE) {
-                uint16_t magic = header[0] | (header[1] << 8);
-                if (magic != LOG_MAGIC) {
-                    break;
-                }
-
-                uint16_t len = header[8] | (header[9] << 8);
-                entry_count++;
-
-                // Skip payload
-                if (len > 0) {
-                    lseek(fd, len, SEEK_CUR);
+            if (nread > 0) {
+                for (ssize_t i = 0; i < nread; i++) {
+                    if (buf[i] == '\n') {
+                        line_count++;
+                    }
                 }
             }
 
-            printf("    Found %d log entries\n", entry_count);
+            printf("    Found %d log lines\n", line_count);
 
             // We wrote at least 3 entries (INFO, WARN, ERROR)
-            if (entry_count >= 3) {
+            if (line_count >= 3) {
                 TEST_PASS("found expected log entries");
             } else {
                 TEST_FAIL("too few log entries");
