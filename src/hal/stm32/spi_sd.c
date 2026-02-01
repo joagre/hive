@@ -18,10 +18,9 @@
 // Enable SD_DEBUG_ENABLE to see initialization details
 #if defined(SD_DEBUG_ENABLE) && SD_DEBUG_ENABLE
 extern void platform_debug_printf(const char *fmt, ...);
-#define SD_DEBUG(fmt, ...) \
-    platform_debug_printf("[SD] " fmt "\n", ##__VA_ARGS__)
+#define SD_DEBUG(...) platform_debug_printf("[SD] " __VA_ARGS__)
 #else
-#define SD_DEBUG(fmt, ...) ((void)0)
+#define SD_DEBUG(...) ((void)0)
 #endif
 
 // ---------------------------------------------------------------------------
@@ -184,19 +183,19 @@ int spi_sd_init(void) {
     uint8_t r1;
     uint8_t ocr[4];
 
-    SD_DEBUG("Initializing SPI SD card...");
+    SD_DEBUG("Initializing SPI SD card...\n");
 
     // Initialize SPI hardware at low speed
     spi_ll_init();
     spi_ll_set_slow();
 
     // Add a longer power-on delay for card stabilization
-    SD_DEBUG("Power-on delay (100ms equivalent)...");
+    SD_DEBUG("Power-on delay (100ms equivalent)...\n");
     for (volatile int d = 0; d < 2000000; d++)
         __asm__("nop");
 
     // Toggle CS a few times to verify pin is working
-    SD_DEBUG("Testing CS pin toggle...");
+    SD_DEBUG("Testing CS pin toggle...\n");
     for (int i = 0; i < 5; i++) {
         spi_ll_cs_low();
         for (volatile int d = 0; d < 50000; d++)
@@ -216,7 +215,7 @@ int spi_sd_init(void) {
 
     // CS high, send 80+ clocks to wake up card and enter native mode
     // SD spec requires at least 74 clocks, send 200 (25 bytes) to be safe
-    SD_DEBUG("Sending %d wake-up clocks...", 25 * 8);
+    SD_DEBUG("Sending %d wake-up clocks...\n", 25 * 8);
     for (int i = 0; i < 25; i++) {
         spi_ll_xfer(0xFF);
     }
@@ -225,7 +224,7 @@ int spi_sd_init(void) {
     for (volatile int d = 0; d < 50000; d++)
         __asm__("nop");
 
-    SD_DEBUG("Sending CMD0 (GO_IDLE_STATE)...");
+    SD_DEBUG("Sending CMD0 (GO_IDLE_STATE)...\n");
 
     // Small delay before CMD0
     for (volatile int d = 0; d < 10000; d++)
@@ -241,11 +240,11 @@ int spi_sd_init(void) {
     r1 = send_cmd(CMD0, 0);
     spi_ll_cs_high();
 
-    SD_DEBUG("CMD0 response: 0x%02X (expect 0x01)", r1);
+    SD_DEBUG("CMD0 response: 0x%02X (expect 0x01)\n", r1);
 
     // 0x00 from CMD0 is suspicious - try sending more clocks and retry
     if (r1 == 0x00 || r1 == 0xFF) {
-        SD_DEBUG("CMD0 got 0x%02X, sending more clocks and retrying...", r1);
+        SD_DEBUG("CMD0 got 0x%02X, sending more clocks and retrying...\n", r1);
         spi_ll_cs_high();
         for (int i = 0; i < 50; i++) {
             spi_ll_xfer(0xFF);
@@ -253,34 +252,34 @@ int spi_sd_init(void) {
         spi_ll_cs_low();
         r1 = send_cmd(CMD0, 0);
         spi_ll_cs_high();
-        SD_DEBUG("CMD0 retry response: 0x%02X", r1);
+        SD_DEBUG("CMD0 retry response: 0x%02X\n", r1);
     }
 
     // If still not in idle state, continue anyway and see what happens
     if (r1 != R1_IDLE_STATE) {
-        SD_DEBUG("CMD0 unexpected response 0x%02X, trying CMD8 anyway", r1);
+        SD_DEBUG("CMD0 unexpected response 0x%02X, trying CMD8 anyway\n", r1);
     }
 
     // Check voltage (CMD8)
-    SD_DEBUG("Sending CMD8 (SEND_IF_COND)...");
+    SD_DEBUG("Sending CMD8 (SEND_IF_COND)...\n");
     spi_ll_cs_low();
     r1 = send_cmd(CMD8, 0x1AA);
-    SD_DEBUG("CMD8 response: 0x%02X", r1);
+    SD_DEBUG("CMD8 response: 0x%02X\n", r1);
     if (r1 == R1_IDLE_STATE) {
         // SD v2.0+
         spi_recv(ocr, 4);
         spi_ll_cs_high();
 
-        SD_DEBUG("CMD8 OCR: %02X %02X %02X %02X", ocr[0], ocr[1], ocr[2],
+        SD_DEBUG("CMD8 OCR: %02X %02X %02X %02X\n", ocr[0], ocr[1], ocr[2],
                  ocr[3]);
 
         if (ocr[2] != 0x01 || ocr[3] != 0xAA) {
-            SD_DEBUG("CMD8 voltage check failed");
+            SD_DEBUG("CMD8 voltage check failed\n");
             return -1; // Voltage not accepted
         }
 
         // Wait for card ready (ACMD41 with HCS=1)
-        SD_DEBUG("Sending ACMD41 (SD_SEND_OP_COND)...");
+        SD_DEBUG("Sending ACMD41 (SD_SEND_OP_COND)...\n");
         for (int i = 0; i < 1000; i++) {
             spi_ll_cs_low();
             r1 = send_acmd(ACMD41, 0x40000000);
@@ -289,10 +288,10 @@ int spi_sd_init(void) {
                 break;
         }
 
-        SD_DEBUG("ACMD41 final response: 0x%02X", r1);
+        SD_DEBUG("ACMD41 final response: 0x%02X\n", r1);
 
         if (r1 != 0) {
-            SD_DEBUG("ACMD41 failed: card not ready");
+            SD_DEBUG("ACMD41 failed: card not ready\n");
             return -1;
         }
 
@@ -303,11 +302,11 @@ int spi_sd_init(void) {
         spi_ll_cs_high();
 
         s_card_type = (ocr[0] & 0x40) ? SD_CARD_V2_HC : SD_CARD_V2_SC;
-        SD_DEBUG("Card type: %s",
+        SD_DEBUG("Card type: %s\n",
                  s_card_type == SD_CARD_V2_HC ? "SDHC" : "SD v2.0");
     } else {
         spi_ll_cs_high();
-        SD_DEBUG("Card is SD v1.x or MMC");
+        SD_DEBUG("Card is SD v1.x or MMC\n");
         // SD v1.x or MMC
         spi_ll_cs_low();
         r1 = send_acmd(ACMD41, 0);
@@ -325,12 +324,12 @@ int spi_sd_init(void) {
             s_card_type = SD_CARD_V1;
         } else {
             // MMC (not supported)
-            SD_DEBUG("MMC cards not supported");
+            SD_DEBUG("MMC cards not supported\n");
             return -1;
         }
 
         if (r1 != 0) {
-            SD_DEBUG("ACMD41 failed for SD v1.x");
+            SD_DEBUG("ACMD41 failed for SD v1.x\n");
             return -1;
         }
     }
@@ -378,17 +377,17 @@ int spi_sd_init(void) {
     spi_ll_set_fast();
 
     s_initialized = true;
-    SD_DEBUG("SD card initialized: %lu sectors (%lu MB)", s_sector_count,
+    SD_DEBUG("SD card initialized: %lu sectors (%lu MB)\n", s_sector_count,
              s_sector_count / 2048);
     return 0;
 }
 
 int spi_sd_read_blocks(uint8_t *buf, uint32_t sector, uint32_t count) {
     if (!s_initialized || count == 0) {
-        SD_DEBUG("read_blocks: not initialized or count=0");
+        SD_DEBUG("read_blocks: not initialized or count=0\n");
         return -1;
     }
-    SD_DEBUG("read_blocks: sector=%lu count=%lu", sector, count);
+    SD_DEBUG("read_blocks: sector=%lu count=%lu\n", sector, count);
 
     // Convert to byte address for v1/v2-SC cards
     uint32_t addr = sector;
@@ -402,13 +401,13 @@ int spi_sd_read_blocks(uint8_t *buf, uint32_t sector, uint32_t count) {
         // Single block read
         uint8_t r = send_cmd(CMD17, addr);
         if (r != 0) {
-            SD_DEBUG("CMD17 failed: 0x%02X", r);
+            SD_DEBUG("CMD17 failed: 0x%02X\n", r);
             spi_ll_cs_high();
             return -1;
         }
 
         if (wait_data_token(TOKEN_SINGLE_BLOCK, 500) != 0) {
-            SD_DEBUG("wait_data_token failed");
+            SD_DEBUG("wait_data_token failed\n");
             spi_ll_cs_high();
             return -1;
         }

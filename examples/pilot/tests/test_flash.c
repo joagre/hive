@@ -76,7 +76,7 @@ static void test_blink(int n, int on_ms, int off_ms) {
     }
 }
 
-static void error_blink_forever(void) {
+__attribute__((unused)) static void error_blink_forever(void) {
     while (1) {
         hal_led_toggle();
         hal_delay_ms(300);

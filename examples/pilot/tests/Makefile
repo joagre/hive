@@ -14,7 +14,7 @@
 PLATFORM :=
 TEST := sensors_motors
 ENABLE_MOTOR_TEST := 0
-ENABLE_SD := 0
+ENABLE_SD := 1
 
 # =============================================================================
 # Paths
