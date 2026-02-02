@@ -44,12 +44,11 @@ static void server_actor(void *args, const hive_spawn_info_t *siblings,
     status = hive_ipc_notify(client_id, MSG_SERVER_READY, &ready_msg,
                              sizeof(ready_msg));
     if (HIVE_FAILED(status)) {
-        printf("Server: Failed to send ready message: %s\n",
-               HIVE_ERR_STR(status));
+        printf("Server: Failed to notify ready: %s\n", HIVE_ERR_STR(status));
         hive_tcp_close(listen_fd);
         return;
     }
-    printf("Server: Sent ready notification to client via IPC\n");
+    printf("Server: Notified ready to client via IPC\n");
 
     // Accept connection (block forever)
     int conn_fd;
@@ -192,10 +191,9 @@ static void client_actor(void *args, const hive_spawn_info_t *siblings,
     status = hive_ipc_notify(server_id, MSG_CLIENT_DONE, &done_msg,
                              sizeof(done_msg));
     if (HIVE_FAILED(status)) {
-        printf("Client: Failed to send done message: %s\n",
-               HIVE_ERR_STR(status));
+        printf("Client: Failed to notify done: %s\n", HIVE_ERR_STR(status));
     } else {
-        printf("Client: Sent done notification to server via IPC\n");
+        printf("Client: Notified done to server via IPC\n");
     }
 
     printf("Client: Done!\n");
@@ -226,7 +224,7 @@ int main(void) {
         return 1;
     }
 
-    // Spawn server actor with client ID so it can send ready notification
+    // Spawn server actor with client ID so it can notify ready
     hive_actor_config_t server_cfg = HIVE_ACTOR_CONFIG_DEFAULT;
     server_cfg.name = "server";
     server_cfg.priority = HIVE_PRIORITY_NORMAL;

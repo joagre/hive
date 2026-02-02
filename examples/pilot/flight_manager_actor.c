@@ -3,11 +3,11 @@
 // Controls flight lifecycle:
 // 1. Startup delay (real hardware only)
 // 2. Open log file (ARM phase)
-// 3. Send START to waypoint actor
+// 3. Notify START to waypoint actor
 // 4. Periodic log sync (every 4 seconds)
 // 5. Flight duration timer
-// 6. Send LANDING to altitude actor
-// 7. Wait for LANDED, then send STOP to motor actor
+// 6. Notify LANDING to altitude actor
+// 7. Wait for LANDED, then notify STOP to motor actor
 // 8. Close log file (DISARM phase)
 //
 // Uses sibling info to find waypoint, altitude, motor actors.
@@ -120,7 +120,7 @@ void flight_manager_actor(void *args, const hive_spawn_info_t *siblings,
 
     // === FLIGHT PHASE ===
     // Notify waypoint actor to begin flight sequence
-    HIVE_LOG_INFO("[FLM] Sending START - flight authorized");
+    HIVE_LOG_INFO("[FLM] Notifying START - flight authorized");
     hive_ipc_notify(waypoint, NOTIFY_FLIGHT_START, NULL, 0);
 
     // Flight duration timer, then initiate controlled landing
@@ -199,7 +199,7 @@ void flight_manager_actor(void *args, const hive_spawn_info_t *siblings,
 
     HIVE_LOG_INFO("[FLM] Landing confirmed - stopping motors");
 
-    // Send STOP to motor actor
+    // Notify STOP to motor actor
     hive_ipc_notify(motor, NOTIFY_FLIGHT_STOP, NULL, 0);
 
     // === DISARM PHASE: Close log file ===

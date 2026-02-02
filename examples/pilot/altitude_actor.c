@@ -4,7 +4,7 @@
 // Landing mode: Fixed descent rate until touchdown
 //
 // Landing is triggered by NOTIFY_LANDING message. When complete,
-// sends NOTIFY_FLIGHT_LANDED to flight manager.
+// notifies NOTIFY_FLIGHT_LANDED to flight manager.
 
 #include "altitude_actor.h"
 #include "pilot_buses.h"

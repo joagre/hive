@@ -4,7 +4,7 @@
  * This example demonstrates handling pool exhaustion in the Hive actor runtime.
  * It shows both approaches:
  * 1. Default behavior: HIVE_ERR_NOMEM returned (caller handles retry/backoff)
- * 2. Blocking behavior: pool_block=true (sends yield until pool space available)
+ * 2. Blocking behavior: pool_block=true (notify operations yield until pool space available)
  *
  * The example spawns a fast sender and slow receiver to intentionally exhaust
  * the message pool, then demonstrates both handling strategies.
@@ -70,7 +70,7 @@ static void nonblocking_sender(void *args, const hive_spawn_info_t *siblings,
     int retries = 0;
     int max_retries = 3;
 
-    // Send messages until pool exhausted, then demonstrate retry pattern
+    // Notify messages until pool exhausted, then demonstrate retry pattern
     for (int i = 0; i < 300; i++) {
         int data = i;
         hive_status_t s =
@@ -91,7 +91,7 @@ static void nonblocking_sender(void *args, const hive_spawn_info_t *siblings,
                         printf("  [%d] Received message during backoff\n", i);
                     }
 
-                    // Retry send
+                    // Retry notify
                     s = hive_ipc_notify(receiver, HIVE_TAG_NONE, &data,
                                         sizeof(data));
                     if (HIVE_SUCCEEDED(s)) {
@@ -164,7 +164,7 @@ static void blocking_sender(void *args, const hive_spawn_info_t *siblings,
     printf("Current pool_block setting: %s\n\n",
            hive_pool_get_block() ? "true" : "false");
 
-    // Send many messages - will block when pool exhausted, resume when space
+    // Notify many messages - will block when pool exhausted, resume when space
     // available
     int target = HIVE_MESSAGE_DATA_POOL_SIZE + 50; // More than pool size
 

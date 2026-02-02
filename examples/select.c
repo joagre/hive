@@ -66,27 +66,27 @@ static void sensor_publisher(void *args, const hive_spawn_info_t *siblings,
     return;
 }
 
-// Command sender actor - sends shutdown command after delay
+// Command sender actor - notifies shutdown command after delay
 static void command_sender(void *args, const hive_spawn_info_t *siblings,
                            size_t sibling_count) {
     (void)siblings;
     (void)sibling_count;
     actor_id_t controller = *(actor_id_t *)args;
-    printf("[Command] Sender started, will send shutdown after 500ms\n");
+    printf("[Command] Sender started, will notify shutdown after 500ms\n");
 
-    // Wait before sending shutdown
+    // Wait before notifying shutdown
     hive_sleep(500000);
 
-    // Send status request
-    printf("[Command] Sending STATUS command\n");
+    // Notify status
+    printf("[Command] Notifying STATUS command\n");
     int status_data = 0;
     hive_ipc_notify(controller, CMD_STATUS, &status_data, sizeof(status_data));
 
     // Wait a bit more
     hive_sleep(200000);
 
-    // Send shutdown command
-    printf("[Command] Sending SHUTDOWN command\n");
+    // Notify shutdown command
+    printf("[Command] Notifying SHUTDOWN command\n");
     int shutdown_data = 1;
     hive_ipc_notify(controller, CMD_SHUTDOWN, &shutdown_data,
                     sizeof(shutdown_data));

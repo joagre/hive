@@ -5,14 +5,14 @@
  * which provides natural backpressure by blocking the caller until a reply.
  *
  * KEY CONCEPTS:
- * - Caller blocks until callee sends a reply (natural backpressure)
+ * - Caller blocks until callee replies (natural backpressure)
  * - Tag-based correlation ensures replies match requests
  * - No risk of deadlock from circular calls (each direction is independent)
  *
  * USE CASES:
  * - Request-response patterns (database queries, API calls)
  * - Flow control between fast producer and slow consumer
- * - When sender needs confirmation before proceeding
+ * - When requester needs confirmation before proceeding
  */
 
 #include "hive_runtime.h"
@@ -82,13 +82,13 @@ static void consumer_actor(void *args, const hive_spawn_info_t *siblings,
             .result = req->data * 2 // Simple processing: double the input
         };
 
-        printf("Consumer: Finished job #%d, sending reply (result=%d)\n",
+        printf("Consumer: Finished job #%d, replying (result=%d)\n",
                req->job_id, result.result);
 
-        // Send reply to unblock the caller
+        // Reply to unblock the caller
         status = hive_ipc_reply(&msg, &result, sizeof(result));
         if (HIVE_FAILED(status)) {
-            printf("Consumer: Failed to send reply: %s\n", status.msg);
+            printf("Consumer: Failed to reply: %s\n", status.msg);
         }
 
         printf("Consumer: Producer is now unblocked\n\n");
@@ -98,7 +98,7 @@ static void consumer_actor(void *args, const hive_spawn_info_t *siblings,
     return;
 }
 
-// Fast producer that sends work requests
+// Fast producer that requests work processing
 static void producer_actor(void *args, const hive_spawn_info_t *siblings,
                            size_t sibling_count) {
     (void)siblings;
@@ -106,7 +106,7 @@ static void producer_actor(void *args, const hive_spawn_info_t *siblings,
     actor_id_t consumer_id = (actor_id_t)(uintptr_t)args;
 
     printf("Producer: Started (ID: %u)\n", hive_self());
-    printf("Producer: Sending 5 jobs with hive_ipc_request (blocks until "
+    printf("Producer: Requesting 5 jobs with hive_ipc_request (blocks until "
            "reply)\n\n");
 
     for (int i = 1; i <= 5; i++) {
@@ -116,7 +116,7 @@ static void producer_actor(void *args, const hive_spawn_info_t *siblings,
                "reply)...\n",
                i);
 
-        // Call consumer - this BLOCKS until consumer sends hive_ipc_reply()
+        // Call consumer - this BLOCKS until consumer calls hive_ipc_reply()
         hive_message_t reply;
         hive_status_t status =
             hive_ipc_request(consumer_id, &req, sizeof(req), &reply, 10000);
@@ -151,7 +151,7 @@ static void demo_actor(void *args, const hive_spawn_info_t *siblings,
     printf("\n--- Message Passing Patterns Demo ---\n");
 
     // Pattern 1: Fire-and-forget with hive_ipc_notify()
-    printf("Demo: Fire-and-forget (hive_ipc_notify) - sender continues "
+    printf("Demo: Fire-and-forget (hive_ipc_notify) - caller continues "
            "immediately\n");
     int data = 42;
     hive_status_t status = hive_ipc_notify(hive_self(), 0, &data, sizeof(data));
@@ -169,7 +169,7 @@ int main(void) {
     printf("=== Request/Reply Example - Request/Response Pattern ===\n\n");
 
     printf("This example shows:\n");
-    printf("1. Producer sends jobs with hive_ipc_request() (blocks until "
+    printf("1. Producer requests jobs with hive_ipc_request() (blocks until "
            "reply)\n");
     printf("2. Consumer processes and replies with hive_ipc_reply()\n");
     printf("3. Producer only proceeds after receiving reply\n\n");

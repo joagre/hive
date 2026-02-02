@@ -57,11 +57,11 @@ static void calculator_service(void *args, const hive_spawn_info_t *siblings,
             int b = operands[1];
             int result = a + b;
 
-            printf("[SERVICE] Received %d + %d, sending result %d\n", a, b,
-                   result);
+            printf("[SERVICE] Received %d + %d, replying with result %d\n", a,
+                   b, result);
             fflush(stdout);
 
-            // Send reply
+            // Reply
             hive_ipc_reply(&msg, &result, sizeof(result));
             requests_handled++;
         }
@@ -75,7 +75,7 @@ static void calculator_service(void *args, const hive_spawn_info_t *siblings,
     return;
 }
 
-// Client - looks up service by name and sends requests
+// Client - looks up service by name and makes requests
 static void client_actor(void *args, const hive_spawn_info_t *siblings,
                          size_t sibling_count) {
     (void)args;
@@ -102,7 +102,7 @@ static void client_actor(void *args, const hive_spawn_info_t *siblings,
     printf("[CLIENT] Found '%s' at actor ID %u\n", SERVICE_NAME, service);
     fflush(stdout);
 
-    // Send some requests
+    // Make some requests
     int test_cases[][2] = {{10, 20}, {42, 58}, {100, 200}};
 
     for (int i = 0; i < 3; i++) {
