@@ -16,7 +16,7 @@
 
 **No RTOS dependency** - Hive is the runtime. No FreeRTOS, no Zephyr, no vendor SDK lock-in.
 
-**Real-world example** - The [pilot example](examples/pilot/) is a quadcopter flight controller running on a Crazyflie 2.1: 11 actors, sensor fusion, cascaded PID, 60KB flash.
+**Real-world example** - The [pilot example](examples/pilot/) is a quadcopter flight controller running on a Crazyflie 2.1: 12 actors, sensor fusion, cascaded PID, 60KB flash.
 
 See [docs/spec/](docs/spec/) for design details.
 
@@ -81,7 +81,7 @@ See [docs/spec/](docs/spec/) for design details.
 - Timers (one-shot and periodic with timerfd/epoll)
 - TCP (non-blocking via event loop)
 - File I/O (POSIX on Linux, flash-backed on STM32 with optional SD card)
-- Logging (compile-time filtering, dual output: console + binary file)
+- Logging (compile-time filtering, dual output: console + plain text file)
 - Bus (pub-sub with retention policies)
 - Pool exhaustion handling (optional blocking with priority-ordered wakeup)
 
@@ -582,7 +582,7 @@ hive_supervisor_stop(supervisor);
 
 ### Pilot Example (Quadcopter Flight Controller)
 
-The `examples/pilot/` directory contains a complete quadcopter autopilot targeting real hardware (Crazyflie 2.1+). Not a toy demo: 11 actors, cascaded PID control, sensor fusion, and fail-safe supervision. Compiles to ~60KB flash and ~58KB RAM with a 52KB stack arena.
+The `examples/pilot/` directory contains a complete quadcopter autopilot targeting real hardware (Crazyflie 2.1+). Not a toy demo: 12 actors, cascaded PID control, sensor fusion, and fail-safe supervision. Compiles to ~60KB flash and ~58KB RAM with a 52KB stack arena.
 
 See [examples/pilot/README.md](examples/pilot/README.md) for build instructions and architecture details.
 
@@ -696,7 +696,7 @@ See `examples/pilot/Makefile.crazyflie-2.1plus` for a complete example and [docs
 ### Logging
 
 Intentionally minimal logging optimized for embedded. No log rotation, no remote/syslog,
-no JSON - just compile-time filtered levels with binary file output for space efficiency.
+no JSON - just compile-time filtered levels with plain text file output.
 
 - `HIVE_LOG_TRACE(fmt, ...)` - Verbose tracing (compile out with `-DHIVE_LOG_LEVEL=HIVE_LOG_LEVEL_DEBUG`)
 - `HIVE_LOG_DEBUG(fmt, ...)` - Debug information
@@ -848,7 +848,7 @@ valgrind --leak-check=full ./build/ipc_test
 
 ```
 
-The test suite includes 22 test programs covering actors, IPC, timers, bus, TCP, file I/O, linking, monitoring, supervision, logging, name registry, and edge cases like pool exhaustion.
+The test suite includes 23 test programs covering actors, IPC, timers, bus, TCP, file I/O, linking, monitoring, supervision, logging, name registry, and edge cases like pool exhaustion.
 
 ## Code Style
 
