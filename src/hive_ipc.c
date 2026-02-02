@@ -11,6 +11,12 @@
 #include "hive_select.h"
 #include <string.h>
 
+// Compile-time checks
+_Static_assert(HIVE_MAX_MESSAGE_SIZE > HIVE_MSG_HEADER_SIZE,
+               "HIVE_MAX_MESSAGE_SIZE must exceed HIVE_MSG_HEADER_SIZE");
+_Static_assert(HIVE_RESERVED_SYSTEM_ENTRIES < HIVE_MAILBOX_ENTRY_POOL_SIZE,
+               "HIVE_RESERVED_SYSTEM_ENTRIES must be less than pool size");
+
 // Static pools for IPC (mailbox_t entries and message data)
 static mailbox_entry_t s_mailbox_pool[HIVE_MAILBOX_ENTRY_POOL_SIZE];
 static bool s_mailbox_used[HIVE_MAILBOX_ENTRY_POOL_SIZE];

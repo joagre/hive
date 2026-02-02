@@ -10,10 +10,13 @@
 #include "hal/hive_hal_time.h"
 #include <string.h>
 
-// Compile-time check: readers_mask is uint32_t, so max 32 subscribers
+// Compile-time checks
 _Static_assert(
     HIVE_MAX_BUS_SUBSCRIBERS <= 32,
     "HIVE_MAX_BUS_SUBSCRIBERS exceeds readers_mask capacity (32 bits)");
+_Static_assert(HIVE_MAX_BUSES > 0, "HIVE_MAX_BUSES must be positive");
+_Static_assert(HIVE_MAX_BUS_ENTRIES > 0,
+               "HIVE_MAX_BUS_ENTRIES must be positive");
 
 // External IPC pools (defined in hive_ipc.c)
 extern hive_pool_t g_message_pool_mgr;

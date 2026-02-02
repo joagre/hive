@@ -23,6 +23,11 @@ typedef struct {
 #define STACK_ALIGNMENT 16
 #define MIN_BLOCK_SIZE 64
 
+// Compile-time checks
+_Static_assert(HIVE_MAX_ACTORS > 0, "HIVE_MAX_ACTORS must be positive");
+_Static_assert((STACK_ALIGNMENT & (STACK_ALIGNMENT - 1)) == 0,
+               "STACK_ALIGNMENT must be power of 2");
+
 // Static arena storage (16-byte aligned)
 static uint8_t s_stack_arena_memory[HIVE_STACK_ARENA_SIZE]
     __attribute__((aligned(16)));
