@@ -16,6 +16,7 @@
 #include "pilot_buses.h"
 #include "notifications.h"
 #include "config.h"
+#include "hal/hal.h"
 #include "hive_runtime.h"
 #include "hive_ipc.h"
 #include "hive_select.h"
@@ -64,9 +65,10 @@ void flight_manager_actor(void *args, const hive_spawn_info_t *siblings,
         hive_exit(HIVE_EXIT_REASON_CRASH);
     }
 
-    // Log flight profile for post-mortem verification
-    HIVE_LOG_INFO("[FLM] Flight profile=%d duration=%.0fs", FLIGHT_PROFILE,
-                  FLIGHT_DURATION_US / 1000000.0f);
+    // Log flight profile and battery for post-mortem verification
+    HIVE_LOG_INFO("[FLM] Flight profile=%d duration=%.0fs battery=%.2fV",
+                  FLIGHT_PROFILE, FLIGHT_DURATION_US / 1000000.0f,
+                  hal_power_get_battery());
 
 #ifndef SIMULATED_TIME
     // Real hardware: wait for startup delay before allowing flight

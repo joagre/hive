@@ -81,6 +81,7 @@ void motor_actor(void *args, const hive_spawn_info_t *siblings,
     }
 
     bool stopped = false;
+    bool first_thrust_logged = false;
 
     // Set up hive_select() sources: torque bus + STOP notification
     enum { SEL_TORQUE, SEL_STOP };
@@ -143,6 +144,13 @@ void motor_actor(void *args, const hive_spawn_info_t *siblings,
 
         if (stopped) {
             torque = (torque_cmd_t)TORQUE_CMD_ZERO;
+        }
+
+        // Log first non-zero thrust (takeoff moment)
+        if (!first_thrust_logged && torque.thrust > 0.01f) {
+            HIVE_LOG_INFO("[MOTOR] First thrust: %.3f - MOTORS ENGAGED",
+                          torque.thrust);
+            first_thrust_logged = true;
         }
 
         hal_write_torque(&torque);
