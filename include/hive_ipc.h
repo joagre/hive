@@ -2,7 +2,6 @@
 #define HIVE_IPC_H
 
 #include "hive_types.h"
-#include "hive_actor.h"
 
 // -----------------------------------------------------------------------------
 // Core Notify/Receive

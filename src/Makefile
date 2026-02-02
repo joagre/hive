@@ -28,7 +28,7 @@ ifeq ($(PLATFORM),linux)
   BASE_CFLAGS += -D_POSIX_C_SOURCE=200809L
   BASE_CFLAGS += -DHIVE_PLATFORM_LINUX
   BASE_CFLAGS += -DPRINTF_INCLUDE_CONFIG_H
-  BASE_CFLAGS += -I../include -I../lib -I../lib/printf -Ihal/linux
+  BASE_CFLAGS += -I. -I../include -I../lib -I../lib/printf -Ihal/linux
   BASE_CFLAGS += -MMD -MP
 
   # Feature defaults for Linux
@@ -56,7 +56,7 @@ else ifeq ($(PLATFORM),stm32)
   BASE_CFLAGS += -ffunction-sections -fdata-sections
   BASE_CFLAGS += -DHIVE_PLATFORM_STM32
   BASE_CFLAGS += -DPRINTF_INCLUDE_CONFIG_H
-  BASE_CFLAGS += -I../include -I../lib -I../lib/printf -Ihal/stm32
+  BASE_CFLAGS += -I. -I../include -I../lib -I../lib/printf -Ihal/stm32
   BASE_CFLAGS += -MMD -MP
 
   # Feature defaults for STM32

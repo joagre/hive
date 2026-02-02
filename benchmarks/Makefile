@@ -24,7 +24,8 @@ else
 endif
 
 # Include path - always relative to this directory
-CPPFLAGS := -I../include $(HAL_INCLUDE) -D_POSIX_C_SOURCE=200809L -DHIVE_PLATFORM_LINUX
+# Note: -I../src needed for internal headers (hive_pool.h) used by pool benchmark
+CPPFLAGS := -I../include -I../src $(HAL_INCLUDE) -D_POSIX_C_SOURCE=200809L -DHIVE_PLATFORM_LINUX
 DEPFLAGS := -MMD -MP
 
 # Feature flags
