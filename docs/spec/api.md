@@ -528,6 +528,53 @@ This eliminates the "timeout but actually dead" ambiguity from previous versions
 
 **Concurrency constraint** - An actor can only have **one outstanding request at a time**. Since `hive_ipc_request()` blocks the caller until a reply arrives (or timeout), the actor cannot issue concurrent requests. To implement scatter/gather patterns, spawn multiple worker actors that each make one request.
 
+### Named IPC
+
+Named IPC functions resolve actor names to IDs automatically, providing a convenient way to send messages to named actors without manual `hive_whereis()` calls.
+
+```c
+// Send notification to named actor
+hive_status_t hive_ipc_named_notify(const char *name, uint32_t tag,
+                                    const void *data, size_t len);
+
+// Send request to named actor and wait for reply
+hive_status_t hive_ipc_named_request(const char *name, const void *request,
+                                     size_t req_len, hive_message_t *reply,
+                                     int32_t timeout_ms);
+```
+
+**Behavior**
+- Resolves `name` via `hive_whereis()` to get actor ID
+- Calls the underlying `hive_ipc_notify()` or `hive_ipc_request()`
+- Returns `HIVE_ERR_NOT_FOUND` if name is not registered
+
+**Use case** - Supervised actors that may restart get new actor IDs on each restart. Caching actor IDs is unsafe across yield points. Named IPC re-resolves the name on each call, ensuring messages reach the current incarnation:
+
+```c
+// Safe: Re-resolves name on each call
+hive_ipc_named_notify("logger", LOG_MSG, &entry, sizeof(entry));
+
+// Unsafe: Cached ID may be stale after restart
+actor_id_t logger = cached_logger_id;  // May point to dead actor
+hive_ipc_notify(logger, LOG_MSG, &entry, sizeof(entry));  // May fail silently
+```
+
+**Error handling**
+
+```c
+hive_status_t status = hive_ipc_named_request("config_server", &req,
+                                              sizeof(req), &reply, 5000);
+if (status.code == HIVE_ERR_NOT_FOUND) {
+    // Actor not registered (not started yet, or crashed and not restarted)
+} else if (status.code == HIVE_ERR_CLOSED) {
+    // Actor died during request (after name resolution succeeded)
+} else if (status.code == HIVE_ERR_TIMEOUT) {
+    // Actor alive but didn't reply in time
+}
+```
+
+**Performance note** - Named IPC adds one hash table lookup per call. For high-frequency messaging to the same actor within a tight loop, consider caching the ID locally and re-resolving only on error.
+
 ### API Contract: hive_ipc_notify()
 
 **Parameter validation**
