@@ -135,7 +135,7 @@ hive_status_t hive_log_file_open(const char *path) {
         hive_log_file_close();
     }
 
-    // Open with create+truncate (TRUNC also erases flash sector on STM32)
+    // Open with create+truncate (clears existing content)
     hive_status_t s = hive_file_open(
         path, HIVE_O_WRONLY | HIVE_O_CREAT | HIVE_O_TRUNC, 0644, &s_log_fd);
     if (HIVE_FAILED(s)) {
