@@ -67,7 +67,7 @@ CFLAGS += -DHIVE_PLATFORM_LINUX
 
 # Includes
 CFLAGS += -I$(WEBOTS_HOME)/include/controller/c
-CFLAGS += -I$(HIVE_ROOT)/include -I. -Iinclude -I$(HAL_DIR)
+CFLAGS += -I$(HIVE_ROOT)/include -I$(HIVE_SRC_DIR) -I. -Iinclude -I$(HAL_DIR)
 CFLAGS += -I$(HIVE_SRC_DIR)/hal/linux
 CFLAGS += -I$(HIVE_ROOT)/lib -I$(HIVE_ROOT)/lib/printf -DPRINTF_INCLUDE_CONFIG_H
 

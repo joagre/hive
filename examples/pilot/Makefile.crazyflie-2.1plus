@@ -14,6 +14,9 @@ FLIGHT_PROFILE := FLIGHT_PROFILE_GROUND_TEST
 LOG_LEVEL := INFO
 LOG_TO_STDOUT := 1
 LOG_TO_FILE := 1
+# Log to SD card instead of flash to avoid blocking scheduler during flash erase.
+# Flash /log blocks 1-4 seconds on sector erase; SD card doesn't have this issue.
+LOG_FILE_PATH := /sd/hive.log
 ENABLE_SD := 1
 STACK_PROFILE := 0
 
@@ -77,7 +80,7 @@ CFLAGS += -DSTM32F405xx -DPLATFORM_CRAZYFLIE_2_1 -DARM_MATH_CM4
 CFLAGS += -DHIVE_PLATFORM_STM32 -DHAL_HAS_RADIO
 
 # Includes
-CFLAGS += -I$(HIVE_ROOT)/include -I$(HIVE_SRC_DIR)/hal/stm32
+CFLAGS += -I$(HIVE_ROOT)/include -I$(HIVE_SRC_DIR) -I$(HIVE_SRC_DIR)/hal/stm32
 CFLAGS += -I. -Iinclude -I$(HAL_DIR)
 CFLAGS += -I$(HIVE_ROOT)/lib -I$(HIVE_ROOT)/lib/printf -DPRINTF_INCLUDE_CONFIG_H
 
@@ -86,6 +89,7 @@ CFLAGS += -DFLIGHT_PROFILE=$(FLIGHT_PROFILE)
 CFLAGS += -DHIVE_LOG_LEVEL=HIVE_LOG_LEVEL_$(LOG_LEVEL)
 CFLAGS += -DHIVE_LOG_TO_STDOUT=$(LOG_TO_STDOUT)
 CFLAGS += -DHIVE_LOG_TO_FILE=$(LOG_TO_FILE)
+CFLAGS += '-DHIVE_LOG_FILE_PATH="$(LOG_FILE_PATH)"'
 
 # Hive library config
 CFLAGS += $(HIVE_CFLAGS)
@@ -194,7 +198,7 @@ help:
 	@echo "      TRACE, DEBUG, INFO, WARN, ERROR, NONE"
 	@echo ""
 	@echo "  LOG_TO_STDOUT=$(LOG_TO_STDOUT)  (SWO debug output)"
-	@echo "  LOG_TO_FILE=$(LOG_TO_FILE)      (flash storage)"
+	@echo "  LOG_TO_FILE=$(LOG_TO_FILE)      (SD card: $(LOG_FILE_PATH))"
 	@echo "  ENABLE_SD=$(ENABLE_SD)          (SD card deck)"
 	@echo "  STACK_PROFILE=$(STACK_PROFILE)  (stack watermarking)"
 	@echo ""

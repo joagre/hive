@@ -117,4 +117,28 @@ hive_status_t hive_whereis(const char *name, hive_actor_id_t *out);
 // Returns HIVE_ERR_INVALID if name is NULL, not found, or not owned by caller.
 hive_status_t hive_unregister(const char *name);
 
+// ============================================================================
+// Stack Profiling API (requires HIVE_STACK_WATERMARK=1)
+// ============================================================================
+// Diagnostic functions for measuring actor stack usage. When stack watermarking
+// is enabled, stacks are filled with a pattern at allocation time, allowing
+// measurement of actual high-water mark usage.
+//
+// Enable via: make CFLAGS+='-DHIVE_STACK_WATERMARK=1'
+
+// Get stack size for an actor (returns 0 if actor not found)
+size_t hive_actor_stack_size(hive_actor_id_t id);
+
+// Get stack bytes used by an actor (high-water mark)
+// Returns stack_size if watermarking disabled, 0 if actor not found.
+size_t hive_actor_stack_usage(hive_actor_id_t id);
+
+// Callback for hive_actor_stack_usage_all()
+typedef void (*hive_stack_usage_callback_t)(hive_actor_id_t id,
+                                            const char *name, size_t stack_size,
+                                            size_t used);
+
+// Iterate all live actors and report their stack usage via callback
+void hive_actor_stack_usage_all(hive_stack_usage_callback_t cb);
+
 #endif // HIVE_RUNTIME_H

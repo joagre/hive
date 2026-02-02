@@ -5,6 +5,8 @@
 #ifndef PILOT_MATH_UTILS_H
 #define PILOT_MATH_UTILS_H
 
+#include <math.h>
+
 // Clamp value to range [lo, hi]
 #define CLAMPF(x, lo, hi) ((x) < (lo) ? (lo) : ((x) > (hi) ? (hi) : (x)))
 
@@ -19,12 +21,18 @@
 #define M_PI_F 3.14159265f     // pi as float
 
 // Normalize angle to [-pi, pi] range
+// Uses fmodf for bounded execution (no infinite loop on corrupted input)
 static inline float normalize_angle(float a) {
-    while (a > M_PI_F)
-        a -= 2.0f * M_PI_F;
-    while (a < -M_PI_F)
+    // Handle NaN/Inf - return 0 as safe default
+    if (!isfinite(a)) {
+        return 0.0f;
+    }
+    // fmodf is bounded, unlike while-loop approach
+    a = fmodf(a + M_PI_F, 2.0f * M_PI_F);
+    if (a < 0.0f) {
         a += 2.0f * M_PI_F;
-    return a;
+    }
+    return a - M_PI_F;
 }
 
 #endif // PILOT_MATH_UTILS_H

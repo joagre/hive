@@ -21,6 +21,32 @@
 #include "hive_log.h"
 #include "hive_select.h"
 #include <string.h>
+#include <math.h>
+
+// Torque validation limits
+// These are sanity checks - values outside indicate control system failure
+#define MAX_THRUST 1.5f     // Allow some headroom above 1.0
+#define MAX_TORQUE_MAG 2.0f // Roll/pitch/yaw torque magnitude limit
+
+// Validate torque command, return true if sane
+// Checks for NaN/Inf and reasonable magnitude
+static bool validate_torque(const torque_cmd_t *cmd) {
+    // Check for NaN or Inf
+    if (!isfinite(cmd->thrust) || !isfinite(cmd->roll) ||
+        !isfinite(cmd->pitch) || !isfinite(cmd->yaw)) {
+        return false;
+    }
+    // Check magnitude limits
+    if (cmd->thrust < -0.1f || cmd->thrust > MAX_THRUST) {
+        return false;
+    }
+    if (fabsf(cmd->roll) > MAX_TORQUE_MAG ||
+        fabsf(cmd->pitch) > MAX_TORQUE_MAG ||
+        fabsf(cmd->yaw) > MAX_TORQUE_MAG) {
+        return false;
+    }
+    return true;
+}
 
 // Actor state - initialized by motor_actor_init
 typedef struct {
@@ -101,6 +127,14 @@ void motor_actor(void *args, const hive_spawn_info_t *siblings,
             continue;
         }
         memcpy(&torque, result.bus.data, sizeof(torque));
+
+        // Validate torque command - last line of defense against garbage data
+        if (!validate_torque(&torque)) {
+            HIVE_LOG_WARN(
+                "[MOTOR] invalid torque rejected: t=%.2f r=%.2f p=%.2f y=%.2f",
+                torque.thrust, torque.roll, torque.pitch, torque.yaw);
+            torque = (torque_cmd_t)TORQUE_CMD_ZERO;
+        }
 
         if (stopped) {
             torque = (torque_cmd_t)TORQUE_CMD_ZERO;

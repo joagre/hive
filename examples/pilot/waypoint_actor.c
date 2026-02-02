@@ -98,7 +98,11 @@ void waypoint_actor(void *args, const hive_spawn_info_t *siblings,
         // Publish current target
         position_target_t target = {
             .x = wp->x, .y = wp->y, .z = wp->z, .yaw = wp->yaw};
-        hive_bus_publish(state->position_target_bus, &target, sizeof(target));
+        status = hive_bus_publish(state->position_target_bus, &target,
+                                  sizeof(target));
+        if (HIVE_FAILED(status)) {
+            HIVE_LOG_WARN("[WPT] bus publish failed: %s", HIVE_ERR_STR(status));
+        }
 
         // Wait for state update OR hover timer (unified event waiting)
         hive_select_source_t sources[] = {

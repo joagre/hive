@@ -2,6 +2,7 @@
 
 #include "pid.h"
 #include "math_utils.h"
+#include "hive_log.h"
 
 void pid_init(pid_state_t *pid, float kp, float ki, float kd) {
     pid_init_full(pid, kp, ki, kd, 0.5f, 1.0f);
@@ -23,9 +24,20 @@ void pid_reset(pid_state_t *pid) {
     pid->prev_error = 0.0f;
 }
 
+// Minimum dt to avoid division by zero or extreme derivative spikes
+// 0.1ms is well below any realistic control loop period
+#define PID_MIN_DT 0.0001f
+
 static float pid_update_internal(pid_state_t *pid, float error, float dt) {
     // Proportional
     float p = pid->kp * error;
+
+    // Guard against bad dt (zero, negative, or extremely small)
+    if (dt < PID_MIN_DT) {
+        // Skip integral and derivative, return P-only output
+        HIVE_LOG_WARN("[PID] bad dt=%.6f, using P-only", dt);
+        return CLAMPF(p, -pid->output_max, pid->output_max);
+    }
 
     // Integral with anti-windup
     pid->integral += error * dt;

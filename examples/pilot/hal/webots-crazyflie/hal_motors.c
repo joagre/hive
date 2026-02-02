@@ -6,6 +6,8 @@
 #include <webots/motor.h>
 
 #include "hal_internal.h"
+#include "hive_log.h"
+#include <stdbool.h>
 
 // Crazyflie X-configuration mixer
 //
@@ -38,13 +40,21 @@ void hal_write_torque(const torque_cmd_t *cmd) {
     float alpha = dt / (tau + dt);
 
     // Clamp, filter, and output to Webots motors
+    bool saturated = false;
     for (int i = 0; i < NUM_MOTORS; i++) {
         float cmd_clamped = CLAMPF(motors[i], 0.0f, 1.0f);
+        if (motors[i] != cmd_clamped) {
+            saturated = true;
+        }
 
         // First-order lag filter
         g_motor_state[i] += alpha * (cmd_clamped - g_motor_state[i]);
 
         wb_motor_set_velocity(g_motors[i], MOTOR_SIGNS[i] * g_motor_state[i] *
                                                MOTOR_MAX_VELOCITY);
+    }
+    if (saturated) {
+        HIVE_LOG_WARN("[MIX] motor saturation: t=%.2f r=%.2f p=%.2f y=%.2f",
+                      cmd->thrust, cmd->roll, cmd->pitch, cmd->yaw);
     }
 }

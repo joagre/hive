@@ -190,7 +190,10 @@ void altitude_actor(void *args, const hive_spawn_info_t *siblings,
         }
 
         thrust_cmd_t cmd = {.thrust = thrust};
-        hive_bus_publish(state->thrust_bus, &cmd, sizeof(cmd));
+        status = hive_bus_publish(state->thrust_bus, &cmd, sizeof(cmd));
+        if (HIVE_FAILED(status)) {
+            HIVE_LOG_WARN("[ALT] bus publish failed: %s", HIVE_ERR_STR(status));
+        }
 
         if (++count % DEBUG_PRINT_INTERVAL == 0) {
             HIVE_LOG_DEBUG("[ALT] tgt=%.2f alt=%.2f vvel=%.2f thrust=%.3f %s",

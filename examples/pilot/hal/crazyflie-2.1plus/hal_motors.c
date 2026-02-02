@@ -5,6 +5,8 @@
 #include "../hal.h"
 #include "platform.h"
 #include "../../include/flight_profiles.h"
+#include "hive_log.h"
+#include <stdbool.h>
 
 // Default MOTORS_DISABLED to 0 if not set by flight profile
 #ifndef MOTORS_DISABLED
@@ -57,9 +59,18 @@ void hal_write_torque(const torque_cmd_t *cmd) {
     motors.motor[3] =
         cmd->thrust - cmd->roll - cmd->pitch - cmd->yaw; // M4 (rear-left, CW)
 
-    // Clamp motor values
+    // Clamp motor values and detect saturation
+    bool saturated = false;
     for (int i = 0; i < 4; i++) {
+        float orig = motors.motor[i];
         motors.motor[i] = clampf(motors.motor[i], 0.0f, 1.0f);
+        if (orig != motors.motor[i]) {
+            saturated = true;
+        }
+    }
+    if (saturated) {
+        HIVE_LOG_WARN("[MIX] motor saturation: t=%.2f r=%.2f p=%.2f y=%.2f",
+                      cmd->thrust, cmd->roll, cmd->pitch, cmd->yaw);
     }
 
     // Output to hardware

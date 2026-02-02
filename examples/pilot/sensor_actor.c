@@ -54,6 +54,10 @@ void sensor_actor(void *args, const hive_spawn_info_t *siblings,
 
         sensor_data_t sensors;
         hal_read_sensors(&sensors);
-        hive_bus_publish(state->sensor_bus, &sensors, sizeof(sensors));
+        status = hive_bus_publish(state->sensor_bus, &sensors, sizeof(sensors));
+        if (HIVE_FAILED(status)) {
+            HIVE_LOG_WARN("[SENSOR] bus publish failed: %s",
+                          HIVE_ERR_STR(status));
+        }
     }
 }

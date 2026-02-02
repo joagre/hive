@@ -19,6 +19,64 @@
 
 #define GRAVITY 9.81f
 
+// Sanity limits for sensor validation
+// These are generous limits - anything outside indicates sensor failure
+#define MAX_POSITION_M 100.0f  // 100m from origin (generous for indoor/outdoor)
+#define MAX_ALTITUDE_M 50.0f   // 50m max altitude
+#define MAX_VELOCITY_MPS 20.0f // 20 m/s max velocity
+#define MAX_GYRO_RADPS 35.0f   // ~2000 deg/s max angular rate
+#define MAX_ACCEL_MPS2 80.0f   // ~8g max acceleration
+
+// Check if float is valid (not NaN or Inf)
+static inline bool is_valid_float(float f) {
+    return isfinite(f);
+}
+
+// Validate sensor data, return false if any critical value is bad
+static bool validate_sensors(const sensor_data_t *s) {
+    // Check gyro
+    for (int i = 0; i < 3; i++) {
+        if (!is_valid_float(s->gyro[i]) || fabsf(s->gyro[i]) > MAX_GYRO_RADPS) {
+            return false;
+        }
+    }
+    // Check accelerometer
+    for (int i = 0; i < 3; i++) {
+        if (!is_valid_float(s->accel[i]) ||
+            fabsf(s->accel[i]) > MAX_ACCEL_MPS2) {
+            return false;
+        }
+    }
+    // GPS validation (only if marked valid)
+    if (s->gps_valid) {
+        if (!is_valid_float(s->gps_x) || !is_valid_float(s->gps_y) ||
+            !is_valid_float(s->gps_z)) {
+            return false;
+        }
+        if (fabsf(s->gps_x) > MAX_POSITION_M ||
+            fabsf(s->gps_y) > MAX_POSITION_M || s->gps_z < -1.0f ||
+            s->gps_z > MAX_ALTITUDE_M) {
+            return false;
+        }
+    }
+    // Barometer validation (only if marked valid)
+    if (s->baro_valid) {
+        if (!is_valid_float(s->baro_altitude) || s->baro_altitude < -10.0f ||
+            s->baro_altitude > MAX_ALTITUDE_M) {
+            return false;
+        }
+    }
+    // Velocity validation (only if marked valid)
+    if (s->velocity_valid) {
+        if (!is_valid_float(s->velocity_x) || !is_valid_float(s->velocity_y) ||
+            fabsf(s->velocity_x) > MAX_VELOCITY_MPS ||
+            fabsf(s->velocity_y) > MAX_VELOCITY_MPS) {
+            return false;
+        }
+    }
+    return true;
+}
+
 // Actor state - initialized by estimator_actor_init
 typedef struct {
     hive_bus_id_t sensor_bus;
@@ -88,6 +146,12 @@ void estimator_actor(void *args, const hive_spawn_info_t *siblings,
         if (HIVE_FAILED(status)) {
             HIVE_LOG_ERROR("[EST] bus read failed: %s", HIVE_ERR_STR(status));
             hive_exit(HIVE_EXIT_REASON_CRASH);
+        }
+
+        // Validate sensor data - reject garbage readings
+        if (!validate_sensors(&sensors)) {
+            HIVE_LOG_WARN("[EST] sensor validation failed, skipping frame");
+            continue;
         }
 
         // Measure actual dt
@@ -188,6 +252,9 @@ void estimator_actor(void *args, const hive_spawn_info_t *siblings,
         est.x_velocity = x_velocity;
         est.y_velocity = y_velocity;
 
-        hive_bus_publish(state->state_bus, &est, sizeof(est));
+        status = hive_bus_publish(state->state_bus, &est, sizeof(est));
+        if (HIVE_FAILED(status)) {
+            HIVE_LOG_WARN("[EST] bus publish failed: %s", HIVE_ERR_STR(status));
+        }
     }
 }

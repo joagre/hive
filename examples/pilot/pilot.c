@@ -66,7 +66,6 @@
 #include "hive_runtime.h"
 #include "hive_bus.h"
 #include "hive_log.h"
-#include "hive_actor.h"
 #include "hive_supervisor.h"
 
 #include "pilot_buses.h"
@@ -217,7 +216,8 @@ int main(void) {
          .restart = HIVE_CHILD_PERMANENT,
          .actor_cfg = {.priority = HIVE_PRIORITY_CRITICAL,
                        .name = "sensor",
-                       .pool_block = true}},
+                       .pool_block =
+                           false}}, // CRITICAL: never block control loop
         {.start = estimator_actor,
          .init = estimator_actor_init,
          .init_args = &buses,
@@ -227,7 +227,8 @@ int main(void) {
          .restart = HIVE_CHILD_PERMANENT,
          .actor_cfg = {.priority = HIVE_PRIORITY_CRITICAL,
                        .name = "estimator",
-                       .pool_block = true}},
+                       .pool_block =
+                           false}}, // CRITICAL: never block control loop
         {.start = waypoint_actor,
          .init = waypoint_actor_init,
          .init_args = &buses,
@@ -237,7 +238,8 @@ int main(void) {
          .restart = HIVE_CHILD_PERMANENT,
          .actor_cfg = {.priority = HIVE_PRIORITY_CRITICAL,
                        .name = "waypoint",
-                       .pool_block = true}},
+                       .pool_block =
+                           false}}, // CRITICAL: never block control loop
         {.start = altitude_actor,
          .init = altitude_actor_init,
          .init_args = &buses,
@@ -247,7 +249,8 @@ int main(void) {
          .restart = HIVE_CHILD_PERMANENT,
          .actor_cfg = {.priority = HIVE_PRIORITY_CRITICAL,
                        .name = "altitude",
-                       .pool_block = true}},
+                       .pool_block =
+                           false}}, // CRITICAL: never block control loop
         {.start = position_actor,
          .init = position_actor_init,
          .init_args = &buses,
@@ -257,7 +260,8 @@ int main(void) {
          .restart = HIVE_CHILD_PERMANENT,
          .actor_cfg = {.priority = HIVE_PRIORITY_CRITICAL,
                        .name = "position",
-                       .pool_block = true}},
+                       .pool_block =
+                           false}}, // CRITICAL: never block control loop
         {.start = attitude_actor,
          .init = attitude_actor_init,
          .init_args = &buses,
@@ -267,7 +271,8 @@ int main(void) {
          .restart = HIVE_CHILD_PERMANENT,
          .actor_cfg = {.priority = HIVE_PRIORITY_CRITICAL,
                        .name = "attitude",
-                       .pool_block = true}},
+                       .pool_block =
+                           false}}, // CRITICAL: never block control loop
         {.start = rate_actor,
          .init = rate_actor_init,
          .init_args = &buses,
@@ -277,7 +282,8 @@ int main(void) {
          .restart = HIVE_CHILD_PERMANENT,
          .actor_cfg = {.priority = HIVE_PRIORITY_CRITICAL,
                        .name = "rate",
-                       .pool_block = true}},
+                       .pool_block =
+                           false}}, // CRITICAL: never block control loop
         {.start = motor_actor,
          .init = motor_actor_init,
          .init_args = &buses,
@@ -287,7 +293,8 @@ int main(void) {
          .restart = HIVE_CHILD_PERMANENT,
          .actor_cfg = {.priority = HIVE_PRIORITY_CRITICAL,
                        .name = "motor",
-                       .pool_block = true}},
+                       .pool_block =
+                           false}}, // CRITICAL: never block control loop
         {.start = flight_manager_actor,
          .init = flight_manager_actor_init,
          .init_args = &buses,
@@ -297,7 +304,8 @@ int main(void) {
          .restart = HIVE_CHILD_TRANSIENT, // Normal exit = mission complete
          .actor_cfg = {.priority = HIVE_PRIORITY_CRITICAL,
                        .name = "flight_mgr",
-                       .pool_block = true}},
+                       .pool_block =
+                           false}}, // CRITICAL: never block control loop
 #ifdef HAL_HAS_RADIO
         {.start = comms_actor,
          .init = comms_actor_init,
@@ -326,9 +334,11 @@ int main(void) {
     // If any actor crashes, all are killed and restarted together.
     // This ensures consistent pipeline state after recovery.
     // Note: comms is TEMPORARY so its exit won't trigger restarts.
+    // First flight safety: max_restarts=0 means any crash triggers immediate
+    // shutdown and landing. No restart attempts that could cause erratic behavior.
     hive_supervisor_config_t sup_cfg = {
         .strategy = HIVE_STRATEGY_ONE_FOR_ALL,
-        .max_restarts = 3,
+        .max_restarts = 0,
         .restart_period_ms = 10000,
         .children = children,
         .num_children = sizeof(children) / sizeof(children[0]),

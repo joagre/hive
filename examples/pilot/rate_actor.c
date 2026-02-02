@@ -102,6 +102,10 @@ void rate_actor(void *args, const hive_spawn_info_t *siblings,
         cmd.pitch = pid_update(&pitch_pid, rate_sp.pitch, est.pitch_rate, dt);
         cmd.yaw = pid_update(&yaw_pid, rate_sp.yaw, est.yaw_rate, dt);
 
-        hive_bus_publish(state->torque_bus, &cmd, sizeof(cmd));
+        status = hive_bus_publish(state->torque_bus, &cmd, sizeof(cmd));
+        if (HIVE_FAILED(status)) {
+            HIVE_LOG_WARN("[RATE] bus publish failed: %s",
+                          HIVE_ERR_STR(status));
+        }
     }
 }

@@ -8,9 +8,8 @@
 
 #if HIVE_STACK_WATERMARK
 
-#include "hive_actor.h"
-#include "hive_log.h"
 #include "hive_runtime.h"
+#include "hive_log.h"
 #include <string.h>
 
 #ifdef HIVE_PLATFORM_STM32
@@ -47,11 +46,10 @@ void stack_profile_capture(const char *name) {
         return;
     }
     hive_actor_id_t self = hive_self();
-    size_t used = hive_actor_stack_usage(self);
 
-    // Get stack size from actor (need to access it before actor exits)
-    actor *a = hive_actor_get(self);
-    size_t stack_size = a ? a->stack_size : 0;
+    // Use public API to get stack info before actor exits
+    size_t stack_size = hive_actor_stack_size(self);
+    size_t used = hive_actor_stack_usage(self);
 
     s_captured[s_captured_count].name = name;
     s_captured[s_captured_count].stack_size = stack_size;

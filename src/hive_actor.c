@@ -1,4 +1,5 @@
 #include "hive_actor.h"
+#include "hive_runtime.h"
 #include "hive_static_config.h"
 #include "hive_internal.h"
 #include "hive_scheduler.h"
@@ -357,7 +358,16 @@ hive_actor_id_t hive_find_sibling(const hive_spawn_info_t *siblings,
     return HIVE_ACTOR_ID_INVALID;
 }
 
-// Stack watermarking functions
+// Stack profiling functions (public API in hive_runtime.h)
+
+size_t hive_actor_stack_size(hive_actor_id_t id) {
+    actor_t *a = hive_actor_get(id);
+    if (!a || !a->stack) {
+        return 0;
+    }
+    return a->stack_size;
+}
+
 size_t hive_actor_stack_usage(hive_actor_id_t id) {
     actor_t *a = hive_actor_get(id);
     if (!a || !a->stack) {
@@ -388,7 +398,7 @@ size_t hive_actor_stack_usage(hive_actor_id_t id) {
 #endif
 }
 
-void hive_actor_stack_usage_all(stack_usage_callback_t cb) {
+void hive_actor_stack_usage_all(hive_stack_usage_callback_t cb) {
     if (!cb) {
         return;
     }
