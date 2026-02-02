@@ -18,7 +18,7 @@ void slow_receiver_actor(void *args, const hive_spawn_info_t *siblings,
     printf("Receiver: Started, will not process messages to exhaust pool\n");
 
     // Just sleep - don't process messages
-    // This causes sender's messages to accumulate in mailbox
+    // This causes notifier's messages to accumulate in mailbox
     hive_message_t msg;
     hive_ipc_recv(&msg, -1); // Block forever (won't get any messages)
 
@@ -31,12 +31,12 @@ void sender_actor(void *args, const hive_spawn_info_t *siblings,
     (void)sibling_count;
     actor_id_t receiver = *(actor_id_t *)args;
 
-    printf("\nSender: Attempting to exhaust IPC pool by sending to slow "
+    printf("\nSender: Attempting to exhaust IPC pool by notifying slow "
            "receiver...\n");
     printf("Sender: Pool sizes: MAILBOX_ENTRY=%d, MESSAGE_DATA=%d\n",
            HIVE_MAILBOX_ENTRY_POOL_SIZE, HIVE_MESSAGE_DATA_POOL_SIZE);
 
-    // Send messages until pool is exhausted
+    // Notify messages until pool is exhausted
     int sent_count = 0;
     int data = 0;
     hive_status_t status;
@@ -70,19 +70,20 @@ void sender_actor(void *args, const hive_spawn_info_t *siblings,
 
     printf("\nSender: Testing backoff-retry pattern...\n");
 
-    // Try to send with backoff-retry
+    // Try to notify with backoff-retry
     int retry_count = 0;
-    bool send_succeeded = false;
+    bool notify_succeeded = false;
 
     for (int attempt = 0; attempt < 5; attempt++) {
-        printf("Sender: Attempt %d - trying to send...\n", attempt + 1);
+        printf("Sender: Attempt %d - trying to notify...\n", attempt + 1);
 
         data++;
         status = hive_ipc_notify(receiver, HIVE_TAG_NONE, &data, sizeof(data));
 
         if (HIVE_SUCCEEDED(status)) {
-            printf("Sender: [OK] Send succeeded on attempt %d!\n", attempt + 1);
-            send_succeeded = true;
+            printf("Sender: [OK] Notify succeeded on attempt %d!\n",
+                   attempt + 1);
+            notify_succeeded = true;
             break;
         }
 
@@ -104,8 +105,8 @@ void sender_actor(void *args, const hive_spawn_info_t *siblings,
         }
     }
 
-    if (!send_succeeded) {
-        printf("Sender: [FAIL] Failed to send after %d retries (pool still "
+    if (!notify_succeeded) {
+        printf("Sender: [FAIL] Failed to notify after %d retries (pool still "
                "exhausted)\n",
                retry_count);
         printf("Sender: This is expected - pool won't free until receiver "
@@ -113,7 +114,7 @@ void sender_actor(void *args, const hive_spawn_info_t *siblings,
     }
 
     printf("\nSender: Signaling receiver to start processing messages...\n");
-    // Send wake-up signal to receiver using different actor
+    // Notify wake-up signal to receiver using different actor
     // (In this test, receiver is blocked so this won't actually work,
     //  but demonstrates the pattern)
 
