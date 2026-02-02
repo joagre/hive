@@ -61,7 +61,7 @@ Install: `make install-man` (or `sudo make install-man`)
 
 **Forbidden malloc** (by subsystem)
 - Scheduler and context switching
-- All IPC send/receive/select paths
+- All IPC notify/request/receive/select paths
 - All timer creation and delivery paths
 - All bus publish/read paths
 - All name registry operations

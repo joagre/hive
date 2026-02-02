@@ -93,12 +93,12 @@ Tests spawn init function and auto-register features.
 Tests inter-process communication (IPC) with ASYNC and SYNC modes.
 
 **Tests (17 tests)**
-- ASYNC send/recv basic
-- ASYNC send to invalid actor
+- ASYNC notify/recv basic
+- ASYNC notify to invalid actor
 - Message ordering (FIFO)
-- Multiple senders to one receiver
-- SYNC send to self (deadlock prevention - rejected)
-- SYNC send/recv with release
+- Multiple notifiers to one receiver
+- SYNC request to self (deadlock prevention - rejected)
+- SYNC request/recv with release
 - rt_ipc_pending and rt_ipc_count
 - recv with timeout=0 (non-blocking)
 - recv with timeout > 0
@@ -106,7 +106,7 @@ Tests inter-process communication (IPC) with ASYNC and SYNC modes.
 - Message size limits (RT_MAX_MESSAGE_SIZE)
 - SYNC auto-release on next recv
 - Zero-length message
-- SYNC send to dead actor
+- SYNC request to dead actor
 - Sync buffer pool exhaustion
 - NULL data pointer handling
 - Mailbox integrity after spawn/death cycles

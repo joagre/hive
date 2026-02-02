@@ -35,7 +35,7 @@ A minimalistic actor-based runtime designed for **embedded and safety-critical s
 
 **Forbidden heap use** (by subsystem)
 - Scheduler and context switching
-- All IPC send/receive/select paths
+- All IPC notify/request/receive/select paths
 - All timer creation and delivery paths
 - All bus publish/read paths
 - All name registry operations
