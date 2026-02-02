@@ -20,7 +20,7 @@ typedef uint32_t timer_id_t;
 #define HIVE_SENDER_ANY     ((actor_id_t)0xFFFFFFFF)
 
 // Actor entry point (see Actor API section for full signature)
-typedef void (*actor_fn_t)(void *args, const hive_spawn_info_t *siblings, size_t sibling_count);
+typedef void (*hive_actor_fn_t)(void *args, const hive_spawn_info_t *siblings, size_t sibling_count);
 
 // Init function called in spawner context
 typedef void *(*hive_actor_init_fn_t)(void *init_args);
@@ -49,7 +49,7 @@ typedef struct {
 
 ```c
 // Actor entry function receives arguments, sibling info, and sibling count
-typedef void (*actor_fn_t)(void *args, const hive_spawn_info_t *siblings, size_t sibling_count);
+typedef void (*hive_actor_fn_t)(void *args, const hive_spawn_info_t *siblings, size_t sibling_count);
 
 // Init function (optional) called in spawner context
 typedef void *(*hive_actor_init_fn_t)(void *init_args);
@@ -71,11 +71,11 @@ typedef struct {
 // init_args: Arguments to init (or directly to actor if init is NULL)
 // cfg: Actor configuration (NULL = use defaults)
 // out: Receives the new actor's ID
-hive_status_t hive_spawn(actor_fn_t fn, hive_actor_init_fn_t init, void *init_args,
-                       const actor_config_t *cfg, actor_id_t *out);
+hive_status_t hive_spawn(hive_actor_fn_t fn, hive_actor_init_fn_t init, void *init_args,
+                       const hive_actor_config_t *cfg, actor_id_t *out);
 
-// Terminate current actor
-_Noreturn void hive_exit(void);
+// Terminate current actor with exit reason
+_Noreturn void hive_exit(hive_exit_reason_t reason);
 
 // Find sibling by name in spawn info array
 const hive_spawn_info_t *hive_find_sibling(const hive_spawn_info_t *siblings,
@@ -1523,7 +1523,7 @@ Supervision for automatic child actor restart. A supervisor is an actor that mon
 
 // Start supervisor with configuration
 hive_status_t hive_supervisor_start(const hive_supervisor_config_t *config,
-                                  const actor_config_t *sup_actor_cfg,
+                                  const hive_actor_config_t *sup_actor_cfg,
                                   actor_id_t *out);
 
 // Request graceful shutdown (async)
@@ -1570,14 +1570,14 @@ typedef enum {
 
 ```c
 typedef struct {
-    actor_fn_t start;              // Actor entry point
+    hive_actor_fn_t start;         // Actor entry point
     hive_actor_init_fn_t init;     // Init function (NULL = skip)
-    void *init_args;             // Arguments to init/actor
-    size_t init_args_size;       // Size to copy (0 = pass pointer directly)
-    const char *name;            // Child identifier for tracking
-    bool auto_register;          // Auto-register in name registry
+    void *init_args;               // Arguments to init/actor
+    size_t init_args_size;         // Size to copy (0 = pass pointer directly)
+    const char *name;              // Child identifier for tracking
+    bool auto_register;            // Auto-register in name registry
     hive_child_restart_t restart;  // Restart policy
-    actor_config_t actor_cfg;      // Actor configuration (stack size, priority, etc.)
+    hive_actor_config_t actor_cfg; // Actor configuration (stack size, priority, etc.)
 } hive_child_spec_t;
 ```
 
@@ -2076,9 +2076,9 @@ hive_file_close(fd);
 ## Logging API
 
 **Intentionally minimal by design.** Optimized for embedded systems with limited resources.
-Provides compile-time level filtering and dual output (console + binary file). Intentionally
+Provides compile-time level filtering and dual output (console + file). Intentionally
 omits log rotation, remote logging (syslog), structured formats (JSON), per-module levels,
-and runtime level changes. Binary format maximizes space efficiency on flash storage.
+and runtime level changes. Plain text format allows direct viewing with standard tools.
 
 Structured logging with compile-time level filtering and dual output (console + file).
 

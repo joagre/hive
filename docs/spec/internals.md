@@ -92,14 +92,14 @@ Per-actor stacks      Sum of all actor stack_size values (if malloc_stack=true)
 
 **Example: Flight controller (pilot example)**
 ```c
-// 10-11 actors, 7 buses, modest IPC traffic
-#define HIVE_MAX_ACTORS 16
+// 10-11 actors (9 children + supervisor + optional comms/tlog), 7 buses
+#define HIVE_MAX_ACTORS 13
 #define HIVE_MAX_BUSES 8
-#define HIVE_MAILBOX_ENTRY_POOL_SIZE 64    // Low IPC usage
-#define HIVE_MESSAGE_DATA_POOL_SIZE 64     // 7 buses x 1 entry each + margin
-#define HIVE_TIMER_ENTRY_POOL_SIZE 16      // Few timers
+#define HIVE_MAILBOX_ENTRY_POOL_SIZE 32    // Low IPC usage
+#define HIVE_MESSAGE_DATA_POOL_SIZE 64     // 7 buses x 4 entries each + margin
+#define HIVE_TIMER_ENTRY_POOL_SIZE 10      // Few timers
 #define HIVE_MAX_SUPERVISORS 1             // Single supervisor
-#define HIVE_MAX_SUPERVISOR_CHILDREN 12    // All flight actors
+#define HIVE_MAX_SUPERVISOR_CHILDREN 12    // 9-11 children + margin
 #define HIVE_STACK_ARENA_SIZE (64*1024)    // 64 KB (STM32 constrained)
 // Total RAM: ~90 KB (fits in STM32F405's 192 KB)
 ```
