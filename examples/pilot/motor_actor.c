@@ -24,8 +24,8 @@
 
 // Actor state - initialized by motor_actor_init
 typedef struct {
-    bus_id_t torque_bus;
-    actor_id_t flight_manager;
+    hive_bus_id_t torque_bus;
+    hive_actor_id_t flight_manager;
 } motor_state_t;
 
 void *motor_actor_init(void *init_args) {

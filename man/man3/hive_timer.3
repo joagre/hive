@@ -6,9 +6,9 @@ hive_timer_after, hive_timer_every, hive_timer_cancel, hive_sleep, hive_get_time
 .nf
 .B #include <hive_timer.h>
 .PP
-.BI "hive_status_t hive_timer_after(uint32_t " delay_us ", timer_id_t *" out ");"
-.BI "hive_status_t hive_timer_every(uint32_t " interval_us ", timer_id_t *" out ");"
-.BI "hive_status_t hive_timer_cancel(timer_id_t " id ");"
+.BI "hive_status_t hive_timer_after(uint32_t " delay_us ", hive_timer_id_t *" out ");"
+.BI "hive_status_t hive_timer_every(uint32_t " interval_us ", hive_timer_id_t *" out ");"
+.BI "hive_status_t hive_timer_cancel(hive_timer_id_t " id ");"
 .BI "hive_status_t hive_sleep(uint32_t " delay_us ");"
 .BI "uint64_t hive_get_time(void);"
 .fi
@@ -67,7 +67,7 @@ Timer messages have:
 = HIVE_MSG_TIMER
 .IP \(bu 2
 .B tag
-= timer_id_t (use to identify which timer fired)
+= hive_timer_id_t (use to identify which timer fired)
 .IP \(bu 2
 .B len
 = 0 (no payload)
@@ -81,19 +81,19 @@ to check if a message is a timer tick:
 .PP
 .nf
 if (hive_msg_is_timer(&msg)) {
-    timer_id_t which = msg.tag;
+    hive_timer_id_t which = msg.tag;
     /* Handle timer */
 }
 .fi
 .SS Waiting for a Specific Timer
 Use
 .BR hive_ipc_recv_match (3)
-with the timer_id_t to wait for a specific timer. This is the recommended
+with the hive_timer_id_t to wait for a specific timer. This is the recommended
 pattern when you need to wait for a particular timer without consuming
 other messages:
 .PP
 .nf
-timer_id_t my_timer;
+hive_timer_id_t my_timer;
 hive_timer_after(500000, &my_timer);
 
 /* Wait specifically for this timer */
@@ -102,7 +102,7 @@ hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, my_timer, &msg, -1);
 .fi
 .PP
 Do NOT use HIVE_TAG_ANY when waiting for timer messages, as this could
-consume timer messages from other timers. Always use the specific timer_id_t
+consume timer messages from other timers. Always use the specific hive_timer_id_t
 returned by
 .BR hive_timer_after ()
 or
@@ -178,12 +178,12 @@ void timer_demo(void *arg, const hive_spawn_info_t *siblings,
                 size_t sibling_count) {
 
     /* Create one-shot timer (500ms) */
-    timer_id_t oneshot;
+    hive_timer_id_t oneshot;
     hive_timer_after(500000, &oneshot);
     printf("One-shot timer %u created\\n", oneshot);
 
     /* Create periodic timer (200ms) */
-    timer_id_t periodic;
+    hive_timer_id_t periodic;
     hive_timer_every(200000, &periodic);
     printf("Periodic timer %u created\\n", periodic);
 
@@ -210,7 +210,7 @@ void timer_demo(void *arg, const hive_spawn_info_t *siblings,
 
 int main(void) {
     hive_init();
-    actor_id_t demo;
+    hive_actor_id_t demo;
     hive_spawn(timer_demo, NULL, NULL, NULL, &demo);
     hive_run();
     hive_cleanup();

@@ -12,13 +12,13 @@ This manual describes the fundamental types, constants, and compile-time
 configuration for the actor runtime.
 .SS Handles
 .TP
-.B actor_id_t
+.B hive_actor_id_t
 Opaque 32-bit handle identifying an actor.
 .TP
 .B HIVE_ACTOR_ID_INVALID
 Sentinel value (0) indicating an invalid or uninitialized actor ID.
 .TP
-.B bus_id_t
+.B hive_bus_id_t
 Opaque 32-bit handle identifying a bus (defined in
 .IR <hive_bus.h> ).
 .TP
@@ -26,7 +26,7 @@ Opaque 32-bit handle identifying a bus (defined in
 Sentinel value (0) indicating an invalid bus ID (defined in
 .IR <hive_bus.h> ).
 .TP
-.B timer_id_t
+.B hive_timer_id_t
 Opaque 32-bit handle identifying a timer (defined in
 .IR <hive_timer.h> ).
 .TP
@@ -100,7 +100,7 @@ Data was truncated to fit buffer (bus read operations).
 .PP
 .nf
 typedef struct {
-    actor_id_t       sender;  /* Sender actor ID */
+    hive_actor_id_t       sender;  /* Sender actor ID */
     hive_msg_class_t class;   /* Message class */
     uint32_t       tag;     /* Message tag */
     size_t         len;     /* Payload length in bytes */
@@ -199,7 +199,7 @@ The actor function receives:
 .nf
 typedef struct {
     const char *name;  /* Actor name (may be NULL) */
-    actor_id_t id;       /* Actor ID */
+    hive_actor_id_t id;       /* Actor ID */
     bool registered;   /* Whether registered in name registry */
 } hive_spawn_info_t;
 .fi
@@ -269,7 +269,7 @@ Defined in
 .PP
 .nf
 typedef struct {
-    actor_id_t       actor;   /* ID of the actor that died */
+    hive_actor_id_t       actor;   /* ID of the actor that died */
     hive_exit_reason_t reason;  /* Why the actor exited */
 } hive_exit_msg_t;
 .fi
@@ -286,7 +286,7 @@ Defined in
 .PP
 .nf
 typedef struct {
-    actor_id_t       sender;  /* HIVE_SENDER_ANY for any sender */
+    hive_actor_id_t       sender;  /* HIVE_SENDER_ANY for any sender */
     hive_msg_class_t class;   /* HIVE_MSG_ANY for any class */
     uint32_t       tag;     /* HIVE_TAG_ANY for any tag */
 } hive_recv_filter_t;
@@ -312,7 +312,7 @@ typedef struct {
     hive_select_type_t type;
     union {
         hive_recv_filter_t ipc;  /* For HIVE_SEL_IPC */
-        bus_id_t bus;            /* For HIVE_SEL_BUS */
+        hive_bus_id_t bus;            /* For HIVE_SEL_BUS */
     };
 } hive_select_source_t;
 

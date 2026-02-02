@@ -239,7 +239,7 @@ mailbox_entry_t *hive_ipc_dequeue_head(actor_t *a) {
 
 // Check for timeout message and handle it
 hive_status_t hive_mailbox_handle_timeout(actor_t *current,
-                                          timer_id_t timeout_timer,
+                                          hive_timer_id_t timeout_timer,
                                           const char *operation) {
     if (timeout_timer == HIVE_TIMER_ID_INVALID) {
         return HIVE_SUCCESS; // No timeout was set
@@ -274,7 +274,8 @@ hive_status_t hive_mailbox_handle_timeout(actor_t *current,
 
 // Internal notify with explicit sender, class and tag (used by timer, link,
 // etc.)
-hive_status_t hive_ipc_notify_internal(actor_id_t to, actor_id_t sender,
+hive_status_t hive_ipc_notify_internal(hive_actor_id_t to,
+                                       hive_actor_id_t sender,
                                        hive_msg_class_t class, uint32_t tag,
                                        const void *data, size_t len) {
     actor_t *receiver = hive_actor_get(to);
@@ -349,8 +350,8 @@ hive_status_t hive_ipc_notify_internal(actor_id_t to, actor_id_t sender,
     return HIVE_SUCCESS;
 }
 
-hive_status_t hive_ipc_notify(actor_id_t to, uint32_t tag, const void *data,
-                              size_t len) {
+hive_status_t hive_ipc_notify(hive_actor_id_t to, uint32_t tag,
+                              const void *data, size_t len) {
     HIVE_REQUIRE_ACTOR_CONTEXT();
     actor_t *sender = hive_actor_current();
 
@@ -363,7 +364,7 @@ hive_status_t hive_ipc_notify(actor_id_t to, uint32_t tag, const void *data,
                                     len);
 }
 
-hive_status_t hive_ipc_notify_ex(actor_id_t to, hive_msg_class_t class,
+hive_status_t hive_ipc_notify_ex(hive_actor_id_t to, hive_msg_class_t class,
                                  uint32_t tag, const void *data, size_t len) {
     HIVE_REQUIRE_ACTOR_CONTEXT();
     actor_t *sender = hive_actor_current();
@@ -392,7 +393,7 @@ hive_status_t hive_ipc_recv(hive_message_t *msg, int32_t timeout_ms) {
     return s;
 }
 
-hive_status_t hive_ipc_recv_match(actor_id_t from, hive_msg_class_t class,
+hive_status_t hive_ipc_recv_match(hive_actor_id_t from, hive_msg_class_t class,
                                   uint32_t tag, hive_message_t *msg,
                                   int32_t timeout_ms) {
     // Wrapper around hive_select with single IPC filter
@@ -441,7 +442,7 @@ hive_status_t hive_ipc_recv_matches(const hive_recv_filter_t *filters,
 // Request/Reply Pattern
 // -----------------------------------------------------------------------------
 
-hive_status_t hive_ipc_request(actor_id_t to, const void *request,
+hive_status_t hive_ipc_request(hive_actor_id_t to, const void *request,
                                size_t req_len, hive_message_t *reply,
                                int32_t timeout_ms) {
     HIVE_REQUIRE_ACTOR_CONTEXT();
@@ -560,7 +561,7 @@ size_t hive_ipc_count(void) {
 
 hive_status_t hive_ipc_named_notify(const char *name, uint32_t tag,
                                     const void *data, size_t len) {
-    actor_id_t target;
+    hive_actor_id_t target;
     hive_status_t status = hive_whereis(name, &target);
     if (HIVE_FAILED(status)) {
         return status;
@@ -571,7 +572,7 @@ hive_status_t hive_ipc_named_notify(const char *name, uint32_t tag,
 hive_status_t hive_ipc_named_request(const char *name, const void *request,
                                      size_t req_len, hive_message_t *reply,
                                      int32_t timeout_ms) {
-    actor_id_t target;
+    hive_actor_id_t target;
     hive_status_t status = hive_whereis(name, &target);
     if (HIVE_FAILED(status)) {
         return status;

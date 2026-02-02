@@ -29,7 +29,7 @@ typedef struct {
 #define CMD_STATUS 101
 
 // Global bus for sensor data
-static bus_id_t s_sensor_bus = HIVE_BUS_ID_INVALID;
+static hive_bus_id_t s_sensor_bus = HIVE_BUS_ID_INVALID;
 
 // Sensor publisher actor - simulates sensor readings
 static void sensor_publisher(void *args, const hive_spawn_info_t *siblings,
@@ -40,7 +40,7 @@ static void sensor_publisher(void *args, const hive_spawn_info_t *siblings,
     printf("[Sensor] Publisher started\n");
 
     // Create periodic timer for sensor updates (100ms)
-    timer_id_t tick;
+    hive_timer_id_t tick;
     hive_timer_every(100000, &tick);
 
     sensor_data_t data = {20.0f, 50.0f, 0};
@@ -71,7 +71,7 @@ static void command_sender(void *args, const hive_spawn_info_t *siblings,
                            size_t sibling_count) {
     (void)siblings;
     (void)sibling_count;
-    actor_id_t controller = *(actor_id_t *)args;
+    hive_actor_id_t controller = *(hive_actor_id_t *)args;
     printf("[Command] Sender started, will notify shutdown after 500ms\n");
 
     // Wait before notifying shutdown
@@ -110,17 +110,17 @@ static void controller(void *args, const hive_spawn_info_t *siblings,
     }
 
     // Create heartbeat timer (250ms)
-    timer_id_t heartbeat;
+    hive_timer_id_t heartbeat;
     hive_timer_every(250000, &heartbeat);
 
     // Spawn sensor publisher
-    actor_id_t publisher;
+    hive_actor_id_t publisher;
     hive_spawn(sensor_publisher, NULL, NULL, NULL, &publisher);
     hive_link(publisher);
 
     // Spawn command sender
-    actor_id_t self = hive_self();
-    actor_id_t cmd_sender;
+    hive_actor_id_t self = hive_self();
+    hive_actor_id_t cmd_sender;
     hive_spawn(command_sender, NULL, &self, NULL, &cmd_sender);
     hive_link(cmd_sender);
 
@@ -237,7 +237,7 @@ int main(void) {
     hive_actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
     cfg.name = "controller";
 
-    actor_id_t id;
+    hive_actor_id_t id;
     if (HIVE_FAILED(hive_spawn(controller, NULL, NULL, &cfg, &id))) {
         fprintf(stderr, "Failed to spawn controller\n");
         hive_bus_destroy(s_sensor_bus);

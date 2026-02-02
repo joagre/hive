@@ -8,17 +8,17 @@ hive_spawn, hive_exit, hive_self, hive_yield, hive_actor_alive, hive_find_siblin
 .PP
 .BI "hive_status_t hive_spawn(hive_actor_fn_t " fn ", hive_actor_init_fn_t " init ","
 .BI "                       void *" init_args ", const hive_actor_config_t *" cfg ","
-.BI "                       actor_id_t *" out ");"
+.BI "                       hive_actor_id_t *" out ");"
 .BI "_Noreturn void hive_exit(hive_exit_reason_t " reason ");"
-.BI "actor_id_t hive_self(void);"
+.BI "hive_actor_id_t hive_self(void);"
 .BI "void hive_yield(void);"
-.BI "bool hive_actor_alive(actor_id_t " id ");"
+.BI "bool hive_actor_alive(hive_actor_id_t " id ");"
 .PP
 .BI "const hive_spawn_info_t *hive_find_sibling(const hive_spawn_info_t *" siblings ","
 .BI "                                         size_t " count ", const char *" name ");"
 .PP
 .BI "hive_status_t hive_register(const char *" name ");"
-.BI "hive_status_t hive_whereis(const char *" name ", actor_id_t *" out ");"
+.BI "hive_status_t hive_whereis(const char *" name ", hive_actor_id_t *" out ");"
 .BI "hive_status_t hive_unregister(const char *" name ");"
 .fi
 .SH DESCRIPTION
@@ -129,7 +129,7 @@ actors. Within the same priority level, actors are scheduled round-robin.
 .nf
 typedef struct {
     const char *name;  /* Actor name (may be NULL) */
-    actor_id_t id;       /* Actor ID */
+    hive_actor_id_t id;       /* Actor ID */
     bool registered;   /* Whether registered in name registry */
 } hive_spawn_info_t;
 .fi
@@ -319,7 +319,7 @@ only valid during actor startup. Copy needed data to actor-local storage.
 .PP
 .B Stale IDs:
 If a sibling restarts (getting a new
-.IR actor_id_t ),
+.IR hive_actor_id_t ),
 any cached IDs become stale. For siblings that may restart independently, use
 .BR hive_whereis (3)
 for dynamic lookups. Sibling arrays work best with ONE_FOR_ALL supervision
@@ -358,7 +358,7 @@ int main(void) {
     cfg.name = "sensor";
 
     int worker_ids[3] = {1, 2, 3};
-    actor_id_t actors[3];
+    hive_actor_id_t actors[3];
 
     for (int i = 0; i < 3; i++) {
         hive_status_t s = hive_spawn(worker, NULL, &worker_ids[i],
@@ -427,7 +427,7 @@ int main(void) {
     cfg.name = "database";
     cfg.auto_register = true;
 
-    actor_id_t db;
+    hive_actor_id_t db;
     hive_status_t s = hive_spawn(database_service, NULL, NULL, &cfg, &db);
     if (s.code == HIVE_ERR_EXISTS) {
         fprintf(stderr, "Database already registered\\n");
@@ -445,7 +445,7 @@ void client(void *args, const hive_spawn_info_t *siblings,
             size_t sibling_count) {
 
     /* Look up database actor by name */
-    actor_id_t db;
+    hive_actor_id_t db;
     hive_status_t s = hive_whereis("database", &db);
     if (HIVE_FAILED(s)) {
         printf("Database not found\\n");

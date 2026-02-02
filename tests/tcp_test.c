@@ -45,7 +45,7 @@ static void server_actor(void *args, const hive_spawn_info_t *siblings,
                          size_t sibling_count) {
     (void)siblings;
     (void)sibling_count;
-    actor_id_t client = *(actor_id_t *)args;
+    hive_actor_id_t client = *(hive_actor_id_t *)args;
     (void)client;
 
     // Listen on port
@@ -100,7 +100,7 @@ static void client_actor(void *args, const hive_spawn_info_t *siblings,
     }
 
     // Small delay to ensure server is in accept
-    timer_id_t timer;
+    hive_timer_id_t timer;
     hive_timer_after(50000, &timer); // 50ms
     hive_message_t msg;
     hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
@@ -153,15 +153,15 @@ static void test1_listen_accept(void *args, const hive_spawn_info_t *siblings,
     g_accepted_fd = -1;
 
     // Get our ID to pass to server
-    actor_id_t self = hive_self();
+    hive_actor_id_t self = hive_self();
 
     // Spawn server
-    actor_id_t server;
+    hive_actor_id_t server;
     hive_spawn(server_actor, NULL, &self, NULL, &server);
     hive_link(server);
 
     // Spawn client
-    actor_id_t client;
+    hive_actor_id_t client;
     hive_spawn(client_actor, NULL, NULL, NULL, &client);
     hive_link(client);
 
@@ -239,7 +239,7 @@ static void echo_client_actor(void *args, const hive_spawn_info_t *siblings,
         hive_yield();
     }
 
-    timer_id_t timer;
+    hive_timer_id_t timer;
     hive_timer_after(50000, &timer);
     hive_message_t msg;
     hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
@@ -280,11 +280,11 @@ static void test2_send_receive(void *args, const hive_spawn_info_t *siblings,
     memset(s_received_data, 0, sizeof(s_received_data));
     memset(s_echo_reply, 0, sizeof(s_echo_reply));
 
-    actor_id_t server;
+    hive_actor_id_t server;
     hive_spawn(echo_server_actor, NULL, NULL, NULL, &server);
     hive_link(server);
 
-    actor_id_t client;
+    hive_actor_id_t client;
     hive_spawn(echo_client_actor, NULL, NULL, NULL, &client);
     hive_link(client);
 
@@ -782,7 +782,7 @@ static void test12_actor_death_during_recv(void *args,
 
     // Spawn actor that will block on recv
     s_recv_actor_started = false;
-    actor_id_t recv_actor;
+    hive_actor_id_t recv_actor;
     if (HIVE_FAILED(hive_spawn(blocked_recv_actor, NULL, &server_fd, NULL,
                                &recv_actor))) {
         TEST_FAIL("spawn blocked_recv_actor");
@@ -801,7 +801,7 @@ static void test12_actor_death_during_recv(void *args,
     }
 
     // Give it time to actually block on recv
-    timer_id_t timer;
+    hive_timer_id_t timer;
     hive_timer_after(50000, &timer); // 50ms
     hive_message_t msg;
     hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
@@ -856,7 +856,7 @@ static void run_all_tests(void *args, const hive_spawn_info_t *siblings,
         hive_actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
         cfg.stack_size = 64 * 1024;
 
-        actor_id_t test;
+        hive_actor_id_t test;
         if (HIVE_FAILED(hive_spawn(test_funcs[i], NULL, NULL, &cfg, &test))) {
             printf("Failed to spawn test %zu\n", i);
             continue;
@@ -884,7 +884,7 @@ int main(void) {
     hive_actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
     cfg.stack_size = 128 * 1024;
 
-    actor_id_t runner;
+    hive_actor_id_t runner;
     if (HIVE_FAILED(hive_spawn(run_all_tests, NULL, NULL, &cfg, &runner))) {
         fprintf(stderr, "Failed to spawn test runner\n");
         hive_cleanup();

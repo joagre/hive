@@ -37,7 +37,7 @@ static void actor_a_links_to_b(void *args, const hive_spawn_info_t *siblings,
                                size_t sibling_count) {
     (void)siblings;
     (void)sibling_count;
-    actor_id_t actor_b = *(actor_id_t *)args;
+    hive_actor_id_t actor_b = *(hive_actor_id_t *)args;
 
     // Link to actor B
     hive_status_t status = hive_link(actor_b);
@@ -67,7 +67,7 @@ static void actor_b_exits_immediately(void *args,
     (void)siblings;
     (void)sibling_count;
     // Give actor A time to link
-    timer_id_t timer;
+    hive_timer_id_t timer;
     hive_timer_after(50000, &timer); // 50ms
     hive_message_t msg;
     hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
@@ -86,7 +86,7 @@ static void test1_basic_link(void *args, const hive_spawn_info_t *siblings,
     g_actor_b_notified = false;
 
     // Spawn actor B first
-    actor_id_t actor_b;
+    hive_actor_id_t actor_b;
     if (HIVE_FAILED(hive_spawn(actor_b_exits_immediately, NULL, NULL, NULL,
                                &actor_b))) {
         TEST_FAIL("spawn actor B");
@@ -94,7 +94,7 @@ static void test1_basic_link(void *args, const hive_spawn_info_t *siblings,
     }
 
     // Spawn actor A and pass actor B's ID
-    actor_id_t actor_a;
+    hive_actor_id_t actor_a;
     if (HIVE_FAILED(
             hive_spawn(actor_a_links_to_b, NULL, &actor_b, NULL, &actor_a))) {
         TEST_FAIL("spawn actor A");
@@ -102,7 +102,7 @@ static void test1_basic_link(void *args, const hive_spawn_info_t *siblings,
     }
 
     // Wait for both to complete
-    timer_id_t timer;
+    hive_timer_id_t timer;
     hive_timer_after(200000, &timer);
     hive_message_t msg;
     hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
@@ -120,7 +120,7 @@ static void test1_basic_link(void *args, const hive_spawn_info_t *siblings,
 // Test 2: Link is bidirectional - reverse direction
 // ============================================================================
 
-static actor_id_t g_linker_id = HIVE_ACTOR_ID_INVALID;
+static hive_actor_id_t g_linker_id = HIVE_ACTOR_ID_INVALID;
 static bool g_target_notified = false;
 
 static void target_waits_for_linker(void *args,
@@ -149,7 +149,7 @@ static void linker_dies_first(void *args, const hive_spawn_info_t *siblings,
                               size_t sibling_count) {
     (void)siblings;
     (void)sibling_count;
-    actor_id_t target = *(actor_id_t *)args;
+    hive_actor_id_t target = *(hive_actor_id_t *)args;
 
     // Link to target
     hive_link(target);
@@ -168,7 +168,7 @@ static void test2_bidirectional(void *args, const hive_spawn_info_t *siblings,
     g_target_notified = false;
 
     // Spawn target first
-    actor_id_t target;
+    hive_actor_id_t target;
     if (HIVE_FAILED(
             hive_spawn(target_waits_for_linker, NULL, NULL, NULL, &target))) {
         TEST_FAIL("spawn target");
@@ -183,7 +183,7 @@ static void test2_bidirectional(void *args, const hive_spawn_info_t *siblings,
     }
 
     // Wait for completion
-    timer_id_t timer;
+    hive_timer_id_t timer;
     hive_timer_after(300000, &timer);
     hive_message_t msg;
     hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
@@ -208,7 +208,7 @@ static void actor_unlinks_before_death(void *args,
                                        size_t sibling_count) {
     (void)siblings;
     (void)sibling_count;
-    actor_id_t target = *(actor_id_t *)args;
+    hive_actor_id_t target = *(hive_actor_id_t *)args;
 
     hive_link(target);
     hive_unlink(target);
@@ -232,7 +232,7 @@ static void actor_dies_after_unlink(void *args,
     (void)sibling_count;
 
     // Give time for link/unlink
-    timer_id_t timer;
+    hive_timer_id_t timer;
     hive_timer_after(100000, &timer);
     hive_message_t msg;
     hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
@@ -249,17 +249,17 @@ static void test3_unlink(void *args, const hive_spawn_info_t *siblings,
 
     g_unlinked_received_notification = false;
 
-    actor_id_t target;
+    hive_actor_id_t target;
     if (HIVE_FAILED(
             hive_spawn(actor_dies_after_unlink, NULL, NULL, NULL, &target))) {
         TEST_FAIL("spawn target");
         return;
     }
 
-    actor_id_t unlinker;
+    hive_actor_id_t unlinker;
     hive_spawn(actor_unlinks_before_death, NULL, &target, NULL, &unlinker);
 
-    timer_id_t timer;
+    hive_timer_id_t timer;
     hive_timer_after(500000, &timer);
     hive_message_t msg;
     hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
@@ -313,7 +313,7 @@ static void multi_link_target(void *args, const hive_spawn_info_t *siblings,
     (void)sibling_count;
     int delay_ms = *(int *)args;
 
-    timer_id_t timer;
+    hive_timer_id_t timer;
     hive_timer_after(delay_ms * 1000, &timer);
     hive_message_t msg;
     hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
@@ -325,7 +325,7 @@ static void multi_linker(void *args, const hive_spawn_info_t *siblings,
                          size_t sibling_count) {
     (void)siblings;
     (void)sibling_count;
-    actor_id_t *targets = (actor_id_t *)args;
+    hive_actor_id_t *targets = (hive_actor_id_t *)args;
 
     // Link to all 3 targets
     for (int i = 0; i < 3; i++) {
@@ -355,7 +355,7 @@ static void test5_multiple_links(void *args, const hive_spawn_info_t *siblings,
 
     // Spawn 3 targets with different delays
     static int delays[3] = {50, 100, 150};
-    static actor_id_t targets[3];
+    static hive_actor_id_t targets[3];
 
     for (int i = 0; i < 3; i++) {
         if (HIVE_FAILED(hive_spawn(multi_link_target, NULL, &delays[i], NULL,
@@ -366,11 +366,11 @@ static void test5_multiple_links(void *args, const hive_spawn_info_t *siblings,
     }
 
     // Spawn linker
-    actor_id_t linker;
+    hive_actor_id_t linker;
     hive_spawn(multi_linker, NULL, targets, NULL, &linker);
 
     // Wait for all to complete
-    timer_id_t timer;
+    hive_timer_id_t timer;
     hive_timer_after(500000, &timer);
     hive_message_t msg;
     hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
@@ -422,7 +422,7 @@ static void linker_actor(void *args, const hive_spawn_info_t *siblings,
                          size_t sibling_count) {
     (void)siblings;
     (void)sibling_count;
-    actor_id_t target = *(actor_id_t *)args;
+    hive_actor_id_t target = *(hive_actor_id_t *)args;
     hive_link(target);
     return; // Die immediately
 }
@@ -431,7 +431,7 @@ static void monitor_actor(void *args, const hive_spawn_info_t *siblings,
                           size_t sibling_count) {
     (void)siblings;
     (void)sibling_count;
-    actor_id_t target = *(actor_id_t *)args;
+    hive_actor_id_t target = *(hive_actor_id_t *)args;
     uint32_t ref;
     hive_monitor(target, &ref);
     return; // Die immediately
@@ -448,21 +448,21 @@ static void test6_link_vs_monitor(void *args, const hive_spawn_info_t *siblings,
     g_monitor_target_got_notification = false;
 
     // Test link: target should be notified when linker dies
-    actor_id_t link_target;
+    hive_actor_id_t link_target;
     hive_spawn(link_target_waits, NULL, NULL, NULL, &link_target);
-    actor_id_t linker;
+    hive_actor_id_t linker;
     hive_spawn(linker_actor, NULL, &link_target, NULL, &linker);
     (void)linker;
 
     // Test monitor: target should NOT be notified when monitor dies
-    actor_id_t monitor_target;
+    hive_actor_id_t monitor_target;
     hive_spawn(monitor_target_waits, NULL, NULL, NULL, &monitor_target);
-    actor_id_t monitor;
+    hive_actor_id_t monitor;
     hive_spawn(monitor_actor, NULL, &monitor_target, NULL, &monitor);
     (void)monitor;
 
     // Wait for completion
-    timer_id_t timer;
+    hive_timer_id_t timer;
     hive_timer_after(500000, &timer);
     hive_message_t msg;
     hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
@@ -494,7 +494,7 @@ static void link_receiver_checks_reason(void *args,
                                         size_t sibling_count) {
     (void)siblings;
     (void)sibling_count;
-    actor_id_t target = *(actor_id_t *)args;
+    hive_actor_id_t target = *(hive_actor_id_t *)args;
 
     hive_link(target);
 
@@ -514,7 +514,7 @@ static void normal_exit_actor(void *args, const hive_spawn_info_t *siblings,
     (void)args;
     (void)siblings;
     (void)sibling_count;
-    timer_id_t timer;
+    hive_timer_id_t timer;
     hive_timer_after(50000, &timer);
     hive_message_t msg;
     hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
@@ -530,12 +530,12 @@ static void test7_exit_reason(void *args, const hive_spawn_info_t *siblings,
 
     s_received_reason = (hive_exit_reason_t)99; // Invalid value
 
-    actor_id_t target;
+    hive_actor_id_t target;
     hive_spawn(normal_exit_actor, NULL, NULL, NULL, &target);
-    actor_id_t receiver;
+    hive_actor_id_t receiver;
     hive_spawn(link_receiver_checks_reason, NULL, &target, NULL, &receiver);
 
-    timer_id_t timer;
+    hive_timer_id_t timer;
     hive_timer_after(300000, &timer);
     hive_message_t msg;
     hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
@@ -573,7 +573,7 @@ static void test8_link_to_dead_actor(void *args,
     fflush(stdout);
 
     // Spawn an actor that exits immediately
-    actor_id_t target;
+    hive_actor_id_t target;
     if (HIVE_FAILED(
             hive_spawn(quickly_exiting_actor, NULL, NULL, NULL, &target))) {
         TEST_FAIL("failed to spawn target actor");
@@ -614,7 +614,7 @@ static void test9_link_to_self(void *args, const hive_spawn_info_t *siblings,
     printf("\nTest 9: Link to self\n");
     fflush(stdout);
 
-    actor_id_t self = hive_self();
+    hive_actor_id_t self = hive_self();
 
     hive_status_t status = hive_link(self);
     if (HIVE_FAILED(status)) {
@@ -637,7 +637,7 @@ static void unlink_target_actor(void *args, const hive_spawn_info_t *siblings,
     (void)siblings;
     (void)sibling_count;
     // Wait a bit then exit
-    timer_id_t timer;
+    hive_timer_id_t timer;
     hive_timer_after(200000, &timer);
     hive_message_t msg;
     hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
@@ -654,7 +654,7 @@ static void test10_unlink_non_linked(void *args,
     fflush(stdout);
 
     // Spawn an actor but don't link to it
-    actor_id_t target;
+    hive_actor_id_t target;
     if (HIVE_FAILED(
             hive_spawn(unlink_target_actor, NULL, NULL, NULL, &target))) {
         TEST_FAIL("spawn target");
@@ -672,7 +672,7 @@ static void test10_unlink_non_linked(void *args,
     }
 
     // Wait for target to exit
-    timer_id_t timer;
+    hive_timer_id_t timer;
     hive_timer_after(300000, &timer);
     hive_message_t msg;
     hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
@@ -738,7 +738,7 @@ static void test12_link_pool_exhaustion(void *args,
 
     // Each link uses 2 entries (bidirectional)
     int max_links = HIVE_LINK_ENTRY_POOL_SIZE / 2;
-    actor_id_t targets[HIVE_LINK_ENTRY_POOL_SIZE];
+    hive_actor_id_t targets[HIVE_LINK_ENTRY_POOL_SIZE];
     int spawned = 0;
     int linked = 0;
 
@@ -748,7 +748,7 @@ static void test12_link_pool_exhaustion(void *args,
         cfg.malloc_stack = true;
         cfg.stack_size = TEST_STACK_SIZE(8 * 1024);
 
-        actor_id_t target;
+        hive_actor_id_t target;
         if (HIVE_FAILED(hive_spawn(link_pool_target_actor, NULL, NULL, &cfg,
                                    &target))) {
             break;
@@ -777,7 +777,7 @@ static void test12_link_pool_exhaustion(void *args,
     }
 
     // Wait for cleanup
-    timer_id_t timer;
+    hive_timer_id_t timer;
     hive_timer_after(200000, &timer);
     hive_message_t msg;
     hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
@@ -815,7 +815,7 @@ static void run_all_tests(void *args, const hive_spawn_info_t *siblings,
         hive_actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
         cfg.stack_size = TEST_STACK_SIZE(64 * 1024);
 
-        actor_id_t test;
+        hive_actor_id_t test;
         if (HIVE_FAILED(hive_spawn(test_funcs[i], NULL, NULL, &cfg, &test))) {
             printf("Failed to spawn test %zu\n", i);
             continue;
@@ -843,7 +843,7 @@ int main(void) {
     hive_actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
     cfg.stack_size = TEST_STACK_SIZE(128 * 1024);
 
-    actor_id_t runner;
+    hive_actor_id_t runner;
     if (HIVE_FAILED(hive_spawn(run_all_tests, NULL, NULL, &cfg, &runner))) {
         fprintf(stderr, "Failed to spawn test runner\n");
         hive_cleanup();

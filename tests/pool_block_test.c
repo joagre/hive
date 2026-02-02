@@ -34,7 +34,7 @@ static void sender_no_block(void *args, const hive_spawn_info_t *siblings,
                             size_t sibling_count) {
     (void)siblings;
     (void)sibling_count;
-    actor_id_t receiver = *(actor_id_t *)args;
+    hive_actor_id_t receiver = *(hive_actor_id_t *)args;
 
     // Verify default is non-blocking
     if (hive_pool_get_block()) {
@@ -77,7 +77,7 @@ static void sender_no_block(void *args, const hive_spawn_info_t *siblings,
 // Test 2: pool_block=true blocks until pool available
 // =============================================================================
 
-static actor_id_t blocking_sender_id;
+static hive_actor_id_t blocking_sender_id;
 
 static void consumer_actor(void *args, const hive_spawn_info_t *siblings,
                            size_t sibling_count) {
@@ -110,7 +110,7 @@ static void sender_blocking(void *args, const hive_spawn_info_t *siblings,
                             size_t sibling_count) {
     (void)siblings;
     (void)sibling_count;
-    actor_id_t receiver = *(actor_id_t *)args;
+    hive_actor_id_t receiver = *(hive_actor_id_t *)args;
 
     // Verify pool_block is set from config
     if (!hive_pool_get_block()) {
@@ -198,7 +198,7 @@ static void timer_under_exhaustion_sender(void *args,
                                           size_t sibling_count) {
     (void)siblings;
     (void)sibling_count;
-    actor_id_t receiver = *(actor_id_t *)args;
+    hive_actor_id_t receiver = *(hive_actor_id_t *)args;
 
     // Fill pool until exhausted (leave only reserved entries)
     int sent = 0;
@@ -221,7 +221,7 @@ static void timer_under_exhaustion_sender(void *args,
     printf("    Reserved entries: %d\n", HIVE_RESERVED_SYSTEM_ENTRIES);
 
     // Now try to use a timer - should work because timers use reserved entries
-    timer_id_t timer;
+    hive_timer_id_t timer;
     hive_status_t s = hive_timer_after(10000, &timer); // 10ms
     if (HIVE_FAILED(s)) {
         printf("    FAIL: timer creation failed: %s\n", HIVE_ERR_STR(s));
@@ -269,10 +269,10 @@ int main(void) {
     test_passed = false;
     hive_init();
     {
-        actor_id_t receiver;
+        hive_actor_id_t receiver;
         hive_spawn(receiver_no_block, NULL, NULL, NULL, &receiver);
 
-        actor_id_t sender;
+        hive_actor_id_t sender;
         hive_spawn(sender_no_block, NULL, &receiver, NULL, &sender);
 
         hive_run();
@@ -294,14 +294,14 @@ int main(void) {
     hive_init();
     {
         // Spawn consumer first
-        actor_id_t consumer;
+        hive_actor_id_t consumer;
         hive_spawn(consumer_actor, NULL, NULL, NULL, &consumer);
 
         // Spawn blocking sender with pool_block=true
         hive_actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
         cfg.pool_block = true;
 
-        actor_id_t sender;
+        hive_actor_id_t sender;
         hive_spawn(sender_blocking, NULL, &consumer, &cfg, &sender);
         blocking_sender_id = sender;
 
@@ -322,7 +322,7 @@ int main(void) {
     test_passed = false;
     hive_init();
     {
-        actor_id_t actor;
+        hive_actor_id_t actor;
         hive_spawn(runtime_api_actor, NULL, NULL, NULL, &actor);
         hive_run();
     }
@@ -341,10 +341,10 @@ int main(void) {
     test_passed = false;
     hive_init();
     {
-        actor_id_t receiver;
+        hive_actor_id_t receiver;
         hive_spawn(timer_test_receiver, NULL, NULL, NULL, &receiver);
 
-        actor_id_t sender;
+        hive_actor_id_t sender;
         hive_spawn(timer_under_exhaustion_sender, NULL, &receiver, NULL,
                    &sender);
 

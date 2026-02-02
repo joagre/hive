@@ -50,7 +50,7 @@ static void test1_basic_pubsub(void *args, const hive_spawn_info_t *siblings,
 
     // Create bus
     hive_bus_config_t cfg = TEST_BUS_CONFIG;
-    bus_id_t bus;
+    hive_bus_id_t bus;
     hive_status_t status = hive_bus_create(&cfg, &bus);
     if (HIVE_FAILED(status)) {
         TEST_FAIL("hive_bus_create");
@@ -102,7 +102,7 @@ static void test1_basic_pubsub(void *args, const hive_spawn_info_t *siblings,
 // Test 2: Multiple subscribers
 // ============================================================================
 
-static bus_id_t s_shared_bus;
+static hive_bus_id_t s_shared_bus;
 static int g_subscriber_received[3] = {0, 0, 0};
 
 static void subscriber_actor(void *args, const hive_spawn_info_t *siblings,
@@ -149,12 +149,12 @@ static void test2_multi_subscriber(void *args,
     static int ids[3] = {0, 1, 2};
     for (int i = 0; i < 3; i++) {
         g_subscriber_received[i] = 0;
-        actor_id_t sub;
+        hive_actor_id_t sub;
         hive_spawn(subscriber_actor, NULL, &ids[i], NULL, &sub);
     }
 
     // Give subscribers time to subscribe
-    timer_id_t timer;
+    hive_timer_id_t timer;
     hive_timer_after(50000, &timer); // 50ms
     hive_message_t msg;
     hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
@@ -190,7 +190,7 @@ static void test2_multi_subscriber(void *args,
 // Test 3: max_readers retention policy (entry consumed after N subscribers read)
 // ============================================================================
 
-static bus_id_t s_max_readers_bus;
+static hive_bus_id_t s_max_readers_bus;
 static int g_max_readers_success[3] = {0, 0, 0};
 
 static void max_readers_subscriber(void *args,
@@ -240,12 +240,12 @@ static void test3_max_readers(void *args, const hive_spawn_info_t *siblings,
     // Spawn 3 subscribers
     static int ids[3] = {0, 1, 2};
     for (int i = 0; i < 3; i++) {
-        actor_id_t sub;
+        hive_actor_id_t sub;
         hive_spawn(max_readers_subscriber, NULL, &ids[i], NULL, &sub);
     }
 
     // Give subscribers time to subscribe
-    timer_id_t timer;
+    hive_timer_id_t timer;
     hive_timer_after(50000, &timer);
     hive_message_t msg;
     hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
@@ -294,7 +294,7 @@ static void test4_ring_buffer_wrap(void *args,
     // Create bus with small ring buffer
     hive_bus_config_t cfg = TEST_BUS_CONFIG;
     cfg.max_entries = 4;
-    bus_id_t bus;
+    hive_bus_id_t bus;
     hive_status_t status = hive_bus_create(&cfg, &bus);
     if (HIVE_FAILED(status)) {
         TEST_FAIL("hive_bus_create");
@@ -350,7 +350,7 @@ static void test5_nonblocking_read(void *args,
     printf("\nTest 5: Non-blocking read returns WOULDBLOCK\n");
 
     hive_bus_config_t cfg = TEST_BUS_CONFIG;
-    bus_id_t bus;
+    hive_bus_id_t bus;
     hive_bus_create(&cfg, &bus);
     hive_bus_subscribe(bus);
 
@@ -384,7 +384,7 @@ static void test6_blocking_read_timeout(void *args,
     printf("\nTest 6: Blocking read with timeout\n");
 
     hive_bus_config_t cfg = TEST_BUS_CONFIG;
-    bus_id_t bus;
+    hive_bus_id_t bus;
     hive_bus_create(&cfg, &bus);
     hive_bus_subscribe(bus);
 
@@ -421,7 +421,7 @@ static void test7_destroy_with_subscribers(void *args,
     printf("\nTest 7: Destroy bus with subscribers fails\n");
 
     hive_bus_config_t cfg = TEST_BUS_CONFIG;
-    bus_id_t bus;
+    hive_bus_id_t bus;
     hive_bus_create(&cfg, &bus);
     hive_bus_subscribe(bus);
 
@@ -503,7 +503,7 @@ static void test9_max_age_expiry(void *args, const hive_spawn_info_t *siblings,
     hive_bus_config_t cfg = TEST_BUS_CONFIG;
     cfg.max_age_ms = 100; // Entries expire after 100ms
 
-    bus_id_t bus;
+    hive_bus_id_t bus;
     hive_status_t status = hive_bus_create(&cfg, &bus);
     if (HIVE_FAILED(status)) {
         TEST_FAIL("failed to create bus with max_age_ms");
@@ -585,7 +585,7 @@ static void test10_entry_count(void *args, const hive_spawn_info_t *siblings,
 #else
     cfg.max_entries = 10;
 #endif
-    bus_id_t bus;
+    hive_bus_id_t bus;
     hive_status_t status = hive_bus_create(&cfg, &bus);
     if (HIVE_FAILED(status)) {
         TEST_FAIL("hive_bus_create");
@@ -678,7 +678,7 @@ static void test11_subscribe_destroyed_bus(void *args,
     fflush(stdout);
 
     hive_bus_config_t cfg = TEST_BUS_CONFIG;
-    bus_id_t bus;
+    hive_bus_id_t bus;
     hive_status_t status = hive_bus_create(&cfg, &bus);
     if (HIVE_FAILED(status)) {
         TEST_FAIL("hive_bus_create");
@@ -717,7 +717,7 @@ static void test12_buffer_overflow_protection(void *args,
     fflush(stdout);
 
     hive_bus_config_t cfg = TEST_BUS_CONFIG;
-    bus_id_t bus;
+    hive_bus_id_t bus;
     hive_status_t status = hive_bus_create(&cfg, &bus);
     if (HIVE_FAILED(status)) {
         TEST_FAIL("hive_bus_create");
@@ -800,7 +800,7 @@ static void run_all_tests(void *args, const hive_spawn_info_t *siblings,
         hive_actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
         cfg.stack_size = TEST_STACK_SIZE(64 * 1024);
 
-        actor_id_t test;
+        hive_actor_id_t test;
         if (HIVE_FAILED(hive_spawn(test_funcs[i], NULL, NULL, &cfg, &test))) {
             printf("Failed to spawn test %zu\n", i);
             continue;
@@ -828,7 +828,7 @@ int main(void) {
     hive_actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
     cfg.stack_size = TEST_STACK_SIZE(128 * 1024);
 
-    actor_id_t runner;
+    hive_actor_id_t runner;
     if (HIVE_FAILED(hive_spawn(run_all_tests, NULL, NULL, &cfg, &runner))) {
         fprintf(stderr, "Failed to spawn test runner\n");
         hive_cleanup();

@@ -133,7 +133,7 @@ hive_status_t hive_select(const hive_select_source_t *sources,
     set_bus_blocked_flags(sources, num_sources);
 
     // Create timeout timer if needed
-    timer_id_t timeout_timer = HIVE_TIMER_ID_INVALID;
+    hive_timer_id_t timeout_timer = HIVE_TIMER_ID_INVALID;
     if (timeout_ms > 0) {
         hive_status_t status =
             hive_timer_after((uint32_t)timeout_ms * 1000, &timeout_timer);

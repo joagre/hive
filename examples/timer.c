@@ -14,7 +14,7 @@ static void timer_actor(void *args, const hive_spawn_info_t *siblings,
 
     // Test one-shot timer (500ms)
     printf("Creating one-shot timer (500ms)...\n");
-    timer_id_t oneshot;
+    hive_timer_id_t oneshot;
     hive_status_t status = hive_timer_after(500000, &oneshot);
     if (HIVE_FAILED(status)) {
         printf("Failed to create one-shot timer: %s\n", HIVE_ERR_STR(status));
@@ -24,7 +24,7 @@ static void timer_actor(void *args, const hive_spawn_info_t *siblings,
 
     // Test periodic timer (200ms)
     printf("Creating periodic timer (200ms)...\n");
-    timer_id_t periodic;
+    hive_timer_id_t periodic;
     status = hive_timer_every(200000, &periodic);
     if (HIVE_FAILED(status)) {
         printf("Failed to create periodic timer: %s\n", HIVE_ERR_STR(status));
@@ -93,7 +93,7 @@ int main(void) {
     hive_actor_config_t actor_cfg = HIVE_ACTOR_CONFIG_DEFAULT;
     actor_cfg.name = "timer";
 
-    actor_id_t id;
+    hive_actor_id_t id;
     if (HIVE_FAILED(hive_spawn(timer_actor, NULL, NULL, &actor_cfg, &id))) {
         fprintf(stderr, "Failed to spawn timer actor\n");
         hive_cleanup();

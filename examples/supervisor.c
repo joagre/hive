@@ -30,7 +30,7 @@ static void worker_actor(void *args, const hive_spawn_info_t *siblings,
         s_worker_iterations[worker_id]++;
 
         // Simulate work with a short delay
-        timer_id_t t;
+        hive_timer_id_t t;
         hive_timer_after(100000, &t); // 100ms
         hive_message_t msg;
         hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, t, &msg, -1);
@@ -127,7 +127,7 @@ static void orchestrator_actor(void *args, const hive_spawn_info_t *siblings,
     printf("\n");
 
     // Start supervisor
-    actor_id_t supervisor;
+    hive_actor_id_t supervisor;
     hive_status_t status =
         hive_supervisor_start(&sup_config, NULL, &supervisor);
     if (HIVE_FAILED(status)) {
@@ -144,7 +144,7 @@ static void orchestrator_actor(void *args, const hive_spawn_info_t *siblings,
     // Let the workers run for a while
     printf("=== Running for 3 seconds... ===\n\n");
 
-    timer_id_t run_timer;
+    hive_timer_id_t run_timer;
     hive_timer_after(3000000, &run_timer); // 3 seconds
 
     // Wait for either timer or supervisor exit
@@ -191,7 +191,7 @@ int main(void) {
     cfg.name = "orchestrator";
     cfg.stack_size = 128 * 1024;
 
-    actor_id_t orchestrator;
+    hive_actor_id_t orchestrator;
     if (HIVE_FAILED(
             hive_spawn(orchestrator_actor, NULL, NULL, &cfg, &orchestrator))) {
         fprintf(stderr, "Failed to spawn orchestrator\n");

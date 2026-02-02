@@ -6,15 +6,15 @@ hive_ipc_notify, hive_ipc_notify_ex, hive_ipc_recv, hive_ipc_recv_match, hive_ip
 .nf
 .B #include <hive_ipc.h>
 .PP
-.BI "hive_status_t hive_ipc_notify(actor_id_t " to ", uint32_t " tag ", const void *" data ", size_t " len ");"
-.BI "hive_status_t hive_ipc_notify_ex(actor_id_t " to ", hive_msg_class_t " class ", uint32_t " tag ","
+.BI "hive_status_t hive_ipc_notify(hive_actor_id_t " to ", uint32_t " tag ", const void *" data ", size_t " len ");"
+.BI "hive_status_t hive_ipc_notify_ex(hive_actor_id_t " to ", hive_msg_class_t " class ", uint32_t " tag ","
 .BI "                               const void *" data ", size_t " len ");"
 .BI "hive_status_t hive_ipc_recv(hive_message_t *" msg ", int32_t " timeout_ms ");"
-.BI "hive_status_t hive_ipc_recv_match(actor_id_t " from ", hive_msg_class_t " class ","
+.BI "hive_status_t hive_ipc_recv_match(hive_actor_id_t " from ", hive_msg_class_t " class ","
 .BI "                            uint32_t " tag ", hive_message_t *" msg ", int32_t " timeout_ms ");"
 .BI "hive_status_t hive_ipc_recv_matches(const hive_recv_filter_t *" filters ", size_t " num_filters ","
 .BI "                            hive_message_t *" msg ", int32_t " timeout_ms ", size_t *" matched_index ");"
-.BI "hive_status_t hive_ipc_request(actor_id_t " to ", const void *" request ", size_t " req_len ","
+.BI "hive_status_t hive_ipc_request(hive_actor_id_t " to ", const void *" request ", size_t " req_len ","
 .BI "                         hive_message_t *" reply ", int32_t " timeout_ms ");"
 .BI "hive_status_t hive_ipc_reply(const hive_message_t *" request ", const void *" data ", size_t " len ");"
 .BI "hive_status_t hive_ipc_named_notify(const char *" name ", uint32_t " tag ","
@@ -42,7 +42,7 @@ structure:
 .PP
 .nf
 typedef struct {
-    actor_id_t       sender;  /* Sender actor ID */
+    hive_actor_id_t       sender;  /* Sender actor ID */
     hive_msg_class_t class;   /* Message class */
     uint32_t       tag;     /* Message tag */
     size_t         len;     /* Payload length in bytes */
@@ -59,7 +59,7 @@ structure specifies matching criteria:
 .PP
 .nf
 typedef struct {
-    actor_id_t       sender;  /* HIVE_SENDER_ANY for any sender */
+    hive_actor_id_t       sender;  /* HIVE_SENDER_ANY for any sender */
     hive_msg_class_t class;   /* HIVE_MSG_ANY for any class */
     uint32_t       tag;     /* HIVE_TAG_ANY for any tag */
 } hive_recv_filter_t;
@@ -462,7 +462,7 @@ void server(void *arg, const hive_spawn_info_t *siblings,
 
 void client(void *arg, const hive_spawn_info_t *siblings,
             size_t sibling_count) {
-    actor_id_t server_id = *(actor_id_t *)arg;
+    hive_actor_id_t server_id = *(hive_actor_id_t *)arg;
 
     point_t req = {10, 20};
     hive_message_t reply;

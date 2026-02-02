@@ -6,7 +6,7 @@
 #include <string.h>
 
 // Shared bus ID
-static bus_id_t s_sensor_bus = HIVE_BUS_ID_INVALID;
+static hive_bus_id_t s_sensor_bus = HIVE_BUS_ID_INVALID;
 
 // Sensor data structure
 typedef struct {
@@ -25,7 +25,7 @@ static void publisher_actor(void *args, const hive_spawn_info_t *siblings,
     printf("Publisher actor started (ID: %u)\n", hive_self());
 
     // Create periodic timer (200ms)
-    timer_id_t timer;
+    hive_timer_id_t timer;
     hive_status_t status = hive_timer_every(200000, &timer);
     if (HIVE_FAILED(status)) {
         printf("Publisher: Failed to create timer: %s\n", HIVE_ERR_STR(status));
@@ -36,7 +36,7 @@ static void publisher_actor(void *args, const hive_spawn_info_t *siblings,
 
     // Publish 10 sensor readings
     for (int i = 0; i < 10; i++) {
-        // Wait for timer tick using selective receive with timer_id_t
+        // Wait for timer tick using selective receive with hive_timer_id_t
         hive_message_t msg;
         status = hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer,
                                      &msg, -1);
@@ -158,7 +158,7 @@ int main(void) {
 #else
     actor_cfg.stack_size = 128 * 1024; // Increase stack size
 #endif
-    actor_id_t sub_a;
+    hive_actor_id_t sub_a;
     if (HIVE_FAILED(hive_spawn(subscriber_actor, NULL, (void *)"Subscriber A",
                                &actor_cfg, &sub_a))) {
         fprintf(stderr, "Failed to spawn subscriber A\n");
@@ -167,7 +167,7 @@ int main(void) {
     }
 
     actor_cfg.name = "subscriber_b";
-    actor_id_t sub_b;
+    hive_actor_id_t sub_b;
     if (HIVE_FAILED(hive_spawn(subscriber_actor, NULL, (void *)"Subscriber B",
                                &actor_cfg, &sub_b))) {
         fprintf(stderr, "Failed to spawn subscriber B\n");
@@ -178,7 +178,7 @@ int main(void) {
     // Spawn publisher actor
     actor_cfg.name = "publisher";
     // Stack size already set above (reuse actor_cfg)
-    actor_id_t pub;
+    hive_actor_id_t pub;
     if (HIVE_FAILED(
             hive_spawn(publisher_actor, NULL, NULL, &actor_cfg, &pub))) {
         fprintf(stderr, "Failed to spawn publisher\n");

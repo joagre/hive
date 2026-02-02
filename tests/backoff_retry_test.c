@@ -15,8 +15,8 @@
 #define MESSAGES_TO_FILL_POOL (HIVE_MAILBOX_ENTRY_POOL_SIZE / 2)
 
 typedef struct {
-    actor_id_t receiver;
-    actor_id_t sender;
+    hive_actor_id_t receiver;
+    hive_actor_id_t sender;
 } test_args_t;
 
 // Message tags for selective receive
@@ -102,7 +102,7 @@ void sender_actor(void *arg, const hive_spawn_info_t *siblings,
     (void)siblings;
     (void)sibling_count;
     test_args_t *args = (test_args_t *)arg;
-    actor_id_t receiver = args->receiver;
+    hive_actor_id_t receiver = args->receiver;
 
     printf("Sender: Started (ID: %u), receiver ID: %u\n", hive_self(),
            receiver);

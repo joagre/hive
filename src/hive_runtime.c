@@ -14,7 +14,7 @@
 
 typedef struct {
     const char *name; // Points to user-provided string (must remain valid)
-    actor_id_t actor;
+    hive_actor_id_t actor;
 } registry_entry_t;
 
 static registry_entry_t s_registry[HIVE_MAX_REGISTERED_NAMES];
@@ -150,7 +150,8 @@ static bool name_is_registered(const char *name) {
 }
 
 // Internal function to register an actor_t by ID (for auto_register)
-static hive_status_t register_actor_by_id(const char *name, actor_id_t id) {
+static hive_status_t register_actor_by_id(const char *name,
+                                          hive_actor_id_t id) {
     if (s_registry_count >= HIVE_MAX_REGISTERED_NAMES) {
         return HIVE_ERROR(HIVE_ERR_NOMEM, "Registry full");
     }
@@ -165,7 +166,7 @@ static hive_status_t register_actor_by_id(const char *name, actor_id_t id) {
 
 hive_status_t hive_spawn(hive_actor_fn_t fn, hive_actor_init_fn_t init,
                          void *init_args, const hive_actor_config_t *cfg,
-                         actor_id_t *out) {
+                         hive_actor_id_t *out) {
     if (!fn) {
         return HIVE_ERROR(HIVE_ERR_INVALID, "NULL function pointer");
     }
@@ -265,7 +266,7 @@ _Noreturn void hive_exit(hive_exit_reason_t reason) {
     abort();
 }
 
-actor_id_t hive_self(void) {
+hive_actor_id_t hive_self(void) {
     actor_t *current = hive_actor_current();
     return current ? current->id : HIVE_ACTOR_ID_INVALID;
 }
@@ -274,12 +275,12 @@ void hive_yield(void) {
     hive_scheduler_yield();
 }
 
-bool hive_actor_alive(actor_id_t id) {
+bool hive_actor_alive(hive_actor_id_t id) {
     actor_t *a = hive_actor_get(id);
     return a != NULL && a->state != ACTOR_STATE_DEAD;
 }
 
-hive_status_t hive_actor_kill(actor_id_t target) {
+hive_status_t hive_actor_kill(hive_actor_id_t target) {
     // Cannot kill self
     actor_t *current = hive_actor_current();
     if (current && current->id == target) {
@@ -340,7 +341,7 @@ hive_status_t hive_register(const char *name) {
     return HIVE_SUCCESS;
 }
 
-hive_status_t hive_whereis(const char *name, actor_id_t *out) {
+hive_status_t hive_whereis(const char *name, hive_actor_id_t *out) {
     if (!name) {
         return HIVE_ERROR(HIVE_ERR_INVALID, "NULL name");
     }
@@ -390,7 +391,7 @@ hive_status_t hive_unregister(const char *name) {
 }
 
 // Called by hive_actor_free() to clean up registry entries for dying actor_t
-void hive_registry_cleanup_actor(actor_id_t id) {
+void hive_registry_cleanup_actor(hive_actor_id_t id) {
     // Remove all entries for this actor_t (scan backwards to allow removal)
     for (size_t i = s_registry_count; i > 0; i--) {
         if (s_registry[i - 1].actor == id) {

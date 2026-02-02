@@ -78,7 +78,7 @@ typedef struct {
     hive_select_type type;
     union {
         hive_recv_filter_t ipc;    // For HIVE_SEL_IPC
-        bus_id_t bus;              // For HIVE_SEL_BUS
+        hive_bus_id_t bus;              // For HIVE_SEL_BUS
     };
 } hive_select_source_t;
 
@@ -325,7 +325,7 @@ hive_status_t hive_ipc_recv(hive_message_t *msg, int32_t timeout_ms) {
     return s;
 }
 
-hive_status_t hive_ipc_recv_match(actor_id_t from, hive_msg_class_t class,
+hive_status_t hive_ipc_recv_match(hive_actor_id_t from, hive_msg_class_t class,
                                 uint32_t tag, hive_message_t *msg,
                                 int32_t timeout_ms) {
     hive_select_source_t source = {HIVE_SEL_IPC, .ipc = {from, class, tag}};
@@ -353,7 +353,7 @@ hive_status_t hive_ipc_recv_matches(const hive_recv_filter_t *filters,
 }
 
 // hive_bus_read() uses hive_select() internally when timeout is non-zero:
-hive_status_t hive_bus_read(bus_id_t bus, void *buf, size_t max_len,
+hive_status_t hive_bus_read(hive_bus_id_t bus, void *buf, size_t max_len,
                             size_t *actual_len, int32_t timeout_ms) {
     // ... validation ...
 
@@ -468,7 +468,7 @@ hive_select.h     <- uses hive_recv_filter_t
 Implementation completed 2026-01-17:
 
 ### Core Implementation
-- [x] `include/hive_types.h` - Added select types (`hive_select_source_t`, `hive_select_result_t`, `bus_id_t`)
+- [x] `include/hive_types.h` - Added select types (`hive_select_source_t`, `hive_select_result_t`, `hive_bus_id_t`)
 - [x] `include/hive_select.h` - New header with types and API declaration
 - [x] `src/hive_select.c` - Implementation
 - [x] `include/hive_actor.h` - Added `select_sources` and `select_source_count` fields

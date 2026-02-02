@@ -17,7 +17,7 @@
 
 // Actor state - initialized by sensor_actor_init
 typedef struct {
-    bus_id_t sensor_bus;
+    hive_bus_id_t sensor_bus;
 } sensor_state_t;
 
 void *sensor_actor_init(void *init_args) {
@@ -34,7 +34,7 @@ void sensor_actor(void *args, const hive_spawn_info_t *siblings,
 
     sensor_state_t *state = args;
 
-    timer_id_t timer;
+    hive_timer_id_t timer;
     hive_status_t status = hive_timer_every(SENSOR_INTERVAL_US, &timer);
     if (HIVE_FAILED(status)) {
         HIVE_LOG_ERROR("[SENSOR] Failed to create periodic timer: %s",

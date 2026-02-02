@@ -26,7 +26,7 @@ static inline uint64_t get_nanos(void) {
 // ============================================================================
 
 typedef struct {
-    actor_id_t partner;
+    hive_actor_id_t partner;
     uint64_t count;
     uint64_t max_count;
     uint64_t start_time;
@@ -87,9 +87,9 @@ static void bench_context_switch(void) {
     ctx_a_warmup->max_count = WARMUP_ITERATIONS;
     ctx_b_warmup->max_count = WARMUP_ITERATIONS;
 
-    actor_id_t b;
+    hive_actor_id_t b;
     hive_spawn(switch_actor_b, NULL, ctx_b_warmup, NULL, &b);
-    actor_id_t a;
+    hive_actor_id_t a;
     hive_spawn(switch_actor_a, NULL, ctx_a_warmup, NULL, &a);
     ctx_a_warmup->partner = b;
     ctx_b_warmup->partner = a;
@@ -139,7 +139,7 @@ static void bench_context_switch(void) {
 // ============================================================================
 
 typedef struct {
-    actor_id_t partner;
+    hive_actor_id_t partner;
     uint64_t count;
     uint64_t max_count;
     size_t msg_size;
@@ -197,9 +197,9 @@ static void bench_ipc_copy(size_t msg_size, const char *label) {
     ctx_recv_warmup->max_count = WARMUP_ITERATIONS;
     ctx_recv_warmup->msg_size = msg_size;
 
-    actor_id_t recv;
+    hive_actor_id_t recv;
     hive_spawn(ipc_receiver, NULL, ctx_recv_warmup, NULL, &recv);
-    actor_id_t send;
+    hive_actor_id_t send;
     hive_spawn(ipc_sender, NULL, ctx_send_warmup, NULL, &send);
     ctx_send_warmup->partner = recv;
     ctx_recv_warmup->partner = send;
@@ -349,7 +349,7 @@ static void bench_actor_spawn(void) {
 
     // Warmup
     for (int i = 0; i < 10; i++) {
-        actor_id_t dummy;
+        hive_actor_id_t dummy;
         hive_spawn(dummy_actor, NULL, NULL, NULL, &dummy);
     }
     hive_run();
@@ -357,7 +357,7 @@ static void bench_actor_spawn(void) {
     // Benchmark
     uint64_t start = get_nanos();
     for (int i = 0; i < 100; i++) {
-        actor_id_t dummy;
+        hive_actor_id_t dummy;
         hive_spawn(dummy_actor, NULL, NULL, NULL, &dummy);
     }
     hive_run();
@@ -378,7 +378,7 @@ static void bench_actor_spawn(void) {
 // ============================================================================
 
 typedef struct {
-    bus_id_t bus;
+    hive_bus_id_t bus;
     uint64_t count;
     uint64_t max_count;
     uint64_t start_time;
@@ -444,7 +444,7 @@ static void bench_bus(void) {
         .max_subscribers = 8,
         .consume_after_reads = 1, // Remove entries after 1 reader reads them
         .max_age_ms = 0};
-    bus_id_t bus;
+    hive_bus_id_t bus;
     hive_bus_create(&cfg, &bus);
 
     // Warmup
@@ -456,9 +456,9 @@ static void bench_bus(void) {
     ctx_sub_warmup->bus = bus;
     ctx_sub_warmup->max_count = 100;
 
-    actor_id_t sub_warmup;
+    hive_actor_id_t sub_warmup;
     hive_spawn(bus_subscriber, NULL, ctx_sub_warmup, NULL, &sub_warmup);
-    actor_id_t pub_warmup;
+    hive_actor_id_t pub_warmup;
     hive_spawn(bus_publisher, NULL, ctx_pub_warmup, NULL, &pub_warmup);
     hive_run();
 
@@ -477,9 +477,9 @@ static void bench_bus(void) {
     ctx_sub->bus = bus;
     ctx_sub->max_count = BUS_ITERATIONS;
 
-    actor_id_t sub;
+    hive_actor_id_t sub;
     hive_spawn(bus_subscriber, NULL, ctx_sub, NULL, &sub);
-    actor_id_t pub;
+    hive_actor_id_t pub;
     hive_spawn(bus_publisher, NULL, ctx_pub, NULL, &pub);
     hive_run();
 

@@ -51,7 +51,7 @@ static void logging_actor(void *args, const hive_spawn_info_t *siblings,
     }
 
     // Create periodic timer for log sync
-    timer_id_t sync_timer;
+    hive_timer_id_t sync_timer;
     status = hive_timer_every(SYNC_INTERVAL_US, &sync_timer);
     if (HIVE_FAILED(status)) {
         HIVE_LOG_ERROR("Failed to create sync timer: %s", HIVE_ERR_STR(status));
@@ -118,7 +118,7 @@ int main(void) {
     hive_actor_config_t actor_cfg = HIVE_ACTOR_CONFIG_DEFAULT;
     actor_cfg.name = "logging_demo";
 
-    actor_id_t id;
+    hive_actor_id_t id;
     if (HIVE_FAILED(hive_spawn(logging_actor, NULL, NULL, &actor_cfg, &id))) {
         fprintf(stderr, "Failed to spawn logging actor\n");
         hive_cleanup();

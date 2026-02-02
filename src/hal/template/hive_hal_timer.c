@@ -25,8 +25,8 @@
 
 // Each active timer needs tracking information
 typedef struct timer_entry_t {
-    timer_id_t id;
-    actor_id_t owner;
+    hive_timer_id_t id;
+    hive_actor_id_t owner;
     bool periodic;
     uint64_t interval_us; // Interval for periodic timers
     uint64_t expiry_us;   // When timer fires (absolute time)
@@ -49,7 +49,7 @@ static hive_pool_t s_timer_pool_mgr;
 static struct {
     bool initialized;
     timer_entry_t *timers; // Active timers list
-    timer_id_t next_id;
+    hive_timer_id_t next_id;
     uint64_t current_time_us; // For simulation mode
     // Platform-specific fields as needed
 } s_hal_timer = {0};
@@ -99,7 +99,8 @@ void hive_hal_timer_cleanup(void) {
 }
 
 hive_status_t hive_hal_timer_create(uint32_t interval_us, bool periodic,
-                                    actor_id_t owner, timer_id_t *out) {
+                                    hive_actor_id_t owner,
+                                    hive_timer_id_t *out) {
     // Allocate timer entry from pool
     timer_entry_t *entry = hive_pool_alloc(&s_timer_pool_mgr);
     if (!entry) {
@@ -133,7 +134,7 @@ hive_status_t hive_hal_timer_create(uint32_t interval_us, bool periodic,
     return HIVE_SUCCESS;
 }
 
-hive_status_t hive_hal_timer_cancel(timer_id_t id) {
+hive_status_t hive_hal_timer_cancel(hive_timer_id_t id) {
     // Find and remove timer from list
     timer_entry_t **pp = &s_hal_timer.timers;
     while (*pp) {

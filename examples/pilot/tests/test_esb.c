@@ -291,7 +291,7 @@ int test_esb_run(bool standalone) {
             return -1;
         }
 
-        actor_id_t actor;
+        hive_actor_id_t actor;
         hive_actor_config_t cfg = {.stack_size = 4096};
         status = hive_spawn(esb_test_actor, NULL, NULL, &cfg, &actor);
         if (HIVE_FAILED(status)) {

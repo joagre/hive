@@ -38,7 +38,7 @@ int main(void) {
 
     printf("Spawning actors until arena exhaustion...\n");
     for (int i = 0; i < 64; i++) {
-        actor_id_t id;
+        hive_actor_id_t id;
         if (HIVE_FAILED(hive_spawn(simple_actor, NULL, NULL, &cfg, &id))) {
             printf("Actor #%d: FAILED (arena exhausted) [OK]\n", i + 1);
             break;
@@ -51,7 +51,7 @@ int main(void) {
 
     // Verify the arena is exhausted by trying to spawn one more
     printf("\nVerifying arena exhaustion...\n");
-    actor_id_t id;
+    hive_actor_id_t id;
     if (HIVE_FAILED(hive_spawn(simple_actor, NULL, NULL, &cfg, &id))) {
         printf("[OK] Arena is exhausted (cannot spawn more actors)\n");
     } else {

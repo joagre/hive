@@ -49,11 +49,11 @@ void flight_manager_actor(void *args, const hive_spawn_info_t *siblings,
     (void)args;
 
     // Look up sibling actors
-    actor_id_t waypoint =
+    hive_actor_id_t waypoint =
         hive_find_sibling(siblings, sibling_count, "waypoint");
-    actor_id_t altitude =
+    hive_actor_id_t altitude =
         hive_find_sibling(siblings, sibling_count, "altitude");
-    actor_id_t motor = hive_find_sibling(siblings, sibling_count, "motor");
+    hive_actor_id_t motor = hive_find_sibling(siblings, sibling_count, "motor");
     if (waypoint == HIVE_ACTOR_ID_INVALID ||
         altitude == HIVE_ACTOR_ID_INVALID || motor == HIVE_ACTOR_ID_INVALID) {
         HIVE_LOG_ERROR("[FLM] Failed to find required siblings");
@@ -110,7 +110,7 @@ void flight_manager_actor(void *args, const hive_spawn_info_t *siblings,
     }
 
     // Start periodic log sync timer (every 4 seconds)
-    timer_id_t sync_timer;
+    hive_timer_id_t sync_timer;
     hive_status_t status = hive_timer_every(LOG_SYNC_INTERVAL_US, &sync_timer);
     if (HIVE_FAILED(status)) {
         HIVE_LOG_ERROR("[FLM] sync timer_every failed: %s",
@@ -127,7 +127,7 @@ void flight_manager_actor(void *args, const hive_spawn_info_t *siblings,
     HIVE_LOG_INFO("[FLM] Flight duration: %.0f seconds",
                   FLIGHT_DURATION_US / 1000000.0f);
 
-    timer_id_t flight_timer;
+    hive_timer_id_t flight_timer;
     status = hive_timer_after(FLIGHT_DURATION_US, &flight_timer);
     if (HIVE_FAILED(status)) {
         HIVE_LOG_ERROR("[FLM] flight timer_after failed: %s",

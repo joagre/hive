@@ -63,7 +63,7 @@ static void test1_coordinator(void *args, const hive_spawn_info_t *siblings,
     // Spawn LOW priority first
     hive_actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
     cfg.priority = HIVE_PRIORITY_LOW;
-    actor_id_t id;
+    hive_actor_id_t id;
     hive_spawn(priority_actor, NULL, &ids[0], &cfg, &id);
 
     // Spawn NORMAL priority
@@ -83,7 +83,7 @@ static void test1_coordinator(void *args, const hive_spawn_info_t *siblings,
     hive_yield();
 
     // Give time for all to complete
-    timer_id_t timer;
+    hive_timer_id_t timer;
     hive_timer_after(50000, &timer); // 50ms
     hive_message_t msg;
     hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
@@ -175,12 +175,12 @@ static void test2_coordinator(void *args, const hive_spawn_info_t *siblings,
     cfg.priority = HIVE_PRIORITY_NORMAL;
 
     for (int i = 0; i < 3; i++) {
-        actor_id_t id;
+        hive_actor_id_t id;
         hive_spawn(rr_actor, NULL, &ids[i], &cfg, &id);
     }
 
     // Wait for them to complete
-    timer_id_t timer;
+    hive_timer_id_t timer;
     hive_timer_after(100000, &timer); // 100ms
     hive_message_t msg;
     hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
@@ -244,7 +244,7 @@ static void low_prio_spawner(void *args, const hive_spawn_info_t *siblings,
     // Spawn a high-priority actor
     hive_actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
     cfg.priority = HIVE_PRIORITY_HIGH;
-    actor_id_t id;
+    hive_actor_id_t id;
     hive_spawn(high_prio_late_spawn, NULL, NULL, &cfg, &id);
 
     // Yield - high priority should run now
@@ -267,11 +267,11 @@ static void test3_coordinator(void *args, const hive_spawn_info_t *siblings,
     // Spawn a LOW priority actor that will spawn a HIGH priority actor
     hive_actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
     cfg.priority = HIVE_PRIORITY_LOW;
-    actor_id_t id;
+    hive_actor_id_t id;
     hive_spawn(low_prio_spawner, NULL, NULL, &cfg, &id);
 
     // Wait for completion
-    timer_id_t timer;
+    hive_timer_id_t timer;
     hive_timer_after(100000, &timer);
     hive_message_t msg;
     hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
@@ -315,12 +315,12 @@ static void test4_coordinator(void *args, const hive_spawn_info_t *siblings,
     for (int i = 0; i < 4; i++) {
         hive_actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
         cfg.priority = (hive_priority_level_t)i;
-        actor_id_t id;
+        hive_actor_id_t id;
         hive_spawn(starvation_actor, NULL, &prios[i], &cfg, &id);
     }
 
     // Wait for all to complete
-    timer_id_t timer;
+    hive_timer_id_t timer;
     hive_timer_after(100000, &timer);
     hive_message_t msg;
     hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
@@ -379,10 +379,10 @@ static void test5_coordinator(void *args, const hive_spawn_info_t *siblings,
     }
 
     // Also spawn an actor with default config to verify
-    actor_id_t checker;
+    hive_actor_id_t checker;
     hive_spawn(check_default_prio, NULL, NULL, NULL, &checker);
 
-    timer_id_t timer;
+    hive_timer_id_t timer;
     hive_timer_after(50000, &timer);
     hive_message_t msg;
     hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
@@ -411,7 +411,7 @@ static void run_all_tests(void *args, const hive_spawn_info_t *siblings,
         hive_actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
         cfg.stack_size = TEST_STACK_SIZE(64 * 1024);
 
-        actor_id_t test;
+        hive_actor_id_t test;
         if (HIVE_FAILED(hive_spawn(test_funcs[i], NULL, NULL, &cfg, &test))) {
             printf("Failed to spawn test %zu\n", i);
             continue;
@@ -441,7 +441,7 @@ int main(void) {
     hive_actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
     cfg.stack_size = TEST_STACK_SIZE(128 * 1024);
 
-    actor_id_t runner;
+    hive_actor_id_t runner;
     if (HIVE_FAILED(hive_spawn(run_all_tests, NULL, NULL, &cfg, &runner))) {
         fprintf(stderr, "Failed to spawn test runner\n");
         hive_cleanup();

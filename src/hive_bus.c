@@ -22,7 +22,7 @@ _Static_assert(HIVE_MAX_BUS_ENTRIES > 0,
 extern hive_pool_t g_message_pool_mgr;
 
 // Forward declaration for internal function
-void hive_bus_cleanup_actor(actor_id_t id);
+void hive_bus_cleanup_actor(hive_actor_id_t id);
 
 // Bus entry in ring buffer
 typedef struct {
@@ -37,7 +37,7 @@ typedef struct {
 
 // Subscriber info
 typedef struct {
-    actor_id_t id;
+    hive_actor_id_t id;
     size_t next_read_idx; // Next entry index to read
     bool active;
     bool blocked; // Is actor_t blocked waiting for data?
@@ -45,7 +45,7 @@ typedef struct {
 
 // Bus structure
 typedef struct {
-    bus_id_t id;
+    hive_bus_id_t id;
     hive_bus_config_t config;
     bus_entry_t *entries;          // Ring buffer (dynamically allocated)
     size_t head;                   // Write position
@@ -66,7 +66,7 @@ static bus_subscriber_t s_bus_subscribers[HIVE_MAX_BUSES]
 static struct {
     bus_t *buses;     // Points to static s_buses array
     size_t max_buses; // Maximum number of buses
-    bus_id_t next_id;
+    hive_bus_id_t next_id;
     bool initialized;
 } s_bus_table = {0};
 
@@ -76,7 +76,7 @@ static uint64_t get_time_ms(void) {
 }
 
 // Find bus by ID
-static bus_t *find_bus(bus_id_t id) {
+static bus_t *find_bus(hive_bus_id_t id) {
     if (id == HIVE_BUS_ID_INVALID) {
         return NULL;
     }
@@ -91,7 +91,7 @@ static bus_t *find_bus(bus_id_t id) {
 }
 
 // Find subscriber index in bus
-static int find_subscriber(bus_t *bus, actor_id_t id) {
+static int find_subscriber(bus_t *bus, hive_actor_id_t id) {
     for (size_t i = 0; i < bus->config.max_subscribers; i++) {
         if (bus->subscribers[i].active && bus->subscribers[i].id == id) {
             return (int)i;
@@ -180,7 +180,7 @@ void hive_bus_cleanup(void) {
 }
 
 // Cleanup actor_t bus subscriptions (called when actor_t dies)
-void hive_bus_cleanup_actor(actor_id_t id) {
+void hive_bus_cleanup_actor(hive_actor_id_t id) {
     if (!s_bus_table.initialized) {
         return;
     }
@@ -204,7 +204,8 @@ void hive_bus_cleanup_actor(actor_id_t id) {
 }
 
 // Create bus
-hive_status_t hive_bus_create(const hive_bus_config_t *cfg, bus_id_t *out) {
+hive_status_t hive_bus_create(const hive_bus_config_t *cfg,
+                              hive_bus_id_t *out) {
     if (!cfg || !out) {
         return HIVE_ERROR(HIVE_ERR_INVALID, "NULL config or out pointer");
     }
@@ -271,7 +272,7 @@ hive_status_t hive_bus_create(const hive_bus_config_t *cfg, bus_id_t *out) {
 }
 
 // Destroy bus
-hive_status_t hive_bus_destroy(bus_id_t id) {
+hive_status_t hive_bus_destroy(hive_bus_id_t id) {
     bus_t *bus = find_bus(id);
     if (!bus) {
         return HIVE_ERROR(HIVE_ERR_INVALID, "Bus not found");
@@ -292,7 +293,7 @@ hive_status_t hive_bus_destroy(bus_id_t id) {
 }
 
 // Publish data
-hive_status_t hive_bus_publish(bus_id_t id, const void *data, size_t len) {
+hive_status_t hive_bus_publish(hive_bus_id_t id, const void *data, size_t len) {
     if (!data || len == 0) {
         return HIVE_ERROR(HIVE_ERR_INVALID, "Invalid data");
     }
@@ -394,7 +395,7 @@ hive_status_t hive_bus_publish(bus_id_t id, const void *data, size_t len) {
 }
 
 // Subscribe current actor_t
-hive_status_t hive_bus_subscribe(bus_id_t id) {
+hive_status_t hive_bus_subscribe(hive_bus_id_t id) {
     bus_t *bus = find_bus(id);
     if (!bus) {
         return HIVE_ERROR(HIVE_ERR_INVALID, "Bus not found");
@@ -434,7 +435,7 @@ hive_status_t hive_bus_subscribe(bus_id_t id) {
 }
 
 // Unsubscribe current actor_t
-hive_status_t hive_bus_unsubscribe(bus_id_t id) {
+hive_status_t hive_bus_unsubscribe(hive_bus_id_t id) {
     bus_t *bus = find_bus(id);
     if (!bus) {
         return HIVE_ERROR(HIVE_ERR_INVALID, "Bus not found");
@@ -457,7 +458,7 @@ hive_status_t hive_bus_unsubscribe(bus_id_t id) {
 }
 
 // Read entry with optional blocking
-hive_status_t hive_bus_read(bus_id_t id, void *buf, size_t max_len,
+hive_status_t hive_bus_read(hive_bus_id_t id, void *buf, size_t max_len,
                             size_t *actual_len, int32_t timeout_ms) {
     if (!buf || !actual_len) {
         return HIVE_ERROR(HIVE_ERR_INVALID,
@@ -568,7 +569,7 @@ hive_status_t hive_bus_read(bus_id_t id, void *buf, size_t max_len,
 }
 
 // Query bus state
-size_t hive_bus_entry_count(bus_id_t id) {
+size_t hive_bus_entry_count(hive_bus_id_t id) {
     bus_t *bus = find_bus(id);
     if (!bus) {
         return 0;
@@ -582,7 +583,7 @@ size_t hive_bus_entry_count(bus_id_t id) {
 // -----------------------------------------------------------------------------
 
 // Check if bus has unread data for current actor_t (non-blocking, no consume)
-bool hive_bus_has_data(bus_id_t id) {
+bool hive_bus_has_data(hive_bus_id_t id) {
     bus_t *bus = find_bus(id);
     if (!bus) {
         return false;
@@ -622,7 +623,7 @@ bool hive_bus_has_data(bus_id_t id) {
 }
 
 // Set blocked flag for current actor_t on specified bus
-void hive_bus_set_blocked(bus_id_t id, bool blocked) {
+void hive_bus_set_blocked(hive_bus_id_t id, bool blocked) {
     bus_t *bus = find_bus(id);
     if (!bus) {
         return;
@@ -642,7 +643,7 @@ void hive_bus_set_blocked(bus_id_t id, bool blocked) {
 }
 
 // Check if current actor_t is subscribed to bus
-bool hive_bus_is_subscribed(bus_id_t id) {
+bool hive_bus_is_subscribed(hive_bus_id_t id) {
     bus_t *bus = find_bus(id);
     if (!bus) {
         return false;

@@ -16,9 +16,9 @@
 
 // Actor state - initialized by attitude_actor_init
 typedef struct {
-    bus_id_t state_bus;
-    bus_id_t attitude_setpoint_bus;
-    bus_id_t rate_setpoint_bus;
+    hive_bus_id_t state_bus;
+    hive_bus_id_t attitude_setpoint_bus;
+    hive_bus_id_t rate_setpoint_bus;
 } attitude_state_t;
 
 void *attitude_actor_init(void *init_args) {

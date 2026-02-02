@@ -53,7 +53,7 @@ static volatile int s_test_failed = 0;
 static volatile int s_pong_count = 0;
 static volatile int s_context_switches = 0;
 static volatile int s_sleep_done = 0;
-static actor_id_t g_pong_actor = 0;
+static hive_actor_id_t g_pong_actor = 0;
 
 /* Test macros */
 #define TEST_ASSERT(cond, msg)                      \
@@ -191,7 +191,7 @@ int main(void) {
 
     /* Test 2: Spawn yield test actors */
     semihosting_printf("\n--- Test: Context Switching ---\n");
-    actor_id_t yield1, yield2;
+    hive_actor_id_t yield1, yield2;
 
     s = hive_spawn(yield_actor, NULL, (void *)1, NULL, &yield1);
     TEST_ASSERT(!HIVE_FAILED(s), "Spawn yield actor 1");
@@ -209,7 +209,7 @@ int main(void) {
     semihosting_printf("\n--- Test: IPC Message Passing ---\n");
     s_context_switches = 0;
 
-    actor_id_t pong_id, ping_id;
+    hive_actor_id_t pong_id, ping_id;
 
     s = hive_spawn(pong_actor, NULL, NULL, NULL, &pong_id);
     TEST_ASSERT(!HIVE_FAILED(s), "Spawn pong actor");
@@ -265,7 +265,7 @@ int main(void) {
 
     if (tick2 > tick1) {
         /* Ticks working, test sleep */
-        actor_id_t sleep_id;
+        hive_actor_id_t sleep_id;
         s = hive_spawn(sleep_actor, NULL, NULL, NULL, &sleep_id);
         TEST_ASSERT(!HIVE_FAILED(s), "Spawn sleep actor");
 

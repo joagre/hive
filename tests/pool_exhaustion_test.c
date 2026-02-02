@@ -29,7 +29,7 @@ void sender_actor(void *args, const hive_spawn_info_t *siblings,
                   size_t sibling_count) {
     (void)siblings;
     (void)sibling_count;
-    actor_id_t receiver = *(actor_id_t *)args;
+    hive_actor_id_t receiver = *(hive_actor_id_t *)args;
 
     printf("\nSender: Attempting to exhaust IPC pool by notifying slow "
            "receiver...\n");
@@ -132,12 +132,12 @@ int main(void) {
     hive_init();
 
     // Spawn receiver that won't process messages
-    actor_id_t receiver;
+    hive_actor_id_t receiver;
     hive_spawn(slow_receiver_actor, NULL, NULL, NULL, &receiver);
     printf("Main: Spawned slow receiver (ID: %u)\n", receiver);
 
     // Spawn sender that will exhaust pool and retry
-    actor_id_t sender;
+    hive_actor_id_t sender;
     hive_spawn(sender_actor, NULL, &receiver, NULL, &sender);
     printf("Main: Spawned sender (ID: %u)\n", sender);
 

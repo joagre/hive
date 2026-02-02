@@ -135,7 +135,7 @@ The runtime consists of:
 - Bus subscriptions gone, cursors reset (fresh subscribe required)
 - Timers cancelled
 - Links and monitors cleared
-- actor_id_t changes
+- hive_actor_id_t changes
 - Name registration removed (must re-register)
 - External handles invalid (must reacquire: fds, sockets, HAL handles)
 
@@ -149,7 +149,7 @@ The runtime consists of:
 - Every restart attempt observable (log)
 - Every give-up observable (log + shutdown callback)
 
-**Client rule** - MUST NOT cache `actor_id_t` across awaits/timeouts. Re-resolve via `hive_whereis()` on each interaction.
+**Client rule** - MUST NOT cache `hive_actor_id_t` across awaits/timeouts. Re-resolve via `hive_whereis()` on each interaction.
 
 ## Key Concepts
 
@@ -211,7 +211,7 @@ Convenience macros:
 ### Stack Watermarking
 When `HIVE_STACK_WATERMARK=1`, the runtime fills actor stacks with a pattern at allocation time, allowing measurement of actual stack usage:
 ```c
-size_t hive_actor_stack_usage(actor_id_t id);  // Get bytes used by actor
+size_t hive_actor_stack_usage(hive_actor_id_t id);  // Get bytes used by actor
 void hive_actor_stack_usage_all(stack_usage_callback cb);  // Iterate all actors
 ```
 Enable via: `make CFLAGS+='-DHIVE_STACK_WATERMARK=1'`
@@ -532,21 +532,21 @@ Messages are identified by class (accessible directly via `msg.class`):
 - `HIVE_MSG_NOTIFY`: Fire-and-forget notification
 - `HIVE_MSG_REQUEST`: Request expecting a reply
 - `HIVE_MSG_REPLY`: Response to a REQUEST
-- `HIVE_MSG_TIMER`: Timer tick (`msg.tag` contains timer_id_t)
+- `HIVE_MSG_TIMER`: Timer tick (`msg.tag` contains hive_timer_id_t)
 - `HIVE_MSG_EXIT`: System notification (e.g., actor death)
 - `HIVE_MSG_ANY`: Wildcard for selective receive filtering
 
 Check message type directly: `if (msg.class == HIVE_MSG_TIMER) { ... }` or use `hive_msg_is_timer(&msg)`.
 
 ### Waiting for Timer Messages
-When waiting for a timer, use selective receive with the specific timer_id_t:
+When waiting for a timer, use selective receive with the specific hive_timer_id_t:
 ```c
-timer_id_t my_timer;
+hive_timer_id_t my_timer;
 hive_timer_after(500000, &my_timer);
 hive_message_t msg;
 hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, my_timer, &msg, -1);
 ```
-Do NOT use `HIVE_TAG_ANY` for timer messages - always use the timer_id_t to avoid consuming the wrong timer's message.
+Do NOT use `HIVE_TAG_ANY` for timer messages - always use the hive_timer_id_t to avoid consuming the wrong timer's message.
 
 ### Logging
 

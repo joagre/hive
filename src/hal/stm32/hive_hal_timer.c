@@ -1,7 +1,7 @@
 // Hardware Abstraction Layer - STM32 Timer Implementation
 //
 // Software timer wheel driven by hardware tick interrupt (SysTick or TIMx).
-// Provides timer_id_t-based API compatible with Linux implementation.
+// Provides hive_timer_id_t-based API compatible with Linux implementation.
 // Default tick resolution: 1ms (HIVE_TIMER_TICK_US)
 
 #include "hal/hive_hal_timer.h"
@@ -27,8 +27,8 @@
 
 // Active timer entry
 typedef struct timer_entry_t {
-    timer_id_t id;
-    actor_id_t owner;
+    hive_timer_id_t id;
+    hive_actor_id_t owner;
     uint32_t expiry_ticks;   // When timer expires (absolute tick count)
     uint32_t interval_ticks; // For periodic timers (0 = one-shot)
     bool periodic;
@@ -44,7 +44,7 @@ static hive_pool_t s_timer_pool_mgr;
 static struct {
     bool initialized;
     timer_entry_t *timers; // Active timers list (sorted by expiry)
-    timer_id_t next_id;
+    hive_timer_id_t next_id;
     volatile uint32_t tick_count; // Current tick count (updated by ISR)
     volatile bool tick_pending;   // Set by ISR, cleared by scheduler
 } s_hal_timer = {0};
@@ -153,7 +153,8 @@ void hive_hal_timer_cleanup(void) {
 }
 
 hive_status_t hive_hal_timer_create(uint32_t interval_us, bool periodic,
-                                    actor_id_t owner, timer_id_t *out) {
+                                    hive_actor_id_t owner,
+                                    hive_timer_id_t *out) {
     // Allocate timer entry from pool
     timer_entry_t *entry = hive_pool_alloc(&s_timer_pool_mgr);
     if (!entry) {
@@ -180,7 +181,7 @@ hive_status_t hive_hal_timer_create(uint32_t interval_us, bool periodic,
     return HIVE_SUCCESS;
 }
 
-hive_status_t hive_hal_timer_cancel(timer_id_t id) {
+hive_status_t hive_hal_timer_cancel(hive_timer_id_t id) {
     // Find and remove timer from list
     timer_entry_t *found = NULL;
     SLIST_FIND_REMOVE(s_hal_timer.timers, entry->id == id, found);

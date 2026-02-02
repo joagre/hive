@@ -49,7 +49,7 @@ void aggressive_sender_actor(void *args, const hive_spawn_info_t *siblings,
                              size_t sibling_count) {
     (void)siblings;
     (void)sibling_count;
-    actor_id_t processor = *(actor_id_t *)args;
+    hive_actor_id_t processor = *(hive_actor_id_t *)args;
 
     printf(
         "\nSender: Aggressively notifying messages until pool exhausts...\n");
@@ -144,11 +144,11 @@ int main(void) {
 
     hive_init();
 
-    actor_id_t processor;
+    hive_actor_id_t processor;
     hive_spawn(slow_processor_actor, NULL, NULL, NULL, &processor);
     printf("Main: Spawned slow processor (ID: %u)\n", processor);
 
-    actor_id_t sender;
+    hive_actor_id_t sender;
     hive_spawn(aggressive_sender_actor, NULL, &processor, NULL, &sender);
     printf("Main: Spawned aggressive sender\n");
 

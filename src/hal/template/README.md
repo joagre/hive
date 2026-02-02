@@ -89,8 +89,8 @@ For platforms without file descriptors (bare metal), register/unregister can be 
 hive_status_t hive_hal_timer_init(void);
 void hive_hal_timer_cleanup(void);
 hive_status_t hive_hal_timer_create(uint32_t interval_us, bool periodic,
-                                  actor_id_t owner, timer_id_t *out);
-hive_status_t hive_hal_timer_cancel(timer_id_t id);
+                                  hive_actor_id_t owner, hive_timer_id_t *out);
+hive_status_t hive_hal_timer_cancel(hive_timer_id_t id);
 uint64_t hive_hal_timer_get_time(void);
 void hive_hal_timer_advance_time(uint64_t delta_us);
 ```

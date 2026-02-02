@@ -21,7 +21,7 @@ static void server_actor(void *args, const hive_spawn_info_t *siblings,
                          size_t sibling_count) {
     (void)siblings;
     (void)sibling_count;
-    actor_id_t client_id = (actor_id_t)(uintptr_t)args;
+    hive_actor_id_t client_id = (hive_actor_id_t)(uintptr_t)args;
 
     HIVE_LOG_DEBUG("Server actor starting (ID: %u, client_id: %u)", hive_self(),
                    client_id);
@@ -136,7 +136,7 @@ static void client_actor(void *args, const hive_spawn_info_t *siblings,
         return;
     }
 
-    actor_id_t server_id = msg.sender;
+    hive_actor_id_t server_id = msg.sender;
     coord_msg_t *coord = (coord_msg_t *)msg.data;
     if (coord->type == MSG_SERVER_READY) {
         printf("Client: Received server ready notification via IPC (from actor "
@@ -216,7 +216,7 @@ int main(void) {
     client_cfg.name = "client";
     client_cfg.priority = HIVE_PRIORITY_NORMAL;
 
-    actor_id_t client_id;
+    hive_actor_id_t client_id;
     if (HIVE_FAILED(
             hive_spawn(client_actor, NULL, NULL, &client_cfg, &client_id))) {
         fprintf(stderr, "Failed to spawn client actor\n");
@@ -229,7 +229,7 @@ int main(void) {
     server_cfg.name = "server";
     server_cfg.priority = HIVE_PRIORITY_NORMAL;
 
-    actor_id_t server_id;
+    hive_actor_id_t server_id;
     if (HIVE_FAILED(hive_spawn(server_actor, NULL, (void *)(uintptr_t)client_id,
                                &server_cfg, &server_id))) {
         fprintf(stderr, "Failed to spawn server actor\n");

@@ -415,7 +415,7 @@ int main(void) {
     hive_init();
 
     /* Spawn logger at LOW priority */
-    actor_id_t logger;
+    hive_actor_id_t logger;
     hive_actor_config_t cfg = {.priority = 3};  /* LOW */
     hive_spawn(logger_actor, NULL, NULL, &cfg, &logger);
 

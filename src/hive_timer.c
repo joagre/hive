@@ -40,7 +40,7 @@ void hive_timer_cleanup(void) {
     s_timer.initialized = false;
 }
 
-hive_status_t hive_timer_after(uint32_t delay_us, timer_id_t *out) {
+hive_status_t hive_timer_after(uint32_t delay_us, hive_timer_id_t *out) {
     if (!out) {
         return HIVE_ERROR(HIVE_ERR_INVALID, "NULL out pointer");
     }
@@ -52,7 +52,7 @@ hive_status_t hive_timer_after(uint32_t delay_us, timer_id_t *out) {
     return hive_hal_timer_create(delay_us, false, current->id, out);
 }
 
-hive_status_t hive_timer_every(uint32_t interval_us, timer_id_t *out) {
+hive_status_t hive_timer_every(uint32_t interval_us, hive_timer_id_t *out) {
     if (!out) {
         return HIVE_ERROR(HIVE_ERR_INVALID, "NULL out pointer");
     }
@@ -64,7 +64,7 @@ hive_status_t hive_timer_every(uint32_t interval_us, timer_id_t *out) {
     return hive_hal_timer_create(interval_us, true, current->id, out);
 }
 
-hive_status_t hive_timer_cancel(timer_id_t id) {
+hive_status_t hive_timer_cancel(hive_timer_id_t id) {
     HIVE_REQUIRE_INIT(s_timer.initialized, "Timer");
 
     return hive_hal_timer_cancel(id);
@@ -72,7 +72,7 @@ hive_status_t hive_timer_cancel(timer_id_t id) {
 
 hive_status_t hive_sleep(uint32_t delay_us) {
     // Create one-shot timer
-    timer_id_t timer;
+    hive_timer_id_t timer;
     hive_status_t s = hive_timer_after(delay_us, &timer);
     if (HIVE_FAILED(s)) {
         return s;

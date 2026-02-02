@@ -290,7 +290,7 @@ procedure hive_run_until_blocked():
 ```c
 // All actors use timers (same code as production)
 void sensor_actor(void *arg) {
-    timer_id_t timer;
+    hive_timer_id_t timer;
     hive_timer_every(TIME_STEP_MS * 1000, &timer);  // Timer-driven
     while (1) {
         hive_message_t msg;
@@ -325,7 +325,7 @@ while (wb_robot_step(TIME_STEP_MS) != -1) {
 **Correct pattern**
 ```c
 void sensor_actor(void *arg) {
-    timer_id_t timer;
+    hive_timer_id_t timer;
     hive_timer_every(TIME_STEP_MS * 1000, &timer);
     while (1) {
         hive_message_t msg;

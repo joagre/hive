@@ -22,9 +22,9 @@
 
 // Actor state - initialized by waypoint_actor_init
 typedef struct {
-    bus_id_t state_bus;
-    bus_id_t position_target_bus;
-    actor_id_t flight_manager;
+    hive_bus_id_t state_bus;
+    hive_bus_id_t position_target_bus;
+    hive_actor_id_t flight_manager;
 } waypoint_state_t;
 
 void *waypoint_actor_init(void *init_args) {
@@ -86,7 +86,7 @@ void waypoint_actor(void *args, const hive_spawn_info_t *siblings,
     HIVE_LOG_INFO("[WPT] START received - beginning flight sequence");
 
     int waypoint_index = 0;
-    timer_id_t hover_timer = HIVE_TIMER_ID_INVALID;
+    hive_timer_id_t hover_timer = HIVE_TIMER_ID_INVALID;
     bool hovering = false;
 
     // Set up hive_select() sources (dynamically adjust count based on hovering)

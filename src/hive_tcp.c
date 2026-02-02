@@ -155,7 +155,7 @@ static hive_status_t try_or_wait(int fd, uint32_t hal_events, int operation,
 
     // Create timeout timer if needed (timeout > 0)
     // Note: timeout < 0 means "wait forever" (no timer)
-    timer_id_t timeout_timer = HIVE_TIMER_ID_INVALID;
+    hive_timer_id_t timeout_timer = HIVE_TIMER_ID_INVALID;
     if (timeout_ms > 0) {
         hive_status_t status =
             hive_timer_after((uint32_t)timeout_ms * 1000, &timeout_timer);

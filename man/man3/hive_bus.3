@@ -6,14 +6,14 @@ hive_bus_create, hive_bus_destroy, hive_bus_publish, hive_bus_subscribe, hive_bu
 .nf
 .B #include <hive_bus.h>
 .PP
-.BI "hive_status_t hive_bus_create(const hive_bus_config_t *" cfg ", bus_id_t *" out ");"
-.BI "hive_status_t hive_bus_destroy(bus_id_t " bus ");"
-.BI "hive_status_t hive_bus_publish(bus_id_t " bus ", const void *" data ", size_t " len ");"
-.BI "hive_status_t hive_bus_subscribe(bus_id_t " bus ");"
-.BI "hive_status_t hive_bus_unsubscribe(bus_id_t " bus ");"
-.BI "hive_status_t hive_bus_read(bus_id_t " bus ", void *" buf ", size_t " max_len ","
+.BI "hive_status_t hive_bus_create(const hive_bus_config_t *" cfg ", hive_bus_id_t *" out ");"
+.BI "hive_status_t hive_bus_destroy(hive_bus_id_t " bus ");"
+.BI "hive_status_t hive_bus_publish(hive_bus_id_t " bus ", const void *" data ", size_t " len ");"
+.BI "hive_status_t hive_bus_subscribe(hive_bus_id_t " bus ");"
+.BI "hive_status_t hive_bus_unsubscribe(hive_bus_id_t " bus ");"
+.BI "hive_status_t hive_bus_read(hive_bus_id_t " bus ", void *" buf ", size_t " max_len ","
 .BI "                          size_t *" bytes_read ", int32_t " timeout_ms ");"
-.BI "size_t hive_bus_entry_count(bus_id_t " bus ");"
+.BI "size_t hive_bus_entry_count(hive_bus_id_t " bus ");"
 .fi
 .SH DESCRIPTION
 These functions implement a publish-subscribe message bus for broadcasting data to
@@ -223,7 +223,7 @@ typedef struct {
     float humidity;
 } sensor_data_t;
 
-bus_id_t sensor_bus;
+hive_bus_id_t sensor_bus;
 
 void sensor_publisher(void *arg, const hive_spawn_info_t *siblings,
                       size_t sibling_count) {
@@ -285,7 +285,7 @@ int main(void) {
     cfg.max_age_ms = 100;
     hive_bus_create(&cfg, &sensor_bus);
 
-    actor_id_t pub, disp, log;
+    hive_actor_id_t pub, disp, log;
     hive_spawn(display_actor, NULL, NULL, NULL, &disp);
     hive_spawn(logger_actor, NULL, NULL, NULL, &log);
     hive_spawn(sensor_publisher, NULL, NULL, NULL, &pub);

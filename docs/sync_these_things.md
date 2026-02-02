@@ -62,7 +62,7 @@ man/man3/                       # API man pages
 ## Type Naming Convention
 
 **All typedefs must end with `_t` suffix.** This includes:
-- `actor_id_t`, `bus_id_t`, `timer_id_t`
+- `hive_actor_id_t`, `hive_bus_id_t`, `hive_timer_id_t`
 - `hive_message_t`, `hive_status_t`, `hive_spawn_info_t`
 - `actor_config_t`, `child_spec_t`, `supervisor_config_t`
 - `hive_bus_config_t`, `hive_recv_filter_t`, `hive_exit_msg_t`
@@ -190,7 +190,7 @@ grep -rn 'typedef' include/ src/hal/ | grep '} [a-z_]*;$' | grep -v '_t;$'
 
 **What was synced**
 - Added `_t` suffix to all typedefs for C convention compliance:
-  - `actor_id` -> `actor_id_t`, `bus_id` -> `bus_id_t`, `timer_id` -> `timer_id_t`
+  - `actor_id` -> `hive_actor_id_t`, `bus_id` -> `hive_bus_id_t`, `timer_id` -> `hive_timer_id_t`
   - `hive_message` -> `hive_message_t`, `hive_status` -> `hive_status_t`
   - All struct/enum typedefs updated (133 files changed)
 - Updated all code examples in documentation to use correct type names

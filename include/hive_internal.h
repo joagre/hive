@@ -145,7 +145,7 @@ void hive_mailbox_add_entry(actor_t *recipient, mailbox_entry_t *entry);
 // Returns HIVE_ERR_TIMEOUT if timeout occurred, otherwise cancels timer and
 // returns HIVE_SUCCESS Used by: IPC recv, TCP, bus
 hive_status_t hive_mailbox_handle_timeout(actor_t *current,
-                                          timer_id_t timeout_timer,
+                                          hive_timer_id_t timeout_timer,
                                           const char *operation);
 
 // Free a mailbox entry and its associated data buffers
@@ -178,7 +178,8 @@ void hive_ipc_free_active_msg(mailbox_entry_t *entry);
 
 // Internal notify with explicit sender, class and tag (used by timer, link,
 // etc.) Not part of public API - use hive_ipc_notify_ex() for user code
-hive_status_t hive_ipc_notify_internal(actor_id_t to, actor_id_t sender,
+hive_status_t hive_ipc_notify_internal(hive_actor_id_t to,
+                                       hive_actor_id_t sender,
                                        hive_msg_class_t class, uint32_t tag,
                                        const void *data, size_t len);
 
@@ -202,14 +203,14 @@ void hive_ipc_consume_entry(mailbox_entry_t *entry, hive_message_t *msg);
 // Check if bus has unread data for current actor (non-blocking, no consume)
 // Returns true if data is available
 // Used by: hive_select
-bool hive_bus_has_data(bus_id_t bus);
+bool hive_bus_has_data(hive_bus_id_t bus);
 
 // Set blocked flag for current actor on specified bus
 // Used by: hive_select
-void hive_bus_set_blocked(bus_id_t bus, bool blocked);
+void hive_bus_set_blocked(hive_bus_id_t bus, bool blocked);
 
 // Check if current actor is subscribed to bus
 // Used by: hive_select for validation
-bool hive_bus_is_subscribed(bus_id_t bus);
+bool hive_bus_is_subscribed(hive_bus_id_t bus);
 
 #endif // HIVE_INTERNAL_H

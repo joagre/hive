@@ -19,7 +19,7 @@ static void worker_actor(void *args, const hive_spawn_info_t *siblings,
     srand(time(NULL) + worker_id);
     uint64_t work_time = 200000 + (rand() % 400000); // 200-600ms
 
-    timer_id_t work_timer;
+    hive_timer_id_t work_timer;
     hive_timer_after(work_time, &work_timer);
 
     hive_message_t msg;
@@ -49,7 +49,7 @@ static void supervisor_actor(void *args, const hive_spawn_info_t *siblings,
         hive_actor_config_t worker_cfg = HIVE_ACTOR_CONFIG_DEFAULT;
         worker_cfg.name = "worker";
 
-        actor_id_t worker;
+        hive_actor_id_t worker;
         if (HIVE_FAILED(hive_spawn(worker_actor, NULL, &worker_ids[i],
                                    &worker_cfg, &worker))) {
             printf("Supervisor: Failed to spawn worker %d\n", i + 1);
@@ -117,7 +117,7 @@ int main(void) {
     sup_cfg.stack_size = 128 * 1024; // 128KB stack
 #endif
 
-    actor_id_t supervisor;
+    hive_actor_id_t supervisor;
     if (HIVE_FAILED(
             hive_spawn(supervisor_actor, NULL, NULL, &sup_cfg, &supervisor))) {
         fprintf(stderr, "Failed to spawn supervisor\n");

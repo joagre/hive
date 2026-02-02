@@ -274,14 +274,14 @@ void server(void *arg, const hive_spawn_info_t *siblings,
         printf("Client connected\\n");
 
         /* Spawn handler actor for this connection */
-        actor_id_t handler;
+        hive_actor_id_t handler;
         hive_spawn(client_handler, NULL, &conn_fd, NULL, &handler);
     }
 }
 
 int main(void) {
     hive_init();
-    actor_id_t srv;
+    hive_actor_id_t srv;
     hive_spawn(server, NULL, NULL, NULL, &srv);
     hive_run();
     hive_cleanup();

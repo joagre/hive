@@ -49,7 +49,7 @@ void hive_cleanup(void);
 // For supervised actors, siblings contains all sibling children.
 hive_status_t hive_spawn(hive_actor_fn_t fn, hive_actor_init_fn_t init,
                          void *init_args, const hive_actor_config_t *cfg,
-                         actor_id_t *out);
+                         hive_actor_id_t *out);
 
 // Terminate current actor with specified exit reason
 // Use HIVE_EXIT_REASON_NORMAL for normal termination
@@ -58,20 +58,20 @@ hive_status_t hive_spawn(hive_actor_fn_t fn, hive_actor_init_fn_t init,
 _Noreturn void hive_exit(hive_exit_reason_t reason);
 
 // Get current actor's ID
-actor_id_t hive_self(void);
+hive_actor_id_t hive_self(void);
 
 // Yield to scheduler
 void hive_yield(void);
 
 // Check if actor is alive
-bool hive_actor_alive(actor_id_t id);
+bool hive_actor_alive(hive_actor_id_t id);
 
 // Kill an actor externally
 // Terminates the target actor and notifies linked/monitoring actors.
 // The target's exit reason will be HIVE_EXIT_REASON_KILLED.
 // Cannot kill the currently running actor (use hive_exit instead).
 // Returns HIVE_ERR_INVALID if target is self or invalid.
-hive_status_t hive_actor_kill(actor_id_t target);
+hive_status_t hive_actor_kill(hive_actor_id_t target);
 
 // ============================================================================
 // Pool Exhaustion Behavior API
@@ -110,7 +110,7 @@ hive_status_t hive_register(const char *name);
 
 // Look up an actor ID by name
 // Returns HIVE_ERR_INVALID if name is NULL or not found.
-hive_status_t hive_whereis(const char *name, actor_id_t *out);
+hive_status_t hive_whereis(const char *name, hive_actor_id_t *out);
 
 // Unregister a name (also happens automatically on actor exit)
 // Only the owning actor can unregister its own name.

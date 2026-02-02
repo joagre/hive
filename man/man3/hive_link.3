@@ -6,9 +6,9 @@ hive_link, hive_unlink, hive_monitor, hive_demonitor, hive_msg_is_exit, hive_dec
 .nf
 .B #include <hive_link.h>
 .PP
-.BI "hive_status_t hive_link(actor_id_t " target ");"
-.BI "hive_status_t hive_unlink(actor_id_t " target ");"
-.BI "hive_status_t hive_monitor(actor_id_t " target ", uint32_t *" out ");"
+.BI "hive_status_t hive_link(hive_actor_id_t " target ");"
+.BI "hive_status_t hive_unlink(hive_actor_id_t " target ");"
+.BI "hive_status_t hive_monitor(hive_actor_id_t " target ", uint32_t *" out ");"
 .BI "hive_status_t hive_demonitor(uint32_t " id ");"
 .BI "bool hive_msg_is_exit(const hive_message_t *" msg ");"
 .BI "hive_status_t hive_decode_exit(const hive_message_t *" msg ", hive_exit_msg_t *" out ");"
@@ -45,7 +45,7 @@ The payload is:
 .PP
 .nf
 typedef struct {
-    actor_id_t         actor;   /* ID of the actor that died */
+    hive_actor_id_t         actor;   /* ID of the actor that died */
     hive_exit_reason_t reason;  /* Why the actor exited */
     uint32_t         monitor_id; /* 0 = link, non-zero = monitor ID */
 } hive_exit_msg_t;
@@ -214,7 +214,7 @@ void manager(void *arg, const hive_spawn_info_t *siblings,
 
     /* Spawn and monitor workers */
     for (int i = 0; i < 3; i++) {
-        actor_id_t w;
+        hive_actor_id_t w;
         hive_spawn(worker, NULL, &worker_ids[i], NULL, &w);
         hive_monitor(w, &monitors[i]);
         printf("Manager: monitoring worker %u\\n", w);
@@ -246,7 +246,7 @@ void manager(void *arg, const hive_spawn_info_t *siblings,
 
 int main(void) {
     hive_init();
-    actor_id_t mgr;
+    hive_actor_id_t mgr;
     hive_spawn(manager, NULL, NULL, NULL, &mgr);
     hive_run();
     hive_cleanup();

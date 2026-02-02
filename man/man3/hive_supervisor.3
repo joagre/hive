@@ -8,8 +8,8 @@ hive_supervisor_start, hive_supervisor_stop, hive_restart_strategy_str, hive_chi
 .PP
 .BI "hive_status_t hive_supervisor_start(const hive_supervisor_config_t *" config ","
 .BI "                                  const hive_actor_config_t *" sup_actor_cfg ","
-.BI "                                  actor_id_t *" out ");"
-.BI "hive_status_t hive_supervisor_stop(actor_id_t " supervisor ");"
+.BI "                                  hive_actor_id_t *" out ");"
+.BI "hive_status_t hive_supervisor_stop(hive_actor_id_t " supervisor ");"
 .BI "const char *hive_restart_strategy_str(hive_restart_strategy_t " strategy ");"
 .BI "const char *hive_child_restart_str(hive_child_restart_t " restart ");"
 .fi
@@ -134,7 +134,7 @@ at startup. The array contains spawn info for all sibling children:
 .nf
 typedef struct {
     const char *name;  /* Child name (from child_spec_t) */
-    actor_id_t id;       /* Actor ID */
+    hive_actor_id_t id;       /* Actor ID */
     bool registered;   /* Whether registered in name registry */
 } hive_spawn_info_t;
 .fi
@@ -235,7 +235,7 @@ Preserved bus cursor position (must re-subscribe)
 .IP \(bu 2
 Preserved timer IDs (old timers cancelled, must create new ones)
 .IP \(bu 2
-Preserved actor_id_t (new ID assigned on restart)
+Preserved hive_actor_id_t (new ID assigned on restart)
 .IP \(bu 2
 Preserved monitor/link state (must re-establish)
 .IP \(bu 2
@@ -267,7 +267,7 @@ early in the actor function
 Either way, the child will be automatically unregistered when it exits.
 .SS Client Rule
 Actors communicating with supervised children MUST NOT cache
-.I actor_id_t
+.I hive_actor_id_t
 across awaits, timeouts, or receive calls. They MUST re-resolve by name
 .RB ( hive_whereis (3))
 on each interaction or after any failure signal (timeout, EXIT message).
@@ -291,7 +291,7 @@ Timers cancelled
 .IP \(bu 2
 Links and monitors cleared
 .IP \(bu 2
-actor_id_t changes
+hive_actor_id_t changes
 .IP \(bu 2
 Name registration removed (must re-register or use auto_register)
 .IP \(bu 2
@@ -387,7 +387,7 @@ int main(void) {
     };
 
     /* Start supervisor */
-    actor_id_t sup;
+    hive_actor_id_t sup;
     hive_supervisor_start(&cfg, NULL, &sup);
 
     hive_run();

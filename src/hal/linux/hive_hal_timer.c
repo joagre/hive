@@ -25,8 +25,8 @@
 
 // Active timer entry
 typedef struct timer_entry_t {
-    timer_id_t id;
-    actor_id_t owner;
+    hive_timer_id_t id;
+    hive_actor_id_t owner;
     int fd; // timerfd (only used in real-time mode)
     bool periodic;
     uint64_t expiry_us;   // Expiry time in microseconds (simulation mode)
@@ -44,7 +44,7 @@ static hive_pool_t s_timer_pool_mgr;
 static struct {
     bool initialized;
     timer_entry_t *timers; // Active timers list
-    timer_id_t next_id;
+    hive_timer_id_t next_id;
     bool sim_mode;        // Simulation time mode (enabled by hive_advance_time)
     uint64_t sim_time_us; // Current simulation time in microseconds
 } s_hal_timer = {0};
@@ -78,8 +78,8 @@ void hive_timer_handle_event(io_source_t *source) {
     }
 
     // Deliver timer tick message to actor_t
-    // Use HIVE_MSG_TIMER class with timer_id_t as tag, sender is the owning actor_t
-    // No payload needed - timer_id_t is encoded in the tag
+    // Use HIVE_MSG_TIMER class with hive_timer_id_t as tag, sender is the owning actor_t
+    // No payload needed - hive_timer_id_t is encoded in the tag
     hive_status_t status = hive_ipc_notify_internal(
         entry->owner, entry->owner, HIVE_MSG_TIMER, entry->id, NULL, 0);
     if (HIVE_FAILED(status)) {
@@ -134,7 +134,8 @@ void hive_hal_timer_cleanup(void) {
 }
 
 hive_status_t hive_hal_timer_create(uint32_t interval_us, bool periodic,
-                                    actor_id_t owner, timer_id_t *out) {
+                                    hive_actor_id_t owner,
+                                    hive_timer_id_t *out) {
     // Allocate timer entry from pool
     timer_entry_t *entry = hive_pool_alloc(&s_timer_pool_mgr);
     if (!entry) {
@@ -214,7 +215,7 @@ hive_status_t hive_hal_timer_create(uint32_t interval_us, bool periodic,
     return HIVE_SUCCESS;
 }
 
-hive_status_t hive_hal_timer_cancel(timer_id_t id) {
+hive_status_t hive_hal_timer_cancel(hive_timer_id_t id) {
     // Find and remove timer from list
     timer_entry_t *found = NULL;
     SLIST_FIND_REMOVE(s_hal_timer.timers, entry->id == id, found);

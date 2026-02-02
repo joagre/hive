@@ -23,7 +23,7 @@ extern actor_table_t *hive_actor_get_table(void);
 
 // Pool wait queue entry
 typedef struct {
-    actor_id_t actor;
+    hive_actor_id_t actor;
     hive_priority_level_t priority;
     bool used;
 } pool_wait_entry_t;
@@ -266,7 +266,7 @@ void hive_scheduler_pool_wake_one(void) {
     }
 
     // Wake the waiter
-    actor_id_t actor_id = s_scheduler.pool_wait_queue[best_idx].actor;
+    hive_actor_id_t actor_id = s_scheduler.pool_wait_queue[best_idx].actor;
     s_scheduler.pool_wait_queue[best_idx].used = false;
     s_scheduler.pool_wait_count--;
 
@@ -278,7 +278,7 @@ void hive_scheduler_pool_wake_one(void) {
     }
 }
 
-void hive_scheduler_pool_wait_remove(actor_id_t id) {
+void hive_scheduler_pool_wait_remove(hive_actor_id_t id) {
     for (size_t i = 0; i < HIVE_MAX_ACTORS; i++) {
         if (s_scheduler.pool_wait_queue[i].used &&
             s_scheduler.pool_wait_queue[i].actor == id) {

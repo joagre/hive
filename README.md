@@ -246,7 +246,7 @@ int main(void) {
         return 1;
     }
 
-    actor_id_t id;
+    hive_actor_id_t id;
     if (HIVE_FAILED(hive_spawn(my_actor, NULL, NULL, NULL, &id))) {
         fprintf(stderr, "Failed to spawn actor\n");
         hive_cleanup();
@@ -272,7 +272,7 @@ cfg.auto_register = false;            // true = auto-register name in registry
 cfg.pool_block = false;               // true = block on pool exhaustion
 
 int worker_id = 1;
-actor_id_t worker;
+hive_actor_id_t worker;
 hive_status_t status = hive_spawn(worker_actor, NULL, &worker_id, &cfg, &worker);
 if (HIVE_FAILED(status)) {
     // HIVE_ERR_NOMEM if actor table or stack arena full
@@ -330,7 +330,7 @@ if (msg.class == HIVE_MSG_NOTIFY) {
 ### Timers
 
 ```c
-timer_id_t timer, periodic;
+hive_timer_id_t timer, periodic;
 hive_status_t status = hive_timer_after(500000, &timer);    // One-shot, 500ms
 if (HIVE_FAILED(status)) {
     // HIVE_ERR_NOMEM if timer pool exhausted (HIVE_TIMER_ENTRY_POOL_SIZE)
@@ -348,7 +348,7 @@ if (HIVE_FAILED(status)) {
 }
 // Other messages stay in mailbox, only this timer is consumed
 
-// Or receive any message and check timer_id_t in msg.tag
+// Or receive any message and check hive_timer_id_t in msg.tag
 hive_ipc_recv(&msg, -1);
 if (hive_msg_is_timer(&msg) && msg.tag == periodic) {
     printf("Periodic timer %u fired\n", msg.tag);
@@ -424,7 +424,7 @@ cfg.consume_after_reads = 0;  // 0 = persist until buffer wraps
 cfg.max_age_ms = 0;           // 0 = no time-based expiry
 // Note: Maximum 32 subscribers per bus (architectural limit)
 
-bus_id_t sensor_bus;
+hive_bus_id_t sensor_bus;
 hive_status_t status = hive_bus_create(&cfg, &sensor_bus);
 
 // Subscribe to receive data (each actor must subscribe)
@@ -452,7 +452,7 @@ if (HIVE_SUCCEEDED(status)) {
 
 ```c
 // Links are BIDIRECTIONAL: if either actor dies, the other gets an EXIT message
-actor_id_t worker;
+hive_actor_id_t worker;
 hive_spawn(worker_actor, NULL, NULL, NULL, &worker);
 hive_link(worker);  // Now linked both ways
 
@@ -520,7 +520,7 @@ hive_supervisor_config_t config = {
     .num_children = 2,
 };
 
-actor_id_t supervisor;
+hive_actor_id_t supervisor;
 hive_supervisor_start(&config, NULL, &supervisor);
 
 // Supervisor runs until: intensity exceeded, all children exit, or hive_supervisor_stop()

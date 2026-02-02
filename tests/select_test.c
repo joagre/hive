@@ -48,7 +48,7 @@ static void test1_ipc_wildcard(void *args, const hive_spawn_info_t *siblings,
     (void)sibling_count;
     printf("\nTest 1: Single IPC source (wildcard)\n");
 
-    actor_id_t self = hive_self();
+    hive_actor_id_t self = hive_self();
 
     // Notify a message to self
     int data = 42;
@@ -96,7 +96,7 @@ static void test2_ipc_filtered(void *args, const hive_spawn_info_t *siblings,
     (void)sibling_count;
     printf("\nTest 2: Single IPC source (filtered)\n");
 
-    actor_id_t self = hive_self();
+    hive_actor_id_t self = hive_self();
 
     // Notify messages with different tags
     int a = 1, b = 2;
@@ -138,7 +138,7 @@ static void test2_ipc_filtered(void *args, const hive_spawn_info_t *siblings,
 // Test 3: Single bus source - equivalent to hive_bus_read() with timeout
 // ============================================================================
 
-static bus_id_t s_test_bus = HIVE_BUS_ID_INVALID;
+static hive_bus_id_t s_test_bus = HIVE_BUS_ID_INVALID;
 
 static void test3_publisher(void *args, const hive_spawn_info_t *siblings,
                             size_t sibling_count) {
@@ -146,7 +146,7 @@ static void test3_publisher(void *args, const hive_spawn_info_t *siblings,
     (void)siblings;
     (void)sibling_count;
     // Wait a bit then publish
-    timer_id_t timer;
+    hive_timer_id_t timer;
     hive_timer_after(50000, &timer);
     hive_message_t msg;
     hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
@@ -179,7 +179,7 @@ static void test3_bus_source(void *args, const hive_spawn_info_t *siblings,
     }
 
     // Spawn publisher
-    actor_id_t publisher;
+    hive_actor_id_t publisher;
     hive_spawn(test3_publisher, NULL, NULL, NULL, &publisher);
 
     // Wait for bus data using hive_select
@@ -236,7 +236,7 @@ static void test4_ipc_multi_first(void *args, const hive_spawn_info_t *siblings,
     (void)sibling_count;
     printf("\nTest 4: Multi-source IPC + IPC (first matches)\n");
 
-    actor_id_t self = hive_self();
+    hive_actor_id_t self = hive_self();
 
     // Notify message matching first filter
     int data = 111;
@@ -280,7 +280,7 @@ static void test5_ipc_multi_second(void *args,
     (void)sibling_count;
     printf("\nTest 5: Multi-source IPC + IPC (second matches)\n");
 
-    actor_id_t self = hive_self();
+    hive_actor_id_t self = hive_self();
 
     // Notify message matching second filter
     int data = 222;
@@ -316,8 +316,8 @@ static void test5_ipc_multi_second(void *args,
 // Test 6: Multi-source bus + bus
 // ============================================================================
 
-static bus_id_t s_bus1 = HIVE_BUS_ID_INVALID;
-static bus_id_t s_bus2 = HIVE_BUS_ID_INVALID;
+static hive_bus_id_t s_bus1 = HIVE_BUS_ID_INVALID;
+static hive_bus_id_t s_bus2 = HIVE_BUS_ID_INVALID;
 
 static void test6_bus_publisher(void *args, const hive_spawn_info_t *siblings,
                                 size_t sibling_count) {
@@ -325,7 +325,7 @@ static void test6_bus_publisher(void *args, const hive_spawn_info_t *siblings,
     (void)sibling_count;
     int which_bus = *(int *)args;
     // Wait a bit then publish to specified bus
-    timer_id_t timer;
+    hive_timer_id_t timer;
     hive_timer_after(50000, &timer);
     hive_message_t msg;
     hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
@@ -351,7 +351,7 @@ static void test6_bus_multi(void *args, const hive_spawn_info_t *siblings,
 
     // Spawn publisher for bus 2
     static int which = 2;
-    actor_id_t publisher;
+    hive_actor_id_t publisher;
     hive_spawn(test6_bus_publisher, NULL, &which, NULL, &publisher);
 
     // Wait for data from either bus
@@ -393,9 +393,9 @@ static void test7_mixed_sender(void *args, const hive_spawn_info_t *siblings,
                                size_t sibling_count) {
     (void)siblings;
     (void)sibling_count;
-    actor_id_t target = *(actor_id_t *)args;
+    hive_actor_id_t target = *(hive_actor_id_t *)args;
     // Wait a bit then notify IPC message
-    timer_id_t timer;
+    hive_timer_id_t timer;
     hive_timer_after(50000, &timer);
     hive_message_t msg;
     hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
@@ -412,16 +412,16 @@ static void test7_mixed_sources(void *args, const hive_spawn_info_t *siblings,
     (void)sibling_count;
     printf("\nTest 7: Multi-source IPC + bus (mixed)\n");
 
-    actor_id_t self = hive_self();
+    hive_actor_id_t self = hive_self();
 
     // Create and subscribe to bus
     hive_bus_config_t cfg = HIVE_BUS_CONFIG_DEFAULT;
-    bus_id_t bus;
+    hive_bus_id_t bus;
     hive_bus_create(&cfg, &bus);
     hive_bus_subscribe(bus);
 
     // Spawn sender that will notify IPC message
-    actor_id_t sender;
+    hive_actor_id_t sender;
     hive_spawn(test7_mixed_sender, NULL, &self, NULL, &sender);
 
     // Wait for either bus data or IPC message
@@ -465,11 +465,11 @@ static void test8_priority_order(void *args, const hive_spawn_info_t *siblings,
     (void)sibling_count;
     printf("\nTest 8: Priority ordering - bus wins over IPC when both ready\n");
 
-    actor_id_t self = hive_self();
+    hive_actor_id_t self = hive_self();
 
     // Create and subscribe to bus
     hive_bus_config_t cfg = HIVE_BUS_CONFIG_DEFAULT;
-    bus_id_t bus;
+    hive_bus_id_t bus;
     hive_bus_create(&cfg, &bus);
     hive_bus_subscribe(bus);
 
@@ -608,7 +608,7 @@ static void test10_error_cases(void *args, const hive_spawn_info_t *siblings,
     }
 
     // Unsubscribed bus
-    bus_id_t invalid_bus = 9999;
+    hive_bus_id_t invalid_bus = 9999;
     hive_select_source_t bus_source = {.type = HIVE_SEL_BUS,
                                        .bus = invalid_bus};
     status = hive_select(&bus_source, 1, &result, 100);
@@ -634,7 +634,7 @@ static void test11_immediate_return(void *args,
     (void)sibling_count;
     printf("\nTest 11: Immediate return when data ready\n");
 
-    actor_id_t self = hive_self();
+    hive_actor_id_t self = hive_self();
 
     // Pre-notify a message
     int data = 42;
@@ -689,7 +689,7 @@ static void run_all_tests(void *args, const hive_spawn_info_t *siblings,
         hive_actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
         cfg.stack_size = TEST_STACK_SIZE(64 * 1024);
 
-        actor_id_t test;
+        hive_actor_id_t test;
         if (HIVE_FAILED(hive_spawn(test_funcs[i], NULL, NULL, &cfg, &test))) {
             printf("Failed to spawn test %zu\n", i);
             continue;
@@ -717,7 +717,7 @@ int main(void) {
     hive_actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
     cfg.stack_size = TEST_STACK_SIZE(128 * 1024);
 
-    actor_id_t runner;
+    hive_actor_id_t runner;
     if (HIVE_FAILED(hive_spawn(run_all_tests, NULL, NULL, &cfg, &runner))) {
         fprintf(stderr, "Failed to spawn test runner\n");
         hive_cleanup();

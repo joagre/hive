@@ -103,7 +103,7 @@ static void producer_actor(void *args, const hive_spawn_info_t *siblings,
                            size_t sibling_count) {
     (void)siblings;
     (void)sibling_count;
-    actor_id_t consumer_id = (actor_id_t)(uintptr_t)args;
+    hive_actor_id_t consumer_id = (hive_actor_id_t)(uintptr_t)args;
 
     printf("Producer: Started (ID: %u)\n", hive_self());
     printf("Producer: Requesting 5 jobs with hive_ipc_request (blocks until "
@@ -145,7 +145,7 @@ static void demo_actor(void *args, const hive_spawn_info_t *siblings,
                        size_t sibling_count) {
     (void)siblings;
     (void)sibling_count;
-    actor_id_t peer_id = (actor_id_t)(uintptr_t)args;
+    hive_actor_id_t peer_id = (hive_actor_id_t)(uintptr_t)args;
     (void)peer_id;
 
     printf("\n--- Message Passing Patterns Demo ---\n");
@@ -182,7 +182,7 @@ int main(void) {
     }
 
     // First, run the demo actor
-    actor_id_t demo;
+    hive_actor_id_t demo;
     if (HIVE_FAILED(hive_spawn(demo_actor, NULL, NULL, NULL, &demo))) {
         fprintf(stderr, "Failed to spawn demo actor\n");
         hive_cleanup();
@@ -190,7 +190,7 @@ int main(void) {
     }
 
     // Spawn consumer first (it will wait for messages)
-    actor_id_t consumer;
+    hive_actor_id_t consumer;
     if (HIVE_FAILED(hive_spawn(consumer_actor, NULL, NULL, NULL, &consumer))) {
         fprintf(stderr, "Failed to spawn consumer\n");
         hive_cleanup();
@@ -198,7 +198,7 @@ int main(void) {
     }
 
     // Spawn producer with consumer's ID
-    actor_id_t producer;
+    hive_actor_id_t producer;
     if (HIVE_FAILED(hive_spawn(producer_actor, NULL,
                                (void *)(uintptr_t)consumer, NULL, &producer))) {
         fprintf(stderr, "Failed to spawn producer\n");

@@ -21,8 +21,8 @@
 
 // Actor state - initialized by estimator_actor_init
 typedef struct {
-    bus_id_t sensor_bus;
-    bus_id_t state_bus;
+    hive_bus_id_t sensor_bus;
+    hive_bus_id_t state_bus;
 } estimator_state_t;
 
 void *estimator_actor_init(void *init_args) {

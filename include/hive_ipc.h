@@ -12,15 +12,15 @@
 // Tag identifies the notification type, enabling selective receive.
 // Payload is copied to receiver's mailbox, caller continues immediately.
 // Returns HIVE_ERR_NOMEM if IPC pools exhausted.
-hive_status_t hive_ipc_notify(actor_id_t to, uint32_t tag, const void *data,
-                              size_t len);
+hive_status_t hive_ipc_notify(hive_actor_id_t to, uint32_t tag,
+                              const void *data, size_t len);
 
 // Notify with explicit class
 // Like hive_ipc_notify, but allows specifying message class.
 // Useful for implementing custom protocols beyond NOTIFY.
 // The sender is automatically set to the current actor.
 // Returns HIVE_ERR_NOMEM if IPC pools exhausted.
-hive_status_t hive_ipc_notify_ex(actor_id_t to, hive_msg_class_t class,
+hive_status_t hive_ipc_notify_ex(hive_actor_id_t to, hive_msg_class_t class,
                                  uint32_t tag, const void *data, size_t len);
 
 // Receive any message (FIFO order)
@@ -33,7 +33,7 @@ hive_status_t hive_ipc_recv(hive_message_t *msg, int32_t timeout_ms);
 // Receive message matching filters (selective receive)
 // Pass HIVE_SENDER_ANY, HIVE_MSG_ANY, or HIVE_TAG_ANY to match any.
 // Scans mailbox for first matching message (O(n) worst case).
-hive_status_t hive_ipc_recv_match(actor_id_t from, hive_msg_class_t class,
+hive_status_t hive_ipc_recv_match(hive_actor_id_t from, hive_msg_class_t class,
                                   uint32_t tag, hive_message_t *msg,
                                   int32_t timeout_ms);
 
@@ -52,7 +52,7 @@ hive_status_t hive_ipc_recv_matches(const hive_recv_filter_t *filters,
 // Request and wait for reply (blocking)
 // Dispatches HIVE_MSG_REQUEST with generated tag, blocks until HIVE_MSG_REPLY
 // received. The reply message is returned in 'reply'.
-hive_status_t hive_ipc_request(actor_id_t to, const void *request,
+hive_status_t hive_ipc_request(hive_actor_id_t to, const void *request,
                                size_t req_len, hive_message_t *reply,
                                int32_t timeout_ms);
 

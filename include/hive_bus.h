@@ -5,9 +5,9 @@
 #include <stdint.h>
 #include <stddef.h>
 
-// bus_id_t typedef is now in hive_types.h
+// hive_bus_id_t typedef is now in hive_types.h
 
-#define HIVE_BUS_ID_INVALID ((bus_id_t)0)
+#define HIVE_BUS_ID_INVALID ((hive_bus_id_t)0)
 
 // Bus configuration
 typedef struct {
@@ -30,26 +30,26 @@ typedef struct {
 // Bus operations
 
 // Create bus
-hive_status_t hive_bus_create(const hive_bus_config_t *cfg, bus_id_t *out);
+hive_status_t hive_bus_create(const hive_bus_config_t *cfg, hive_bus_id_t *out);
 
 // Destroy bus (fails if subscribers exist)
-hive_status_t hive_bus_destroy(bus_id_t bus);
+hive_status_t hive_bus_destroy(hive_bus_id_t bus);
 
 // Publish data
-hive_status_t hive_bus_publish(bus_id_t bus, const void *data, size_t len);
+hive_status_t hive_bus_publish(hive_bus_id_t bus, const void *data, size_t len);
 
 // Subscribe/unsubscribe current actor
-hive_status_t hive_bus_subscribe(bus_id_t bus);
-hive_status_t hive_bus_unsubscribe(bus_id_t bus);
+hive_status_t hive_bus_subscribe(hive_bus_id_t bus);
+hive_status_t hive_bus_unsubscribe(hive_bus_id_t bus);
 
 // Read entry
 // timeout_ms: HIVE_TIMEOUT_NONBLOCKING (0) returns HIVE_ERR_WOULDBLOCK if empty
 //             HIVE_TIMEOUT_INFINITE (-1) blocks forever
 //             positive value blocks up to timeout, returns HIVE_ERR_TIMEOUT
-hive_status_t hive_bus_read(bus_id_t bus, void *buf, size_t max_len,
+hive_status_t hive_bus_read(hive_bus_id_t bus, void *buf, size_t max_len,
                             size_t *bytes_read, int32_t timeout_ms);
 
 // Query bus state
-size_t hive_bus_entry_count(bus_id_t bus);
+size_t hive_bus_entry_count(hive_bus_id_t bus);
 
 #endif // HIVE_BUS_H

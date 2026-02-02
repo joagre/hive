@@ -12,8 +12,9 @@
 // Use shared SLIST_APPEND from hive_internal.h
 
 // Forward declarations for internal functions
-void hive_link_cleanup_actor(actor_id_t id);
-static bool deliver_exit_notification(actor_t *recipient, actor_id_t dying_id,
+void hive_link_cleanup_actor(hive_actor_id_t id);
+static bool deliver_exit_notification(actor_t *recipient,
+                                      hive_actor_id_t dying_id,
                                       hive_exit_reason_t reason,
                                       uint32_t monitor_id);
 
@@ -62,7 +63,7 @@ void hive_link_cleanup(void) {
 }
 
 // Helper: Check if actor_t already linked
-static bool is_already_linked(actor_t *a, actor_id_t target_id) {
+static bool is_already_linked(actor_t *a, hive_actor_id_t target_id) {
     for (link_entry_t *e = a->links; e != NULL; e = e->next) {
         if (e->target == target_id) {
             return true;
@@ -72,7 +73,7 @@ static bool is_already_linked(actor_t *a, actor_id_t target_id) {
 }
 
 // Create bidirectional link
-hive_status_t hive_link(actor_id_t target_id) {
+hive_status_t hive_link(hive_actor_id_t target_id) {
     HIVE_REQUIRE_ACTOR_CONTEXT();
     actor_t *current = hive_actor_current();
 
@@ -121,7 +122,7 @@ hive_status_t hive_link(actor_id_t target_id) {
 }
 
 // Remove bidirectional link
-hive_status_t hive_unlink(actor_id_t target_id) {
+hive_status_t hive_unlink(hive_actor_id_t target_id) {
     HIVE_REQUIRE_ACTOR_CONTEXT();
     actor_t *current = hive_actor_current();
 
@@ -149,7 +150,7 @@ hive_status_t hive_unlink(actor_id_t target_id) {
 }
 
 // Create unidirectional monitor
-hive_status_t hive_monitor(actor_id_t target_id, uint32_t *monitor_id) {
+hive_status_t hive_monitor(hive_actor_id_t target_id, uint32_t *monitor_id) {
     if (!monitor_id) {
         return HIVE_ERROR(HIVE_ERR_INVALID, "Invalid monitor_id pointer");
     }
@@ -236,7 +237,8 @@ hive_status_t hive_decode_exit(const hive_message_t *msg,
 
 // Helper: Deliver exit notification to an actor_t
 // monitor_id: 0 for links, non-zero for monitors
-static bool deliver_exit_notification(actor_t *recipient, actor_id_t dying_id,
+static bool deliver_exit_notification(actor_t *recipient,
+                                      hive_actor_id_t dying_id,
                                       hive_exit_reason_t reason,
                                       uint32_t monitor_id) {
     // Build exit message payload
@@ -257,7 +259,7 @@ static bool deliver_exit_notification(actor_t *recipient, actor_id_t dying_id,
 }
 
 // Cleanup actor_t links/monitors and deliver death notifications
-void hive_link_cleanup_actor(actor_id_t dying_actor_id) {
+void hive_link_cleanup_actor(hive_actor_id_t dying_actor_id) {
     if (!s_link_state.initialized) {
         return;
     }

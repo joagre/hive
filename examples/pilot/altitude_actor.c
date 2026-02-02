@@ -32,10 +32,10 @@
 
 // Actor state - initialized by altitude_actor_init
 typedef struct {
-    bus_id_t state_bus;
-    bus_id_t thrust_bus;
-    bus_id_t position_target_bus;
-    actor_id_t flight_manager;
+    hive_bus_id_t state_bus;
+    hive_bus_id_t thrust_bus;
+    hive_bus_id_t position_target_bus;
+    hive_actor_id_t flight_manager;
 } altitude_state_t;
 
 void *altitude_actor_init(void *init_args) {

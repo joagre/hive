@@ -237,7 +237,7 @@ int main(void) {
         return 1;
     }
 
-    actor_id_t runner;
+    hive_actor_id_t runner;
     if (HIVE_FAILED(hive_spawn(run_logging_tests, NULL, NULL, NULL, &runner))) {
         fprintf(stderr, "Failed to spawn test runner\n");
         hive_cleanup();

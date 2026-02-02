@@ -14,7 +14,7 @@ typedef enum {
 
 // Mailbox entry (linked list)
 typedef struct mailbox_entry_t {
-    actor_id_t sender;
+    hive_actor_id_t sender;
     size_t len;
     void *data;
     struct mailbox_entry_t *next;
@@ -30,20 +30,20 @@ typedef struct {
 
 // Link entry (bidirectional relationship)
 typedef struct link_entry_t {
-    actor_id_t target;
+    hive_actor_id_t target;
     struct link_entry_t *next;
 } link_entry_t;
 
 // Monitor entry (unidirectional relationship)
 typedef struct monitor_entry_t {
     uint32_t ref;
-    actor_id_t target;
+    hive_actor_id_t target;
     struct monitor_entry_t *next;
 } monitor_entry_t;
 
 // Actor control block
 typedef struct {
-    actor_id_t id;
+    hive_actor_id_t id;
     actor_state_t state;
     hive_priority_level_t priority;
     const char *name;
@@ -92,10 +92,10 @@ typedef struct {
 
 // Actor table - global storage for all actors
 typedef struct {
-    actor_t *actors;    // Array of actors
-    size_t max_actors;  // Maximum number of actors
-    size_t num_actors;  // Current number of live actors
-    actor_id_t next_id; // Next actor ID to assign
+    actor_t *actors;         // Array of actors
+    size_t max_actors;       // Maximum number of actors
+    size_t num_actors;       // Current number of live actors
+    hive_actor_id_t next_id; // Next actor ID to assign
 } actor_table_t;
 
 // Initialize actor subsystem
@@ -105,7 +105,7 @@ hive_status_t hive_actor_init(void);
 void hive_actor_cleanup(void);
 
 // Get actor by ID
-actor_t *hive_actor_get(actor_id_t id);
+actor_t *hive_actor_get(hive_actor_id_t id);
 
 // Allocate a new actor
 // fn: actor function
@@ -128,10 +128,10 @@ void hive_actor_set_current(actor_t *a);
 
 // Stack watermarking functions (enabled when HIVE_STACK_WATERMARK=1)
 // Returns bytes used if watermarking enabled, or stack_size if disabled
-size_t hive_actor_stack_usage(actor_id_t id);
+size_t hive_actor_stack_usage(hive_actor_id_t id);
 
 // Callback for hive_actor_stack_usage_all()
-typedef void (*stack_usage_callback_t)(actor_id_t id, const char *name,
+typedef void (*stack_usage_callback_t)(hive_actor_id_t id, const char *name,
                                        size_t stack_size, size_t used);
 
 // Iterate all live actors and report their stack usage via callback

@@ -47,7 +47,7 @@ static void test1_monitor_actor(void *args, const hive_spawn_info_t *siblings,
     printf("\nTest 1: Basic monitor (normal exit)\n");
 
     // Spawn target
-    actor_id_t target;
+    hive_actor_id_t target;
     if (HIVE_FAILED(
             hive_spawn(target_normal_exit, NULL, NULL, NULL, &target))) {
         TEST_FAIL("spawn target");
@@ -102,7 +102,7 @@ static void target_delayed_exit(void *args, const hive_spawn_info_t *siblings,
     (void)sibling_count;
     int delay_ms = *(int *)args;
 
-    timer_id_t timer;
+    hive_timer_id_t timer;
     hive_timer_after(delay_ms * 1000, &timer); // Convert ms to us
 
     hive_message_t msg;
@@ -121,7 +121,7 @@ static void test3_multi_monitor_actor(void *args,
 
     // Spawn 3 targets with different delays
     int delays[3] = {50, 100, 150};
-    actor_id_t targets[3];
+    hive_actor_id_t targets[3];
     uint32_t refs[3];
 
     for (int i = 0; i < 3; i++) {
@@ -181,7 +181,7 @@ static void target_slow_exit(void *args, const hive_spawn_info_t *siblings,
     (void)siblings;
     (void)sibling_count;
 
-    timer_id_t timer;
+    hive_timer_id_t timer;
     hive_timer_after(500000, &timer); // 500ms delay
 
     hive_message_t msg;
@@ -198,7 +198,7 @@ static void test4_demonitor_actor(void *args, const hive_spawn_info_t *siblings,
     printf("\nTest 3: Demonitor\n");
 
     // Spawn target
-    actor_id_t target;
+    hive_actor_id_t target;
     if (HIVE_FAILED(hive_spawn(target_slow_exit, NULL, NULL, NULL, &target))) {
         TEST_FAIL("spawn target");
         return;
@@ -266,7 +266,7 @@ static void monitor_dies_early(void *args, const hive_spawn_info_t *siblings,
                                size_t sibling_count) {
     (void)siblings;
     (void)sibling_count;
-    actor_id_t target = *(actor_id_t *)args;
+    hive_actor_id_t target = *(hive_actor_id_t *)args;
 
     // Monitor the target
     uint32_t ref;
@@ -285,7 +285,7 @@ static void test5_coordinator(void *args, const hive_spawn_info_t *siblings,
            "monitor dies)\n");
 
     // Spawn target first
-    actor_id_t target;
+    hive_actor_id_t target;
     if (HIVE_FAILED(
             hive_spawn(target_waits_for_exit, NULL, NULL, NULL, &target))) {
         TEST_FAIL("spawn target");
@@ -293,7 +293,7 @@ static void test5_coordinator(void *args, const hive_spawn_info_t *siblings,
     }
 
     // Spawn monitor that will monitor target then die
-    actor_id_t monitor;
+    hive_actor_id_t monitor;
     if (HIVE_FAILED(
             hive_spawn(monitor_dies_early, NULL, &target, NULL, &monitor))) {
         TEST_FAIL("spawn monitor");
@@ -301,7 +301,7 @@ static void test5_coordinator(void *args, const hive_spawn_info_t *siblings,
     }
 
     // Wait for both to finish
-    timer_id_t timer;
+    hive_timer_id_t timer;
     hive_timer_after(700000, &timer); // 700ms
     hive_message_t msg;
     hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
@@ -388,7 +388,7 @@ static void double_demonitor_target(void *args,
     (void)args;
     (void)siblings;
     (void)sibling_count;
-    timer_id_t timer;
+    hive_timer_id_t timer;
     hive_timer_after(500000, &timer);
     hive_message_t msg;
     hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
@@ -403,7 +403,7 @@ static void test8_double_demonitor(void *args,
     (void)sibling_count;
     printf("\nTest 7: Double demonitor (same ref twice)\n");
 
-    actor_id_t target;
+    hive_actor_id_t target;
     if (HIVE_FAILED(
             hive_spawn(double_demonitor_target, NULL, NULL, NULL, &target))) {
         TEST_FAIL("spawn target");
@@ -434,7 +434,7 @@ static void test8_double_demonitor(void *args,
     }
 
     // Wait for target to exit
-    timer_id_t timer;
+    hive_timer_id_t timer;
     hive_timer_after(600000, &timer);
     hive_message_t msg;
     hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
@@ -466,7 +466,7 @@ static void test9_monitor_pool_exhaustion(void *args,
         "\nTest 8: Monitor pool exhaustion (HIVE_MONITOR_ENTRY_POOL_SIZE=%d)\n",
         HIVE_MONITOR_ENTRY_POOL_SIZE);
 
-    actor_id_t targets[HIVE_MONITOR_ENTRY_POOL_SIZE + 10];
+    hive_actor_id_t targets[HIVE_MONITOR_ENTRY_POOL_SIZE + 10];
     uint32_t refs[HIVE_MONITOR_ENTRY_POOL_SIZE + 10];
     int spawned = 0;
     int monitored = 0;
@@ -477,7 +477,7 @@ static void test9_monitor_pool_exhaustion(void *args,
         cfg.malloc_stack = true;
         cfg.stack_size = TEST_STACK_SIZE(8 * 1024);
 
-        actor_id_t target;
+        hive_actor_id_t target;
         if (HIVE_FAILED(
                 hive_spawn(monitor_pool_target, NULL, NULL, &cfg, &target))) {
             break;
@@ -507,7 +507,7 @@ static void test9_monitor_pool_exhaustion(void *args,
     }
 
     // Wait for cleanup
-    timer_id_t timer;
+    hive_timer_id_t timer;
     hive_timer_after(200000, &timer);
     hive_message_t msg;
     hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
@@ -543,7 +543,7 @@ static void run_all_tests(void *args, const hive_spawn_info_t *siblings,
         hive_actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
         cfg.stack_size = TEST_STACK_SIZE(64 * 1024);
 
-        actor_id_t test;
+        hive_actor_id_t test;
         if (HIVE_FAILED(hive_spawn(test_funcs[i], NULL, NULL, &cfg, &test))) {
             printf("Failed to spawn test %zu\n", i);
             continue;
@@ -573,7 +573,7 @@ int main(void) {
     hive_actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
     cfg.stack_size = TEST_STACK_SIZE(128 * 1024);
 
-    actor_id_t runner;
+    hive_actor_id_t runner;
     if (HIVE_FAILED(hive_spawn(run_all_tests, NULL, NULL, &cfg, &runner))) {
         fprintf(stderr, "Failed to spawn test runner\n");
         hive_cleanup();

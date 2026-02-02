@@ -28,10 +28,10 @@
 
 // Actor state
 typedef struct {
-    bus_id_t state_bus;
-    bus_id_t sensor_bus;
-    bus_id_t thrust_bus;
-    bus_id_t position_target_bus;
+    hive_bus_id_t state_bus;
+    hive_bus_id_t sensor_bus;
+    hive_bus_id_t thrust_bus;
+    hive_bus_id_t position_target_bus;
     char log_path[64];
     int log_fd;
 } telemetry_logger_state_t;
@@ -109,7 +109,7 @@ void telemetry_logger_actor(void *args, const hive_spawn_info_t *siblings,
     }
 
     // Start logging timer
-    timer_id_t timer;
+    hive_timer_id_t timer;
     if (HIVE_FAILED(hive_timer_every(LOG_INTERVAL_US, &timer))) {
         HIVE_LOG_ERROR("[TLOG] Timer setup failed");
         hive_file_close(state->log_fd);

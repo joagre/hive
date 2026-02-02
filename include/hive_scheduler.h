@@ -46,6 +46,6 @@ void hive_scheduler_pool_wake_one(void);
 
 // Remove an actor from pool wait queue (if present)
 // Called by hive_actor_kill() to clean up killed actors
-void hive_scheduler_pool_wait_remove(actor_id_t id);
+void hive_scheduler_pool_wait_remove(hive_actor_id_t id);
 
 #endif // HIVE_SCHEDULER_H

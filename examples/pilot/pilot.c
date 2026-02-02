@@ -336,7 +336,7 @@ int main(void) {
         .shutdown_ctx = NULL,
     };
 
-    actor_id_t supervisor;
+    hive_actor_id_t supervisor;
     status = hive_supervisor_start(&sup_cfg, NULL, &supervisor);
     if (HIVE_FAILED(status)) {
         HIVE_LOG_ERROR("Failed to start supervisor: %s", HIVE_ERR_STR(status));

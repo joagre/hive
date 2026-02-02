@@ -20,7 +20,7 @@ typedef struct {
     int fd;
     void *buf;
     size_t len;
-    actor_id_t actor;
+    hive_actor_id_t actor;
     int operation; // TCP_OP_RECV, TCP_OP_SEND, etc.
 } tcp_io_data_t;
 

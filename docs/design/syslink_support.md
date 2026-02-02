@@ -480,7 +480,7 @@ static void telemetry_actor(void *args, const hive_spawn_info_t *siblings,
     hive_bus_subscribe(setpoint_bus);
 
     // Create 10ms timer (100Hz telemetry)
-    timer_id_t telem_timer;
+    hive_timer_id_t telem_timer;
     hive_timer_every(10000, &telem_timer);  // 10ms = 100Hz
 
     while (1) {

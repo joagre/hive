@@ -5,8 +5,8 @@
 #include <stdio.h>
 
 // Shared actor IDs
-static actor_id_t g_actor_a = HIVE_ACTOR_ID_INVALID;
-static actor_id_t g_actor_b = HIVE_ACTOR_ID_INVALID;
+static hive_actor_id_t g_actor_a = HIVE_ACTOR_ID_INVALID;
+static hive_actor_id_t g_actor_b = HIVE_ACTOR_ID_INVALID;
 
 // Actor A - links to B, then waits for exit notification
 static void actor_a(void *args, const hive_spawn_info_t *siblings,
@@ -19,7 +19,7 @@ static void actor_a(void *args, const hive_spawn_info_t *siblings,
     printf("Actor A: Waiting for Actor B to spawn...\n");
 
     // Wait a bit for B to spawn
-    timer_id_t wait_timer;
+    hive_timer_id_t wait_timer;
     hive_timer_after(100000, &wait_timer); // 100ms
 
     hive_message_t msg;
@@ -64,7 +64,7 @@ static void actor_b(void *args, const hive_spawn_info_t *siblings,
     printf("Actor B: Waiting 500ms before exiting...\n");
 
     // Wait 500ms
-    timer_id_t wait_timer;
+    hive_timer_id_t wait_timer;
     hive_timer_after(500000, &wait_timer);
 
     hive_message_t msg;

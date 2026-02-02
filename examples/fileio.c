@@ -119,7 +119,7 @@ int main(void) {
     writer_cfg.name = "writer";
     writer_cfg.priority = HIVE_PRIORITY_NORMAL;
 
-    actor_id_t writer_id;
+    hive_actor_id_t writer_id;
     if (HIVE_FAILED(
             hive_spawn(writer_actor, NULL, NULL, &writer_cfg, &writer_id))) {
         fprintf(stderr, "Failed to spawn writer actor\n");
@@ -134,7 +134,7 @@ int main(void) {
     reader_cfg.name = "reader";
     reader_cfg.priority = HIVE_PRIORITY_NORMAL;
 
-    actor_id_t reader_id;
+    hive_actor_id_t reader_id;
     if (HIVE_FAILED(
             hive_spawn(reader_actor, NULL, NULL, &reader_cfg, &reader_id))) {
         fprintf(stderr, "Failed to spawn reader actor\n");

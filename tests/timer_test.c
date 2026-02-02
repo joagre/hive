@@ -43,7 +43,7 @@ static void run_timer_tests(void *args, const hive_spawn_info_t *siblings,
     // ========================================================================
     printf("\nTest 1: One-shot timer (hive_timer_after)\n");
     {
-        timer_id_t timer;
+        hive_timer_id_t timer;
         hive_status_t status = hive_timer_after(100000, &timer); // 100ms
         if (HIVE_FAILED(status)) {
             TEST_FAIL("hive_timer_after failed");
@@ -76,7 +76,7 @@ static void run_timer_tests(void *args, const hive_spawn_info_t *siblings,
     // ========================================================================
     printf("\nTest 2: Timer cancellation\n");
     {
-        timer_id_t timer;
+        hive_timer_id_t timer;
         hive_timer_after(100000, &timer); // 100ms
 
         hive_status_t status = hive_timer_cancel(timer);
@@ -103,7 +103,7 @@ static void run_timer_tests(void *args, const hive_spawn_info_t *siblings,
     // ========================================================================
     printf("\nTest 3: Timer sender is the owning actor\n");
     {
-        timer_id_t timer;
+        hive_timer_id_t timer;
         hive_timer_after(50000, &timer);
 
         hive_message_t msg;
@@ -125,7 +125,7 @@ static void run_timer_tests(void *args, const hive_spawn_info_t *siblings,
     // ========================================================================
     printf("\nTest 4: hive_msg_is_timer identifies timer messages\n");
     {
-        timer_id_t timer;
+        hive_timer_id_t timer;
         hive_timer_after(50000, &timer);
 
         hive_message_t msg;
@@ -138,7 +138,7 @@ static void run_timer_tests(void *args, const hive_spawn_info_t *siblings,
         }
 
         // Now test that regular messages are NOT detected as timer ticks
-        actor_id_t self = hive_self();
+        hive_actor_id_t self = hive_self();
         const char *data = "not a timer";
         hive_ipc_notify(self, HIVE_TAG_NONE, data, 12);
 
@@ -175,7 +175,7 @@ static void run_timer_tests(void *args, const hive_spawn_info_t *siblings,
     // ========================================================================
     printf("\nTest 6: Short delay timer\n");
     {
-        timer_id_t timer;
+        hive_timer_id_t timer;
         uint64_t start = time_ms();
 
         hive_timer_after(10000, &timer); // 10ms
@@ -201,7 +201,7 @@ static void run_timer_tests(void *args, const hive_spawn_info_t *siblings,
     // ========================================================================
     printf("\nTest 7: Periodic timer (hive_timer_every)\n");
     {
-        timer_id_t timer;
+        hive_timer_id_t timer;
         hive_status_t status = hive_timer_every(50000, &timer); // 50ms interval
         if (HIVE_FAILED(status)) {
             TEST_FAIL("hive_timer_every failed to create timer");
@@ -245,7 +245,7 @@ static void run_timer_tests(void *args, const hive_spawn_info_t *siblings,
     // ========================================================================
     printf("\nTest 8: Multiple simultaneous timers\n");
     {
-        timer_id_t timer1, timer2, timer3;
+        hive_timer_id_t timer1, timer2, timer3;
 
         hive_status_t s1 = hive_timer_after(50000, &timer1);  // 50ms
         hive_status_t s2 = hive_timer_after(100000, &timer2); // 100ms
@@ -287,7 +287,7 @@ static void run_timer_tests(void *args, const hive_spawn_info_t *siblings,
     // ========================================================================
     printf("\nTest 9: Cancel periodic timer\n");
     {
-        timer_id_t timer;
+        hive_timer_id_t timer;
         hive_status_t status = hive_timer_every(30000, &timer); // 30ms interval
         if (HIVE_FAILED(status)) {
             TEST_FAIL("hive_timer_every failed");
@@ -331,7 +331,7 @@ static void run_timer_tests(void *args, const hive_spawn_info_t *siblings,
     printf("\nTest 10: Timer pool exhaustion (HIVE_TIMER_ENTRY_POOL_SIZE=%d)\n",
            HIVE_TIMER_ENTRY_POOL_SIZE);
     {
-        timer_id_t timers[HIVE_TIMER_ENTRY_POOL_SIZE + 10];
+        hive_timer_id_t timers[HIVE_TIMER_ENTRY_POOL_SIZE + 10];
         int created = 0;
 
         // Create timers until pool exhaustion
@@ -365,7 +365,7 @@ static void run_timer_tests(void *args, const hive_spawn_info_t *siblings,
     // ========================================================================
     printf("\nTest 11: Zero delay timer\n");
     {
-        timer_id_t timer;
+        hive_timer_id_t timer;
         uint64_t start = time_ms();
 
         hive_status_t status =
@@ -392,7 +392,7 @@ static void run_timer_tests(void *args, const hive_spawn_info_t *siblings,
     // ========================================================================
     printf("\nTest 12: Zero-interval periodic timer\n");
     {
-        timer_id_t timer;
+        hive_timer_id_t timer;
 
         // A zero-interval periodic timer could fire very fast
         // It should either be rejected or treated as minimum interval
@@ -517,7 +517,7 @@ static void run_timer_tests(void *args, const hive_spawn_info_t *siblings,
     printf("\nTest 17: hive_sleep preserves messages\n");
     {
         // Notify a message to self before sleeping
-        actor_id_t self = hive_self();
+        hive_actor_id_t self = hive_self();
         int test_data = 12345;
         hive_status_t status =
             hive_ipc_notify(self, HIVE_TAG_NONE, &test_data, sizeof(test_data));
@@ -573,7 +573,7 @@ int main(void) {
     hive_actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
     cfg.stack_size = TEST_STACK_SIZE(128 * 1024);
 
-    actor_id_t runner;
+    hive_actor_id_t runner;
     if (HIVE_FAILED(hive_spawn(run_timer_tests, NULL, NULL, &cfg, &runner))) {
         fprintf(stderr, "Failed to spawn test runner\n");
         hive_cleanup();

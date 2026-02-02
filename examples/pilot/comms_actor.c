@@ -139,9 +139,9 @@ static inline uint16_t float_to_u16(float val) {
 
 // Actor state
 typedef struct {
-    bus_id_t state_bus;
-    bus_id_t sensor_bus;
-    bus_id_t thrust_bus;
+    hive_bus_id_t state_bus;
+    hive_bus_id_t sensor_bus;
+    hive_bus_id_t thrust_bus;
     bool next_is_attitude; // Alternate between packet types
     uint32_t tick_count;   // Tick counter for timestamps (10ms per tick)
     // Log download state
@@ -231,7 +231,7 @@ void comms_actor(void *args, const hive_spawn_info_t *siblings,
     }
 
     // Start telemetry timer
-    timer_id_t timer;
+    hive_timer_id_t timer;
     if (HIVE_FAILED(hive_timer_every(TELEMETRY_INTERVAL_US, &timer))) {
         HIVE_LOG_ERROR("[COMMS] Timer setup failed");
         hive_exit(HIVE_EXIT_REASON_CRASH);

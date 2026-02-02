@@ -16,7 +16,7 @@
 
 // Child runtime state
 typedef struct {
-    actor_id_t id;       // Current actor_t ID (0 if not running)
+    hive_actor_id_t id;  // Current actor_t ID (0 if not running)
     uint32_t monitor_id; // Monitor ID
     bool running;        // Is child currently running
 } child_state_t;
@@ -29,7 +29,7 @@ typedef struct {
 // Supervisor instance state
 typedef struct {
     bool in_use;
-    actor_id_t supervisor_id;
+    hive_actor_id_t supervisor_id;
 
     // Configuration (copied from user)
     hive_restart_strategy_t strategy;
@@ -79,7 +79,7 @@ static void free_supervisor(supervisor_state_t *sup) {
     }
 }
 
-static supervisor_state_t *find_supervisor_by_id(actor_id_t id) {
+static supervisor_state_t *find_supervisor_by_id(hive_actor_id_t id) {
     for (size_t i = 0; i < HIVE_MAX_SUPERVISORS; i++) {
         if (s_supervisors[i].in_use && s_supervisors[i].supervisor_id == id) {
             return &s_supervisors[i];
@@ -292,7 +292,7 @@ static void stop_child(supervisor_state_t *sup, size_t index) {
     }
 }
 
-static size_t find_child_by_actor(supervisor_state_t *sup, actor_id_t id) {
+static size_t find_child_by_actor(supervisor_state_t *sup, hive_actor_id_t id) {
     for (size_t i = 0; i < sup->num_children; i++) {
         if (sup->child_states[i].id == id) {
             return i;
@@ -411,7 +411,7 @@ static hive_status_t restart_rest_for_one(supervisor_state_t *sup,
 }
 
 static hive_status_t handle_child_exit(supervisor_state_t *sup,
-                                       actor_id_t child,
+                                       hive_actor_id_t child,
                                        hive_exit_reason_t reason) {
     size_t index = find_child_by_actor(sup, child);
     if (index == (size_t)-1) {
@@ -516,7 +516,7 @@ static void supervisor_actor_fn(void *args, const hive_spawn_info_t *siblings,
 
 hive_status_t hive_supervisor_start(const hive_supervisor_config_t *config,
                                     const hive_actor_config_t *sup_actor_cfg,
-                                    actor_id_t *out_supervisor) {
+                                    hive_actor_id_t *out_supervisor) {
     if (!config || !out_supervisor) {
         return HIVE_ERROR(HIVE_ERR_INVALID, "NULL config or out_supervisor");
     }
@@ -587,7 +587,7 @@ hive_status_t hive_supervisor_start(const hive_supervisor_config_t *config,
     return HIVE_SUCCESS;
 }
 
-hive_status_t hive_supervisor_stop(actor_id_t supervisor) {
+hive_status_t hive_supervisor_stop(hive_actor_id_t supervisor) {
     supervisor_state_t *sup = find_supervisor_by_id(supervisor);
     if (!sup) {
         return HIVE_ERROR(HIVE_ERR_INVALID, "invalid supervisor ID");

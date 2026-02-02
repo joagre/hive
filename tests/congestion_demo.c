@@ -13,7 +13,7 @@
 #define BURST_SIZE 100
 
 typedef struct {
-    actor_id_t workers[NUM_WORKERS];
+    hive_actor_id_t workers[NUM_WORKERS];
     int worker_count;
 } coordinator_args_t;
 
@@ -137,7 +137,7 @@ int main(void) {
     printf("Main: Spawned %d workers\n", NUM_WORKERS);
 
     // Spawn coordinator
-    actor_id_t coordinator;
+    hive_actor_id_t coordinator;
     hive_spawn(coordinator_actor, NULL, &args, NULL, &coordinator);
     printf("Main: Spawned coordinator\n");
 

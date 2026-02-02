@@ -67,7 +67,7 @@ static void test1_init_transforms(void *args, const hive_spawn_info_t *siblings,
     init_input_t input = {.input_value = 21};
     s_received_value = 0;
 
-    actor_id_t id;
+    hive_actor_id_t id;
     hive_status_t s =
         hive_spawn(init_receiver_actor, transform_init, &input, NULL, &id);
     if (HIVE_FAILED(s)) {
@@ -119,7 +119,7 @@ static void test2_init_returns_null(void *args,
     s_null_args_received = false;
     int dummy = 123;
 
-    actor_id_t id;
+    hive_actor_id_t id;
     hive_status_t s = hive_spawn(null_args_actor, null_init, &dummy, NULL, &id);
     if (HIVE_FAILED(s)) {
         TEST_FAIL("spawn with null-returning init failed");
@@ -166,7 +166,7 @@ static void test3_auto_register(void *args, const hive_spawn_info_t *siblings,
     cfg.name = "test_registered";
     cfg.auto_register = true;
 
-    actor_id_t id;
+    hive_actor_id_t id;
     hive_status_t s = hive_spawn(registered_actor, NULL, NULL, &cfg, &id);
     if (HIVE_FAILED(s)) {
         TEST_FAIL("spawn with auto_register failed");
@@ -174,7 +174,7 @@ static void test3_auto_register(void *args, const hive_spawn_info_t *siblings,
     }
 
     // Check that we can find it by name
-    actor_id_t found;
+    hive_actor_id_t found;
     s = hive_whereis("test_registered", &found);
     if (HIVE_FAILED(s)) {
         TEST_FAIL("hive_whereis failed to find registered actor");
@@ -220,7 +220,7 @@ static void test4_register_conflict(void *args,
     cfg.auto_register = true;
 
     // Spawn first actor with name
-    actor_id_t id1;
+    hive_actor_id_t id1;
     hive_status_t s = hive_spawn(placeholder_actor, NULL, NULL, &cfg, &id1);
     if (HIVE_FAILED(s)) {
         TEST_FAIL("first spawn failed");
@@ -228,7 +228,7 @@ static void test4_register_conflict(void *args,
     }
 
     // Try to spawn second actor with same name
-    actor_id_t id2;
+    hive_actor_id_t id2;
     s = hive_spawn(placeholder_actor, NULL, NULL, &cfg, &id2);
     if (s.code == HIVE_ERR_EXISTS) {
         TEST_PASS("second spawn correctly failed with HIVE_ERR_EXISTS");
@@ -270,7 +270,7 @@ static void test5_no_init(void *args, const hive_spawn_info_t *siblings,
     static int value = 99;
     s_direct_value = 0;
 
-    actor_id_t id;
+    hive_actor_id_t id;
     hive_status_t s = hive_spawn(direct_args_actor, NULL, &value, NULL, &id);
     if (HIVE_FAILED(s)) {
         TEST_FAIL("spawn without init failed");
@@ -311,7 +311,7 @@ static void run_next_test(void *args, const hive_spawn_info_t *siblings,
     (void)sibling_count;
 
     if (current_test < sizeof(test_funcs) / sizeof(test_funcs[0])) {
-        actor_id_t id;
+        hive_actor_id_t id;
         hive_spawn(test_funcs[current_test], NULL, NULL, NULL, &id);
         hive_link(id);
         current_test++;
@@ -331,7 +331,7 @@ int main(void) {
 
     hive_init();
 
-    actor_id_t runner;
+    hive_actor_id_t runner;
     hive_spawn(run_next_test, NULL, NULL, NULL, &runner);
 
     hive_run();

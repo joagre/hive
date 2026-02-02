@@ -16,10 +16,10 @@
 
 // Actor state - initialized by rate_actor_init
 typedef struct {
-    bus_id_t state_bus;
-    bus_id_t thrust_bus;
-    bus_id_t rate_setpoint_bus;
-    bus_id_t torque_bus;
+    hive_bus_id_t state_bus;
+    hive_bus_id_t thrust_bus;
+    hive_bus_id_t rate_setpoint_bus;
+    hive_bus_id_t torque_bus;
 } rate_state_t;
 
 void *rate_actor_init(void *init_args) {

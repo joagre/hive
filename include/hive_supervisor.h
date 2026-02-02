@@ -96,7 +96,7 @@ typedef struct {
 //   HIVE_ERR_NOMEM    - No supervisor slots available or spawn failed
 hive_status_t hive_supervisor_start(const hive_supervisor_config_t *config,
                                     const hive_actor_config_t *sup_actor_cfg,
-                                    actor_id_t *out);
+                                    hive_actor_id_t *out);
 
 // Request supervisor shutdown (async)
 // The supervisor will stop all children and then exit.
@@ -105,7 +105,7 @@ hive_status_t hive_supervisor_start(const hive_supervisor_config_t *config,
 // Errors:
 //   HIVE_ERR_INVALID  - Invalid supervisor ID
 //   HIVE_ERR_NOMEM    - Failed to deliver shutdown message
-hive_status_t hive_supervisor_stop(actor_id_t supervisor);
+hive_status_t hive_supervisor_stop(hive_actor_id_t supervisor);
 
 // -----------------------------------------------------------------------------
 // Utility Functions

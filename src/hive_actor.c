@@ -179,7 +179,7 @@ void hive_actor_cleanup(void) {
     }
 }
 
-actor_t *hive_actor_get(actor_id_t id) {
+actor_t *hive_actor_get(hive_actor_id_t id) {
     if (id == HIVE_ACTOR_ID_INVALID) {
         return NULL;
     }
@@ -284,9 +284,9 @@ actor_t *hive_actor_alloc(hive_actor_fn_t fn, void *args,
 }
 
 // External cleanup functions
-extern void hive_bus_cleanup_actor(actor_id_t id);
-extern void hive_link_cleanup_actor(actor_id_t id);
-extern void hive_registry_cleanup_actor(actor_id_t id);
+extern void hive_bus_cleanup_actor(hive_actor_id_t id);
+extern void hive_link_cleanup_actor(hive_actor_id_t id);
+extern void hive_registry_cleanup_actor(hive_actor_id_t id);
 
 void hive_actor_free(actor_t *a) {
     if (!a) {
@@ -342,8 +342,8 @@ actor_table_t *hive_actor_get_table(void) {
 }
 
 // Find a sibling actor_t by name in the spawn info array
-actor_id_t hive_find_sibling(const hive_spawn_info_t *siblings, size_t count,
-                             const char *name) {
+hive_actor_id_t hive_find_sibling(const hive_spawn_info_t *siblings,
+                                  size_t count, const char *name) {
     if (!siblings || !name) {
         return HIVE_ACTOR_ID_INVALID;
     }
@@ -358,7 +358,7 @@ actor_id_t hive_find_sibling(const hive_spawn_info_t *siblings, size_t count,
 }
 
 // Stack watermarking functions
-size_t hive_actor_stack_usage(actor_id_t id) {
+size_t hive_actor_stack_usage(hive_actor_id_t id) {
     actor_t *a = hive_actor_get(id);
     if (!a || !a->stack) {
         return 0;

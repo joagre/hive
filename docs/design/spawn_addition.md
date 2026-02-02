@@ -28,7 +28,7 @@ typedef void *(*hive_actor_init_fn_t)(void *init_args);
 // Info about a spawned actor (passed to actor function)
 typedef struct {
     const char *name;       // Actor name (NULL if unnamed)
-    actor_id_t id;            // Actor ID
+    hive_actor_id_t id;            // Actor ID
     bool registered;        // Whether registered in name registry
 } hive_spawn_info_t;
 ```
@@ -63,14 +63,14 @@ typedef struct {
 hive_status_t hive_spawn(
     hive_actor_fn fn,
     void *arg,
-    actor_id_t *out
+    hive_actor_id_t *out
 );
 
 hive_status_t hive_spawn_ex(
     hive_actor_fn fn,
     void *arg,
     const actor_config_t *cfg,
-    actor_id_t *out
+    hive_actor_id_t *out
 );
 
 // New (single function, hive_spawn_ex removed)
@@ -79,7 +79,7 @@ hive_status_t hive_spawn(
     hive_actor_init_fn_t init,    // Init function (NULL = skip)
     void *init_args,            // Arguments to init (or direct args if init is NULL)
     const actor_config_t *cfg,    // Config (NULL = defaults: no name, no registration)
-    actor_id_t *out
+    hive_actor_id_t *out
 );
 ```
 
@@ -133,7 +133,7 @@ Note: Removed separate `id` field. The `name` field serves both purposes:
      - If registration fails: deallocate actor, return `HIVE_ERR_EXISTS`
 3. Build `hive_spawn_info_t` array with single entry (the actor itself)
 4. Schedule actor to run `fn(args, siblings, 1)`
-5. Return `HIVE_OK` with actor_id_t
+5. Return `HIVE_OK` with hive_actor_id_t
 
 ### Spawn Sequence (supervisor starting children)
 
@@ -146,7 +146,7 @@ Note: Removed separate `id` field. The `name` field serves both purposes:
 
 2. **Phase 2 - Build sibling array**
    - Create `hive_spawn_info_t` array with all children (in spec order)
-   - Each entry contains: name, actor_id_t, registered status
+   - Each entry contains: name, hive_actor_id_t, registered status
 
 3. **Phase 3 - Start all children**
    - Schedule each actor with `fn(args, siblings, sibling_count)`
@@ -159,7 +159,7 @@ This two-phase approach ensures every child sees all siblings, including those d
 - For standalone `hive_spawn()`: array contains only the spawned actor (`sibling_count = 1`)
 - For supervisor children: array contains ALL children in spec order
 - Array is stack-allocated, valid only at actor function entry
-- Actor must copy needed `actor_id_t`s to local variables
+- Actor must copy needed `hive_actor_id_t`s to local variables
 
 ### Example
 
@@ -181,14 +181,14 @@ void altitude_actor(void *args, const hive_spawn_info_t *siblings, size_t count)
     // count = 3
 
     // Find motor - no whereis() needed
-    actor_id_t motor = find_sibling(siblings, count, "motor");
+    hive_actor_id_t motor = find_sibling(siblings, count, "motor");
 
     // Already registered as "altitude" - no hive_register() needed
     // ...
 }
 
 // Helper function (could be provided by runtime)
-actor_id_t find_sibling(const hive_spawn_info_t *siblings, size_t count, const char *name) {
+hive_actor_id_t find_sibling(const hive_spawn_info_t *siblings, size_t count, const char *name) {
     for (size_t i = 0; i < count; i++) {
         if (siblings[i].name && strcmp(siblings[i].name, name) == 0) {
             return siblings[i].id;
@@ -236,7 +236,7 @@ hive_spawn(my_actor, NULL, &args, &cfg, &id);  // With config
 
 3. **Restart behavior**: On supervisor restart, init function is called again (fresh initialization). The restarted actor receives updated sibling info (with new actor_ids for any other restarted siblings).
 
-4. **Sibling array lifetime**: Stack-allocated by runtime, valid only at actor function entry. Actor copies needed `actor_id_t`s to local variables.
+4. **Sibling array lifetime**: Stack-allocated by runtime, valid only at actor function entry. Actor copies needed `hive_actor_id_t`s to local variables.
 
 5. **Init returning NULL**: Valid. Actor receives `NULL` as `args` parameter.
 
@@ -248,7 +248,7 @@ hive_spawn(my_actor, NULL, &args, &cfg, &id);  // With config
 
 ## Handling Sibling Restarts
 
-If a sibling is restarted by a supervisor, its `actor_id_t` changes. Actors that cache sibling IDs should:
+If a sibling is restarted by a supervisor, its `hive_actor_id_t` changes. Actors that cache sibling IDs should:
 
 1. Monitor siblings via `hive_monitor()`
 2. Handle exit messages in their event loop
@@ -256,7 +256,7 @@ If a sibling is restarted by a supervisor, its `actor_id_t` changes. Actors that
 
 ```c
 void my_actor(void *args, const hive_spawn_info_t *siblings, size_t count) {
-    actor_id_t motor = find_sibling(siblings, count, "motor");
+    hive_actor_id_t motor = find_sibling(siblings, count, "motor");
     hive_monitor(motor);  // Get notified if motor restarts
 
     while (1) {

@@ -66,7 +66,7 @@ typedef struct {
     hive_select_type type;
     union {
         hive_recv_filter_t ipc;  /* For HIVE_SEL_IPC */
-        bus_id_t bus;            /* For HIVE_SEL_BUS */
+        hive_bus_id_t bus;            /* For HIVE_SEL_BUS */
     };
 } hive_select_source_t;
 .fi
@@ -204,13 +204,13 @@ Works on all platforms (Linux and STM32)
 /* Wait for either sensor data OR a command notification */
 void controller(void *arg, const hive_spawn_info_t *siblings,
                 size_t sibling_count) {
-    bus_id_t sensor_bus = *(bus_id_t *)arg;
+    hive_bus_id_t sensor_bus = *(hive_bus_id_t *)arg;
 
     /* Subscribe to sensor bus */
     hive_bus_subscribe(sensor_bus);
 
     /* Create periodic timer for status updates */
-    timer_id_t tick;
+    hive_timer_id_t tick;
     hive_timer_every(100000, &tick);  /* 100ms */
 
     enum { SEL_SENSOR, SEL_TIMER, SEL_COMMAND };

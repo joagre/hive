@@ -153,7 +153,7 @@ int main(void) {
         return 1;
     }
 
-    actor_id_t worker;
+    hive_actor_id_t worker;
     hive_spawn(worker_actor, NULL, NULL, NULL, &worker);
 
     hive_run();      /* Blocks until all actors exit */
@@ -179,7 +179,7 @@ for simulation integration:
 
 void sensor_actor(void *arg, const hive_spawn_info_t *siblings,
                   size_t sibling_count) {
-    timer_id_t timer;
+    hive_timer_id_t timer;
     hive_timer_every(TIME_STEP_MS * 1000, &timer);
 
     while (1) {
@@ -194,7 +194,7 @@ int main(void) {
     hive_init();
 
     /* Spawn timer-driven actors */
-    actor_id_t sensor;
+    hive_actor_id_t sensor;
     hive_spawn(sensor_actor, NULL, NULL, NULL, &sensor);
 
     while (wb_robot_step(TIME_STEP_MS) != -1) {

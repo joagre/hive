@@ -61,7 +61,7 @@ static void nonblocking_sender(void *args, const hive_spawn_info_t *siblings,
                                size_t sibling_count) {
     (void)siblings;
     (void)sibling_count;
-    actor_id_t receiver = *(actor_id_t *)args;
+    hive_actor_id_t receiver = *(hive_actor_id_t *)args;
 
     printf("Non-blocking sender started (ID: %u)\n", hive_self());
     printf("Demonstrating default behavior: HIVE_ERR_NOMEM on pool "
@@ -157,7 +157,7 @@ static void blocking_sender(void *args, const hive_spawn_info_t *siblings,
                             size_t sibling_count) {
     (void)siblings;
     (void)sibling_count;
-    actor_id_t receiver = *(actor_id_t *)args;
+    hive_actor_id_t receiver = *(hive_actor_id_t *)args;
 
     printf("Blocking sender started (ID: %u)\n", hive_self());
     printf("Demonstrating pool_block=true: yields until pool available\n");
@@ -239,10 +239,10 @@ int main(void) {
     printf("--- Demo 1: Default behavior (pool_block=false) ---\n\n");
     hive_init();
     {
-        actor_id_t receiver;
+        hive_actor_id_t receiver;
         hive_spawn(slow_receiver, NULL, NULL, NULL, &receiver);
 
-        actor_id_t sender;
+        hive_actor_id_t sender;
         hive_spawn(nonblocking_sender, NULL, &receiver, NULL, &sender);
 
         hive_run();
@@ -255,14 +255,14 @@ int main(void) {
     printf("\n--- Demo 2: Blocking behavior (pool_block=true) ---\n\n");
     hive_init();
     {
-        actor_id_t receiver;
+        hive_actor_id_t receiver;
         hive_spawn(consumer, NULL, NULL, NULL, &receiver);
 
         // Spawn sender with pool_block=true
         hive_actor_config_t cfg = HIVE_ACTOR_CONFIG_DEFAULT;
         cfg.pool_block = true;
 
-        actor_id_t sender;
+        hive_actor_id_t sender;
         hive_spawn(blocking_sender, NULL, &receiver, &cfg, &sender);
 
         hive_run();
@@ -272,7 +272,7 @@ int main(void) {
     printf("\n--- Demo 3: Runtime API ---\n\n");
     hive_init();
     {
-        actor_id_t demo;
+        hive_actor_id_t demo;
         hive_spawn(runtime_api_demo, NULL, NULL, NULL, &demo);
         hive_run();
     }
