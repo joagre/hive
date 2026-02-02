@@ -203,6 +203,10 @@ void altitude_actor(void *args, const hive_spawn_info_t *siblings,
             // Normal altitude hold mode
             if (ramp_start_time == 0) {
                 ramp_start_time = hive_get_time();
+                HIVE_LOG_INFO("[ALT] Takeoff ramp start: roll=%.1f pitch=%.1f "
+                              "yaw=%.1f alt=%.2f",
+                              est.roll * RAD_TO_DEG, est.pitch * RAD_TO_DEG,
+                              est.yaw * RAD_TO_DEG, est.altitude);
             }
 
             // PID altitude control
