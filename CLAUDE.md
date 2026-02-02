@@ -226,6 +226,12 @@ All messages have a 4-byte header prepended to payload:
 - **`hive_ipc_request(to, req, len, reply, timeout)`**: Blocking request/reply (monitors target, waits for REPLY or death)
 - **`hive_ipc_reply(request, data, len)`**: Reply to a REQUEST message
 
+**Named IPC** - Convenience functions that resolve actor names automatically:
+- **`hive_ipc_named_notify(name, tag, data, len)`**: Resolve name via `hive_whereis()`, then send notification
+- **`hive_ipc_named_request(name, req, len, reply, timeout)`**: Resolve name via `hive_whereis()`, then send request
+
+Named IPC is useful for communicating with supervised actors that may restart (and get new actor IDs). Returns `HIVE_ERR_NOT_FOUND` if name not registered.
+
 **`hive_ipc_request()` errors** - Returns `HIVE_ERR_CLOSED` if target died during request (detected immediately via internal monitor), `HIVE_ERR_TIMEOUT` if no reply within timeout, `HIVE_ERR_NOMEM` if pool exhausted, `HIVE_ERR_INVALID` for bad arguments.
 
 ### Message Structure

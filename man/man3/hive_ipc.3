@@ -1,7 +1,7 @@
 .\" Man page for IPC functions
 .TH HIVE_IPC 3 "January 2026" "Hive 1.0" "Actor Runtime Manual"
 .SH NAME
-hive_ipc_notify, hive_ipc_notify_ex, hive_ipc_recv, hive_ipc_recv_match, hive_ipc_recv_matches, hive_ipc_request, hive_ipc_reply, hive_msg_is_timer, hive_ipc_pending, hive_ipc_count, hive_pool_set_block, hive_pool_get_block \- inter-process communication
+hive_ipc_notify, hive_ipc_notify_ex, hive_ipc_recv, hive_ipc_recv_match, hive_ipc_recv_matches, hive_ipc_request, hive_ipc_reply, hive_ipc_named_notify, hive_ipc_named_request, hive_msg_is_timer, hive_ipc_pending, hive_ipc_count, hive_pool_set_block, hive_pool_get_block \- inter-process communication
 .SH SYNOPSIS
 .nf
 .B #include <hive_ipc.h>
@@ -17,6 +17,10 @@ hive_ipc_notify, hive_ipc_notify_ex, hive_ipc_recv, hive_ipc_recv_match, hive_ip
 .BI "hive_status_t hive_ipc_request(actor_id_t " to ", const void *" request ", size_t " req_len ","
 .BI "                         hive_message_t *" reply ", int32_t " timeout_ms ");"
 .BI "hive_status_t hive_ipc_reply(const hive_message_t *" request ", const void *" data ", size_t " len ");"
+.BI "hive_status_t hive_ipc_named_notify(const char *" name ", uint32_t " tag ","
+.BI "                               const void *" data ", size_t " len ");"
+.BI "hive_status_t hive_ipc_named_request(const char *" name ", const void *" request ","
+.BI "                               size_t " req_len ", hive_message_t *" reply ", int32_t " timeout_ms ");"
 .BI "bool hive_msg_is_timer(const hive_message_t *" msg ");"
 .BI "bool hive_ipc_pending(void);"
 .BI "size_t hive_ipc_count(void);"
@@ -206,6 +210,51 @@ automatically. The
 .I request
 parameter must be the message received via
 .BR hive_ipc_recv ().
+.SS Named IPC
+Named IPC functions resolve actor names to IDs automatically, providing a
+convenient way to send messages to named actors without manual
+.BR hive_whereis (3)
+calls.
+.PP
+.BR hive_ipc_named_notify ()
+resolves
+.I name
+via
+.BR hive_whereis (),
+then sends a notification to the resolved actor. Returns
+.B HIVE_ERR_NOT_FOUND
+if the name is not registered. Otherwise behaves identically to
+.BR hive_ipc_notify ().
+.PP
+.BR hive_ipc_named_request ()
+resolves
+.I name
+via
+.BR hive_whereis (),
+then sends a request and waits for a reply. Returns
+.B HIVE_ERR_NOT_FOUND
+if the name is not registered. Otherwise behaves identically to
+.BR hive_ipc_request ().
+.PP
+These functions are useful when interacting with actors that may be restarted
+by supervisors. Since actor IDs change on restart, caching IDs is unsafe. Named
+IPC re-resolves the name on each call, ensuring messages reach the current
+incarnation of the actor.
+.PP
+Example:
+.PP
+.nf
+/* Send notification to named actor */
+hive_ipc_named_notify("logger", LOG_MSG, &log_entry, sizeof(log_entry));
+
+/* Request/reply with named actor */
+hive_message_t reply;
+hive_status_t s = hive_ipc_named_request("config_server", &req,
+                                        sizeof(req), &reply, 5000);
+if (s.code == HIVE_ERR_NOT_FOUND) {
+    /* Actor not registered (not started or crashed) */
+}
+.fi
 .SS Message Inspection
 .BR hive_msg_is_timer ()
 returns true if
@@ -256,6 +305,9 @@ The request was sent but the target exited before sending a reply.
 .B HIVE_ERR_WOULDBLOCK
 Mailbox empty and timeout was
 .BR HIVE_TIMEOUT_NONBLOCKING .
+.TP
+.B HIVE_ERR_NOT_FOUND
+Actor name not registered in name registry (named IPC functions only).
 .SH NOTES
 .SS Message Lifetime (Critical)
 .B "Payload data is only valid until the next successful hive_ipc_recv() call."

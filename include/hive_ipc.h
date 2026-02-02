@@ -71,6 +71,23 @@ hive_status_t hive_ipc_reply(const hive_message_t *request, const void *data,
 bool hive_msg_is_timer(const hive_message_t *msg);
 
 // -----------------------------------------------------------------------------
+// Named IPC (uses name registry under the hood)
+// -----------------------------------------------------------------------------
+
+// Send notification to actor by name
+// Resolves name via hive_whereis(), then sends notification.
+// Returns HIVE_ERR_NOT_FOUND if name not registered.
+hive_status_t hive_ipc_named_notify(const char *name, uint32_t tag,
+                                    const void *data, size_t len);
+
+// Send request to actor by name and wait for reply
+// Resolves name via hive_whereis(), then sends request.
+// Returns HIVE_ERR_NOT_FOUND if name not registered.
+hive_status_t hive_ipc_named_request(const char *name, const void *request,
+                                     size_t req_len, hive_message_t *reply,
+                                     int32_t timeout_ms);
+
+// -----------------------------------------------------------------------------
 // Query Functions
 // -----------------------------------------------------------------------------
 

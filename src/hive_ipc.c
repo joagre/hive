@@ -549,6 +549,31 @@ size_t hive_ipc_count(void) {
 }
 
 // -----------------------------------------------------------------------------
+// Named IPC
+// -----------------------------------------------------------------------------
+
+hive_status_t hive_ipc_named_notify(const char *name, uint32_t tag,
+                                    const void *data, size_t len) {
+    actor_id_t target;
+    hive_status_t status = hive_whereis(name, &target);
+    if (HIVE_FAILED(status)) {
+        return status;
+    }
+    return hive_ipc_notify(target, tag, data, len);
+}
+
+hive_status_t hive_ipc_named_request(const char *name, const void *request,
+                                     size_t req_len, hive_message_t *reply,
+                                     int32_t timeout_ms) {
+    actor_id_t target;
+    hive_status_t status = hive_whereis(name, &target);
+    if (HIVE_FAILED(status)) {
+        return status;
+    }
+    return hive_ipc_request(target, request, req_len, reply, timeout_ms);
+}
+
+// -----------------------------------------------------------------------------
 // Cleanup Functions
 // -----------------------------------------------------------------------------
 

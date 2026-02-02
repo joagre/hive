@@ -625,6 +625,8 @@ See [examples/pilot/README.md](examples/pilot/README.md) for build instructions 
 - `hive_ipc_recv_matches(filters, n, msg, timeout, matched_idx)` - Multi-pattern selective receive
 - `hive_ipc_request(to, req, len, reply, timeout)` - Blocking request/reply
 - `hive_ipc_reply(request, data, len)` - Reply to a REQUEST message
+- `hive_ipc_named_notify(name, tag, data, len)` - Send notification by actor name
+- `hive_ipc_named_request(name, req, len, reply, timeout)` - Request/reply by actor name
 - `hive_msg_is_timer(msg)` - Check if message is a timer tick
 - `hive_ipc_pending()` - Check if messages are available
 - `hive_ipc_count()` - Get number of pending messages
