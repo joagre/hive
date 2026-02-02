@@ -61,7 +61,7 @@
 // -----------------------------------------------------------------------------
 
 // Size of global mailbox entry pool (shared by all actors)
-// Each send consumes one entry until message is received
+// Each notify/request consumes one entry until message is received
 #ifndef HIVE_MAILBOX_ENTRY_POOL_SIZE
 #define HIVE_MAILBOX_ENTRY_POOL_SIZE 256
 #endif

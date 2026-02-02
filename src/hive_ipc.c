@@ -263,7 +263,7 @@ hive_status_t hive_mailbox_handle_timeout(actor_t *current,
 }
 
 // -----------------------------------------------------------------------------
-// Core Send/Receive
+// Core Notify/Receive
 // -----------------------------------------------------------------------------
 
 // Internal notify with explicit sender, class and tag (used by timer, link,
@@ -458,7 +458,7 @@ hive_status_t hive_ipc_request(actor_id_t to, const void *request,
     // Generate unique tag for this call
     uint32_t call_tag = generate_tag();
 
-    // Send HIVE_MSG_REQUEST with generated tag
+    // Dispatch HIVE_MSG_REQUEST with generated tag
     status = hive_ipc_notify_internal(to, current->id, HIVE_MSG_REQUEST,
                                       call_tag, request, req_len);
     if (HIVE_FAILED(status)) {
@@ -511,7 +511,7 @@ hive_status_t hive_ipc_reply(const hive_message_t *request, const void *data,
         return HIVE_ERROR(HIVE_ERR_INVALID, "NULL data with non-zero length");
     }
 
-    // Send HIVE_MSG_REPLY with same tag back to caller
+    // Dispatch HIVE_MSG_REPLY with same tag back to caller
     return hive_ipc_notify_internal(request->sender, current->id,
                                     HIVE_MSG_REPLY, request->tag, data, len);
 }

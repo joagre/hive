@@ -593,7 +593,7 @@ hive_status_t hive_supervisor_stop(actor_id_t supervisor) {
         return HIVE_ERROR(HIVE_ERR_INVALID, "invalid supervisor ID");
     }
 
-    // Send stop message
+    // Deliver stop message
     return hive_ipc_notify(supervisor, SUP_TAG_STOP, NULL, 0);
 }
 

@@ -298,7 +298,7 @@ hive_status_t hive_actor_kill(actor_id_t target) {
     // Set exit reason before cleanup (so notifications report correct reason)
     a->exit_reason = HIVE_EXIT_REASON_KILLED;
 
-    // Free actor_t resources and send death notifications
+    // Free actor_t resources and deliver death notifications
     hive_actor_free(a);
 
     return HIVE_SUCCESS;

@@ -5,17 +5,17 @@
 #include "hive_actor.h"
 
 // -----------------------------------------------------------------------------
-// Core Send/Receive
+// Core Notify/Receive
 // -----------------------------------------------------------------------------
 
-// Send an async notification (HIVE_MSG_NOTIFY)
+// Notify asynchronously (HIVE_MSG_NOTIFY)
 // Tag identifies the notification type, enabling selective receive.
-// Payload is copied to receiver's mailbox, sender continues immediately.
+// Payload is copied to receiver's mailbox, caller continues immediately.
 // Returns HIVE_ERR_NOMEM if IPC pools exhausted.
 hive_status_t hive_ipc_notify(actor_id_t to, uint32_t tag, const void *data,
                               size_t len);
 
-// Send a message with explicit class
+// Notify with explicit class
 // Like hive_ipc_notify, but allows specifying message class.
 // Useful for implementing custom protocols beyond NOTIFY.
 // The sender is automatically set to the current actor.
@@ -49,15 +49,15 @@ hive_status_t hive_ipc_recv_matches(const hive_recv_filter_t *filters,
 // Request/Reply Pattern
 // -----------------------------------------------------------------------------
 
-// Send request and wait for reply (blocking)
-// Sends HIVE_MSG_REQUEST with generated tag, blocks until HIVE_MSG_REPLY
+// Request and wait for reply (blocking)
+// Dispatches HIVE_MSG_REQUEST with generated tag, blocks until HIVE_MSG_REPLY
 // received. The reply message is returned in 'reply'.
 hive_status_t hive_ipc_request(actor_id_t to, const void *request,
                                size_t req_len, hive_message_t *reply,
                                int32_t timeout_ms);
 
 // Reply to a request message
-// Extracts tag from request header and sends HIVE_MSG_REPLY.
+// Extracts tag from request header and dispatches HIVE_MSG_REPLY.
 // 'request' must be a HIVE_MSG_REQUEST message from the current
 // hive_ipc_recv().
 hive_status_t hive_ipc_reply(const hive_message_t *request, const void *data,
@@ -74,14 +74,14 @@ bool hive_msg_is_timer(const hive_message_t *msg);
 // Named IPC (uses name registry under the hood)
 // -----------------------------------------------------------------------------
 
-// Send notification to actor by name
-// Resolves name via hive_whereis(), then sends notification.
+// Notify actor by name
+// Resolves name via hive_whereis(), then notifies.
 // Returns HIVE_ERR_NOT_FOUND if name not registered.
 hive_status_t hive_ipc_named_notify(const char *name, uint32_t tag,
                                     const void *data, size_t len);
 
-// Send request to actor by name and wait for reply
-// Resolves name via hive_whereis(), then sends request.
+// Request actor by name and wait for reply
+// Resolves name via hive_whereis(), then requests.
 // Returns HIVE_ERR_NOT_FOUND if name not registered.
 hive_status_t hive_ipc_named_request(const char *name, const void *request,
                                      size_t req_len, hive_message_t *reply,

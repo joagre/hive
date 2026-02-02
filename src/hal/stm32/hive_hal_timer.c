@@ -83,7 +83,7 @@ void hive_timer_process_pending(void) {
         // Check if timer expired (handle wrap-around)
         int32_t delta = (int32_t)(entry->expiry_ticks - now);
         if (delta <= 0) {
-            // Timer expired - send message to owner
+            // Timer expired - deliver message to owner
             actor_t *a = hive_actor_get(entry->owner);
             if (a) {
                 hive_ipc_notify_internal(entry->owner, entry->owner,

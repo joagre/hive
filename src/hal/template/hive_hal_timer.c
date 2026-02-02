@@ -120,7 +120,7 @@ hive_status_t hive_hal_timer_create(uint32_t interval_us, bool periodic,
     //   - Create timerfd with timerfd_create()
     //   - Set timer with timerfd_settime()
     //   - Register with event system via hive_hal_event_register()
-    //   - When timerfd fires, send HIVE_MSG_TIMER to owner
+    //   - When timerfd fires, deliver HIVE_MSG_TIMER to owner
     //
     // Option B: Software timer wheel (STM32, simulation)
     //   - Store expiry time/ticks
@@ -186,7 +186,7 @@ void hive_hal_timer_advance_time(uint64_t delta_us) {
             timer_entry_t *entry = *pp;
 
             if (entry->expiry_us <= s_hal_timer.current_time_us) {
-                // Timer expired - send message to owner
+                // Timer expired - deliver message to owner
                 actor_t *a = hive_actor_get(entry->owner);
                 if (a) {
                     hive_ipc_notify_internal(entry->owner, entry->owner,
@@ -233,6 +233,6 @@ void hive_hal_timer_advance_time(uint64_t delta_us) {
 // void hive_timer_handle_event(io_source_t *source) {
 //     timer_entry_t *entry = source->data.timer;
 //     // Read timerfd to acknowledge
-//     // Send HIVE_MSG_TIMER to owner
+//     // Deliver HIVE_MSG_TIMER to owner
 //     // If one-shot, cleanup timer
 // }

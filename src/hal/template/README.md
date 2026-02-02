@@ -96,7 +96,7 @@ void hive_hal_timer_advance_time(uint64_t delta_us);
 ```
 
 **Implementation notes**
-- `timer_create`: Create a one-shot or periodic timer that sends `HIVE_MSG_TIMER` to owner
+- `timer_create`: Create a one-shot or periodic timer that delivers `HIVE_MSG_TIMER` to owner
 - `timer_cancel`: Cancel an active timer by ID
 - `timer_get_time`: Return current time in microseconds (for simulation mode)
 - `timer_advance_time`: Advance simulation time and fire due timers (for testing/simulation)

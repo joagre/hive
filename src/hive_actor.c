@@ -288,7 +288,7 @@ void hive_actor_free(actor_t *a) {
         return;
     }
 
-    // Cleanup links/monitors and send death notifications
+    // Cleanup links/monitors and deliver death notifications
     hive_link_cleanup_actor(a->id);
 
     // Cleanup bus subscriptions

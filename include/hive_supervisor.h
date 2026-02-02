@@ -104,7 +104,7 @@ hive_status_t hive_supervisor_start(const hive_supervisor_config_t *config,
 //
 // Errors:
 //   HIVE_ERR_INVALID  - Invalid supervisor ID
-//   HIVE_ERR_NOMEM    - Failed to send shutdown message
+//   HIVE_ERR_NOMEM    - Failed to deliver shutdown message
 hive_status_t hive_supervisor_stop(actor_id_t supervisor);
 
 // -----------------------------------------------------------------------------

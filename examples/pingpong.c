@@ -40,13 +40,13 @@ static void pong_actor(void *args, const hive_spawn_info_t *siblings,
         printf("Pong: Received ping #%d from actor %u\n", pm_copy.count,
                msg.sender);
 
-        // Send pong back
+        // Notify ping back
         pm_copy.count++;
         status = hive_ipc_notify(ping_id, HIVE_TAG_NONE, &pm_copy,
                                  sizeof(ping_msg_t));
 
         if (HIVE_FAILED(status)) {
-            printf("Pong: Failed to send message: %s\n", HIVE_ERR_STR(status));
+            printf("Pong: Failed to notify: %s\n", HIVE_ERR_STR(status));
             break;
         }
 
@@ -66,18 +66,18 @@ static void ping_actor(void *args, const hive_spawn_info_t *siblings,
 
     printf("Ping actor started (ID: %u)\n", hive_self());
 
-    // Send first ping
+    // Notify first ping
     ping_msg_t pm = {.count = 0};
     hive_status_t status =
         hive_ipc_notify(pong_id, HIVE_TAG_NONE, &pm, sizeof(ping_msg_t));
 
     if (HIVE_FAILED(status)) {
-        printf("Ping: Failed to send initial message: %s\n",
+        printf("Ping: Failed to notify initial message: %s\n",
                HIVE_ERR_STR(status));
         return;
     }
 
-    printf("Ping: Sent initial ping #%d\n", pm.count);
+    printf("Ping: Notified initial ping #%d\n", pm.count);
 
     for (int i = 0; i < 5; i++) {
         // Wait for pong
@@ -94,17 +94,17 @@ static void ping_actor(void *args, const hive_spawn_info_t *siblings,
         printf("Ping: Received pong #%d from actor %u\n", recv_pm.count,
                msg.sender);
 
-        // Send ping back
+        // Notify ping back
         recv_pm.count++;
         status = hive_ipc_notify(pong_id, HIVE_TAG_NONE, &recv_pm,
                                  sizeof(ping_msg_t));
 
         if (HIVE_FAILED(status)) {
-            printf("Ping: Failed to send message: %s\n", HIVE_ERR_STR(status));
+            printf("Ping: Failed to notify: %s\n", HIVE_ERR_STR(status));
             break;
         }
 
-        printf("Ping: Sent ping #%d\n", recv_pm.count);
+        printf("Ping: Notified ping #%d\n", recv_pm.count);
     }
 
     printf("Ping actor exiting\n");

@@ -77,13 +77,13 @@ void hive_timer_handle_event(io_source_t *source) {
         return;
     }
 
-    // Send timer tick message to actor_t
+    // Deliver timer tick message to actor_t
     // Use HIVE_MSG_TIMER class with timer_id_t as tag, sender is the owning actor_t
     // No payload needed - timer_id_t is encoded in the tag
     hive_status_t status = hive_ipc_notify_internal(
         entry->owner, entry->owner, HIVE_MSG_TIMER, entry->id, NULL, 0);
     if (HIVE_FAILED(status)) {
-        HIVE_LOG_ERROR("Failed to send timer tick: %s", status.msg);
+        HIVE_LOG_ERROR("Failed to deliver timer tick: %s", status.msg);
         // Don't cleanup timer - try again next tick
         return;
     }
@@ -292,7 +292,7 @@ void hive_hal_timer_advance_time(uint64_t delta_us) {
                     continue;
                 }
 
-                // Send timer tick message to actor_t
+                // Deliver timer tick message to actor_t
                 HIVE_LOG_DEBUG(
                     "Timer %u fired for actor_t %u (sim_time=%lu, expiry=%lu)",
                     entry->id, entry->owner,
@@ -304,7 +304,8 @@ void hive_hal_timer_advance_time(uint64_t delta_us) {
                     0);
 
                 if (HIVE_FAILED(status)) {
-                    HIVE_LOG_ERROR("Failed to send timer tick: %s", status.msg);
+                    HIVE_LOG_ERROR("Failed to deliver timer tick: %s",
+                                   status.msg);
                     prev = entry;
                     entry = next;
                     continue;
