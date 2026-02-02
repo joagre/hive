@@ -92,3 +92,8 @@ void hal_disarm(void) {
 bool hal_step(void) {
     return wb_robot_step(TIME_STEP_MS) != -1;
 }
+
+// Simulated battery (always full in simulation)
+float hal_power_get_battery(void) {
+    return 4.2f;
+}
