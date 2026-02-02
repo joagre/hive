@@ -77,6 +77,26 @@ Install: `make install-man` (or `sudo make install-man`)
 - **Forbidden** - `**Label:** text` format; use `**Label** - text` instead
 - **Forbidden** - Colons in bold labels; use `**Label**` not `**Label:**`
 
+### IPC Terminology
+
+Use specific terms for IPC operations instead of generic "send":
+
+| Term | Usage |
+|------|-------|
+| **notify** | Fire-and-forget messages (`hive_ipc_notify`) |
+| **request** | Request/reply pattern (`hive_ipc_request`) |
+| **reply** | Response to a request (`hive_ipc_reply`) |
+| **deliver** | Internal message dispatch to mailboxes |
+
+**Keep "send" for non-IPC operations**
+- TCP operations (`hive_tcp_send`) - network layer
+- Hardware/I2C/SPI/radio operations (`hal_esb_send`, `i2c_send`) - hardware layer
+- Vendor/library code - external dependencies
+
+**Keep struct field names and actor role names**
+- `msg.sender` - struct field, not an operation
+- `sender_actor`, `ipc_sender` - actor role names describing what the actor does
+
 ## Architecture
 
 The runtime is **completely single-threaded** with an event loop architecture. All actors run cooperatively in a single scheduler thread. There are no I/O worker threads.
