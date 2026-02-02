@@ -185,11 +185,11 @@ Exit notifications (steps 2-3 above) are enqueued in recipient mailboxes **durin
 **Consequences**
 
 ```c
-// Dying actor sends messages before death
+// Dying actor notifies messages before death
 void actor_A(void *arg) {
     hive_ipc_notify(B, HIVE_TAG_NONE, &msg1, sizeof(msg1));  // Enqueued in B's mailbox
     hive_ipc_notify(C, HIVE_TAG_NONE, &msg2, sizeof(msg2));  // Enqueued in C's mailbox
-    return;  // Exit notifications sent to links/monitors
+    return;  // Exit notifications delivered to links/monitors
 }
 // Linked actor B will receive: msg1, then EXIT(A) (class=HIVE_MSG_EXIT)
 // Actor C will receive: msg2 (no exit notification, not linked)
@@ -392,7 +392,7 @@ if (no_runnable_actors) {
             uint64_t expirations;
             read(source->fd, &expirations, sizeof(expirations));  // Clear timerfd
             // expirations may be > 1 for periodic timers (coalesced)
-            // We send ONE tick message regardless of count
+            // We deliver ONE tick message regardless of count
         }
         dispatch_io_event(source);  // Handle timer tick or TCP
     }
