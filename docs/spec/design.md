@@ -383,7 +383,7 @@ A scheduling phase consists of one iteration of the scheduler loop:
 When `epoll_wait()` returns multiple ready events (timers and TCP), they are processed in **array index order** as returned by the kernel. This order is deterministic for a given set of ready file descriptors but is not controllable by the runtime.
 
 For each event:
-- **Timer event (timerfd)**: Read timerfd, send timer tick message to actor's mailbox, wake actor
+- **Timer event (timerfd)**: Read timerfd, deliver timer tick message to actor's mailbox, wake actor
 - **TCP event (socket)**: Perform I/O operation, store result in actor's `io_status`, wake actor
 
 **Event drain timing**
