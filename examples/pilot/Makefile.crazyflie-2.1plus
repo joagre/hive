@@ -16,8 +16,10 @@ LOG_TO_STDOUT := 1
 LOG_TO_FILE := 1
 # Log to SD card instead of flash to avoid blocking scheduler during flash erase.
 # Flash /log blocks 1-4 seconds on sector erase; SD card doesn't have this issue.
+# Requires SD card deck installed. Use ENABLE_FLASH_LOG=1 if no SD card.
 LOG_FILE_PATH := /sd/hive.log
 ENABLE_SD := 1
+ENABLE_FLASH_LOG := 0
 STACK_PROFILE := 0
 
 # =============================================================================
@@ -197,9 +199,11 @@ help:
 	@echo "  LOG_LEVEL=$(LOG_LEVEL)"
 	@echo "      TRACE, DEBUG, INFO, WARN, ERROR, NONE"
 	@echo ""
-	@echo "  LOG_TO_STDOUT=$(LOG_TO_STDOUT)  (SWO debug output)"
-	@echo "  LOG_TO_FILE=$(LOG_TO_FILE)      (SD card: $(LOG_FILE_PATH))"
-	@echo "  ENABLE_SD=$(ENABLE_SD)          (SD card deck)"
+	@echo "  LOG_TO_STDOUT=$(LOG_TO_STDOUT)    (SWO debug output)"
+	@echo "  LOG_TO_FILE=$(LOG_TO_FILE)        (file logging enabled)"
+	@echo "  LOG_FILE_PATH=$(LOG_FILE_PATH)  (log destination)"
+	@echo "  ENABLE_SD=$(ENABLE_SD)            (SD card deck)"
+	@echo "  ENABLE_FLASH_LOG=$(ENABLE_FLASH_LOG)    (flash /log mount, blocks scheduler)"
 	@echo "  STACK_PROFILE=$(STACK_PROFILE)  (stack watermarking)"
 	@echo ""
 	@echo "Examples:"
