@@ -33,17 +33,29 @@ static inline bool is_valid_float(float f) {
 }
 
 // Validate sensor data, return false if any critical value is bad
+// Logs which sensor failed for post-mortem analysis
 static bool validate_sensors(const sensor_data_t *s) {
     // Check gyro
     for (int i = 0; i < 3; i++) {
-        if (!is_valid_float(s->gyro[i]) || fabsf(s->gyro[i]) > MAX_GYRO_RADPS) {
+        if (!is_valid_float(s->gyro[i])) {
+            HIVE_LOG_ERROR("[EST] Sensor fail: gyro[%d]=NaN/Inf", i);
+            return false;
+        }
+        if (fabsf(s->gyro[i]) > MAX_GYRO_RADPS) {
+            HIVE_LOG_ERROR("[EST] Sensor fail: gyro[%d]=%.1f > %.1f", i,
+                           s->gyro[i], MAX_GYRO_RADPS);
             return false;
         }
     }
     // Check accelerometer
     for (int i = 0; i < 3; i++) {
-        if (!is_valid_float(s->accel[i]) ||
-            fabsf(s->accel[i]) > MAX_ACCEL_MPS2) {
+        if (!is_valid_float(s->accel[i])) {
+            HIVE_LOG_ERROR("[EST] Sensor fail: accel[%d]=NaN/Inf", i);
+            return false;
+        }
+        if (fabsf(s->accel[i]) > MAX_ACCEL_MPS2) {
+            HIVE_LOG_ERROR("[EST] Sensor fail: accel[%d]=%.1f > %.1f", i,
+                           s->accel[i], MAX_ACCEL_MPS2);
             return false;
         }
     }
@@ -51,26 +63,43 @@ static bool validate_sensors(const sensor_data_t *s) {
     if (s->gps_valid) {
         if (!is_valid_float(s->gps_x) || !is_valid_float(s->gps_y) ||
             !is_valid_float(s->gps_z)) {
+            HIVE_LOG_ERROR("[EST] Sensor fail: GPS pos=NaN/Inf");
             return false;
         }
         if (fabsf(s->gps_x) > MAX_POSITION_M ||
-            fabsf(s->gps_y) > MAX_POSITION_M || s->gps_z < -1.0f ||
-            s->gps_z > MAX_ALTITUDE_M) {
+            fabsf(s->gps_y) > MAX_POSITION_M) {
+            HIVE_LOG_ERROR("[EST] Sensor fail: GPS xy=(%.1f,%.1f) > %.1f",
+                           s->gps_x, s->gps_y, MAX_POSITION_M);
+            return false;
+        }
+        if (s->gps_z < -1.0f || s->gps_z > MAX_ALTITUDE_M) {
+            HIVE_LOG_ERROR("[EST] Sensor fail: GPS z=%.2f out of [-1,%.0f]",
+                           s->gps_z, MAX_ALTITUDE_M);
             return false;
         }
     }
     // Barometer validation (only if marked valid)
     if (s->baro_valid) {
-        if (!is_valid_float(s->baro_altitude) || s->baro_altitude < -1.0f ||
-            s->baro_altitude > MAX_ALTITUDE_M) {
+        if (!is_valid_float(s->baro_altitude)) {
+            HIVE_LOG_ERROR("[EST] Sensor fail: baro=NaN/Inf");
+            return false;
+        }
+        if (s->baro_altitude < -1.0f || s->baro_altitude > MAX_ALTITUDE_M) {
+            HIVE_LOG_ERROR("[EST] Sensor fail: baro=%.2f out of [-1,%.0f]",
+                           s->baro_altitude, MAX_ALTITUDE_M);
             return false;
         }
     }
     // Velocity validation (only if marked valid)
     if (s->velocity_valid) {
-        if (!is_valid_float(s->velocity_x) || !is_valid_float(s->velocity_y) ||
-            fabsf(s->velocity_x) > MAX_VELOCITY_MPS ||
+        if (!is_valid_float(s->velocity_x) || !is_valid_float(s->velocity_y)) {
+            HIVE_LOG_ERROR("[EST] Sensor fail: velocity=NaN/Inf");
+            return false;
+        }
+        if (fabsf(s->velocity_x) > MAX_VELOCITY_MPS ||
             fabsf(s->velocity_y) > MAX_VELOCITY_MPS) {
+            HIVE_LOG_ERROR("[EST] Sensor fail: vel=(%.1f,%.1f) > %.1f",
+                           s->velocity_x, s->velocity_y, MAX_VELOCITY_MPS);
             return false;
         }
     }
@@ -153,8 +182,8 @@ void estimator_actor(void *args, const hive_spawn_info_t *siblings,
         }
 
         // Validate sensor data - reject garbage readings
+        // (validate_sensors logs which sensor failed)
         if (!validate_sensors(&sensors)) {
-            HIVE_LOG_WARN("[EST] sensor validation failed, skipping frame");
             continue;
         }
 
