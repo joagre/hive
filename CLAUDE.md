@@ -20,7 +20,7 @@ This is an actor-based runtime for embedded systems, targeting STM32 (ARM Cortex
 - **README.md** - Quick start and API overview
 - **man/man3/** - Unix man pages for all API functions
 - **examples/** - Working examples (pingpong, bus, supervisor, etc.)
-- **examples/pilot/** - Complete quadcopter autopilot (11 actors, Kalman filter, cascaded PID)
+- **examples/pilot/** - Complete quadcopter autopilot (12 actors, Kalman filter, cascaded PID)
 
 Man pages available:
 - `hive_init(3)` - Runtime initialization, run loop, shutdown
@@ -556,3 +556,37 @@ Files can be viewed directly with `cat`, `tail`, `less`, etc.
 | `HIVE_LOG_TO_FILE` | 1 (enabled) | 1 (enabled) |
 | `HIVE_LOG_FILE_PATH` | `/var/tmp/hive.log` | `/log` |
 | `HIVE_LOG_LEVEL` | INFO | NONE (disabled) |
+
+## Testing
+
+**Test Suite** - Located in `tests/` directory with comprehensive coverage of all subsystems.
+
+```bash
+# Run all Linux tests
+cd tests && make test
+
+# Run specific test
+make test TEST=ipc_test
+
+# Run with verbose output
+make test VERBOSE=1
+```
+
+**QEMU Testing** - STM32 tests can run in QEMU for CI/automated testing.
+
+```bash
+# Run STM32 tests in QEMU
+cd tests/qemu && make test
+```
+
+**Pilot Hardware Tests** - Located in `examples/pilot/tests/` for Crazyflie hardware.
+
+```bash
+# Build and flash test_main (combined test runner)
+cd examples/pilot/tests
+make PLATFORM=crazyflie TEST=main
+st-flash write build_crazyflie/test_main.bin 0x8000000
+
+# Capture SWO debug output
+st-trace
+```
