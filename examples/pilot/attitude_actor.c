@@ -79,6 +79,12 @@ void attitude_actor(void *args, const hive_spawn_info_t *siblings,
         float dt = (now - prev_time) / 1000000.0f;
         prev_time = now;
 
+        // Guard against bad dt
+        if (dt <= 0.0f || dt > 1.0f) {
+            HIVE_LOG_WARN("[ATT] bad dt=%.6f, skipping cycle", dt);
+            continue;
+        }
+
         // Read attitude setpoints from position controller (non-blocking, use
         // last known)
         if (hive_bus_read(state->attitude_setpoint_bus, &new_attitude_sp,

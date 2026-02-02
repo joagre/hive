@@ -97,8 +97,13 @@ void position_actor(void *args, const hive_spawn_info_t *siblings,
 
         // Sign conversion to aerospace convention:
         // - Roll negated: positive body Y error -> negative roll -> +Y accel
+        float target_yaw = target.yaw;
+        if (!isfinite(target_yaw)) {
+            HIVE_LOG_WARN("[POS] NaN target yaw, using current yaw");
+            target_yaw = est.yaw;
+        }
         attitude_setpoint_t setpoint = {
-            .roll = -roll_cmd, .pitch = pitch_cmd, .yaw = target.yaw};
+            .roll = -roll_cmd, .pitch = pitch_cmd, .yaw = target_yaw};
 
         status = hive_bus_publish(state->attitude_setpoint_bus, &setpoint,
                                   sizeof(setpoint));

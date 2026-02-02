@@ -61,7 +61,7 @@ static bool validate_sensors(const sensor_data_t *s) {
     }
     // Barometer validation (only if marked valid)
     if (s->baro_valid) {
-        if (!is_valid_float(s->baro_altitude) || s->baro_altitude < -10.0f ||
+        if (!is_valid_float(s->baro_altitude) || s->baro_altitude < -1.0f ||
             s->baro_altitude > MAX_ALTITUDE_M) {
             return false;
         }
@@ -159,6 +159,12 @@ void estimator_actor(void *args, const hive_spawn_info_t *siblings,
         float dt = (now - prev_time) / 1000000.0f;
         prev_time = now;
 
+        // Guard against bad dt
+        if (dt <= 0.0f || dt > 1.0f) {
+            HIVE_LOG_WARN("[EST] bad dt=%.6f, skipping cycle", dt);
+            continue;
+        }
+
         // Run complementary filter for attitude estimation
         cf_update(&filter, &sensors, dt);
 
@@ -218,6 +224,10 @@ void estimator_actor(void *args, const hive_spawn_info_t *siblings,
 
         // Run Kalman filter
         if (!alt_kf.initialized) {
+            if (!isfinite(measured_altitude)) {
+                HIVE_LOG_WARN("[EST] NaN altitude at KF init, using 0");
+                measured_altitude = 0.0f;
+            }
             altitude_kf_reset(&alt_kf, measured_altitude);
         }
         altitude_kf_update(&alt_kf, accel_z, measured_altitude, dt);

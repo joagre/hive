@@ -308,6 +308,9 @@ void comms_actor(void *args, const hive_spawn_info_t *siblings,
                 hive_file_pread(state->log_fd, chunk.data, LOG_CHUNK_DATA_SIZE,
                                 state->log_offset, &bytes_read);
 
+            if (HIVE_FAILED(s)) {
+                HIVE_LOG_WARN("[COMMS] Log read failed: %s", HIVE_ERR_STR(s));
+            }
             if (HIVE_FAILED(s) || bytes_read == 0) {
                 // End of file or error - send completion packet
                 log_complete_packet_t done = {

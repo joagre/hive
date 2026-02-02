@@ -56,9 +56,17 @@ void flight_manager_actor(void *args, const hive_spawn_info_t *siblings,
     hive_actor_id_t motor = hive_find_sibling(siblings, sibling_count, "motor");
     if (waypoint == HIVE_ACTOR_ID_INVALID ||
         altitude == HIVE_ACTOR_ID_INVALID || motor == HIVE_ACTOR_ID_INVALID) {
-        HIVE_LOG_ERROR("[FLM] Failed to find required siblings");
+        HIVE_LOG_ERROR(
+            "[FLM] Missing siblings: waypoint=%s altitude=%s motor=%s",
+            waypoint == HIVE_ACTOR_ID_INVALID ? "MISSING" : "ok",
+            altitude == HIVE_ACTOR_ID_INVALID ? "MISSING" : "ok",
+            motor == HIVE_ACTOR_ID_INVALID ? "MISSING" : "ok");
         hive_exit(HIVE_EXIT_REASON_CRASH);
     }
+
+    // Log flight profile for post-mortem verification
+    HIVE_LOG_INFO("[FLM] Flight profile=%d duration=%.0fs", FLIGHT_PROFILE,
+                  FLIGHT_DURATION_US / 1000000.0f);
 
 #ifndef SIMULATED_TIME
     // Real hardware: wait for startup delay before allowing flight

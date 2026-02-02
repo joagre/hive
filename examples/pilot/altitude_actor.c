@@ -126,6 +126,12 @@ void altitude_actor(void *args, const hive_spawn_info_t *siblings,
         float dt = (now - prev_time) / 1000000.0f;
         prev_time = now;
 
+        // Guard against bad dt (logged by PID, but also check here for context)
+        if (dt <= 0.0f || dt > 1.0f) {
+            HIVE_LOG_WARN("[ALT] bad dt=%.6f, skipping cycle", dt);
+            continue;
+        }
+
         // Read target altitude (non-blocking)
         if (hive_bus_read(state->position_target_bus, &target, sizeof(target),
                           &len, HIVE_TIMEOUT_NONBLOCKING)
@@ -162,9 +168,16 @@ void altitude_actor(void *args, const hive_spawn_info_t *siblings,
             // Landing mode: control descent rate, not altitude
             // Target velocity = LANDING_DESCENT_RATE, adjust thrust to achieve
             // it
-            float velocity_error = LANDING_DESCENT_RATE - est.vertical_velocity;
-            thrust = HAL_BASE_THRUST + LANDING_VELOCITY_GAIN * velocity_error;
-            thrust = CLAMPF(thrust, 0.0f, 1.0f);
+            if (!isfinite(est.vertical_velocity)) {
+                HIVE_LOG_WARN("[ALT] NaN velocity in landing, using zero");
+                thrust = 0.0f;
+            } else {
+                float velocity_error =
+                    LANDING_DESCENT_RATE - est.vertical_velocity;
+                thrust =
+                    HAL_BASE_THRUST + LANDING_VELOCITY_GAIN * velocity_error;
+                thrust = CLAMPF(thrust, 0.0f, 1.0f);
+            }
         } else {
             // Normal altitude hold mode
             if (ramp_start_time == 0) {

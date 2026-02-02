@@ -81,6 +81,12 @@ void rate_actor(void *args, const hive_spawn_info_t *siblings,
         float dt = (now - prev_time) / 1000000.0f;
         prev_time = now;
 
+        // Guard against bad dt
+        if (dt <= 0.0f || dt > 1.0f) {
+            HIVE_LOG_WARN("[RATE] bad dt=%.6f, skipping cycle", dt);
+            continue;
+        }
+
         // Read thrust and rate setpoints (non-blocking, use last known)
         if (hive_bus_read(state->thrust_bus, &thrust_cmd, sizeof(thrust_cmd),
                           &len, HIVE_TIMEOUT_NONBLOCKING)

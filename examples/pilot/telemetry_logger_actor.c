@@ -202,7 +202,12 @@ void telemetry_logger_actor(void *args, const hive_spawn_info_t *siblings,
                         latest_sensors.accel[1], latest_sensors.accel[2]);
 
         // Write CSV row
-        hive_file_write(state->log_fd, line_buf, (size_t)len, &bytes_written);
+        status = hive_file_write(state->log_fd, line_buf, (size_t)len,
+                                 &bytes_written);
+        if (HIVE_FAILED(status) || bytes_written != (size_t)len) {
+            HIVE_LOG_WARN("[TLOG] Write failed: wrote %zu of %d bytes",
+                          bytes_written, len);
+        }
 
         log_count++;
 

@@ -38,6 +38,11 @@ void *waypoint_actor_init(void *init_args) {
 
 // Check if drone has arrived at waypoint
 static bool check_arrival(const waypoint_t *wp, const state_estimate_t *est) {
+    // Validate position - NaN means we don't know where we are
+    if (!isfinite(est->x) || !isfinite(est->y) || !isfinite(est->altitude)) {
+        return false; // Can't declare arrival with unknown position
+    }
+
     float dx = wp->x - est->x;
     float dy = wp->y - est->y;
     float dist_xy = sqrtf(dx * dx + dy * dy);
@@ -148,9 +153,13 @@ void waypoint_actor(void *args, const hive_spawn_info_t *siblings,
         if (!hovering && check_arrival(wp, &est)) {
             HIVE_LOG_INFO("[WPT] Arrived at waypoint %d - hovering",
                           waypoint_index);
-            if (HIVE_FAILED(
-                    hive_timer_after(WAYPOINT_HOVER_TIME_US, &hover_timer))) {
-                HIVE_LOG_WARN("[WPT] timer_after failed");
+            hive_status_t timer_status =
+                hive_timer_after(WAYPOINT_HOVER_TIME_US, &hover_timer);
+            if (HIVE_FAILED(timer_status)) {
+                HIVE_LOG_ERROR("[WPT] timer_after failed: %s - cannot hover",
+                               HIVE_ERR_STR(timer_status));
+                // Don't set hovering=true without a timer, or we'd hang forever
+                continue;
             }
             hovering = true;
         }

@@ -67,4 +67,8 @@ static const waypoint_t waypoints[] = {
 
 #define NUM_WAYPOINTS (sizeof(waypoints) / sizeof(waypoints[0]))
 
+// Compile-time sanity check: at least one waypoint required
+_Static_assert(NUM_WAYPOINTS >= 1,
+               "Flight profile must have at least 1 waypoint");
+
 #endif // FLIGHT_PROFILES_H
