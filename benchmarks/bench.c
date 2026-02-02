@@ -40,7 +40,7 @@ static void switch_actor_a(void *args, const hive_spawn_info_t *siblings,
     switch_ctx_t *ctx = (switch_ctx_t *)args;
 
     while (ctx->count < ctx->max_count) {
-        // Send ping to B
+        // Notify ping to B
         int msg = 1;
         hive_ipc_notify(ctx->partner, HIVE_TAG_NONE, &msg, sizeof(msg));
 
@@ -66,7 +66,7 @@ static void switch_actor_b(void *args, const hive_spawn_info_t *siblings,
         hive_message_t msg;
         hive_ipc_recv(&msg, -1);
 
-        // Send pong back to A
+        // Notify pong back to A
         int reply = 2;
         hive_ipc_notify(ctx->partner, HIVE_TAG_NONE, &reply, sizeof(reply));
 
@@ -180,7 +180,7 @@ static void ipc_receiver(void *args, const hive_spawn_info_t *siblings,
         hive_message_t msg;
         hive_ipc_recv(&msg, -1);
 
-        // Send ack
+        // Notify ack
         hive_ipc_notify(ctx->partner, HIVE_TAG_NONE, &ack, sizeof(ack));
     }
 
