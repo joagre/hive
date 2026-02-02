@@ -226,7 +226,7 @@ When actors are restarted by a supervisor, they should call
 with the same name (or use auto_register). Actors that need to communicate
 with them should call
 .BR hive_whereis ()
-each time they need to send a message, rather than caching the actor ID at startup.
+each time they need to notify or request, rather than caching the actor ID at startup.
 This ensures they get the current actor ID even after restarts.
 .SH RETURN VALUE
 .BR hive_spawn ()
@@ -452,7 +452,7 @@ void client(void *args, const hive_spawn_info_t *siblings,
         return;
     }
 
-    /* Send request to database */
+    /* Notify database */
     char query[] = "SELECT * FROM users";
     hive_ipc_notify(db, HIVE_TAG_NONE, query, sizeof(query));
 

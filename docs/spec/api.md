@@ -122,7 +122,7 @@ hive_status_t hive_actor_kill(actor_id_t target);
 
 **hive_actor_kill(target)**: Terminates the target actor immediately. This is a **hard kill** - the target cannot resist or defer termination. There is no graceful shutdown protocol; the actor is removed from the scheduler at the next opportunity. The target's exit reason is set to `HIVE_EXIT_REASON_KILLED`. Linked/monitoring actors receive exit notifications. Cannot kill self (use `hive_exit()` instead). Used internally by supervisors to terminate children during shutdown or strategy application.
 
-For graceful shutdown, implement an application-level protocol: send a shutdown request message, wait for acknowledgment, then kill if needed.
+For graceful shutdown, implement an application-level protocol: request shutdown, wait for acknowledgment, then kill if needed.
 
 ### Stack Watermarking
 
@@ -257,7 +257,7 @@ hive_status_t hive_unregister(const char *name);
 
 **Use with supervisors**
 
-When actors are restarted by a supervisor, they should call `hive_register()` with the same name. Actors that need to communicate with them should call `hive_whereis()` each time they need to send a message, rather than caching the actor ID at startup. This ensures they get the current actor ID even after restarts.
+When actors are restarted by a supervisor, they should call `hive_register()` with the same name. Actors that need to communicate with them should call `hive_whereis()` each time they need to notify or request, rather than caching the actor ID at startup. This ensures they get the current actor ID even after restarts.
 
 ```c
 // Service actor that registers itself
@@ -270,7 +270,7 @@ void database_service(void *arg) {
     }
 }
 
-// Client actor that uses whereis (called on each send)
+// Client actor that uses whereis (called on each notify/request)
 void send_query(const char *query) {
     actor_id_t db;
     if (HIVE_SUCCEEDED(hive_whereis("database", &db))) {
@@ -397,7 +397,7 @@ if (msg.class == HIVE_MSG_REQUEST) {
 // Tag enables selective receive filtering on the receiver side
 hive_status_t hive_ipc_notify(actor_id_t to, uint32_t tag, const void *data, size_t len);
 
-// Send with explicit class and tag (sender is current actor)
+// Notify with explicit class and tag (sender is current actor)
 hive_status_t hive_ipc_notify_ex(actor_id_t to, hive_msg_class_t class,
                                uint32_t tag, const void *data, size_t len);
 
@@ -482,7 +482,7 @@ if (matched == FILTER_SYNC_TIMER) {
 #### Request/Reply
 
 ```c
-// Send REQUEST, block until REPLY with matching tag, or timeout
+// Issue REQUEST, block until REPLY with matching tag, or timeout
 hive_status_t hive_ipc_request(actor_id_t to, const void *request, size_t req_len,
                       hive_message_t *reply, int32_t timeout_ms);
 
@@ -495,19 +495,19 @@ hive_status_t hive_ipc_reply(const hive_message_t *request, const void *data, si
 // hive_ipc_request internally does:
 // 1. Set up temporary monitor on target (to detect death)
 // 2. Generate unique tag
-// 3. Send message with class=REQUEST
+// 3. Dispatch message with class=REQUEST
 // 4. Wait for REPLY with matching tag OR EXIT from monitor
 // 5. Clean up monitor and return reply, HIVE_ERR_CLOSED, or timeout error
 
 // hive_ipc_reply internally does:
 // 1. Decode sender and tag from request
-// 2. Send message with class=REPLY and same tag
+// 2. Dispatch message with class=REPLY and same tag
 ```
 
 **Error conditions for `hive_ipc_request()`**
-- `HIVE_ERR_CLOSED`: Target actor died before sending a reply (detected via internal monitor)
+- `HIVE_ERR_CLOSED`: Target actor died before replying (detected via internal monitor)
 - `HIVE_ERR_TIMEOUT`: No reply received within timeout period
-- `HIVE_ERR_NOMEM`: Pool exhausted when sending request
+- `HIVE_ERR_NOMEM`: Pool exhausted when issuing request
 - `HIVE_ERR_INVALID`: Invalid target actor ID or NULL request with non-zero length
 
 **Target death detection** - `hive_ipc_request()` internally monitors the target actor for the duration of the request. If the target dies before replying, the function returns `HIVE_ERR_CLOSED` immediately without waiting for timeout:
@@ -530,14 +530,14 @@ This eliminates the "timeout but actually dead" ambiguity from previous versions
 
 ### Named IPC
 
-Named IPC functions resolve actor names to IDs automatically, providing a convenient way to send messages to named actors without manual `hive_whereis()` calls.
+Named IPC functions resolve actor names to IDs automatically, providing a convenient way to notify or request named actors without manual `hive_whereis()` calls.
 
 ```c
-// Send notification to named actor
+// Notify named actor
 hive_status_t hive_ipc_named_notify(const char *name, uint32_t tag,
                                     const void *data, size_t len);
 
-// Send request to named actor and wait for reply
+// Request named actor and wait for reply
 hive_status_t hive_ipc_named_request(const char *name, const void *request,
                                      size_t req_len, hive_message_t *reply,
                                      int32_t timeout_ms);
@@ -612,7 +612,7 @@ if (status.code == HIVE_ERR_NOMEM) {
     // Pool exhausted - backoff and retry
     hive_message_t msg;
     hive_ipc_recv(&msg, 10);  // Wait 10ms, process any incoming messages
-    // Retry the send
+    // Retry the notify
     status = hive_ipc_notify(target, HIVE_TAG_NONE, &data, sizeof(data));
     if (HIVE_FAILED(status)) {
         // Still failing - drop message or take other action
@@ -725,12 +725,12 @@ hive_ipc_recv(&msg, 0);  // Gets first skipped message
 **Single sender to single receiver**
 - Messages are received in the order they were sent
 - **FIFO guaranteed**
-- Example: If actor A sends M1, M2, M3 to actor B, B receives them in order M1 -> M2 -> M3
+- Example: If actor A notifies B with M1, M2, M3, B receives them in order M1 -> M2 -> M3
 
 **Multiple senders to single receiver**
 - Message order depends on scheduling (which sender runs first)
 - **Arrival order is scheduling-dependent**
-- Example: If actor A sends M1 and actor B sends M2, receiver may get M1->M2 or M2->M1
+- Example: If actor A notifies with M1 and actor B notifies with M2, receiver may get M1->M2 or M2->M1
 
 **Selective receive and ordering**
 - Selective receive can retrieve messages out of FIFO order
@@ -843,15 +843,15 @@ IPC uses two global pools shared by all actors:
 
 **Default behavior (`pool_block = false`)**
 - `hive_ipc_notify()` returns `HIVE_ERR_NOMEM` immediately
-- Send operation **does NOT block** waiting for space
-- Send operation **does NOT drop** messages automatically
+- Notify/request **does NOT block** waiting for space
+- Notify/request **does NOT drop** messages automatically
 - Caller **must check** return value and handle failure
 
 **Blocking behavior (`pool_block = true`)**
-- Send operations **yield** (block) until pool space becomes available
+- Notify/request **yields** (blocks) until pool space becomes available
 - Actor is added to a **priority-ordered wait queue** (higher priority actors wake first)
 - Actor wakes when another actor frees a pool entry
-- No `HIVE_ERR_NOMEM` returned - send always succeeds eventually
+- No `HIVE_ERR_NOMEM` returned - notify/request always succeeds eventually
 
 **Configuring pool blocking**
 ```c
@@ -894,7 +894,7 @@ if (status.code == HIVE_ERR_NOMEM) {
         // Got message during backoff, handle it first
         handle_message(&msg);
     }
-    // Retry send...
+    // Retry notify...
 }
 ```
 
@@ -1170,7 +1170,7 @@ Entries can be removed by **three mechanisms** (whichever occurs first):
 
 **WARNING: Resource Contention Between IPC and Bus**
 
-Bus publishing consumes the same message data pool as IPC (`HIVE_MESSAGE_DATA_POOL_SIZE`). A misconfigured or high-rate bus can exhaust the message pool and cause **all** IPC sends to fail with `HIVE_ERR_NOMEM`, potentially starving critical actor communication.
+Bus publishing consumes the same message data pool as IPC (`HIVE_MESSAGE_DATA_POOL_SIZE`). A misconfigured or high-rate bus can exhaust the message pool and cause **all** IPC notifications/requests to fail with `HIVE_ERR_NOMEM`, potentially starving critical actor communication.
 
 **Architectural consequences**
 - Bus auto-evicts oldest entries when its ring buffer fills (graceful degradation)
@@ -1647,7 +1647,7 @@ Returns:
 
 **hive_supervisor_stop(supervisor)**
 
-Sends asynchronous stop request to supervisor. The supervisor will:
+Issues asynchronous stop request to supervisor. The supervisor will:
 1. Stop all children (in reverse start order)
 2. Call `on_shutdown` callback if configured
 3. Exit normally
@@ -1657,7 +1657,7 @@ Use `hive_monitor()` to be notified when shutdown completes.
 Returns:
 - `HIVE_OK`: Stop request sent
 - `HIVE_ERR_INVALID`: Invalid supervisor ID
-- `HIVE_ERR_NOMEM`: Failed to send shutdown message
+- `HIVE_ERR_NOMEM`: Failed to deliver shutdown message
 
 ### Compile-Time Configuration
 
@@ -1708,7 +1708,7 @@ Failure to do so causes "works in simulation, dies on hardware" bugs because res
 
 **Client Rule** - Actors communicating with supervised children MUST NOT cache `actor_id_t` across awaits, timeouts, or receive calls. They MUST re-resolve by name (`hive_whereis()`) on each interaction or after any failure signal (timeout, EXIT message).
 
-This prevents the classic bug: client caches ID -> server restarts -> client sends to dead ID -> silent failure or mysterious behavior.
+This prevents the classic bug: client caches ID -> server restarts -> client notifies/requests dead ID -> silent failure or mysterious behavior.
 
 ### Restart Contract Checklist
 

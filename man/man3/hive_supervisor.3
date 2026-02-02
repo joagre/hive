@@ -154,7 +154,7 @@ parameter configures the supervisor actor itself (stack size, priority, etc.).
 Pass NULL for defaults.
 .SS Stopping a Supervisor
 .BR hive_supervisor_stop ()
-sends an asynchronous stop request to the supervisor. The supervisor will
+issues an asynchronous stop request to the supervisor. The supervisor will
 stop all children and then exit. Use
 .BR hive_monitor (3)
 to be notified when shutdown completes.
@@ -194,7 +194,7 @@ non-zero count, NULL child function, or invalid supervisor ID.
 .TP
 .B HIVE_ERR_NOMEM
 No supervisor slots available (see HIVE_MAX_SUPERVISORS), failed to spawn
-supervisor actor, or failed to send stop message.
+supervisor actor, or failed to deliver stop message.
 .TP
 .B HIVE_ERR_EXISTS
 A child with auto_register=true has a name that is already registered.
@@ -276,8 +276,8 @@ Alternatively, supervised siblings can use
 .BR hive_find_sibling ()
 at startup to get sibling IDs, though these IDs become stale on restart.
 .PP
-This prevents the classic bug: client caches ID, server restarts, client sends
-to dead ID, silent failure or mysterious behavior.
+This prevents the classic bug: client caches ID, server restarts, client notifies/requests
+dead ID, silent failure or mysterious behavior.
 .SS Restart Contract Checklist
 .B On child restart, these are always reset:
 .IP \(bu 2

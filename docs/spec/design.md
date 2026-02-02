@@ -125,7 +125,7 @@ Quick reference for resource exhaustion and failure handling. See IPC and Bus se
 
 ### Pool Blocking
 
-By default, pool exhaustion returns `HIVE_ERR_NOMEM` immediately. Actors can opt into **blocking behavior** where send operations yield (block) until pool space becomes available.
+By default, pool exhaustion returns `HIVE_ERR_NOMEM` immediately. Actors can opt into **blocking behavior** where notify/request operations yield (block) until pool space becomes available.
 
 **Configuration:**
 - **At spawn**: Set `hive_actor_config_t.pool_block = true`
@@ -149,7 +149,7 @@ The runtime reserves `HIVE_RESERVED_SYSTEM_ENTRIES` (default: 16) pool entries f
 **How it works:**
 - User messages (`HIVE_MSG_NOTIFY`, `HIVE_MSG_REQUEST`, `HIVE_MSG_REPLY`) cannot use the last 16 entries
 - System messages (`HIVE_MSG_TIMER`, `HIVE_MSG_EXIT`) can use any entry, including reserved ones
-- When the pool has only reserved entries remaining, user sends return `HIVE_ERR_NOMEM` but timers still fire
+- When the pool has only reserved entries remaining, user notifications/requests return `HIVE_ERR_NOMEM` but timers still fire
 
 **Configuration:**
 - `HIVE_RESERVED_SYSTEM_ENTRIES` in `hive_static_config.h` (default: 16)
@@ -211,9 +211,9 @@ This runtime makes deliberate design choices that favor **predictability, perfor
 **Why this design**
 - Simplicity: No per-actor accounting, no quota enforcement
 - Flexibility: Bursty actors can use available pool space
-- Performance: No quota checks on send path
+- Performance: No quota checks on notify/request path
 
-**Consequence** - A single bad actor can cause global `HIVE_ERR_NOMEM` failures for all IPC sends.
+**Consequence** - A single bad actor can cause global `HIVE_ERR_NOMEM` failures for all IPC notifications/requests.
 
 **Mitigation** - Application-level quotas, monitoring, backpressure patterns. Runtime provides primitives, not policies.
 
@@ -251,7 +251,7 @@ This runtime makes deliberate design choices that favor **predictability, perfor
 - Flexibility: Pool space shared dynamically based on actual usage
 - Memory efficiency: No wasted dedicated pools
 
-**Consequence** - Misconfigured bus can cause all IPC sends to fail with `HIVE_ERR_NOMEM`.
+**Consequence** - Misconfigured bus can cause all IPC notifications/requests to fail with `HIVE_ERR_NOMEM`.
 
 **Mitigation** - WARNING box in Bus section, size pool for combined load, monitor exhaustion.
 

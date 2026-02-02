@@ -219,7 +219,7 @@ All messages have a 4-byte header prepended to payload:
 
 ### IPC API
 - **`hive_ipc_notify(to, tag, data, len)`**: Fire-and-forget notification (class=NOTIFY). Use `HIVE_TAG_NONE` when no correlation needed
-- **`hive_ipc_notify_ex(to, class, tag, data, len)`**: Send with explicit class and tag
+- **`hive_ipc_notify_ex(to, class, tag, data, len)`**: Notify with explicit class and tag
 - **`hive_ipc_recv(msg, timeout)`**: Receive any message
 - **`hive_ipc_recv_match(from, class, tag, msg, timeout)`**: Selective receive with filtering
 - **`hive_ipc_recv_matches(filters, num_filters, msg, timeout, matched_index)`**: Multi-pattern selective receive (wait for any of several message types)
@@ -227,8 +227,8 @@ All messages have a 4-byte header prepended to payload:
 - **`hive_ipc_reply(request, data, len)`**: Reply to a REQUEST message
 
 **Named IPC** - Convenience functions that resolve actor names automatically:
-- **`hive_ipc_named_notify(name, tag, data, len)`**: Resolve name via `hive_whereis()`, then send notification
-- **`hive_ipc_named_request(name, req, len, reply, timeout)`**: Resolve name via `hive_whereis()`, then send request
+- **`hive_ipc_named_notify(name, tag, data, len)`**: Resolve name via `hive_whereis()`, then notify
+- **`hive_ipc_named_request(name, req, len, reply, timeout)`**: Resolve name via `hive_whereis()`, then request
 
 Named IPC is useful for communicating with supervised actors that may restart (and get new actor IDs). Returns `HIVE_ERR_NOT_FOUND` if name not registered.
 
@@ -249,8 +249,8 @@ if (msg.class == HIVE_MSG_REQUEST) { ... }
 - `hive_ipc_recv_matches()` waits for any message matching one of several filters (useful for waiting on timer OR notification, REPLY OR EXIT)
 - Non-matching messages are **skipped but not dropped** - they remain in mailbox
 - Filter on sender (`HIVE_SENDER_ANY` = wildcard), class (`HIVE_MSG_ANY`), tag (`HIVE_TAG_ANY`)
-- Use `HIVE_TAG_NONE` when sending notifications that don't need correlation
-- Enables request/reply pattern: send REQUEST with generated tag, wait for REPLY with matching tag
+- Use `HIVE_TAG_NONE` for notifications that don't need correlation
+- Enables request/reply pattern: issue REQUEST with generated tag, wait for REPLY with matching tag
 
 ### IPC Pool Exhaustion
 IPC uses global pools shared by all actors:
@@ -260,15 +260,15 @@ IPC uses global pools shared by all actors:
 
 **Default behavior (`pool_block = false`)**:
 - `hive_ipc_notify()` and `hive_ipc_notify_ex()` return `HIVE_ERR_NOMEM` immediately
-- Send operation **does NOT block** waiting for space
-- Send operation **does NOT drop** messages automatically
+- Notify/request **does NOT block** waiting for space
+- Notify/request **does NOT drop** messages automatically
 - Caller **must check** return value and handle failure (retry, backoff, or discard)
 
 **Blocking behavior (`pool_block = true`)**:
 - Enable at spawn: set `hive_actor_config_t.pool_block = true`
 - Override at runtime: `hive_pool_set_block(HIVE_POOL_BLOCK)` / `hive_pool_set_block(HIVE_POOL_NO_BLOCK)`
 - Query: `hive_pool_get_block()` returns current effective setting
-- When enabled, send operations **yield** (block) until pool space available
+- When enabled, notify/request **yields** (blocks) until pool space available
 - Actors are queued by priority (CRITICAL wakes first)
 - **Warning**: Can deadlock if all actors block without any freeing pool entries
 

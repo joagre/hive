@@ -87,9 +87,9 @@ Timer tick (sent by runtime, see
 .B HIVE_MSG_EXIT
 Actor death notification (see
 .BR hive_link (3))
-.SS Sending Messages
+.SS Notifying
 .BR hive_ipc_notify ()
-sends an asynchronous message to actor
+delivers an asynchronous message to actor
 .IR to
 with the specified
 .IR tag .
@@ -183,14 +183,14 @@ else { /* landed notification */ }
 .fi
 .SS Request/Reply Pattern
 .BR hive_ipc_request ()
-sends a request and blocks until a reply is received, the target dies, or
+issues a request and blocks until a reply is received, the target dies, or
 timeout expires. It:
 .IP 1. 3
 Sets up a temporary monitor on the target to detect death
 .IP 2. 3
 Generates a unique tag
 .IP 3. 3
-Sends message with class
+Dispatches message with class
 .B HIVE_MSG_REQUEST
 .IP 4. 3
 Waits for either
@@ -204,7 +204,7 @@ Cleans up the monitor and returns the reply, error, or
 if target died
 .PP
 .BR hive_ipc_reply ()
-sends a reply to a received request. It extracts the sender and tag from
+dispatches a reply to a received request. It extracts the sender and tag from
 .I request
 automatically. The
 .I request
@@ -212,7 +212,7 @@ parameter must be the message received via
 .BR hive_ipc_recv ().
 .SS Named IPC
 Named IPC functions resolve actor names to IDs automatically, providing a
-convenient way to send messages to named actors without manual
+convenient way to notify or request named actors without manual
 .BR hive_whereis (3)
 calls.
 .PP
@@ -221,7 +221,7 @@ resolves
 .I name
 via
 .BR hive_whereis (),
-then sends a notification to the resolved actor. Returns
+then notifies the resolved actor. Returns
 .B HIVE_ERR_NOT_FOUND
 if the name is not registered. Otherwise behaves identically to
 .BR hive_ipc_notify ().
@@ -231,7 +231,7 @@ resolves
 .I name
 via
 .BR hive_whereis (),
-then sends a request and waits for a reply. Returns
+then issues a request and waits for a reply. Returns
 .B HIVE_ERR_NOT_FOUND
 if the name is not registered. Otherwise behaves identically to
 .BR hive_ipc_request ().
@@ -244,7 +244,7 @@ incarnation of the actor.
 Example:
 .PP
 .nf
-/* Send notification to named actor */
+/* Notify named actor */
 hive_ipc_named_notify("logger", LOG_MSG, &log_entry, sizeof(log_entry));
 
 /* Request/reply with named actor */
@@ -286,7 +286,7 @@ returns the message count.
 .SH ERRORS
 .TP
 .B HIVE_ERR_NOMEM
-IPC pool exhausted (mailbox entry pool or message data pool). Send does
+IPC pool exhausted (mailbox entry pool or message data pool). Notify/request does
 .B not
 block or drop messages; caller must handle this error.
 .TP
@@ -300,7 +300,7 @@ No message received within timeout period.
 .B HIVE_ERR_CLOSED
 Target actor died during
 .BR hive_ipc_request ().
-The request was sent but the target exited before sending a reply.
+The request was issued but the target exited before replying.
 .TP
 .B HIVE_ERR_WOULDBLOCK
 Mailbox empty and timeout was
@@ -363,7 +363,7 @@ if (s.code == HIVE_ERR_NOMEM) {
 .PP
 When
 .I pool_block
-is enabled (via spawn configuration or runtime API), send operations will
+is enabled (via spawn configuration or runtime API), notify/request operations will
 .B yield
 (block) when pools are exhausted, waiting until pool space becomes available.
 The actor is added to a priority-ordered wait queue and woken when another
@@ -405,7 +405,7 @@ events are never blocked by user message pressure.
 .SS Target Death During Request
 .BR hive_ipc_request ()
 automatically detects target death by setting up a temporary monitor. If the
-target dies before sending a reply, the function returns
+target dies before replying, the function returns
 .B HIVE_ERR_CLOSED
 immediately (no need to wait for timeout). This allows clean error handling:
 .PP

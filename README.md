@@ -278,7 +278,7 @@ if (HIVE_FAILED(status)) {
     // HIVE_ERR_NOMEM if actor table or stack arena full
 }
 
-// Send notification (fire-and-forget)
+// Notify (fire-and-forget)
 int data = 42;
 status = hive_ipc_notify(worker, HIVE_TAG_NONE, &data, sizeof(data));
 if (HIVE_FAILED(status)) {
@@ -292,7 +292,7 @@ if (HIVE_FAILED(status)) {
 }
 
 // Alternative: Use pool_block=true to yield on pool exhaustion
-// (sends always succeed eventually, but can deadlock if no one consumes)
+// (notify/request always succeeds eventually, but can deadlock if no one consumes)
 
 // Request/reply pattern (blocks until reply or timeout)
 hive_message_t reply;
@@ -619,13 +619,13 @@ See [examples/pilot/README.md](examples/pilot/README.md) for build instructions 
 ### IPC
 
 - `hive_ipc_notify(to, tag, data, len)` - Fire-and-forget notification with tag
-- `hive_ipc_notify_ex(to, class, tag, data, len)` - Send with explicit class and tag
+- `hive_ipc_notify_ex(to, class, tag, data, len)` - Notify with explicit class and tag
 - `hive_ipc_recv(msg, timeout)` - Receive any message (`msg.class`, `msg.tag`, `msg.data`)
 - `hive_ipc_recv_match(from, class, tag, msg, timeout)` - Selective receive with filtering
 - `hive_ipc_recv_matches(filters, n, msg, timeout, matched_idx)` - Multi-pattern selective receive
 - `hive_ipc_request(to, req, len, reply, timeout)` - Blocking request/reply
 - `hive_ipc_reply(request, data, len)` - Reply to a REQUEST message
-- `hive_ipc_named_notify(name, tag, data, len)` - Send notification by actor name
+- `hive_ipc_named_notify(name, tag, data, len)` - Notify by actor name
 - `hive_ipc_named_request(name, req, len, reply, timeout)` - Request/reply by actor name
 - `hive_msg_is_timer(msg)` - Check if message is a timer tick
 - `hive_ipc_pending()` - Check if messages are available
