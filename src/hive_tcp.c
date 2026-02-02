@@ -52,7 +52,7 @@ void hive_tcp_handle_event(io_source_t *source) {
         int conn_fd;
         status = hive_hal_tcp_accept(tcp->fd, &conn_fd);
         if (status.code == HIVE_ERR_WOULDBLOCK) {
-            // Still not ready - this shouldn't happen with epoll, but handle it
+            // Still not ready - handle gracefully
             return; // Keep waiting
         }
         if (HIVE_SUCCEEDED(status)) {
@@ -76,7 +76,7 @@ void hive_tcp_handle_event(io_source_t *source) {
         size_t received = 0;
         status = hive_hal_tcp_recv(tcp->fd, tcp->buf, tcp->len, &received);
         if (status.code == HIVE_ERR_WOULDBLOCK) {
-            // Still not ready - shouldn't happen with epoll
+            // Still not ready - keep waiting
             return; // Keep waiting
         }
         if (HIVE_SUCCEEDED(status)) {
@@ -89,7 +89,7 @@ void hive_tcp_handle_event(io_source_t *source) {
         size_t sent = 0;
         status = hive_hal_tcp_send(tcp->fd, tcp->buf, tcp->len, &sent);
         if (status.code == HIVE_ERR_WOULDBLOCK) {
-            // Still not ready - shouldn't happen with epoll
+            // Still not ready - keep waiting
             return; // Keep waiting
         }
         if (HIVE_SUCCEEDED(status)) {
@@ -266,7 +266,7 @@ hive_status_t hive_tcp_accept(int listen_fd, int *out, int32_t timeout_ms) {
         return status;
     }
 
-    // Would block - register interest in epoll and yield
+    // Would block - register event interest and yield
     status = try_or_wait(listen_fd, HIVE_EVENT_READ, TCP_OP_ACCEPT, NULL, 0,
                          timeout_ms);
     if (HIVE_FAILED(status)) {
@@ -311,7 +311,7 @@ hive_status_t hive_tcp_connect(const char *ip, uint16_t port, int *out,
         return status;
     }
 
-    // Connection in progress - add to epoll and wait for writable
+    // Connection in progress - register event interest and wait for writable
     status =
         try_or_wait(fd, HIVE_EVENT_WRITE, TCP_OP_CONNECT, NULL, 0, timeout_ms);
     if (HIVE_FAILED(status)) {
@@ -354,7 +354,7 @@ hive_status_t hive_tcp_recv(int fd, void *buf, size_t len, size_t *bytes_read,
         return status;
     }
 
-    // Would block - register interest in epoll and yield
+    // Would block - register event interest and yield
     status =
         try_or_wait(fd, HIVE_EVENT_READ, TCP_OP_RECV, buf, len, timeout_ms);
     if (HIVE_FAILED(status)) {
@@ -391,7 +391,7 @@ hive_status_t hive_tcp_send(int fd, const void *buf, size_t len,
         return status;
     }
 
-    // Would block - register interest in epoll and yield
+    // Would block - register event interest and yield
     status = try_or_wait(fd, HIVE_EVENT_WRITE, TCP_OP_SEND, (void *)buf, len,
                          timeout_ms);
     if (HIVE_FAILED(status)) {
