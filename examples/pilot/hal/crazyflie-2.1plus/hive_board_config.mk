@@ -12,20 +12,8 @@
 # =============================================================================
 # STM32 Flash File Configuration
 # =============================================================================
-# The Crazyflie 2.1+ uses STM32F405 with 1MB flash.
-# Sector 8 (128KB at 0x08080000) can be used for log storage.
-#
-# Flash logging disabled by default: flash erase blocks scheduler 1-4 seconds.
-# Use SD card for logging instead (ENABLE_SD=1, LOG_FILE_PATH=/sd/hive.log).
-# Enable flash with ENABLE_FLASH_LOG=1 if needed for debugging without SD card.
-
-ENABLE_FLASH_LOG ?= 0
-ifeq ($(ENABLE_FLASH_LOG),1)
-  HIVE_CFLAGS += -DHIVE_VFILE_LOG_BASE=0x08080000
-  HIVE_CFLAGS += -DHIVE_VFILE_LOG_SIZE=131072
-  HIVE_CFLAGS += -DHIVE_VFILE_LOG_SECTOR=8
-  HIVE_CFLAGS += '-DHIVE_FILE_RING_SIZE=(8*1024)'
-endif
+# Flash /log disabled: sector erase blocks scheduler 1-4 seconds.
+# Use SD card instead (LOG_FILE_PATH=/sd/hive.log).
 
 # =============================================================================
 # SD Card Configuration
