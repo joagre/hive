@@ -19,7 +19,7 @@ typedef struct {
     arena_block_t *free_list;
 } stack_arena_t;
 
-// Stack alignment for x86-64 ABI
+// Stack alignment (16 satisfies both x86-64 ABI and ARM AAPCS)
 #define STACK_ALIGNMENT 16
 #define MIN_BLOCK_SIZE 64
 
