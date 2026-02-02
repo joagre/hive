@@ -57,7 +57,7 @@ void coordinator_actor(void *args, const hive_spawn_info_t *siblings,
     int retry_needed = 0;
     int retry_success = 0;
 
-    // Send bursts to each worker
+    // Notify bursts to each worker
     for (int burst = 0; burst < BURST_SIZE; burst++) {
         for (int w = 0; w < cargs->worker_count; w++) {
             int data = burst * NUM_WORKERS + w;
@@ -120,7 +120,7 @@ void coordinator_actor(void *args, const hive_spawn_info_t *siblings,
 
 int main(void) {
     printf("=== Congestion Handling with Backoff-Retry ===\n");
-    printf("\nScenario: Coordinator sends bursts to multiple workers\n");
+    printf("\nScenario: Coordinator notifies bursts to multiple workers\n");
     printf("Expected: Temporary pool exhaustion handled by backoff-retry\n");
 
     hive_init();

@@ -51,7 +51,7 @@ static void test_timeout_actor(void *args, const hive_spawn_info_t *siblings,
     }
 
     printf("\nTest 3: Backoff-retry pattern (simulated pool exhaustion)\n");
-    // Simulate: first send "fails", backoff, retry
+    // Simulate: first notify "fails", backoff, retry
     int retry_count = 0;
     while (retry_count < 3) {
         printf("  Attempt %d: Backing off 50ms...\n", retry_count + 1);

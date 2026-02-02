@@ -130,10 +130,10 @@ void sender_actor(void *arg, const hive_spawn_info_t *siblings,
         sent_count++;
     }
 
-    printf("Sender: Sent %d messages\n", sent_count);
+    printf("Sender: Notified %d messages\n", sent_count);
 
-    // Try sending more
-    printf("\nSender: Attempting 50 more sends...\n");
+    // Try notifying more
+    printf("\nSender: Attempting 50 more notifies...\n");
 
     int extra_sent = 0;
     int failed_count = 0;
@@ -149,22 +149,23 @@ void sender_actor(void *arg, const hive_spawn_info_t *siblings,
     }
 
     if (failed_count > 0) {
-        printf("Sender: [OK] HIVE_ERR_NOMEM on %d attempts (sent %d more)\n",
-               failed_count, extra_sent);
+        printf(
+            "Sender: [OK] HIVE_ERR_NOMEM on %d attempts (notified %d more)\n",
+            failed_count, extra_sent);
     } else {
-        printf("Sender: All 50 extra sends succeeded\n");
+        printf("Sender: All 50 extra notifies succeeded\n");
     }
 
-    // Send START signal
-    printf("\nSender: Sending START signal (tag=%d)...\n", TAG_START);
+    // Notify START signal
+    printf("\nSender: Notifying START signal (tag=%d)...\n", TAG_START);
     fflush(stdout);
     hive_status_t status =
         hive_ipc_notify_ex(receiver, HIVE_MSG_NOTIFY, TAG_START, NULL, 0);
     if (HIVE_FAILED(status)) {
-        printf("Sender: Failed to send START: %s\n",
+        printf("Sender: Failed to notify START: %s\n",
                status.msg ? status.msg : "unknown");
     } else {
-        printf("Sender: START signal sent successfully\n");
+        printf("Sender: START signal notified successfully\n");
     }
 
     // Yield to let receiver process
@@ -176,7 +177,7 @@ void sender_actor(void *arg, const hive_spawn_info_t *siblings,
     printf("Sender: Starting retry loop...\n");
     fflush(stdout);
 
-    bool send_succeeded = false;
+    bool notify_succeeded = false;
     int retry_count = 0;
 
     for (int attempt = 0; attempt < 30; attempt++) {
@@ -187,8 +188,9 @@ void sender_actor(void *arg, const hive_spawn_info_t *siblings,
                                     sizeof(data));
 
         if (HIVE_SUCCEEDED(status)) {
-            printf("Sender: [OK] Send succeeded on attempt %d!\n", attempt + 1);
-            send_succeeded = true;
+            printf("Sender: [OK] Notify succeeded on attempt %d!\n",
+                   attempt + 1);
+            notify_succeeded = true;
             break;
         }
 
@@ -200,17 +202,17 @@ void sender_actor(void *arg, const hive_spawn_info_t *siblings,
                 printf("Sender: Attempt %d - pool exhausted\n", attempt + 1);
             }
         } else {
-            printf("Sender: Send failed: %s\n",
+            printf("Sender: Notify failed: %s\n",
                    status.msg ? status.msg : "unknown");
             break;
         }
     }
 
-    // Send DONE signal
-    printf("\nSender: Sending DONE signal...\n");
+    // Notify DONE signal
+    printf("\nSender: Notifying DONE signal...\n");
     hive_ipc_notify_ex(receiver, HIVE_MSG_NOTIFY, TAG_DONE, NULL, 0);
 
-    if (send_succeeded) {
+    if (notify_succeeded) {
         printf("\nSender: [OK] Backoff-retry SUCCESS!\n");
     } else if (retry_count == 0) {
         printf("\nSender: Pool never exhausted during retry\n");
@@ -226,7 +228,7 @@ int main(void) {
     printf("=== Backoff-Retry Test ===\n\n");
     printf("Pool size: HIVE_MAILBOX_ENTRY_POOL_SIZE = %d\n",
            HIVE_MAILBOX_ENTRY_POOL_SIZE);
-    printf("Messages to send: %d\n\n", MESSAGES_TO_FILL_POOL);
+    printf("Messages to notify: %d\n\n", MESSAGES_TO_FILL_POOL);
     fflush(stdout);
 
     hive_init();

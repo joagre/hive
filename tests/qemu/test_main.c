@@ -98,18 +98,18 @@ static void pong_actor(void *args, const hive_spawn_info_t *siblings,
     semihosting_printf("Pong actor exiting\n");
 }
 
-/* Ping actor - sends pings immediately (no sleep) */
+/* Ping actor - notifies pings immediately (no sleep) */
 static void ping_actor(void *args, const hive_spawn_info_t *siblings,
                        size_t sibling_count) {
     semihosting_printf("Ping actor started (id=%u)\n", (unsigned)hive_self());
     s_context_switches++;
 
-    /* Send 3 pings */
+    /* Notify 3 pings */
     for (int i = 0; i < 3; i++) {
         const char *ping = "PING";
         hive_message_t reply;
 
-        semihosting_printf("Ping: sending request #%d to actor %u\n", i + 1,
+        semihosting_printf("Ping: notifying request #%d to actor %u\n", i + 1,
                            (unsigned)g_pong_actor);
 
         /* Use notify + recv instead of request to avoid timeout dependency */

@@ -516,13 +516,13 @@ static void run_timer_tests(void *args, const hive_spawn_info_t *siblings,
     // ========================================================================
     printf("\nTest 17: hive_sleep preserves messages\n");
     {
-        // Send a message to self before sleeping
+        // Notify a message to self before sleeping
         actor_id_t self = hive_self();
         int test_data = 12345;
         hive_status_t status =
             hive_ipc_notify(self, HIVE_TAG_NONE, &test_data, sizeof(test_data));
         if (HIVE_FAILED(status)) {
-            TEST_FAIL("failed to send message to self");
+            TEST_FAIL("failed to notify message to self");
         } else {
             // Sleep - the message should NOT be consumed
             status = hive_sleep(50000); // 50ms

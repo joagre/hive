@@ -30,7 +30,7 @@ void slow_processor_actor(void *args, const hive_spawn_info_t *siblings,
                        "space)...\n",
                        processed);
             }
-            // Process slowly to allow sender to retry
+            // Process slowly to allow notifier to retry
             hive_yield();
             hive_yield();
         } else if (status.code == HIVE_ERR_TIMEOUT) {
@@ -51,7 +51,8 @@ void aggressive_sender_actor(void *args, const hive_spawn_info_t *siblings,
     (void)sibling_count;
     actor_id_t processor = *(actor_id_t *)args;
 
-    printf("\nSender: Aggressively sending messages until pool exhausts...\n");
+    printf(
+        "\nSender: Aggressively notifying messages until pool exhausts...\n");
 
     int sent = 0;
     int failed = 0;
@@ -69,9 +70,9 @@ void aggressive_sender_actor(void *args, const hive_spawn_info_t *siblings,
             failed++;
 
             if (failed == 1) {
-                printf(
-                    "\nSender: [OK] Pool exhausted after %d successful sends\n",
-                    sent);
+                printf("\nSender: [OK] Pool exhausted after %d successful "
+                       "notifies\n",
+                       sent);
                 printf("Sender: Beginning backoff-retry pattern...\n\n");
             }
 
@@ -88,7 +89,7 @@ void aggressive_sender_actor(void *args, const hive_spawn_info_t *siblings,
                     msg.sender);
             }
 
-            // Retry the send
+            // Retry the notify
             status =
                 hive_ipc_notify(processor, HIVE_TAG_NONE, &data, sizeof(data));
             if (HIVE_SUCCEEDED(status)) {

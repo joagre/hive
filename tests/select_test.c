@@ -50,7 +50,7 @@ static void test1_ipc_wildcard(void *args, const hive_spawn_info_t *siblings,
 
     actor_id_t self = hive_self();
 
-    // Send a message to self
+    // Notify a message to self
     int data = 42;
     hive_ipc_notify(self, 123, &data, sizeof(data));
 
@@ -98,7 +98,7 @@ static void test2_ipc_filtered(void *args, const hive_spawn_info_t *siblings,
 
     actor_id_t self = hive_self();
 
-    // Send messages with different tags
+    // Notify messages with different tags
     int a = 1, b = 2;
     hive_ipc_notify(self, TAG_A, &a, sizeof(a));
     hive_ipc_notify(self, TAG_B, &b, sizeof(b));
@@ -238,7 +238,7 @@ static void test4_ipc_multi_first(void *args, const hive_spawn_info_t *siblings,
 
     actor_id_t self = hive_self();
 
-    // Send message matching first filter
+    // Notify message matching first filter
     int data = 111;
     hive_ipc_notify(self, TAG_A, &data, sizeof(data));
 
@@ -282,7 +282,7 @@ static void test5_ipc_multi_second(void *args,
 
     actor_id_t self = hive_self();
 
-    // Send message matching second filter
+    // Notify message matching second filter
     int data = 222;
     hive_ipc_notify(self, TAG_B, &data, sizeof(data));
 
@@ -394,7 +394,7 @@ static void test7_mixed_sender(void *args, const hive_spawn_info_t *siblings,
     (void)siblings;
     (void)sibling_count;
     actor_id_t target = *(actor_id_t *)args;
-    // Wait a bit then send IPC message
+    // Wait a bit then notify IPC message
     timer_id_t timer;
     hive_timer_after(50000, &timer);
     hive_message_t msg;
@@ -420,7 +420,7 @@ static void test7_mixed_sources(void *args, const hive_spawn_info_t *siblings,
     hive_bus_create(&cfg, &bus);
     hive_bus_subscribe(bus);
 
-    // Spawn sender that will send IPC message
+    // Spawn sender that will notify IPC message
     actor_id_t sender;
     hive_spawn(test7_mixed_sender, NULL, &self, NULL, &sender);
 
@@ -473,7 +473,7 @@ static void test8_priority_order(void *args, const hive_spawn_info_t *siblings,
     hive_bus_create(&cfg, &bus);
     hive_bus_subscribe(bus);
 
-    // Send IPC message first
+    // Notify IPC message first
     int ipc_data = 111;
     hive_ipc_notify(self, TAG_A, &ipc_data, sizeof(ipc_data));
 
@@ -636,7 +636,7 @@ static void test11_immediate_return(void *args,
 
     actor_id_t self = hive_self();
 
-    // Pre-send a message
+    // Pre-notify a message
     int data = 42;
     hive_ipc_notify(self, TAG_A, &data, sizeof(data));
 

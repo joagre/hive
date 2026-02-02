@@ -42,7 +42,7 @@ static void sender_no_block(void *args, const hive_spawn_info_t *siblings,
         return;
     }
 
-    // Send messages until pool is exhausted
+    // Notify messages until pool is exhausted
     int sent = 0;
     int data = 0;
 
@@ -85,7 +85,7 @@ static void consumer_actor(void *args, const hive_spawn_info_t *siblings,
     (void)siblings;
     (void)sibling_count;
 
-    // Consume messages as they arrive to free pool space for sender
+    // Consume messages as they arrive to free pool space for notifier
     // Use timeout=0 for non-blocking receive, yield between attempts
     printf("    Consumer: starting to consume messages...\n");
 
@@ -99,7 +99,7 @@ static void consumer_actor(void *args, const hive_spawn_info_t *siblings,
         } else {
             empty_cycles++;
         }
-        hive_yield(); // Let sender run
+        hive_yield(); // Let notifier run
     }
 
     printf("    Consumer: consumed %d messages\n", messages_received);
@@ -118,14 +118,14 @@ static void sender_blocking(void *args, const hive_spawn_info_t *siblings,
         return;
     }
 
-    printf("    Blocking sender: sending messages until pool exhausted...\n");
+    printf("    Blocking sender: notifying messages until pool exhausted...\n");
 
-    // Send messages - should block when pool exhausted
+    // Notify messages - should block when pool exhausted
     int sent = 0;
     int data = 0;
 
-    // Send many messages - will eventually block when pool exhausted
-    // Consumer will free space, allowing more sends
+    // Notify many messages - will eventually block when pool exhausted
+    // Consumer will free space, allowing more notifies
     for (int i = 0; i < HIVE_MESSAGE_DATA_POOL_SIZE + 20; i++) {
         hive_status_t s =
             hive_ipc_notify(receiver, HIVE_TAG_NONE, &data, sizeof(data));
@@ -138,7 +138,8 @@ static void sender_blocking(void *args, const hive_spawn_info_t *siblings,
         data++;
     }
 
-    printf("    Blocking sender: sent %d messages (blocking worked!)\n", sent);
+    printf("    Blocking sender: notified %d messages (blocking worked!)\n",
+           sent);
     test_passed = true;
     return;
 }
