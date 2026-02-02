@@ -16,7 +16,7 @@ This is an actor-based runtime for embedded systems, targeting STM32 (ARM Cortex
 
 ## Documentation
 
-- \*\*docs/spec/\*\* - Complete design specification (design.md, api.md, internals.md)
+- **docs/spec/** - Complete design specification (design.md, api.md, internals.md)
 - **README.md** - Quick start and API overview
 - **man/man3/** - Unix man pages for all API functions
 - **examples/** - Working examples (pingpong, bus, supervisor, etc.)
@@ -96,7 +96,7 @@ The runtime consists of:
    - Fine for short, bursty operations; use `LOW` priority actors for file work
 8. **Logging**: Structured logging with compile-time filtering
    - Log levels: TRACE, DEBUG, INFO, WARN, ERROR, NONE
-   - Dual output: console (stderr) + binary file
+   - Dual output: console (stderr) + plain text file
    - Platform defaults: Linux (stdout + file), STM32 (file only, disabled by default)
    - File logging managed by application (open/sync/close lifecycle)
 9. **Supervisor**: Supervision for automatic child restart
@@ -486,7 +486,8 @@ to flush data to flash before continuing. This ensures the same no-data-loss sem
 as Linux while still providing fast writes in the common case.
 
 STM32 restrictions:
-- Only virtual paths work (`/log`, `/config`) - arbitrary paths rejected
+- Only virtual paths work (`/log`, `/config`, `/sd`) - arbitrary paths rejected
+- `/sd` requires SD card deck and `ENABLE_SD=1` build flag
 - `HIVE_O_RDWR` rejected - use `HIVE_O_RDONLY` or `HIVE_O_WRONLY`
 - `HIVE_O_WRONLY` requires `HIVE_O_TRUNC` (flash must be erased first)
 - `hive_file_read()` returns error - use `hive_file_pread()` instead
