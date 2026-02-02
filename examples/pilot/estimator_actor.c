@@ -132,6 +132,10 @@ void estimator_actor(void *args, const hive_spawn_info_t *siblings,
     float last_valid_x = 0.0f;
     float last_valid_y = 0.0f;
 
+    // Track sensor state transitions for logging
+    bool prev_gps_valid = false;
+    bool prev_velocity_valid = false;
+
     // For measuring dt
     uint64_t prev_time = hive_get_time();
 
@@ -181,6 +185,18 @@ void estimator_actor(void *args, const hive_spawn_info_t *siblings,
         // -----------------------------------------------------------------
         float measured_altitude = 0.0f;
 
+        // Log GPS state transitions
+        if (sensors.gps_valid != prev_gps_valid) {
+            if (sensors.gps_valid) {
+                HIVE_LOG_INFO("[EST] GPS valid: pos=(%.2f, %.2f, %.2f)",
+                              sensors.gps_x, sensors.gps_y, sensors.gps_z);
+            } else {
+                HIVE_LOG_WARN("[EST] GPS lost - holding position (%.2f, %.2f)",
+                              last_valid_x, last_valid_y);
+            }
+            prev_gps_valid = sensors.gps_valid;
+        }
+
         if (sensors.gps_valid) {
             est.x = sensors.gps_x;
             est.y = sensors.gps_y;
@@ -225,7 +241,8 @@ void estimator_actor(void *args, const hive_spawn_info_t *siblings,
         // Run Kalman filter
         if (!alt_kf.initialized) {
             if (!isfinite(measured_altitude)) {
-                HIVE_LOG_WARN("[EST] NaN altitude at KF init, using 0");
+                HIVE_LOG_ERROR(
+                    "[EST] NaN altitude at KF init - sensor failure!");
                 measured_altitude = 0.0f;
             }
             altitude_kf_reset(&alt_kf, measured_altitude);
@@ -239,6 +256,17 @@ void estimator_actor(void *args, const hive_spawn_info_t *siblings,
         // -----------------------------------------------------------------
         // Horizontal velocity
         // -----------------------------------------------------------------
+        // Log velocity source transitions
+        if (sensors.velocity_valid != prev_velocity_valid) {
+            if (sensors.velocity_valid) {
+                HIVE_LOG_INFO("[EST] Velocity source: optical flow");
+            } else {
+                HIVE_LOG_WARN(
+                    "[EST] Velocity source: differentiation (flow lost)");
+            }
+            prev_velocity_valid = sensors.velocity_valid;
+        }
+
         if (sensors.velocity_valid) {
             // Use direct velocity from HAL (e.g., optical flow)
             // This is higher quality than differentiated position

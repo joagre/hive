@@ -99,7 +99,7 @@ void position_actor(void *args, const hive_spawn_info_t *siblings,
         // - Roll negated: positive body Y error -> negative roll -> +Y accel
         float target_yaw = target.yaw;
         if (!isfinite(target_yaw)) {
-            HIVE_LOG_WARN("[POS] NaN target yaw, using current yaw");
+            HIVE_LOG_ERROR("[POS] NaN target yaw - waypoint corrupted!");
             target_yaw = est.yaw;
         }
         attitude_setpoint_t setpoint = {

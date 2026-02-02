@@ -114,7 +114,10 @@ void motor_actor(void *args, const hive_spawn_info_t *siblings,
 
         if (result.index == SEL_STOP) {
             // STOP received - respond immediately
-            stopped = true;
+            if (!stopped) {
+                HIVE_LOG_INFO("[MOTOR] STOP received - motors disabled");
+                stopped = true;
+            }
             torque = (torque_cmd_t)TORQUE_CMD_ZERO;
             hal_write_torque(&torque);
             continue; // Loop back to wait for next event
@@ -122,17 +125,19 @@ void motor_actor(void *args, const hive_spawn_info_t *siblings,
 
         // SEL_TORQUE: Copy torque data from select result
         if (result.bus.len != sizeof(torque)) {
-            HIVE_LOG_WARN("[MOTOR] Invalid torque bus message size: %zu",
-                          result.bus.len);
+            HIVE_LOG_ERROR(
+                "[MOTOR] Torque bus corrupted: size=%zu expected=%zu",
+                result.bus.len, sizeof(torque));
             continue;
         }
         memcpy(&torque, result.bus.data, sizeof(torque));
 
         // Validate torque command - last line of defense against garbage data
         if (!validate_torque(&torque)) {
-            HIVE_LOG_WARN(
-                "[MOTOR] invalid torque rejected: t=%.2f r=%.2f p=%.2f y=%.2f",
-                torque.thrust, torque.roll, torque.pitch, torque.yaw);
+            HIVE_LOG_ERROR("[MOTOR] Invalid torque rejected: t=%.2f r=%.2f "
+                           "p=%.2f y=%.2f - control system failure!",
+                           torque.thrust, torque.roll, torque.pitch,
+                           torque.yaw);
             torque = (torque_cmd_t)TORQUE_CMD_ZERO;
         }
 

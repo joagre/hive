@@ -115,8 +115,8 @@ void altitude_actor(void *args, const hive_spawn_info_t *siblings,
 
         // SEL_STATE: Copy state data from select result
         if (result.bus.len != sizeof(est)) {
-            HIVE_LOG_WARN("[ALT] Invalid state bus message size: %zu",
-                          result.bus.len);
+            HIVE_LOG_ERROR("[ALT] State bus corrupted: size=%zu expected=%zu",
+                           result.bus.len, sizeof(est));
             continue;
         }
         memcpy(&est, result.bus.data, sizeof(est));
@@ -151,6 +151,24 @@ void altitude_actor(void *args, const hive_spawn_info_t *siblings,
 
         bool cutoff = attitude_emergency || altitude_emergency || touchdown;
 
+        // Log emergency conditions (once per event)
+        static bool logged_attitude_emergency = false;
+        static bool logged_altitude_emergency = false;
+        if (attitude_emergency && !logged_attitude_emergency) {
+            HIVE_LOG_ERROR(
+                "[ALT] EMERGENCY: tilt exceeded! roll=%.1f pitch=%.1f "
+                "limit=%.1f deg",
+                est.roll * RAD_TO_DEG, est.pitch * RAD_TO_DEG,
+                EMERGENCY_TILT_LIMIT * RAD_TO_DEG);
+            logged_attitude_emergency = true;
+        }
+        if (altitude_emergency && !logged_altitude_emergency) {
+            HIVE_LOG_ERROR("[ALT] EMERGENCY: altitude exceeded! alt=%.2f "
+                           "limit=%.2f m",
+                           est.altitude, EMERGENCY_ALTITUDE_MAX);
+            logged_altitude_emergency = true;
+        }
+
         float thrust;
         if (cutoff) {
             thrust = 0.0f;
@@ -160,7 +178,9 @@ void altitude_actor(void *args, const hive_spawn_info_t *siblings,
             // Notify flight manager once when landed
             if (touchdown && !landed) {
                 landed = true;
-                HIVE_LOG_INFO("[ALT] Touchdown - notifying flight manager");
+                HIVE_LOG_INFO("[ALT] Touchdown at alt=%.3f vvel=%.3f - "
+                              "notifying flight manager",
+                              est.altitude, est.vertical_velocity);
                 hive_ipc_notify(state->flight_manager, NOTIFY_FLIGHT_LANDED,
                                 NULL, 0);
             }
@@ -169,7 +189,8 @@ void altitude_actor(void *args, const hive_spawn_info_t *siblings,
             // Target velocity = LANDING_DESCENT_RATE, adjust thrust to achieve
             // it
             if (!isfinite(est.vertical_velocity)) {
-                HIVE_LOG_WARN("[ALT] NaN velocity in landing, using zero");
+                HIVE_LOG_ERROR(
+                    "[ALT] NaN velocity in landing - estimator failure!");
                 thrust = 0.0f;
             } else {
                 float velocity_error =
