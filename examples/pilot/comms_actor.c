@@ -5,6 +5,13 @@
 //   - Downlink: Log file transfer on request
 //   - Uplink: Commands from ground station
 //
+// Architecture: Interrupt-driven RX with 100Hz TX refresh
+//   - Ground station (PTX) polls, drone (PRX) responds via ACK payload
+//   - Each poll triggers UART IDLE interrupt -> HAL event -> actor wakes
+//   - Actor uses hive_select() to wait on RX event (no polling)
+//   - 100Hz timer refreshes telemetry payload between polls
+//   - See hal/crazyflie-2.1plus/README.md "Radio Communication Flow" for diagram
+//
 // Runs at LOW priority so control loops run first each cycle.
 // Radio send blocks ~370us (37 bytes * 10 bits/byte / 1Mbaud).
 //

@@ -477,6 +477,58 @@ EEPROM (DS28E05)      | GPIO 8    |         USART6 (PC6/PC7)       | Main CPU
 - Deck detection uses sensor probing instead (VL53L1x + PMW3901 = Flow deck)
 - NRF51 handles: battery monitoring, 1-Wire protocol, radio, power management
 
+## Radio Communication Flow
+
+The Crazyflie uses ESB (Enhanced ShockBurst) for radio communication. Understanding
+this flow is essential for the telemetry system.
+
+**Protocol overview:**
+- **Ground station** (Crazyradio) is PTX (Primary Transmitter) - initiates all communication
+- **Drone** (nRF51) is PRX (Primary Receiver) - can only respond via ACK payloads
+- The drone **cannot send spontaneously** - it must wait for the ground to poll
+
+**Complete poll/response cycle:**
+
+```
+Ground Station                 nRF51 (PRX)                    STM32 (comms_actor)
+      |                            |                                |
+      |--- ESB poll packet ------->|                                |
+      |                            |                                |
+      |<-- ACK + telemetry --------|                                |
+      |                            |                                |
+      |                            |--- syslink (UART) ------------>|
+      |                            |    (poll forwarded)            |
+      |                            |                                |
+      |                            |                         UART IDLE interrupt
+      |                            |                                |
+      |                            |                         hive_hal_event_signal()
+      |                            |                                |
+      |                            |                         comms_actor wakes
+      |                            |                                |
+      |                            |                         hal_esb_poll()
+      |                            |                                |
+      |                            |<-- syslink (next telemetry) ---|
+      |                            |    (queued for next ACK)       |
+      |                            |                                |
+```
+
+**Timing:**
+- Ground station polls at 100Hz (configurable in ground_station.py)
+- Each poll triggers a HAL event on STM32
+- comms_actor is interrupt-driven, not polling
+- Telemetry queued at 100Hz, sent when next poll arrives
+
+**Implementation:**
+- `hal_syslink.c` - UART6 DMA RX with IDLE line interrupt
+- HAL event signals when complete syslink packet received
+- `comms_actor.c` uses `hive_select()` to wait on RX event
+- Telemetry sent via `hal_esb_send()` which queues for next ACK
+
+**Why interrupt-driven?**
+- No CPU wasted polling for packets
+- Immediate response when poll arrives
+- Actor sleeps (WFI) between polls, saving power
+
 ## Chip ID Reference
 
 Use these to verify sensor communication:
