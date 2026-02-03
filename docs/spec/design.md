@@ -292,9 +292,10 @@ graph TB
             IPC[IPC]
             BUS[Bus]
             TIMERS[Timers]
+            HALEVT[HAL Events]
         end
 
-        SCHED --> IPC & BUS & TIMERS
+        SCHED --> IPC & BUS & TIMERS & HALEVT
 
         subgraph IO["I/O"]
             NET[TCP<br/>sockets]
@@ -305,8 +306,12 @@ graph TB
     end
 
     PLATFORM[epoll - Linux<br/>WFI - STM32]
+    ISR[Hardware ISRs<br/>UART/DMA/GPIO]
     NET --> PLATFORM
+    ISR -.->|signal| HALEVT
 ```
+
+**HAL Events** - ISR-safe mechanism for hardware interrupts to wake actors. ISRs call `hive_hal_event_signal()` to set a flag; actors wait via `hive_select()` with `HIVE_SEL_HAL_EVENT` source. See [HAL Event API](api.md#hal-event-api).
 
 ## Scheduling
 
@@ -565,7 +570,13 @@ The runtime uses **zero synchronization primitives** in the core event loop:
 - **No condition variables** - event loop uses epoll for waiting
 - **No locks** - mailboxes, actor state, bus state accessed only by scheduler thread
 
-**STM32 exception** - ISR-to-scheduler communication uses `volatile bool` flags with interrupt disable/enable for safe flag clearing. This is a synchronization protocol but not C11 atomics or lock-based synchronization.
+**STM32 exception - HAL Events** - ISR-to-actor communication uses the HAL event system (`hive_hal_event_signal()`), which provides ISR-safe signaling via a `volatile uint32_t` bitmask:
+
+- **Signal (ISR context)** - Single 32-bit store instruction (atomic on ARM Cortex-M)
+- **Clear (actor context)** - Uses interrupt disable/enable for safe read-modify-write
+- **Check (actor context)** - Simple volatile read
+
+This allows ISRs to wake actors waiting in `hive_select()` without calling runtime APIs (which are not reentrant). See [HAL Event API](api.md#hal-event-api) for details.
 
 **Optional synchronization** (not part of hot path):
 - **Logging** - No synchronization needed (single-threaded)

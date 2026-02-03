@@ -1,65 +1,9 @@
-// clang-format off
-// Pilot example - Quadcopter waypoint navigation using actor runtime
+// Pilot - Quadcopter autopilot using the Hive actor runtime
 //
-// Demonstrates waypoint navigation for a quadcopter using the hive actor
-// runtime. Nine flight-critical actors work together in a control pipeline,
-// supervised by one supervisor. Telemetry actors add logging:
-//   - telemetry_logger_actor writes CSV at 25Hz (to /sd or /tmp)
-//   - comms_actor sends radio telemetry at 100Hz (Crazyflie only)
+// 11 actors in a supervised control pipeline: sensor fusion, cascaded PID
+// control (altitude/position/attitude/rate), and telemetry logging.
 //
-// Actor list (11-12 actors depending on platform):
-//
-//   sensor_actor          - Reads raw sensors via HAL -> sensor bus
-//   estimator_actor       - Complementary filter fusion -> state bus
-//   waypoint_actor        - Waypoint manager -> position target bus
-//   altitude_actor        - Altitude PID -> thrust command
-//   position_actor        - Position PD -> attitude setpoints
-//   attitude_actor        - Attitude PIDs -> rate setpoints
-//   rate_actor            - Rate PIDs -> torque commands
-//   motor_actor           - Output to hardware via HAL
-//   flight_manager_actor  - Flight authority and safety monitoring
-//   comms_actor           - Radio telemetry (Crazyflie only)
-//   telemetry_logger_actor- CSV logging (to /sd or /tmp if available)
-//   supervisor            - Monitors all workers (ONE_FOR_ALL restart)
-//
-// Data flow through buses:
-//
-//   HAL ──► Sensor ──► Sensor Bus ──► Estimator ──► State Bus ───┐
-//                                                      │         │
-//                  ┌───────────────────────────────────┼─────────┤
-//                  │                                   │         │
-//                  v                                   v         v
-//              Waypoint ──► Pos Target Bus ──►     Altitude   Position
-//                  │               │                   │         │
-//                  │               v                   v         v
-//                  │           Altitude ──►       Thrust Bus  Att SP Bus
-//                  │                                   │         │
-//                  │                                   v         v
-//                  │                                 Rate ◄── Attitude
-//                  │                                   │
-//                  │                                   v
-//                  │                              Torque Bus ──► Motor ──► HAL
-//                  │                                   │
-//                  v                                   v
-//           Telemetry Logger                    Comms (radio)
-//           (/sd or /tmp, 25Hz)               (Crazyflie, 100Hz)
-//           reads: Sensor, State,             reads: Sensor, State,
-//                  Thrust, Pos Target                Thrust
-//
-// Note: Telemetry logger captures position targets for PID tuning analysis.
-//       Comms omits targets due to 31-byte ESB packet size limit.
-//
-// Supervision:
-//   All actors are supervised with ONE_FOR_ALL strategy.
-//   Flight-critical actors use PERMANENT restart (crash restarts all).
-//   Telemetry actors use TEMPORARY restart (not flight-critical).
-//
-// Hardware abstraction:
-//   All hardware access goes through the HAL (hal/hal.h).
-//   Supported platforms:
-//     - hal/webots-crazyflie/ - Webots simulation
-//     - hal/crazyflie-2.1plus/   - Crazyflie 2.1+ hardware
-// clang-format on
+// See README.md for architecture, data flow, and build instructions.
 
 #include "hal/hal.h"
 #include "hal_config.h"
@@ -110,33 +54,11 @@ int main(void) {
     }
 
 #ifdef HAL_HAS_RADIO
-    // Initialize ESB radio early so nRF51 can initialize while we self-test
-    hal_printf("[PILOT] Calling hal_esb_init...\n");
+    // Initialize ESB radio (blocks until nRF51 responds or timeout)
     if (hal_esb_init() != 0) {
         return 1;
     }
-    hal_printf("[PILOT] hal_esb_init OK\n");
-
-    // Wait for nRF51 to be ready (battery packet confirms bidirectional link)
-    hal_printf("[PILOT] Waiting for nRF51...\n");
-    {
-        uint32_t start = hal_get_time_ms();
-        bool ready = false;
-        while ((hal_get_time_ms() - start) < 5000) {
-            hal_esb_poll();
-            if (hal_power_get_battery() > 0.1f) {
-                hal_printf("[PILOT] nRF51 ready, battery=%.2fV\n",
-                           hal_power_get_battery());
-                ready = true;
-                break;
-            }
-            for (volatile int i = 0; i < 10000; i++) {
-            }
-        }
-        if (!ready) {
-            hal_printf("[PILOT] nRF51 timeout (continuing anyway)\n");
-        }
-    }
+    hal_printf("[PILOT] Radio ready, battery=%.2fV\n", hal_power_get_battery());
 #endif
 
     if (!hal_self_test()) {

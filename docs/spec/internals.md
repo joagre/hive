@@ -92,14 +92,14 @@ Per-actor stacks      Sum of all actor stack_size values (if malloc_stack=true)
 
 **Example: Flight controller (pilot example)**
 ```c
-// 10-11 actors (9 children + supervisor + optional comms/tlog), 7 buses
+// 11-12 actors (10-11 children + 1 supervisor), 7 buses
 #define HIVE_MAX_ACTORS 13
 #define HIVE_MAX_BUSES 8
 #define HIVE_MAILBOX_ENTRY_POOL_SIZE 32    // Low IPC usage
 #define HIVE_MESSAGE_DATA_POOL_SIZE 64     // 7 buses x 4 entries each + margin
 #define HIVE_TIMER_ENTRY_POOL_SIZE 10      // Few timers
 #define HIVE_MAX_SUPERVISORS 1             // Single supervisor
-#define HIVE_MAX_SUPERVISOR_CHILDREN 12    // 9-11 children + margin
+#define HIVE_MAX_SUPERVISOR_CHILDREN 12    // 10-11 children + margin
 #define HIVE_STACK_ARENA_SIZE (64*1024)    // 64 KB (STM32 constrained)
 // Total RAM: ~90 KB (fits in STM32F405's 192 KB)
 ```
@@ -493,7 +493,7 @@ The runtime uses a Hardware Abstraction Layer (HAL) to isolate platform-specific
 ```
 include/hal/
   hive_hal_time.h      - Time + critical sections (3 functions)
-  hive_hal_event.h     - Event loop primitives (5 functions)
+  hive_hal_event.h     - Event loop primitives (6 functions) + ISR-safe signaling (5 functions)
   hive_hal_timer.h     - Timer operations (6 functions)
   hive_hal_context.h   - Context switching (1 function + struct)
   hive_hal_file.h      - File I/O (8 functions, optional)
@@ -501,18 +501,23 @@ include/hal/
   hive_mount.h         - Mount table types (backend enum, function declarations)
 ```
 
+**hive_hal_event.h** contains two distinct APIs:
+1. **Event loop primitives** - `init`, `cleanup`, `poll`, `wait`, `register`, `unregister` (platform-specific event loop integration)
+2. **HAL event signaling** - `create`, `destroy`, `signal`, `is_set`, `clear` (ISR-to-actor communication via `hive_select()`)
+
 ### HAL Functions
 
 | Category | Functions | Required |
 |----------|-----------|----------|
 | Time | `get_time_us`, `critical_enter`, `critical_exit` | Yes |
-| Event | `init`, `cleanup`, `poll`, `wait`, `register`, `unregister` | Yes |
+| Event Loop | `init`, `cleanup`, `poll`, `wait`, `register`, `unregister` | Yes |
+| HAL Event | `create`, `destroy`, `signal`, `is_set`, `clear` | Yes |
 | Timer | `init`, `cleanup`, `create`, `cancel`, `get_time`, `advance_time` | Yes |
 | Context | `init` (C), `switch` (asm) | Yes |
 | File | `init`, `cleanup`, `open`, `close`, `read`, `pread`, `write`, `pwrite`, `sync` | Optional |
 | TCP | `init`, `cleanup`, `socket`, `bind`, `listen`, `accept`, `connect`, `connect_check`, `close`, `recv`, `send` | Optional |
 
-**Minimum port** - ~16 C functions + 1 assembly function + 1 struct definition
+**Minimum port** - ~21 C functions + 1 assembly function + 1 struct definition
 
 ### Platform-Specific Source Files
 

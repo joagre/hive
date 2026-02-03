@@ -8,17 +8,27 @@ hive_select \- wait for data from multiple event sources
 .PP
 .BI "hive_status_t hive_select(const hive_select_source_t *" sources ", size_t " num_sources ","
 .BI "                        hive_select_result_t *" result ", int32_t " timeout_ms ");"
+.PP
+.BI "hive_status_t hive_event_wait(hive_hal_event_id_t " event ", int32_t " timeout_ms ");"
 .fi
 .SH DESCRIPTION
 .BR hive_select ()
 blocks until data is available from any of the specified event sources (IPC
-messages or bus entries). It is the single unified primitive that underlies
-all blocking receive operations in the runtime.
+messages, bus entries, or HAL events). It is the single unified primitive that
+underlies all blocking receive operations in the runtime.
+.PP
+.BR hive_event_wait ()
+is a convenience wrapper for the common case of waiting on a single HAL event.
+It is equivalent to calling
+.BR hive_select ()
+with a single
+.B HIVE_SEL_HAL_EVENT
+source.
 .PP
 The
 .I sources
-array specifies which event sources to wait on. Each source is either an IPC
-message filter or a bus subscription.
+array specifies which event sources to wait on. Each source is an IPC
+message filter, a bus subscription, or a HAL event (for interrupt-driven I/O).
 .PP
 The
 .I timeout_ms
@@ -54,19 +64,29 @@ or
 .BR hive_select ().
 The actor must already be subscribed to the bus (see
 .BR hive_bus_subscribe (3)).
+.TP
+.B HIVE_SEL_HAL_EVENT
+Wait for a HAL event to be signaled. HAL events provide ISR-safe communication
+from interrupt service routines to actors. When an ISR calls
+.BR hive_hal_event_signal ()
+on the event ID, the waiting actor is woken. There is no data payload \- the
+actor must call a HAL-specific function to retrieve actual data. This enables
+efficient, interrupt-driven I/O without polling.
 .SS Select Source Structure
 .PP
 .nf
 typedef enum {
-    HIVE_SEL_IPC,  /* Wait for IPC message */
-    HIVE_SEL_BUS,  /* Wait for bus data */
-} hive_select_type;
+    HIVE_SEL_IPC,       /* Wait for IPC message */
+    HIVE_SEL_BUS,       /* Wait for bus data */
+    HIVE_SEL_HAL_EVENT, /* Wait for HAL event signal */
+} hive_select_type_t;
 
 typedef struct {
-    hive_select_type type;
+    hive_select_type_t type;
     union {
-        hive_recv_filter_t ipc;  /* For HIVE_SEL_IPC */
+        hive_recv_filter_t ipc;       /* For HIVE_SEL_IPC */
         hive_bus_id_t bus;            /* For HIVE_SEL_BUS */
+        hive_hal_event_id_t event;    /* For HIVE_SEL_HAL_EVENT */
     };
 } hive_select_source_t;
 .fi
@@ -74,14 +94,15 @@ typedef struct {
 .PP
 .nf
 typedef struct {
-    size_t index;           /* Which source triggered (0-based) */
-    hive_select_type type;  /* Type of triggered source */
+    size_t index;            /* Which source triggered (0-based) */
+    hive_select_type_t type; /* Type of triggered source */
     union {
-        hive_message_t ipc;   /* For HIVE_SEL_IPC */
+        hive_message_t ipc;  /* For HIVE_SEL_IPC */
         struct {
-            void *data;     /* For HIVE_SEL_BUS */
+            void *data;      /* For HIVE_SEL_BUS */
             size_t len;
         } bus;
+        /* For HIVE_SEL_HAL_EVENT: no data payload */
     };
 } hive_select_result_t;
 .fi
@@ -91,11 +112,11 @@ After a successful call,
 indicates which source (0-based array index) triggered the return. The
 .I result.type
 field provides the source type for convenience. Access the actual data through
-either
 .I result.ipc
 (for IPC sources) or
 .I result.bus
-(for bus sources).
+(for bus sources). HAL events have no data payload \- the actor must call the
+appropriate HAL function to retrieve actual data.
 .SS Priority Ordering
 When multiple sources have data ready simultaneously,
 .BR hive_select ()
@@ -171,11 +192,13 @@ is the core primitive. The following APIs are thin wrappers:
 .IP \(bu 2
 .BR hive_bus_read ()
 \- select with single bus source (when timeout is non-zero)
+.IP \(bu 2
+.BR hive_event_wait ()
+\- select with single HAL event source
 .PP
 Use
 .BR hive_select ()
-directly when you need to wait on a mix of IPC and bus sources, or when you
-want the unified API.
+directly when you need to wait on a mix of IPC, bus, and HAL event sources.
 .SS Efficiency
 Source scan complexity:
 .IP \(bu 2
@@ -246,3 +269,7 @@ void controller(void *arg, const hive_spawn_info_t *siblings,
 .BR hive_bus (3),
 .BR hive_timer (3),
 .BR hive_types (3)
+.PP
+For HAL events, see
+.I docs/spec/api.md
+"HAL Event API" section.

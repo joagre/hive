@@ -11,21 +11,26 @@ ESB Protocol:
   Drone's nRF51 is PRX (Primary Receiver) - responds via ACK payloads.
   Telemetry from drone piggybacks on ACK packets when ground station polls.
 
-  Uses Crazyradio direct API for raw byte access (no CRTP layer).
+  Uses Crazyradio direct API with CRTP header for nRF51 compatibility.
+  All packets have a CRTP header (0xA0 = port 10) as first byte.
 
-Telemetry packet formats (13 bytes each, no timestamp due to nRF51 16-byte limit):
-  Type 0x01 - Attitude/Rates (13 bytes):
-    type(1) + gyro_xyz(6) + roll/pitch/yaw(6)
+Telemetry packet formats (max 31 bytes on wire = 30 payload + CRTP):
+  The HAL layer prepends the CRTP header, so wire format is crtp(1) + payload.
+  ESB max payload is 32 bytes.
 
-  Type 0x02 - Position/Altitude (13 bytes):
-    type(1) + altitude(2) + vz(2) + vx(2) + vy(2) + thrust(2) + battery_mv(2)
+  Type 0x01 - Attitude/Rates (17 bytes payload, 18 on wire):
+    crtp(1) + type(1) + timestamp_ms(4) + gyro_xyz(6) + roll/pitch/yaw(6)
+
+  Type 0x02 - Position/Altitude (17 bytes payload, 18 on wire):
+    crtp(1) + type(1) + timestamp_ms(4) + altitude(2) + vz(2) + vx(2) + vy(2) + thrust(2) + battery_mv(2)
 
 Log download packet formats (must match comms_actor.c):
-  Type 0x10 - CMD_REQUEST_LOG (1 byte): Ground -> Drone to request log
-  Type 0x11 - PACKET_LOG_CHUNK (31 bytes): Drone -> Ground log data chunk
-    type(1) + sequence(2) + data(28)
-  Type 0x12 - PACKET_LOG_DONE (3 bytes): Drone -> Ground download complete
-    type(1) + total_chunks(2)
+  Type 0x10 - CMD_REQUEST_LOG (2 bytes): Ground -> Drone to request log
+    crtp(1) + type(1)
+  Type 0x11 - PACKET_LOG_CHUNK (31 bytes on wire): Drone -> Ground log data chunk
+    crtp(1) + type(1) + sequence(2) + data(27)
+  Type 0x12 - PACKET_LOG_DONE (4 bytes on wire): Drone -> Ground download complete
+    crtp(1) + type(1) + total_chunks(2)
 
 Requirements:
   pip install cflib
@@ -53,7 +58,11 @@ except ImportError:
     print("Error: cflib not installed. Run: pip install cflib", file=sys.stderr)
     sys.exit(1)
 
-# Packet type identifiers - telemetry
+# CRTP header for custom telemetry port (must match comms_actor.c)
+# The nRF51 expects CRTP-formatted packets. First byte is CRTP header.
+CRTP_HEADER_TELEMETRY = 0xA0  # Port 10, channel 0
+
+# Packet type identifiers - telemetry (byte after CRTP header)
 PACKET_TYPE_ATTITUDE = 0x01
 PACKET_TYPE_POSITION = 0x02
 
@@ -62,8 +71,8 @@ CMD_REQUEST_LOG = 0x10
 PACKET_LOG_CHUNK = 0x11
 PACKET_LOG_DONE = 0x12
 
-# Log chunk data size
-LOG_CHUNK_DATA_SIZE = 28
+# Log chunk data size (31 - 4 byte header = 27 bytes)
+LOG_CHUNK_DATA_SIZE = 27
 
 # Scale factors (inverse of transmitter)
 SCALE_ANGLE = 1000.0   # millirad -> rad
@@ -76,19 +85,19 @@ SCALE_THRUST = 65535.0 # 0-65535 -> 0.0-1.0
 def decode_attitude_packet(data: bytes) -> dict:
     """Decode attitude/rates packet (type 0x01).
 
-    Format matches comms_actor.c telemetry_attitude_t:
-      type(1) + gyro_xyz(6) + roll/pitch/yaw(6) = 13 bytes
-    Note: No timestamp due to nRF51 16-byte syslink limit.
+    Wire format: crtp(1) + type(1) + timestamp(4) + gyro_xyz(6) + roll/pitch/yaw(6) = 18 bytes
+    The CRTP header is prepended by HAL, payload is 17 bytes.
     """
-    if len(data) < 13:
+    if len(data) < 18:
         return None
 
-    _, gx, gy, gz, roll, pitch, yaw = struct.unpack(
-        "<Bhhhhhh", data[:13]
+    _, _, timestamp_ms, gx, gy, gz, roll, pitch, yaw = struct.unpack(
+        "<BBIhhhhhh", data[:18]
     )
 
     return {
         "type": "attitude",
+        "timestamp_ms": timestamp_ms,
         "gyro_x": gx / SCALE_RATE,
         "gyro_y": gy / SCALE_RATE,
         "gyro_z": gz / SCALE_RATE,
@@ -101,19 +110,19 @@ def decode_attitude_packet(data: bytes) -> dict:
 def decode_position_packet(data: bytes) -> dict:
     """Decode position/altitude packet (type 0x02).
 
-    Format matches comms_actor.c telemetry_position_t:
-      type(1) + alt(2) + vz(2) + vx(2) + vy(2) + thrust(2) + battery_mv(2) = 13 bytes
-    Note: No timestamp due to nRF51 16-byte syslink limit.
+    Wire format: crtp(1) + type(1) + timestamp(4) + alt(2) + vz(2) + vx(2) + vy(2) + thrust(2) + battery_mv(2) = 18 bytes
+    The CRTP header is prepended by HAL, payload is 17 bytes.
     """
-    if len(data) < 13:
+    if len(data) < 18:
         return None
 
-    _, alt, vz, vx, vy, thrust, battery_mv = struct.unpack(
-        "<BhhhhHH", data[:13]
+    _, _, timestamp_ms, alt, vz, vx, vy, thrust, battery_mv = struct.unpack(
+        "<BBIhhhhHH", data[:18]
     )
 
     return {
         "type": "position",
+        "timestamp_ms": timestamp_ms,
         "altitude": alt / SCALE_POS,
         "vz": vz / SCALE_VEL,
         "vx": vx / SCALE_VEL,
@@ -124,11 +133,21 @@ def decode_position_packet(data: bytes) -> dict:
 
 
 def decode_packet(data: bytes) -> dict:
-    """Decode a telemetry packet based on type byte."""
-    if not data or len(data) < 1:
+    """Decode a telemetry packet based on type byte.
+
+    Packet format: CRTP header (1 byte) + type (1 byte) + payload
+    We skip the CRTP header and decode based on the type byte.
+    """
+    if not data or len(data) < 2:
         return None
 
-    pkt_type = data[0]
+    # Check CRTP header - should be our custom telemetry port
+    crtp_header = data[0]
+    if crtp_header != CRTP_HEADER_TELEMETRY:
+        # Not our telemetry packet (might be link port response, etc.)
+        return None
+
+    pkt_type = data[1]
 
     if pkt_type == PACKET_TYPE_ATTITUDE:
         return decode_attitude_packet(data)
@@ -140,8 +159,9 @@ def decode_packet(data: bytes) -> dict:
 
 def format_attitude(pkt: dict) -> str:
     """Format attitude packet for display."""
+    t = pkt['timestamp_ms'] / 1000.0
     return (
-        f"ATT  "
+        f"ATT  t={t:8.3f}  "
         f"gyro=({pkt['gyro_x']:+6.2f}, {pkt['gyro_y']:+6.2f}, {pkt['gyro_z']:+6.2f}) rad/s  "
         f"rpy=({pkt['roll']:+5.2f}, {pkt['pitch']:+5.2f}, {pkt['yaw']:+5.2f}) rad"
     )
@@ -149,8 +169,9 @@ def format_attitude(pkt: dict) -> str:
 
 def format_position(pkt: dict) -> str:
     """Format position packet for display."""
+    t = pkt['timestamp_ms'] / 1000.0
     return (
-        f"POS  "
+        f"POS  t={t:8.3f}  "
         f"alt={pkt['altitude']:+5.2f}m  vz={pkt['vz']:+5.2f}m/s  "
         f"vxy=({pkt['vx']:+5.2f}, {pkt['vy']:+5.2f})m/s  "
         f"thrust={pkt['thrust']:.1%}  bat={pkt['battery_v']:.2f}V"
@@ -300,6 +321,7 @@ class TelemetryReceiver:
         row = {
             "receive_time": datetime.now().isoformat(),
             "type": pkt["type"],
+            "timestamp_ms": pkt["timestamp_ms"],
         }
 
         if pkt["type"] == "attitude":
@@ -344,8 +366,8 @@ class TelemetryReceiver:
         """
         print(f"Requesting log download...", file=sys.stderr)
 
-        # Send request command
-        response = self.radio.send_packet((CMD_REQUEST_LOG,))
+        # Send request command (with CRTP header)
+        response = self.radio.send_packet((CRTP_HEADER_TELEMETRY, CMD_REQUEST_LOG))
 
         if not response or not response.ack:
             print("Error: No ACK for log request", file=sys.stderr)
@@ -362,19 +384,25 @@ class TelemetryReceiver:
                     # Poll for next chunk
                     data = self.poll()
 
-                    if not data or len(data) < 1:
+                    if not data or len(data) < 2:
                         continue
 
-                    pkt_type = data[0]
+                    # Skip CRTP header (byte 0), type is in byte 1
+                    crtp_header = data[0]
+                    pkt_type = data[1]
+
+                    # Ignore packets that aren't from our telemetry port
+                    if crtp_header != CRTP_HEADER_TELEMETRY:
+                        continue
 
                     if pkt_type == PACKET_LOG_CHUNK:
-                        if len(data) < 3 + LOG_CHUNK_DATA_SIZE:
+                        if len(data) < 4 + LOG_CHUNK_DATA_SIZE:
                             print(f"Warning: Short chunk packet ({len(data)} bytes)",
                                   file=sys.stderr)
                             continue
 
-                        sequence = struct.unpack("<H", data[1:3])[0]
-                        chunk_data = data[3:3 + LOG_CHUNK_DATA_SIZE]
+                        sequence = struct.unpack("<H", data[2:4])[0]
+                        chunk_data = data[4:4 + LOG_CHUNK_DATA_SIZE]
 
                         if sequence != expected_seq:
                             print(f"Warning: Sequence mismatch, expected {expected_seq}, "
@@ -391,8 +419,8 @@ class TelemetryReceiver:
                                   f"({total_bytes} bytes)...", file=sys.stderr)
 
                     elif pkt_type == PACKET_LOG_DONE:
-                        if len(data) >= 3:
-                            total_chunks = struct.unpack("<H", data[1:3])[0]
+                        if len(data) >= 4:
+                            total_chunks = struct.unpack("<H", data[2:4])[0]
                             print(f"Download complete: {total_chunks} chunks, "
                                   f"{total_bytes} bytes", file=sys.stderr)
                         else:
@@ -446,7 +474,7 @@ def main():
     if args.output:
         csv_file = open(args.output, "w", newline="")
         fieldnames = [
-            "receive_time", "type",
+            "receive_time", "type", "timestamp_ms",
             "gyro_x", "gyro_y", "gyro_z", "roll", "pitch", "yaw",
             "altitude", "vz", "vx", "vy", "thrust", "battery_v"
         ]

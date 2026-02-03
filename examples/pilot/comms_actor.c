@@ -1,21 +1,19 @@
 // Comms actor - Ground station communication
 //
 // Handles bidirectional radio communication with ground station:
-//   - Downlink: Telemetry at 100Hz (attitude, position packets)
+//   - Downlink: Telemetry in response to ground station polls
 //   - Downlink: Log file transfer on request
 //   - Uplink: Commands from ground station
 //
 // Runs at LOW priority so control loops run first each cycle.
 // Radio send blocks ~370us (37 bytes * 10 bits/byte / 1Mbaud).
 //
-// IMPORTANT: Telemetry packets are limited to 16 bytes maximum.
-// The nRF51 syslink implementation drops RADIO_RAW packets larger than
-// 16 bytes. This appears to be an undocumented limitation in the Bitcraze
-// nRF51 firmware. Packets 17+ bytes are silently lost.
+// Telemetry packets can be up to 30 bytes payload (HAL adds protocol overhead).
+// ESB max payload is 32 bytes; HAL uses 1 byte for framing.
 //
-// Packet types:
-//   0x01: Attitude/rates (13 bytes) - gyro xyz, roll/pitch/yaw
-//   0x02: Position/altitude (13 bytes) - alt, velocities, thrust, battery
+// Packet types (first byte of payload):
+//   0x01: Attitude/rates (17 bytes) - timestamp, gyro xyz, roll/pitch/yaw
+//   0x02: Position/altitude (17 bytes) - timestamp, alt, velocities, thrust, battery
 //   0x10: CMD_REQUEST_LOG - ground station requests log download
 //   0x11: LOG_CHUNK - drone sends log data chunk
 //   0x12: LOG_COMPLETE - drone signals end of log file
@@ -26,18 +24,15 @@
 #include "hal/hal.h"
 #include "hive_runtime.h"
 #include "hive_bus.h"
-#include "hive_timer.h"
 #include "hive_ipc.h"
+#include "hive_select.h"
 #include "hive_log.h"
 #include "hive_file.h"
 #include <string.h>
 
 #ifdef HAL_HAS_RADIO
 
-// Telemetry rate: 100Hz total (50Hz per packet type)
-#define TELEMETRY_INTERVAL_US 10000 // 10ms = 100Hz
-
-// Packet type identifiers - telemetry
+// Packet type identifiers - telemetry (first byte of payload)
 #define PACKET_TYPE_ATTITUDE 0x01
 #define PACKET_TYPE_POSITION 0x02
 
@@ -46,8 +41,10 @@
 #define PACKET_LOG_CHUNK 0x11 // Drone -> ground: log data chunk
 #define PACKET_LOG_DONE 0x12  // Drone -> ground: download complete
 
-// Log chunk data size (31 - 3 byte header = 28 bytes)
-#define LOG_CHUNK_DATA_SIZE 28
+// Log chunk data size (30 - 3 byte header = 27 bytes)
+// HAL uses 1 byte for framing, leaving 30 bytes for payload
+// Header: type(1) + sequence(2) = 3 bytes
+#define LOG_CHUNK_DATA_SIZE 27
 
 // Operating modes
 typedef enum {
@@ -63,59 +60,58 @@ typedef enum {
 #define SCALE_THRUST 65535 // 0.0-1.0 -> 0-65535
 
 // Packed structs for wire format.
-// IMPORTANT: Keep packets <= 16 bytes due to nRF51 syslink limitation.
+// Maximum payload is 30 bytes (HAL uses 1 byte for framing, ESB limit is 32).
 // Packed is appropriate here: bandwidth is tight, both ends are controlled
 // by this codebase, and ARM Cortex-M handles unaligned access.
 
-// Maximum telemetry packet size (nRF51 syslink limitation)
-#define MAX_TELEMETRY_SIZE 16
+// Maximum telemetry packet size (30 bytes payload, HAL adds 1 byte framing)
+#define MAX_TELEMETRY_SIZE 30
 
-// Packet type 0x01: Attitude and rates (13 bytes)
-// Note: No timestamp - ground station derives timing from receive rate
+// Packet type 0x01: Attitude and rates (17 bytes payload)
 typedef struct __attribute__((packed)) {
-    uint8_t type;   // 0x01
-    int16_t gyro_x; // Raw gyro X (millirad/s)
-    int16_t gyro_y; // Raw gyro Y (millirad/s)
-    int16_t gyro_z; // Raw gyro Z (millirad/s)
-    int16_t roll;   // Roll angle (millirad)
-    int16_t pitch;  // Pitch angle (millirad)
-    int16_t yaw;    // Yaw angle (millirad)
+    uint8_t type;          // 0x01
+    uint32_t timestamp_ms; // Milliseconds since boot
+    int16_t gyro_x;        // Raw gyro X (millirad/s)
+    int16_t gyro_y;        // Raw gyro Y (millirad/s)
+    int16_t gyro_z;        // Raw gyro Z (millirad/s)
+    int16_t roll;          // Roll angle (millirad)
+    int16_t pitch;         // Pitch angle (millirad)
+    int16_t yaw;           // Yaw angle (millirad)
 } telemetry_attitude_t;
 
-// Packet type 0x02: Position and altitude (13 bytes)
-// Note: No timestamp - ground station derives timing from receive rate
+// Packet type 0x02: Position and altitude (17 bytes payload)
 typedef struct __attribute__((packed)) {
-    uint8_t type;        // 0x02
-    int16_t altitude;    // Altitude (mm)
-    int16_t vz;          // Vertical velocity (mm/s)
-    int16_t vx;          // X velocity (mm/s)
-    int16_t vy;          // Y velocity (mm/s)
-    uint16_t thrust;     // Thrust (0-65535)
-    uint16_t battery_mv; // Battery voltage (millivolts)
+    uint8_t type;          // 0x02
+    uint32_t timestamp_ms; // Milliseconds since boot
+    int16_t altitude;      // Altitude (mm)
+    int16_t vz;            // Vertical velocity (mm/s)
+    int16_t vx;            // X velocity (mm/s)
+    int16_t vy;            // Y velocity (mm/s)
+    uint16_t thrust;       // Thrust (0-65535)
+    uint16_t battery_mv;   // Battery voltage (millivolts)
 } telemetry_position_t;
 
-// Packet type 0x11: Log chunk (31 bytes)
+// Packet type 0x11: Log chunk (30 bytes payload)
 typedef struct __attribute__((packed)) {
     uint8_t type;                      // 0x11
     uint16_t sequence;                 // Chunk sequence number
     uint8_t data[LOG_CHUNK_DATA_SIZE]; // File data
 } log_chunk_packet_t;
 
-// Packet type 0x12: Log complete (3 bytes)
+// Packet type 0x12: Log complete (3 bytes payload)
 typedef struct __attribute__((packed)) {
     uint8_t type;          // 0x12
     uint16_t total_chunks; // Total chunks sent
 } log_complete_packet_t;
 
 // Verify packet sizes at compile time
-// Telemetry packets must be <= 16 bytes (nRF51 syslink limitation)
-// Log packets can be up to 31 bytes (ESB limit) since they use different flow
+// All packets must be <= 30 bytes (HAL adds 1 byte framing, ESB limit is 32)
 _Static_assert(sizeof(telemetry_attitude_t) <= MAX_TELEMETRY_SIZE,
                "Attitude packet too large for nRF51 syslink");
 _Static_assert(sizeof(telemetry_position_t) <= MAX_TELEMETRY_SIZE,
                "Position packet too large for nRF51 syslink");
-_Static_assert(sizeof(log_chunk_packet_t) <= 31, "Log chunk packet too large");
-_Static_assert(sizeof(log_complete_packet_t) <= 31,
+_Static_assert(sizeof(log_chunk_packet_t) <= 30, "Log chunk packet too large");
+_Static_assert(sizeof(log_complete_packet_t) <= 30,
                "Log complete packet too large");
 
 // Helper: clamp float to int16 range
@@ -143,7 +139,6 @@ typedef struct {
     hive_bus_id_t sensor_bus;
     hive_bus_id_t thrust_bus;
     bool next_is_attitude; // Alternate between packet types
-    uint32_t tick_count;   // Tick counter for timestamps (10ms per tick)
     // Log download state
     comms_mode_t mode;
     int log_fd;
@@ -154,12 +149,18 @@ typedef struct {
 // RX callback - handles incoming commands from ground station
 static void radio_rx_callback(const void *data, size_t len, void *user_data) {
     comms_state_t *state = (comms_state_t *)user_data;
-    if (len < 1 || !state) {
+    if (!state) {
+        return;
+    }
+
+    // Need at least HAL frame header + command byte for commands
+    if (len < 2) {
         return;
     }
 
     const uint8_t *bytes = (const uint8_t *)data;
-    uint8_t cmd = bytes[0];
+    // Skip HAL frame header (byte 0), command is in byte 1
+    uint8_t cmd = bytes[1];
 
     if (cmd == CMD_REQUEST_LOG) {
         // Ground station requests log download
@@ -201,7 +202,6 @@ void *comms_actor_init(void *init_args) {
     state.sensor_bus = buses->sensor_bus;
     state.thrust_bus = buses->thrust_bus;
     state.next_is_attitude = true;
-    state.tick_count = 0;
     state.mode = COMMS_MODE_FLIGHT;
     state.log_fd = -1;
     state.log_offset = 0;
@@ -230,14 +230,15 @@ void comms_actor(void *args, const hive_spawn_info_t *siblings,
         hive_exit(HIVE_EXIT_REASON_CRASH);
     }
 
-    // Start telemetry timer
-    hive_timer_id_t timer;
-    if (HIVE_FAILED(hive_timer_every(TELEMETRY_INTERVAL_US, &timer))) {
-        HIVE_LOG_ERROR("[COMMS] Timer setup failed");
+    // Get HAL event for RX notification (UART IDLE interrupt)
+    hive_hal_event_id_t rx_event = hal_esb_get_rx_event();
+    if (rx_event == HIVE_HAL_EVENT_INVALID) {
+        HIVE_LOG_ERROR("[COMMS] No RX event available");
         hive_exit(HIVE_EXIT_REASON_CRASH);
     }
 
-    HIVE_LOG_INFO("[COMMS] Started at 100Hz");
+    HIVE_LOG_INFO("[COMMS] Started (event-driven), pkt sizes: att=%zu pos=%zu",
+                  sizeof(telemetry_attitude_t), sizeof(telemetry_position_t));
 
     // Latest data from buses
     state_estimate_t latest_state = STATE_ESTIMATE_ZERO;
@@ -245,19 +246,15 @@ void comms_actor(void *args, const hive_spawn_info_t *siblings,
     thrust_cmd_t latest_thrust = THRUST_CMD_ZERO;
 
     while (1) {
-        hive_message_t msg;
-        hive_status_t status = hive_ipc_recv_match(
-            HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
+        // Wait for RX event (UART IDLE interrupt signals ground station poll)
+        hive_status_t status = hive_event_wait(rx_event, -1);
         if (HIVE_FAILED(status)) {
-            HIVE_LOG_ERROR("[COMMS] recv_match failed: %s",
+            HIVE_LOG_ERROR("[COMMS] event wait failed: %s",
                            HIVE_ERR_STR(status));
             hive_exit(HIVE_EXIT_REASON_CRASH);
         }
 
-        // Increment tick counter (10ms per tick)
-        state->tick_count++;
-
-        // Poll radio for incoming packets (maintains flow control)
+        // Always poll to process any pending RX data (from DMA buffer)
         hal_esb_poll();
 
         // Read latest bus data (non-blocking)
@@ -303,15 +300,12 @@ void comms_actor(void *args, const hive_spawn_info_t *siblings,
             };
 
             // Read next chunk from file
-            size_t bytes_read;
+            size_t file_bytes_read;
             hive_status_t s =
                 hive_file_pread(state->log_fd, chunk.data, LOG_CHUNK_DATA_SIZE,
-                                state->log_offset, &bytes_read);
+                                state->log_offset, &file_bytes_read);
 
-            if (HIVE_FAILED(s)) {
-                HIVE_LOG_WARN("[COMMS] Log read failed: %s", HIVE_ERR_STR(s));
-            }
-            if (HIVE_FAILED(s) || bytes_read == 0) {
+            if (HIVE_FAILED(s) || file_bytes_read == 0) {
                 // End of file or error - send completion packet
                 log_complete_packet_t done = {
                     .type = PACKET_LOG_DONE,
@@ -327,21 +321,22 @@ void comms_actor(void *args, const hive_spawn_info_t *siblings,
                               state->log_sequence);
             } else {
                 // Pad remaining bytes with zeros if partial chunk
-                if (bytes_read < LOG_CHUNK_DATA_SIZE) {
-                    memset(chunk.data + bytes_read, 0,
-                           LOG_CHUNK_DATA_SIZE - bytes_read);
+                if (file_bytes_read < LOG_CHUNK_DATA_SIZE) {
+                    memset(chunk.data + file_bytes_read, 0,
+                           LOG_CHUNK_DATA_SIZE - file_bytes_read);
                 }
 
                 hal_esb_send(&chunk, sizeof(chunk));
-                state->log_offset += bytes_read;
+                state->log_offset += file_bytes_read;
                 state->log_sequence++;
             }
         } else {
             // Flight telemetry mode: alternate between attitude and position
             if (state->next_is_attitude) {
-                // Send attitude packet (13 bytes)
+                // Send attitude packet
                 telemetry_attitude_t pkt = {
                     .type = PACKET_TYPE_ATTITUDE,
+                    .timestamp_ms = hal_get_time_ms(),
                     .gyro_x = float_to_i16(latest_sensors.gyro[0], SCALE_RATE),
                     .gyro_y = float_to_i16(latest_sensors.gyro[1], SCALE_RATE),
                     .gyro_z = float_to_i16(latest_sensors.gyro[2], SCALE_RATE),
@@ -351,9 +346,10 @@ void comms_actor(void *args, const hive_spawn_info_t *siblings,
                 };
                 hal_esb_send(&pkt, sizeof(pkt));
             } else {
-                // Send position packet (13 bytes)
+                // Send position packet
                 telemetry_position_t pkt = {
                     .type = PACKET_TYPE_POSITION,
+                    .timestamp_ms = hal_get_time_ms(),
                     .altitude = float_to_i16(latest_state.altitude, SCALE_POS),
                     .vz =
                         float_to_i16(latest_state.vertical_velocity, SCALE_VEL),

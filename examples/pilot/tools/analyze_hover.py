@@ -11,7 +11,7 @@ Detects hover phases and computes stability metrics:
 Useful for comparing filter performance (KF vs LPF) and tuning.
 
 Usage:
-    python3 analyze_hover.py /tmp/pilot_telemetry.csv
+    python3 analyze_hover.py /tmp/tlog.csv
     python3 analyze_hover.py file1.csv file2.csv --compare
     python3 analyze_hover.py telemetry.csv --json
     python3 analyze_hover.py telemetry.csv --time 5 15

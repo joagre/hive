@@ -746,9 +746,15 @@ Omits SSL/TLS, UDP, socket options by design. See `man hive_tcp` for rationale.
 
 ### Unified Event Waiting
 
-- `hive_select(sources, num_sources, result, timeout_ms)` - Wait on multiple event sources (IPC + bus)
+- `hive_select(sources, num_sources, result, timeout_ms)` - Wait on multiple event sources (IPC + bus + HAL events)
+- `hive_event_wait(event, timeout_ms)` - Convenience wrapper for waiting on a single HAL event
 
 `hive_select()` provides unified waiting on heterogeneous sources:
+
+**Source types:**
+- `HIVE_SEL_IPC` - Wait for IPC message matching filter
+- `HIVE_SEL_BUS` - Wait for bus data
+- `HIVE_SEL_HAL_EVENT` - Wait for hardware interrupt (ISR-safe)
 ```c
 enum { SEL_SENSOR, SEL_TIMER, SEL_SHUTDOWN };
 hive_select_source_t sources[] = {
@@ -777,6 +783,23 @@ case SEL_SHUTDOWN:
 ```
 
 **Priority** - Strict array order. When multiple sources are ready, the first one in the array wins.
+
+**HAL events** enable interrupt-driven I/O. ISRs call `hive_hal_event_signal(id)` to wake actors:
+```c
+// Simple case: wait for single HAL event
+hive_event_wait(uart_rx_event, -1);
+hal_uart_read(buf, sizeof(buf));
+
+// Multiple sources: use hive_select() directly
+hive_select_source_t sources[] = {
+    {HIVE_SEL_HAL_EVENT, .event = uart_rx_event},
+    {HIVE_SEL_IPC, .ipc = {HIVE_SENDER_ANY, HIVE_MSG_TIMER, timeout_timer}},
+};
+hive_select(sources, 2, &result, -1);
+if (result.type == HIVE_SEL_HAL_EVENT) {
+    hal_uart_read(buf, sizeof(buf));  // Read data after wake
+}
+```
 
 ## Implementation Details
 

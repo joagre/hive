@@ -154,12 +154,13 @@ the lengthy configuration sequence.
 
 | File | Description |
 |------|-------------|
-| `hal_init.c` | init, cleanup, arm, disarm |
+| `hal_init.c` | init, cleanup, self_test, calibrate, arm, disarm |
 | `hal_sensors.c` | hal_read_sensors (wrapper to platform) |
 | `hal_motors.c` | hal_write_torque (mixer, PWM output) |
 | `hal_time.c` | hal_delay_ms, hal_get_time_ms |
 | `hal_led.c` | hal_led_on/off/toggle |
 | `hal_debug.c` | hal_debug_init, hal_printf |
+| `hal_config.h` | Platform-specific PID gains, thrust, bus config |
 
 ### Platform Layer
 
@@ -519,6 +520,8 @@ Detection uses Model ID register (0x010F) which returns 0xEACC for VL53L1x.
 
 ## Motor Layout
 
+Standard Bitcraze X-configuration:
+
 ```
          FRONT
      M1(CCW)  M2(CW)
@@ -535,6 +538,15 @@ Detection uses Model ID register (0x010F) which returns 0xEACC for VL53L1x.
 | M2 | Front-right | CW | PB11 | TIM2_CH4 |
 | M3 | Rear-right | CCW | PA15 | TIM2_CH1 |
 | M4 | Rear-left | CW | PB9 | TIM4_CH4 |
+
+**Motor mixing (in hal_motors.c)**
+
+```
+M1 = thrust - roll + pitch + yaw  (front-left, CCW)
+M2 = thrust + roll + pitch - yaw  (front-right, CW)
+M3 = thrust + roll - pitch + yaw  (rear-right, CCW)
+M4 = thrust - roll - pitch - yaw  (rear-left, CW)
+```
 
 ## Troubleshooting
 

@@ -113,3 +113,50 @@ void hive_hal_event_unregister(int fd) {
 
     epoll_ctl(s_event.epoll_fd, EPOLL_CTL_DEL, fd, NULL);
 }
+
+// -----------------------------------------------------------------------------
+// HAL Event Signaling - Linux stub implementation
+// -----------------------------------------------------------------------------
+// Linux doesn't have hardware interrupts in userspace, but we provide the API
+// for compatibility. Webots simulation doesn't use ESB radio.
+
+#include <stdatomic.h>
+
+static atomic_uint_fast32_t s_event_flags = 0;
+static uint32_t s_event_allocated = 0;
+
+hive_hal_event_id_t hive_hal_event_create(void) {
+    for (uint8_t i = 0; i < HIVE_HAL_EVENT_MAX; i++) {
+        if (!(s_event_allocated & (1U << i))) {
+            s_event_allocated |= (1U << i);
+            return i;
+        }
+    }
+    return HIVE_HAL_EVENT_INVALID;
+}
+
+void hive_hal_event_destroy(hive_hal_event_id_t id) {
+    if (id < HIVE_HAL_EVENT_MAX) {
+        s_event_allocated &= ~(1U << id);
+        atomic_fetch_and(&s_event_flags, ~(1U << id));
+    }
+}
+
+void hive_hal_event_signal(hive_hal_event_id_t id) {
+    if (id < HIVE_HAL_EVENT_MAX) {
+        atomic_fetch_or(&s_event_flags, (1U << id));
+    }
+}
+
+bool hive_hal_event_is_set(hive_hal_event_id_t id) {
+    if (id < HIVE_HAL_EVENT_MAX) {
+        return (atomic_load(&s_event_flags) & (1U << id)) != 0;
+    }
+    return false;
+}
+
+void hive_hal_event_clear(hive_hal_event_id_t id) {
+    if (id < HIVE_HAL_EVENT_MAX) {
+        atomic_fetch_and(&s_event_flags, ~(1U << id));
+    }
+}

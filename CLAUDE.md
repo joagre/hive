@@ -30,7 +30,7 @@ Man pages available:
 - `hive_supervisor(3)` - Supervision (restart strategies, child specs)
 - `hive_timer(3)` - One-shot and periodic timers
 - `hive_bus(3)` - Publish-subscribe bus
-- `hive_select(3)` - Unified event waiting (IPC + bus)
+- `hive_select(3)` - Unified event waiting (IPC + bus + HAL events)
 - `hive_tcp(3)` - Non-blocking TCP
 - `hive_file(3)` - Synchronous file I/O
 - `hive_types(3)` - Types, constants, compile-time configuration
@@ -333,30 +333,42 @@ Bus shares the message data pool with IPC and has per-bus buffer limits:
 
 ### Unified Event Waiting (hive_select)
 
-`hive_select()` provides a unified primitive for waiting on multiple event sources (IPC messages + bus data). The existing blocking APIs are thin wrappers around this primitive.
+`hive_select()` provides a unified primitive for waiting on multiple event sources: IPC messages, bus data, and HAL events (hardware interrupts). The existing blocking APIs are thin wrappers around this primitive.
+
+**Source types**
+- `HIVE_SEL_IPC` - Wait for IPC message matching filter
+- `HIVE_SEL_BUS` - Wait for bus data
+- `HIVE_SEL_HAL_EVENT` - Wait for hardware interrupt signal (ISR-safe)
 
 **API**
 - **`hive_select(sources, num_sources, result, timeout)`** - Wait on multiple sources simultaneously
 
 **Priority semantics**
 - Sources are checked in strict array order (first ready source wins)
-- No type-based priority - bus and IPC sources are treated equally
+- No type-based priority - all source types are treated equally
 
 **Example**
 ```c
 hive_select_source_t sources[] = {
     {HIVE_SEL_BUS, .bus = sensor_bus},
     {HIVE_SEL_IPC, .ipc = {HIVE_SENDER_ANY, HIVE_MSG_TIMER, heartbeat}},
-    {HIVE_SEL_IPC, .ipc = {HIVE_SENDER_ANY, HIVE_MSG_NOTIFY, CMD_SHUTDOWN}},
+    {HIVE_SEL_HAL_EVENT, .event = uart_rx_event},  // Wake on UART interrupt
 };
 hive_select_result_t result;
 hive_select(sources, 3, &result, -1);
 // result.index tells which source triggered
-// result.type tells if it's IPC or bus
-// result.ipc or result.bus contains the data
+// result.type tells if it's IPC, bus, or HAL event
+// result.ipc or result.bus contains the data (HAL event has no data)
 ```
 
-**Wrapper relationship** - `hive_ipc_recv()`, `hive_ipc_recv_match()`, `hive_ipc_recv_matches()`, and `hive_bus_read()` (with timeout != 0) are all implemented as thin wrappers around `hive_select()`.
+**HAL events** - Enable interrupt-driven I/O without polling. ISRs call `hive_hal_event_signal(id)` to wake actors waiting in `hive_select()`. See spec/api.md "HAL Event API" for details.
+
+**Convenience wrappers** - For the common case of waiting on a single source:
+- `hive_ipc_recv()`, `hive_ipc_recv_match()`, `hive_ipc_recv_matches()` - Wait for IPC message
+- `hive_bus_read()` - Wait for bus data
+- `hive_event_wait(event, timeout)` - Wait for HAL event
+
+All are thin wrappers around `hive_select()`. Use `hive_select()` directly when waiting on multiple heterogeneous sources.
 
 ## Important Implementation Details
 
@@ -435,11 +447,15 @@ The runtime is **completely single-threaded**. All runtime APIs must be called f
 - No condition variables (event loop uses epoll/select for waiting)
 - No locks (mailboxes, actor state, bus state accessed only by scheduler thread)
 
-**STM32 exception** - ISR-to-scheduler communication uses `volatile bool` flags with interrupt disable/enable. This is a synchronization protocol but not C11 atomics or lock-based synchronization.
+**STM32 exception - HAL Events** - ISR-to-actor communication uses `hive_hal_event_signal()` which is ISR-safe:
+- Signal uses single 32-bit store (atomic on ARM Cortex-M)
+- Clear uses interrupt disable/enable for safe read-modify-write
+- ISRs can wake actors waiting in `hive_select()` without calling runtime APIs
 
 **External threads (forbidden)**
 - CANNOT call runtime APIs (hive_ipc_notify NOT THREAD-SAFE - no locking/atomics)
 - Must use platform-specific IPC (sockets, pipes) with dedicated reader actors
+- Use HAL events for ISR-to-actor communication instead
 
 See docs/spec/design.md "Thread Safety" section for full details.
 
@@ -451,7 +467,7 @@ The runtime uses a HAL to isolate platform-specific code. Porters implement HAL 
 ```
 include/hal/
   hive_hal_time.h      - Time + critical sections (3 functions)
-  hive_hal_event.h     - Event loop primitives (6 functions)
+  hive_hal_event.h     - Event loop (6 functions) + ISR-safe signaling (5 functions)
   hive_hal_timer.h     - Timer operations (6 functions)
   hive_hal_context.h   - Context switching (2 functions + struct)
   hive_hal_file.h      - File I/O (9 functions, optional)
@@ -463,7 +479,7 @@ src/hal/
   template/            - Documented templates for new ports
 ```
 
-**Minimum port** - ~16 C functions + 1 assembly function + 1 struct definition
+**Minimum port** - ~21 C functions + 1 assembly function + 1 struct definition
 
 **Platform-specific files**
 | Category | Linux | STM32 |
@@ -605,14 +621,4 @@ make test VERBOSE=1
 cd tests/qemu && make test
 ```
 
-**Pilot Hardware Tests** - Located in `examples/pilot/tests/` for Crazyflie hardware.
-
-```bash
-# Build and flash test_main (combined test runner)
-cd examples/pilot/tests
-make PLATFORM=crazyflie TEST=main
-st-flash write build_crazyflie/test_main.bin 0x8000000
-
-# Capture SWO debug output
-st-trace
-```
+**Pilot Hardware Tests** - See `examples/pilot/CLAUDE.md` for Crazyflie-specific build, flash, and debug instructions.

@@ -53,19 +53,19 @@ Analyze PID controller performance from telemetry data. Computes metrics for alt
 
 ```bash
 # Analyze all controllers
-python3 analyze_pid.py /tmp/pilot_telemetry.csv
+python3 analyze_pid.py /tmp/tlog.csv
 
 # Altitude controller only
-python3 analyze_pid.py /tmp/pilot_telemetry.csv --altitude
+python3 analyze_pid.py /tmp/tlog.csv --altitude
 
 # Position controller only
-python3 analyze_pid.py /tmp/pilot_telemetry.csv --position
+python3 analyze_pid.py /tmp/tlog.csv --position
 
 # Analyze specific time window (first 10 seconds)
-python3 analyze_pid.py /tmp/pilot_telemetry.csv --time 0 10
+python3 analyze_pid.py /tmp/tlog.csv --time 0 10
 
 # Output as JSON (for scripting)
-python3 analyze_pid.py /tmp/pilot_telemetry.csv --json
+python3 analyze_pid.py /tmp/tlog.csv --json
 ```
 
 ### plot_telemetry.py
@@ -81,22 +81,22 @@ Generate 6-panel telemetry plots showing:
 
 ```bash
 # Show interactive plot
-python3 plot_telemetry.py /tmp/pilot_telemetry.csv
+python3 plot_telemetry.py /tmp/tlog.csv
 
 # Save to file
-python3 plot_telemetry.py /tmp/pilot_telemetry.csv -o output.png
+python3 plot_telemetry.py /tmp/tlog.csv -o output.png
 
 # Limit time range
-python3 plot_telemetry.py /tmp/pilot_telemetry.csv --xlim 0 20
+python3 plot_telemetry.py /tmp/tlog.csv --xlim 0 20
 
 # Plot only altitude response
-python3 plot_telemetry.py /tmp/pilot_telemetry.csv --altitude
+python3 plot_telemetry.py /tmp/tlog.csv --altitude
 
 # Plot only position response
-python3 plot_telemetry.py /tmp/pilot_telemetry.csv --position
+python3 plot_telemetry.py /tmp/tlog.csv --position
 
 # Custom title
-python3 plot_telemetry.py /tmp/pilot_telemetry.csv --title "Test Flight 1"
+python3 plot_telemetry.py /tmp/tlog.csv --title "Test Flight 1"
 ```
 
 ### plot_flight.py
@@ -113,16 +113,16 @@ Generate full flight summary with 3D trajectory visualization:
 
 ```bash
 # Show interactive plot with stats
-python3 plot_flight.py /tmp/pilot_telemetry.csv
+python3 plot_flight.py /tmp/tlog.csv
 
 # Save to file
-python3 plot_flight.py /tmp/pilot_telemetry.csv -o flight_report.png
+python3 plot_flight.py /tmp/tlog.csv -o flight_report.png
 
 # Print statistics only (no plot)
-python3 plot_flight.py /tmp/pilot_telemetry.csv --stats
+python3 plot_flight.py /tmp/tlog.csv --stats
 
 # Custom title
-python3 plot_flight.py /tmp/pilot_telemetry.csv --title "Waypoint Test"
+python3 plot_flight.py /tmp/tlog.csv --title "Waypoint Test"
 ```
 
 ### analyze_hover.py
@@ -136,19 +136,19 @@ Analyze hover stability from telemetry data. Detects hover phases and computes m
 
 ```bash
 # Analyze hover phases
-python3 analyze_hover.py /tmp/pilot_telemetry.csv
+python3 analyze_hover.py /tmp/tlog.csv
 
 # Compare two flights (e.g., KF vs LPF)
 python3 analyze_hover.py kf_flight.csv lpf_flight.csv --compare
 
 # Analyze specific time window
-python3 analyze_hover.py /tmp/pilot_telemetry.csv --time 5 15
+python3 analyze_hover.py /tmp/tlog.csv --time 5 15
 
 # Output as JSON
-python3 analyze_hover.py /tmp/pilot_telemetry.csv --json
+python3 analyze_hover.py /tmp/tlog.csv --json
 
 # Adjust hover detection tolerance
-python3 analyze_hover.py /tmp/pilot_telemetry.csv --tolerance 0.3
+python3 analyze_hover.py /tmp/tlog.csv --tolerance 0.3
 ```
 
 ### flight_debug.py
@@ -163,16 +163,16 @@ Debug flight telemetry - show timeline and detect issues:
 
 ```bash
 # Quick flight analysis
-python3 flight_debug.py /tmp/pilot_telemetry.csv
+python3 flight_debug.py /tmp/tlog.csv
 
 # Verbose timeline (0.5s intervals)
-python3 flight_debug.py /tmp/pilot_telemetry.csv --verbose
+python3 flight_debug.py /tmp/tlog.csv --verbose
 
 # Analyze specific time window
-python3 flight_debug.py /tmp/pilot_telemetry.csv --time 0 10
+python3 flight_debug.py /tmp/tlog.csv --time 0 10
 
 # Custom timeline interval
-python3 flight_debug.py /tmp/pilot_telemetry.csv --interval 1.0
+python3 flight_debug.py /tmp/tlog.csv --interval 1.0
 ```
 
 ### ground_station.py
@@ -206,16 +206,16 @@ python3 ground_station.py --uri radio://0/80/2M
 
 ### Webots Simulation
 
-1. Run a flight test in Webots (telemetry logged to `/tmp/pilot_telemetry.csv`)
+1. Run a flight test in Webots (telemetry logged to `/tmp/tlog.csv`)
 
 2. Analyze current performance:
    ```bash
-   python3 tools/analyze_pid.py /tmp/pilot_telemetry.csv
+   python3 tools/analyze_pid.py /tmp/tlog.csv
    ```
 
 3. Visualize the response:
    ```bash
-   python3 tools/plot_telemetry.py /tmp/pilot_telemetry.csv --xlim 0 15
+   python3 tools/plot_telemetry.py /tmp/tlog.csv --xlim 0 15
    ```
 
 4. Adjust gains in `hal/*/hal_config.h` (altitude) or `config.h` (position)

@@ -13,14 +13,15 @@ Step-by-step guide from hardware verification to first flight.
 
 ---
 
-## Phase 1: Bringup Tests
+## Phase 1: Hardware Tests
 
-Run the hardware bringup firmware to verify all components.
+Run the sensors_motors test to verify all hardware components.
 
 ```bash
-cd examples/pilot/hal/crazyflie-2.1plus/bringup
-make && make flash
-make trace    # Or: ../../tools/st-trace.sh -t 0 for no timeout
+cd examples/pilot/tests
+make PLATFORM=crazyflie TEST=sensors_motors
+make flash-crazyflie TEST=sensors_motors
+./st-trace.sh -t 0    # No timeout, Ctrl-C to stop
 ```
 
 ### Required Tests (must pass)

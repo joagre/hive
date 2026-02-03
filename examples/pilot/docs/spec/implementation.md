@@ -40,7 +40,7 @@ Code is split into focused modules:
 | `math_utils.h` | Math utilities (CLAMPF, LPF macros, normalize_angle) |
 | `notifications.h` | IPC notification tags (NOTIFY_FLIGHT_START, etc.) |
 | `flight_profiles.h` | Waypoint definitions per flight profile |
-| `tools/*.py` | PID tuning and telemetry analysis tools |
+| `tools/*.py` | PID tuning, telemetry analysis, and ground station tools |
 
 ## Control Algorithms
 
@@ -129,8 +129,10 @@ int hal_esb_init(void);
 int hal_esb_send(const void *data, size_t len);
 bool hal_esb_tx_ready(void);
 void hal_esb_poll(void);
+void hal_esb_set_rx_callback(void (*cb)(const void*, size_t, void*), void *ctx);
+hive_hal_event_id_t hal_esb_get_rx_event(void);  // For event-driven RX
 
-// Power interface (HAL_HAS_RADIO only)
+// Power interface
 float hal_power_get_battery(void);
 
 // Simulation time (only for SIMULATED_TIME builds)
@@ -225,19 +227,22 @@ examples/pilot/
     telemetry_logger_actor.c # CSV logging (to /sd or /tmp)
     pid.c                # Reusable PID controller
     stack_profile.c      # Stack usage profiling
+    config.h             # Configuration constants (timing, thresholds)
     include/             # Header files
         *_actor.h        # Actor interfaces
         types.h          # Portable data types
-        config.h         # Configuration constants
         math_utils.h     # Math macros
         notifications.h  # IPC notification tags
         flight_profiles.h # Waypoint definitions
         pid.h            # PID controller interface
         pilot_buses.h    # Bus handle struct
+        stack_profile.h  # Stack profiling interface
     fusion/
         complementary_filter.c/h  # Portable attitude estimation
     tools/
         analyze_pid.py       # PID metrics analysis (overshoot, settling time)
+        analyze_hover.py     # Hover stability analysis
+        flight_debug.py      # Flight debugging utilities
         plot_telemetry.py    # 6-panel telemetry visualization
         plot_flight.py       # Full flight summary with 3D trajectory
         ground_station.py    # Radio telemetry receiver (Crazyflie)
@@ -246,12 +251,12 @@ examples/pilot/
     Makefile.crazyflie-2.1plus  # Crazyflie 2.1+ build
     hive_config.mk           # Shared Hive memory config
     README.md            # Usage instructions
-    spec/                # This specification
-        README.md        # Specification overview
-        design.md        # Design decisions
-        implementation.md # This file
-        evolution.md     # Architecture evolution
     docs/
+        spec/                # This specification
+            README.md        # Specification overview
+            design.md        # Design decisions
+            implementation.md # This file
+            evolution.md     # Architecture evolution
         first_flight_checklist.md  # Hardware bring-up and flight checklist
     worlds/
         hover_test.wbt   # Webots world file
@@ -260,9 +265,7 @@ examples/pilot/
     hal/
         hal.h                # Common HAL interface
         webots-crazyflie/    # Webots simulation HAL
-        crazyflie-2.1plus/      # Crazyflie 2.1+ HAL (STM32F405)
-            bringup/         # Hardware bring-up test firmware
-            tests/           # HAL test firmware
+        crazyflie-2.1plus/   # Crazyflie 2.1+ HAL (STM32F405)
 ```
 
 ---
@@ -280,7 +283,7 @@ examples/pilot/
 ### Console Output
 
 ```
-10-11 actors spawned (see Actor Counts table)
+11-12 actors spawned (see Actor Counts table)
 [ALT] tgt=1.00 alt=0.01 vvel=0.00 thrust=0.750
 [ALT] tgt=1.00 alt=0.05 vvel=0.12 thrust=0.720
 ...
@@ -308,7 +311,7 @@ Hive memory settings are split between shared and platform-specific files:
 | `Makefile.<platform>` | Platform-specific: stack sizes, flash layout |
 
 The shared settings in `hive_config.mk` are determined by the pilot application
-(10-11 actors, 7 buses, pool sizes for supervision) and are identical across all
+(11-12 actors, 7 buses, pool sizes for supervision) and are identical across all
 platforms. Only stack sizes vary based on available RAM.
 
 Key memory optimizations in `hive_config.mk`:

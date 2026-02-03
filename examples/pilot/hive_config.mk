@@ -63,7 +63,7 @@
 #
 # ============================================================================
 
-# Pilot uses 10-11 actors (9 children + 1 supervisor + optional telemetry), 7 buses
+# Pilot uses 11-12 actors (10-11 children + 1 supervisor), 7 buses
 HIVE_CFLAGS += -DHIVE_MAX_ACTORS=13
 HIVE_CFLAGS += -DHIVE_MAX_BUSES=8
 

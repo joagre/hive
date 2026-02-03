@@ -27,7 +27,7 @@ Then open `worlds/hover_test.wbt` in Webots and start the simulation.
 
 ## Motor Layout
 
-X-configuration matching Bitcraze firmware:
+X-configuration matching Bitcraze firmware behavior:
 
 ```
         Front
@@ -40,9 +40,14 @@ X-configuration matching Bitcraze firmware:
         Rear
 ```
 
+**Note**: The Webots PROTO model numbers motors differently than the physical
+Crazyflie hardware (where M1 is front-left). The HAL handles this mapping
+internally - both platforms produce identical behavior for the same torque
+command.
+
 **Motor mixing (in hal_motors.c)**
 
-Note: Pitch is negated before mixing to match Crazyflie coordinate frame.
+Pitch is negated before mixing to match Crazyflie coordinate frame.
 After this adjustment, the effective mixing is:
 ```
 M1 = thrust - roll - pitch + yaw  (rear-left, CCW)
@@ -86,8 +91,8 @@ Build with custom level: `make SENSOR_NOISE=0`
 | `hal_time.c` | hal_delay_ms, hal_get_time_ms |
 | `hal_led.c` | hal_led_on/off/toggle (no-op in simulation) |
 | `hal_debug.c` | hal_debug_init, hal_printf |
-| `hal_internal.h` | Shared state and configuration |
-| `hal_config.h` | Platform-specific PID gains and thrust |
+| `hal_internal.h` | Shared state (motors, Webots devices) |
+| `hal_config.h` | Platform-specific PID gains, thrust, bus config |
 
 ## Configuration
 

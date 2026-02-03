@@ -42,7 +42,7 @@ A complete quadcopter autopilot. Not a toy demo, but a flight controller targeti
 
 ## What it does
 
-Demonstrates waypoint navigation with a quadcopter using 10-11 actors (8 flight-critical workers + flight manager + supervisor + 1 optional telemetry actor):
+Demonstrates waypoint navigation with a quadcopter using 11-12 actors (8 flight-critical workers + flight manager + telemetry logger + supervisor + 1 optional comms actor):
 
 1. **Sensor actor** reads raw sensors via HAL, publishes to sensor bus
 2. **Estimator actor** runs altitude Kalman filter + attitude complementary filter, publishes to state bus
@@ -111,8 +111,8 @@ See `hal/<platform>/README.md` for hardware details, pin mapping, flight profile
 
 ## Architecture
 
-10-11 actors: eight flight-critical workers + flight manager + supervisor, plus one optional
-telemetry actor (comms on Crazyflie, telemetry_logger on Webots):
+11-12 actors: eight flight-critical workers + flight manager + telemetry logger + supervisor,
+plus optional comms actor on Crazyflie:
 
 ```mermaid
 graph TB
@@ -145,8 +145,8 @@ Hardware Abstraction Layer (HAL) provides platform independence:
 - `hal_arm()`, `hal_disarm()` - motor enable/disable
 - `hal_read_sensors()` - reads sensors (called by sensor_actor)
 - `hal_write_torque()` - writes motors with mixing (called by motor_actor)
-- `hal_esb_*()` - ESB radio telemetry (Crazyflie only, called by comms_actor)
-- `hal_power_get_battery()` - battery voltage (Crazyflie only)
+- `hal_esb_*()` - ESB radio telemetry (Crazyflie only, event-driven RX)
+- `hal_power_get_battery()` - battery voltage
 - `hal_step()` - advance simulation (Webots only)
 - `hal_debug_init()`, `hal_printf()` - debug output
 - `hal_delay_ms()`, `hal_get_time_ms()` - timing utilities
@@ -175,7 +175,7 @@ Spawn order determines execution order (round-robin within priority level):
 | 8     | motor     | CRITICAL | PERMANENT | Needs torque + STOP signal, writes hardware last |
 | 9     | flight_mgr| CRITICAL | TRANSIENT | Normal exit = mission complete |
 | 10    | comms     | LOW      | TEMPORARY | Crazyflie only, not flight-critical |
-| 11    | tlog      | LOW      | TEMPORARY | CSV logging for PID tuning (to /sd or /tmp) |
+| 11    | tlog      | LOW      | TEMPORARY | CSV logging (to /sd or /tmp, exits if no storage) |
 
 Workers use `hive_find_sibling()` to look up sibling actor IDs for IPC coordination.
 
@@ -361,17 +361,16 @@ The Crazyflie build includes a comms actor that sends flight data over radio
 at 100Hz for real-time ground station logging. This uses the syslink protocol
 to the nRF51822 radio chip, which transmits via ESB to a Crazyradio 2.0 on the ground.
 
-**Packet types** (13 bytes each, alternating at 50Hz):
-- Type 0x01: Attitude/rates (gyro XYZ, roll/pitch/yaw)
-- Type 0x02: Position (altitude, velocities, thrust, battery voltage)
+**Packet types** (17 bytes payload each, alternating at 50Hz):
+- Type 0x01: Attitude/rates (timestamp, gyro XYZ, roll/pitch/yaw)
+- Type 0x02: Position (timestamp, altitude, velocities, thrust, battery voltage)
 
-**Important: 16-byte syslink limit** - The nRF51 syslink implementation silently
-drops RADIO_RAW packets larger than 16 bytes. This is an undocumented limitation
-in the Bitcraze nRF51 firmware. Telemetry packets are designed to fit within this
-limit (13 bytes each). Timestamps are derived from receive rate on the ground station.
+**ESB packet limits** - ESB limit is 32 bytes, HAL uses 1 byte for framing,
+leaving 30 bytes for application payload. Each packet includes a 32-bit
+timestamp (milliseconds since boot) for accurate timing reconstruction.
 
-**Note** - Position targets (waypoints) are not included in radio telemetry due to
-packet size constraints. Radio telemetry is suitable for tuning altitude, attitude,
+**Note** - Position targets (waypoints) are not included in radio telemetry to
+keep packets small. Radio telemetry is suitable for tuning altitude, attitude,
 and rate control loops, but not position control. For position control tuning,
 use Webots CSV telemetry which includes full position targets.
 
@@ -486,9 +485,12 @@ doesn't affect flight-critical control loops and won't trigger restarts if it fa
 | File | Description |
 |------|-------------|
 | `tools/analyze_pid.py` | PID metrics analysis (overshoot, rise time, settling time) |
+| `tools/analyze_hover.py` | Hover stability analysis (altitude std dev, drift) |
+| `tools/flight_debug.py` | Flight debugging (timeline, crash detection) |
 | `tools/plot_telemetry.py` | 6-panel telemetry visualization |
 | `tools/plot_flight.py` | Full flight summary with 3D trajectory |
 | `tools/ground_station.py` | Radio telemetry receiver (Crazyflie only) |
+| `tools/st-trace.sh` | SWO trace viewer for debug output |
 | `tools/README.md` | Tools documentation and PID tuning workflow |
 
 ### Documentation
@@ -507,7 +509,6 @@ doesn't affect flight-critical control loops and won't trigger restarts if it fa
 | `docs/spec/` | Design specification (design, implementation, evolution) |
 | `docs/` | Documentation (first flight checklist) |
 | `hal/` | Hardware abstraction layer (see `hal/<platform>/README.md`) |
-| `hal/crazyflie-2.1plus/bringup/` | Hardware bring-up test firmware |
 | `tools/` | PID tuning and telemetry analysis tools |
 | `controllers/pilot/` | Webots controller (installed by `make`) |
 | `worlds/` | Webots world files |

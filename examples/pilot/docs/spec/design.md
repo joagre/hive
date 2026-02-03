@@ -223,7 +223,7 @@ complete flight record for debugging without the overhead of TRACE/DEBUG message
 
 ## Architecture Overview
 
-10-11 actors depending on platform (see [Actor Counts](README.md#actor-counts)): flight-critical workers connected via buses, supervisor, flight manager, and one optional telemetry actor:
+11-12 actors depending on platform (see [Actor Counts](README.md#actor-counts)): flight-critical workers connected via buses, supervisor, flight manager, telemetry logger, and optional comms actor:
 
 **Supervision** - All actors are supervised with ONE_FOR_ALL strategy. Flight-critical
 actors use PERMANENT restart (crash triggers restart of all). Comms uses
@@ -311,7 +311,7 @@ This table documents the scheduling design for audit and latency analysis.
 | rate | CRITICAL | Bus read (3 buses) | Yields waiting for state + thrust + rate setpoint |
 | motor | CRITICAL | hive_select (1 bus + IPC, 50ms timeout) | Yields waiting for torque, STOP, or timeout |
 | flight_manager | CRITICAL | hive_select (2 timers) | Yields waiting for sync or flight timer |
-| comms | LOW | Bus read (3 buses) | Non-critical, may be starved |
+| comms | LOW | HAL event (RX) + bus read (3 buses) | Non-critical, event-driven RX |
 | telemetry_logger | LOW | Timer + bus read (4 buses) | Non-critical, may be starved |
 
 **Scheduling characteristics**
@@ -335,8 +335,8 @@ This table documents the scheduling design for audit and latency analysis.
 | **Rate** | State + Thrust + Rate SP | Torque Bus | CRITICAL | PERMANENT | Rate PIDs |
 | **Motor** | Torque Bus + STOP notification | Hardware | CRITICAL | PERMANENT | Output to hardware via HAL |
 | **Flight Manager** | LANDED notification | START/LANDING/STOP notifications | CRITICAL | TRANSIENT | Startup delay, landing coordination (normal exit = mission complete) |
-| **Comms** | Sensor + State + Thrust Bus | Radio (HAL) | LOW | TEMPORARY | Radio telemetry (Crazyflie only, not flight-critical) |
-| **Telemetry Logger** | Sensor + State + Thrust + Position Target Bus | CSV file | LOW | TEMPORARY | CSV logging for PID tuning (Webots only, not flight-critical) |
+| **Comms** | Sensor + State + Thrust Bus + HAL event | Radio (HAL) | LOW | TEMPORARY | Radio telemetry (Crazyflie only, event-driven RX, not flight-critical) |
+| **Telemetry Logger** | Sensor + State + Thrust + Position Target Bus | CSV file | LOW | TEMPORARY | CSV logging for PID tuning (to /sd or /tmp, not flight-critical) |
 
 **Why CRITICAL for flight actors?** Flight-critical actors share the same priority so execution
 order follows spawn order (round-robin within priority level). This ensures the data pipeline

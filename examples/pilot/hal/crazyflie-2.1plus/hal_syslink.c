@@ -18,6 +18,8 @@
 
 #include "platform.h"
 #include "stm32f4xx.h"
+#include "hal/hal.h"
+#include "hal/hive_hal_event.h"
 #include <stdbool.h>
 #include <string.h>
 
@@ -37,6 +39,11 @@
 #define SYSLINK_PM_BATTERY_AUTOUPDATE 0x14
 #define SYSLINK_MTU 64
 #define RADIO_MTU 31 // Max payload for ESB packet
+
+// CRTP header for custom telemetry port
+// The nRF51 expects CRTP-formatted packets. First byte must be a CRTP header.
+// Format: (port << 4) | channel. We use port 10 (unused by Bitcraze).
+#define CRTP_HEADER_TELEMETRY 0xA0 // Port 10, channel 0
 
 // ----------------------------------------------------------------------------
 // UART Configuration (USART6)
@@ -75,10 +82,8 @@ static volatile uint32_t s_dma_rx_read_pos = 0;
 static volatile bool s_initialized = false;
 static volatile float s_battery_voltage = 0.0f;
 
-// Debug counters for RX diagnostics
-static volatile uint32_t s_rx_byte_count = 0;
-static volatile uint32_t s_rx_errors = 0;
-static volatile uint32_t s_packet_count = 0;
+// HAL event for RX notification (signals when UART goes idle after receiving)
+static hive_hal_event_id_t s_rx_event = HIVE_HAL_EVENT_INVALID;
 
 // RX callback with user data
 typedef void (*radio_rx_callback_t)(const void *data, size_t len,
@@ -187,14 +192,35 @@ static void uart_init(void) {
     // clock domain synchronization with APB2 peripherals.
     dma_rx_init();
 
-    // Enable USART, TX, RX
-    SYSLINK_USART->CR1 = USART_CR1_UE | USART_CR1_TE | USART_CR1_RE;
+    // Enable USART, TX, RX, and IDLE interrupt
+    // IDLE interrupt fires when RX line goes idle after receiving data
+    SYSLINK_USART->CR1 =
+        USART_CR1_UE | USART_CR1_TE | USART_CR1_RE | USART_CR1_IDLEIE;
+
+    // Enable USART6 interrupt in NVIC (lower priority than control loops)
+    NVIC_SetPriority(USART6_IRQn, 5);
+    NVIC_EnableIRQ(USART6_IRQn);
 }
 
 static inline void uart_putc(uint8_t c) {
     while (!(SYSLINK_USART->SR & USART_SR_TXE))
         ;
     SYSLINK_USART->DR = c;
+}
+
+// USART6 Interrupt Handler - signals HAL event when RX line goes idle
+void USART6_IRQHandler(void) {
+    // Check if IDLE flag is set (RX line went idle after receiving)
+    if (SYSLINK_USART->SR & USART_SR_IDLE) {
+        // Clear IDLE flag by reading SR then DR (per STM32 reference manual)
+        (void)SYSLINK_USART->SR;
+        (void)SYSLINK_USART->DR;
+
+        // Signal the RX event to wake up waiting actors
+        if (s_rx_event != HIVE_HAL_EVENT_INVALID) {
+            hive_hal_event_signal(s_rx_event);
+        }
+    }
 }
 
 static inline bool txen_ready(void) {
@@ -349,7 +375,6 @@ static void syslink_rx_byte(uint8_t byte) {
 
     case RX_CKSUM_B:
         if (byte == s_rx_ck_b) {
-            s_packet_count++; // Track successful packets
             syslink_process_packet();
         }
         s_rx_state = RX_START1;
@@ -362,6 +387,9 @@ static void syslink_rx_byte(uint8_t byte) {
 // ----------------------------------------------------------------------------
 
 int hal_esb_init(void) {
+    // Create HAL event for RX notification (before uart_init enables interrupt)
+    s_rx_event = hive_hal_event_create();
+
     uart_init();
 
     s_rx_state = RX_START1;
@@ -370,15 +398,24 @@ int hal_esb_init(void) {
     s_battery_voltage = 0.0f;
     s_initialized = true;
 
+    // Small delay for UART to stabilize after init
+    hal_delay_ms(10);
+
     // Enable battery status autoupdate from nRF51.
     // The nRF51 won't send battery packets until this command is received.
-    // Small delay for UART to stabilize after init.
-    for (volatile int i = 0; i < 10000; i++) {
-        __NOP();
-    }
-
     syslink_send(SYSLINK_PM_BATTERY_AUTOUPDATE, NULL, 0);
 
+    // Wait for nRF51 to respond with battery voltage (confirms link is working)
+    uint32_t start = hal_get_time_ms();
+    while ((hal_get_time_ms() - start) < 5000) {
+        hal_esb_poll();
+        if (s_battery_voltage > 0.1f) {
+            return 0; // nRF51 ready
+        }
+        hal_delay_ms(10);
+    }
+
+    // Timeout - nRF51 not responding, but continue anyway
     return 0;
 }
 
@@ -387,12 +424,19 @@ int hal_esb_send(const void *data, size_t len) {
         return -1;
     }
 
-    if (len > RADIO_MTU) {
+    // Account for CRTP header we'll prepend
+    if (len + 1 > RADIO_MTU) {
         return -1; // Too large for ESB packet
     }
 
+    // Build packet with CRTP header prepended
+    // The nRF51 expects CRTP format: header byte + payload
+    uint8_t packet[RADIO_MTU];
+    packet[0] = CRTP_HEADER_TELEMETRY;
+    memcpy(&packet[1], data, len);
+
     // Flow control via TXEN hardware line (checked in syslink_send)
-    return syslink_send(SYSLINK_RADIO_RAW, data, len);
+    return syslink_send(SYSLINK_RADIO_RAW, packet, len + 1);
 }
 
 bool hal_esb_tx_ready(void) {
@@ -412,7 +456,6 @@ void hal_esb_poll(void) {
     // Process all bytes between read and write positions
     while (read_pos != write_pos) {
         uint8_t byte = s_dma_rx_buffer[read_pos];
-        s_rx_byte_count++; // Track bytes received
         syslink_rx_byte(byte);
 
         // Advance read position with wrap
@@ -434,23 +477,6 @@ float hal_power_get_battery(void) {
     return s_battery_voltage;
 }
 
-// ----------------------------------------------------------------------------
-// Debug API (for RX diagnostics)
-// ----------------------------------------------------------------------------
-
-uint32_t hal_esb_debug_isr_count(void) {
-    // DMA doesn't use ISRs for RX - return 0 to indicate DMA mode
-    return 0;
-}
-
-uint32_t hal_esb_debug_rx_bytes(void) {
-    return s_rx_byte_count;
-}
-
-uint32_t hal_esb_debug_errors(void) {
-    return s_rx_errors;
-}
-
-uint32_t hal_esb_debug_packets(void) {
-    return s_packet_count;
+hive_hal_event_id_t hal_esb_get_rx_event(void) {
+    return s_rx_event;
 }

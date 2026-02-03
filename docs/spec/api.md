@@ -1226,29 +1226,32 @@ The bus can encounter two types of resource limits:
 ```c
 // Source types
 typedef enum {
-    HIVE_SEL_IPC,  // Wait for IPC message
-    HIVE_SEL_BUS,  // Wait for bus data
-} hive_select_type;
+    HIVE_SEL_IPC,       // Wait for IPC message
+    HIVE_SEL_BUS,       // Wait for bus data
+    HIVE_SEL_HAL_EVENT, // Wait for HAL event (ISR signal)
+} hive_select_type_t;
 
 // Select source (tagged union)
 typedef struct {
-    hive_select_type type;
+    hive_select_type_t type;
     union {
-        hive_recv_filter_t ipc;  // For HIVE_SEL_IPC
+        hive_recv_filter_t ipc;       // For HIVE_SEL_IPC
         hive_bus_id_t bus;            // For HIVE_SEL_BUS
+        hive_hal_event_id_t event;    // For HIVE_SEL_HAL_EVENT
     };
 } hive_select_source_t;
 
 // Select result
 typedef struct {
-    size_t index;           // Which source triggered (0-based)
-    hive_select_type type;  // Type of triggered source
+    size_t index;            // Which source triggered (0-based)
+    hive_select_type_t type; // Type of triggered source
     union {
-        hive_message_t ipc;   // For HIVE_SEL_IPC
+        hive_message_t ipc;  // For HIVE_SEL_IPC
         struct {
-            void *data;     // For HIVE_SEL_BUS
+            void *data;      // For HIVE_SEL_BUS
             size_t len;
         } bus;
+        // For HIVE_SEL_HAL_EVENT: no data, just the event signal
     };
 } hive_select_result_t;
 ```
@@ -1263,6 +1266,10 @@ typedef struct {
 // timeout_ms > 0:   block up to timeout, returns HIVE_ERR_TIMEOUT if exceeded
 hive_status_t hive_select(const hive_select_source_t *sources, size_t num_sources,
                         hive_select_result_t *result, int32_t timeout_ms);
+
+// Convenience wrapper for waiting on a single HAL event
+// Equivalent to hive_select() with a single HIVE_SEL_HAL_EVENT source
+hive_status_t hive_event_wait(hive_hal_event_id_t event, int32_t timeout_ms);
 ```
 
 ### Priority Semantics
@@ -1278,6 +1285,60 @@ A bus source is "ready" when the bus contains an entry the calling actor has not
 - A bus can have data for one subscriber but not another
 - Reading an entry marks it as read for that subscriber only
 - New publishes are unread for all subscribers until consumed
+
+### HAL Event Sources
+
+`HIVE_SEL_HAL_EVENT` allows actors to wait for hardware interrupts (ISRs) to signal events. This enables efficient, interrupt-driven I/O without polling.
+
+**Use cases:**
+- UART receive (wait for IDLE interrupt after packet reception)
+- DMA completion
+- External pin interrupts (button press, sensor ready)
+- Any hardware event that triggers an ISR
+
+**HAL event readiness:**
+- An event is "ready" when signaled by an ISR via `hive_hal_event_signal()`
+- Reading the event clears it (edge-triggered semantics)
+- No data payload - just signals "event occurred"
+- Actor must call the appropriate HAL function to retrieve actual data
+
+**Example: Interrupt-driven radio RX**
+```c
+// In ISR context (UART IDLE interrupt)
+void USART6_IRQHandler(void) {
+    if (USART6->SR & USART_SR_IDLE) {
+        (void)USART6->SR;  // Clear flag
+        (void)USART6->DR;
+        hive_hal_event_signal(rx_event);  // Wake actor
+    }
+}
+
+// In actor context
+void comms_actor(void *args, ...) {
+    hive_hal_event_id_t rx_event = hal_esb_get_rx_event();
+    hive_timer_id_t timer;
+    hive_timer_every(100000, &timer);  // 100ms fallback
+
+    hive_select_source_t sources[] = {
+        {HIVE_SEL_HAL_EVENT, .event = rx_event},
+        {HIVE_SEL_IPC, .ipc = {HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer}},
+    };
+
+    while (1) {
+        hive_select_result_t result;
+        hive_select(sources, 2, &result, -1);
+
+        if (result.type == HIVE_SEL_HAL_EVENT) {
+            // Radio data arrived - process it
+            hal_esb_poll();  // Retrieve data from DMA buffer
+            send_telemetry();
+        } else {
+            // Timer fallback for periodic tasks
+            do_periodic_work();
+        }
+    }
+}
+```
 
 ### Example Usage
 
@@ -1513,6 +1574,132 @@ Feature | Timer API | IPC/File/TCP API
 - Milliseconds for I/O: TCP/file timeouts rarely need microsecond precision
 - 32-bit limit: Embedded systems prefer fixed-size types; 64-bit would waste memory
 - Trade-off: Accept wraparound at ~71 minutes for memory efficiency
+
+## HAL Event API
+
+HAL events provide a mechanism for interrupt service routines (ISRs) to signal actors waiting in `hive_select()`. This enables efficient, interrupt-driven I/O without polling.
+
+### Types
+
+```c
+#include "hal/hive_hal_event.h"
+
+typedef uint8_t hive_hal_event_id_t;
+
+#define HIVE_HAL_EVENT_INVALID 0xFF
+#define HIVE_HAL_EVENT_MAX 32
+```
+
+### Functions
+
+```c
+// Create a new HAL event
+// Returns event ID, or HIVE_HAL_EVENT_INVALID if pool exhausted
+hive_hal_event_id_t hive_hal_event_create(void);
+
+// Destroy a HAL event and return it to the pool
+void hive_hal_event_destroy(hive_hal_event_id_t id);
+
+// Signal an event (ISR-safe)
+// Can be called from interrupt context
+// Uses atomic store on ARM Cortex-M (single instruction)
+void hive_hal_event_signal(hive_hal_event_id_t id);
+
+// Check if event is set (non-blocking)
+bool hive_hal_event_is_set(hive_hal_event_id_t id);
+
+// Clear event flag
+// Uses interrupt disable/enable on STM32 for atomicity
+void hive_hal_event_clear(hive_hal_event_id_t id);
+```
+
+### ISR Safety
+
+`hive_hal_event_signal()` is specifically designed to be called from ISR context:
+
+**ARM Cortex-M (STM32)**
+- Uses single 32-bit store instruction (atomic by hardware)
+- No interrupt disable needed
+- Zero latency overhead
+
+**Linux**
+- Uses C11 `atomic_fetch_or()` for correctness
+- Safe for signal handlers (though rarely needed on Linux)
+
+### Usage Pattern
+
+**1. Create event during initialization**
+```c
+static hive_hal_event_id_t s_rx_event = HIVE_HAL_EVENT_INVALID;
+
+int hal_uart_init(void) {
+    s_rx_event = hive_hal_event_create();
+    if (s_rx_event == HIVE_HAL_EVENT_INVALID) {
+        return -1;  // Pool exhausted
+    }
+    // Enable UART IDLE interrupt
+    USART1->CR1 |= USART_CR1_IDLEIE;
+    NVIC_EnableIRQ(USART1_IRQn);
+    return 0;
+}
+```
+
+**2. Signal from ISR**
+```c
+void USART1_IRQHandler(void) {
+    if (USART1->SR & USART_SR_IDLE) {
+        // Clear IDLE flag (read SR then DR)
+        (void)USART1->SR;
+        (void)USART1->DR;
+        // Signal waiting actor
+        hive_hal_event_signal(s_rx_event);
+    }
+}
+```
+
+**3. Wait in actor with hive_select()**
+```c
+void uart_actor(void *args, ...) {
+    hive_hal_event_id_t rx_event = hal_uart_get_rx_event();
+
+    hive_select_source_t sources[] = {
+        {HIVE_SEL_HAL_EVENT, .event = rx_event},
+    };
+
+    while (1) {
+        hive_select_result_t result;
+        hive_select(sources, 1, &result, -1);  // Block until ISR signals
+
+        // Event fired - process received data
+        uint8_t buf[256];
+        size_t len = hal_uart_read(buf, sizeof(buf));
+        process_data(buf, len);
+    }
+}
+```
+
+### Design Rationale
+
+**Why not direct IPC from ISR?**
+- Runtime APIs are NOT reentrant (no locks, no atomics in IPC path)
+- Calling `hive_ipc_notify()` from ISR would corrupt runtime state
+- HAL events use a separate, ISR-safe mechanism (bitmask with atomic ops)
+
+**Why bitmask instead of queue?**
+- Fixed 32-bit bitmask - no allocation, O(1) operations
+- Edge-triggered semantics - just "something happened"
+- Actor must call HAL-specific function to get actual data
+- Simple and predictable
+
+**When to use HAL events vs polling timer?**
+
+| Approach | Latency | CPU Usage | Complexity |
+|----------|---------|-----------|------------|
+| HAL event + WFI | Immediate wake | Zero when idle | Requires ISR setup |
+| Polling timer (1ms) | Up to 1ms | 1000 wakes/sec | Simple, no ISR |
+| Polling timer (10ms) | Up to 10ms | 100 wakes/sec | Simple, no ISR |
+
+Use HAL events when low latency and power efficiency matter (battery-powered, real-time response). Use polling when simplicity is more important than efficiency.
 
 ## Supervisor API
 

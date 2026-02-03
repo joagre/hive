@@ -6,6 +6,7 @@
 #include "hive_timer.h"
 #include "hive_bus.h"
 #include "hive_log.h"
+#include "hal/hive_hal_event.h"
 #include <string.h>
 
 // Static buffer for bus data (single-threaded, one actor_t at a time)
@@ -53,6 +54,15 @@ static bool scan_sources(const hive_select_source_t *sources,
                 result->index = i;
                 result->type = HIVE_SEL_IPC;
                 HIVE_LOG_TRACE("select: IPC source %zu ready", i);
+                return true;
+            }
+        } else if (sources[i].type == HIVE_SEL_HAL_EVENT) {
+            if (hive_hal_event_is_set(sources[i].event)) {
+                // HAL event is signaled - clear it and return
+                hive_hal_event_clear(sources[i].event);
+                result->index = i;
+                result->type = HIVE_SEL_HAL_EVENT;
+                HIVE_LOG_TRACE("select: HAL event source %zu ready", i);
                 return true;
             }
         }
@@ -170,4 +180,14 @@ hive_status_t hive_select(const hive_select_source_t *sources,
 
     // Spurious wakeup - no matching data found
     return HIVE_ERROR(HIVE_ERR_WOULDBLOCK, "No data available after wakeup");
+}
+
+// -----------------------------------------------------------------------------
+// hive_event_wait - Convenience wrapper for single HAL event
+// -----------------------------------------------------------------------------
+
+hive_status_t hive_event_wait(hive_hal_event_id_t event, int32_t timeout_ms) {
+    hive_select_source_t source = {.type = HIVE_SEL_HAL_EVENT, .event = event};
+    hive_select_result_t result;
+    return hive_select(&source, 1, &result, timeout_ms);
 }

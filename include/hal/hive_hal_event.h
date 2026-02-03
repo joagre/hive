@@ -59,4 +59,30 @@ hive_status_t hive_hal_event_register(int fd, uint32_t events,
 // STM32: No-op
 void hive_hal_event_unregister(int fd);
 
+// ----------------------------------------------------------------------------
+// HAL Event Signaling (for ISR-to-actor communication)
+// ----------------------------------------------------------------------------
+// Generic mechanism for hardware interrupts to wake actors waiting in
+// hive_select(). Use for UART IDLE, DMA complete, GPIO interrupts, etc.
+
+typedef uint8_t hive_hal_event_id_t;
+#define HIVE_HAL_EVENT_INVALID 0xFF
+#define HIVE_HAL_EVENT_MAX 32
+
+// Create a new HAL event. Returns HIVE_HAL_EVENT_INVALID if none available.
+hive_hal_event_id_t hive_hal_event_create(void);
+
+// Destroy a HAL event, freeing the ID for reuse.
+void hive_hal_event_destroy(hive_hal_event_id_t id);
+
+// Signal an event (ISR-safe). Sets the event flag.
+// On ARM Cortex-M, this is a single atomic store.
+void hive_hal_event_signal(hive_hal_event_id_t id);
+
+// Check if an event is set (non-blocking).
+bool hive_hal_event_is_set(hive_hal_event_id_t id);
+
+// Clear an event flag.
+void hive_hal_event_clear(hive_hal_event_id_t id);
+
 #endif // HIVE_HAL_EVENT_H

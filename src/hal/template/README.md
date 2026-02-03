@@ -11,7 +11,8 @@ The Hardware Abstraction Layer (HAL) isolates platform-specific code so that por
 | Category | Files | Functions | Required |
 |----------|-------|-----------|----------|
 | Time | `hive_hal_time.c` | 3 functions | Yes |
-| Event | `hive_hal_event.c` | 6 functions | Yes |
+| Event Loop | `hive_hal_event.c` | 6 functions | Yes |
+| HAL Event Signaling | `hive_hal_event.c` | 5 functions | Yes |
 | Timer | `hive_hal_timer.c` | 6 functions | Yes |
 | Context | `hive_hal_context.c` | 1 function | Yes |
 | Context | `hive_context.S` | 1 function | Yes |
@@ -19,7 +20,7 @@ The Hardware Abstraction Layer (HAL) isolates platform-specific code so that por
 | File I/O | `hive_hal_file.c` | 9 functions | Optional |
 | TCP | `hive_hal_tcp.c` | 11 functions | Optional |
 
-**Minimum port** - ~16 functions + 1 assembly function + 1 struct definition
+**Minimum port** - ~21 functions + 1 assembly function + 1 struct definition
 
 ## Quick Start
 
@@ -65,7 +66,7 @@ void hive_hal_critical_exit(uint32_t state);
 - `get_time_us`: Must be monotonic, microsecond resolution preferred
 - Critical sections: Disable interrupts, support nesting
 
-### Event Functions (6 functions) - `hive_hal_event.c`
+### Event Loop Functions (6 functions) - `hive_hal_event.c`
 
 ```c
 hive_status_t hive_hal_event_init(void);
@@ -82,6 +83,55 @@ void hive_hal_event_unregister(int fd);
 - `event_register/unregister`: Add/remove file descriptors from watch list
 
 For platforms without file descriptors (bare metal), register/unregister can be no-ops if timers use a software wheel.
+
+### HAL Event Signaling Functions (5 functions) - `hive_hal_event.c`
+
+These functions enable ISR-to-actor communication via `hive_select()`:
+
+```c
+hive_hal_event_id_t hive_hal_event_create(void);
+void hive_hal_event_destroy(hive_hal_event_id_t id);
+void hive_hal_event_signal(hive_hal_event_id_t id);  // ISR-safe!
+bool hive_hal_event_is_set(hive_hal_event_id_t id);
+void hive_hal_event_clear(hive_hal_event_id_t id);
+```
+
+**Implementation notes**
+- `event_create`: Allocate event ID from pool (max 32 events, uses bitmask)
+- `event_destroy`: Return event ID to pool
+- `event_signal`: **Must be ISR-safe** - set flag using atomic operation
+- `event_is_set`: Check if event flag is set (volatile read)
+- `event_clear`: Clear event flag (must be atomic on platforms with ISRs)
+
+**ISR safety requirements for `event_signal()`:**
+- **ARM Cortex-M**: Single 32-bit store to `volatile uint32_t` is atomic
+- **x86-64/Linux**: Use `atomic_fetch_or()` or equivalent
+- **Other**: Ensure single-instruction flag set, no read-modify-write
+
+**ISR safety requirements for `event_clear()`:**
+- **ARM Cortex-M**: Disable interrupts around read-modify-write (`CPSID I` / `CPSIE I`)
+- **x86-64/Linux**: Use `atomic_fetch_and()` or equivalent
+- Clear is called from actor context, not ISR context
+
+**Example (ARM Cortex-M):**
+```c
+static volatile uint32_t s_event_flags = 0;
+static uint32_t s_event_allocated = 0;
+
+void hive_hal_event_signal(hive_hal_event_id_t id) {
+    if (id < HIVE_HAL_EVENT_MAX) {
+        s_event_flags |= (1U << id);  // Single store = atomic on ARM
+    }
+}
+
+void hive_hal_event_clear(hive_hal_event_id_t id) {
+    if (id < HIVE_HAL_EVENT_MAX) {
+        __disable_irq();
+        s_event_flags &= ~(1U << id);
+        __enable_irq();
+    }
+}
+```
 
 ### Timer Functions (6 functions) - `hive_hal_timer.c`
 
@@ -147,13 +197,14 @@ hive_status_t hive_hal_file_pread(int fd, void *buf, size_t len, size_t offset, 
 hive_status_t hive_hal_file_write(int fd, const void *buf, size_t len, size_t *bytes_written);
 hive_status_t hive_hal_file_pwrite(int fd, const void *buf, size_t len, size_t offset, size_t *bytes_written);
 hive_status_t hive_hal_file_sync(int fd);
-hive_status_t hive_hal_file_mount_available(const char *path);
 ```
 
 **Implementation notes**
-- `mount_available`: Check if mount point for path is ready (useful for removable media like SD cards). Return `HIVE_OK` if ready, `HIVE_ERR_INVALID` if no mount for path, `HIVE_ERR_IO` if mount exists but backend unavailable.
+- All file operations should be synchronous (blocking)
+- STM32: Only virtual paths work (`/log`, `/config`) - arbitrary paths rejected
+- Mount availability checking is handled by the separate mount module (`hive_mount.h`)
 
-### TCP (10 functions, HIVE_ENABLE_TCP=1) - `hive_hal_tcp.c`
+### TCP (11 functions, HIVE_ENABLE_TCP=1) - `hive_hal_tcp.c`
 
 ```c
 hive_status_t hive_hal_tcp_init(void);
@@ -194,7 +245,7 @@ Use these error codes in your HAL implementation:
 
 See `src/hal/linux/`:
 - `hive_hal_time.c` - Time (clock_gettime), critical sections (no-op)
-- `hive_hal_event.c` - Event system (epoll)
+- `hive_hal_event.c` - Event loop (epoll) + HAL event signaling (C11 atomics)
 - `hive_hal_timer.c` - Timer HAL (timerfd + simulation mode)
 - `hive_hal_file.c` - File I/O (POSIX)
 - `hive_hal_tcp.c` - TCP (BSD sockets)
@@ -206,7 +257,7 @@ See `src/hal/linux/`:
 
 See `src/hal/stm32/`:
 - `hive_hal_time.c` - Time (tick counter), critical sections (PRIMASK)
-- `hive_hal_event.c` - Event system (WFI)
+- `hive_hal_event.c` - Event loop (WFI) + HAL event signaling (atomic stores + CPSID/CPSIE)
 - `hive_hal_timer.c` - Timer HAL (software timer wheel)
 - `hive_hal_file.c` - Flash-based virtual file system
 - `hive_hal_tcp.c` - TCP stubs (future lwIP)

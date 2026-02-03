@@ -18,6 +18,7 @@
 
 #include "types.h"
 #include "config.h"
+#include "hal/hive_hal_event.h"
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -139,27 +140,23 @@ void hal_esb_set_rx_callback(void (*callback)(const void *data, size_t len,
                                               void *user_data),
                              void *user_data);
 
-// Debug functions for RX diagnostics.
-// Returns counters tracking ISR activity.
-uint32_t hal_esb_debug_isr_count(void); // Total ISR invocations
-uint32_t hal_esb_debug_rx_bytes(void);  // Bytes received via RXNE
-uint32_t hal_esb_debug_errors(void);    // UART error flags (ORE/NE/FE/PE)
-uint32_t hal_esb_debug_packets(void);   // Complete syslink packets decoded
+// Get HAL event ID for RX notification.
+// This event is signaled by the UART IDLE interrupt when data arrives.
+// Use with hive_select(HIVE_SEL_HAL_EVENT) for efficient waiting.
+// Returns HIVE_HAL_EVENT_INVALID if radio not initialized.
+hive_hal_event_id_t hal_esb_get_rx_event(void);
 
 #endif // HAL_HAS_RADIO
 
 // ----------------------------------------------------------------------------
-// Power Interface (optional)
+// Power Interface
 // ----------------------------------------------------------------------------
-
-#ifdef HAL_HAS_RADIO
 
 // Get battery voltage.
 // On Crazyflie: received via syslink from nRF51 power management.
+// On simulation: returns simulated battery voltage.
 // Returns 0.0 if not yet available.
 float hal_power_get_battery(void);
-
-#endif // HAL_HAS_RADIO
 
 // ----------------------------------------------------------------------------
 // Simulated Time Interface (only for simulation platforms)

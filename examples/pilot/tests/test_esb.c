@@ -10,14 +10,13 @@
  *   - Drone queues telemetry via hal_esb_send()
  *   - nRF51 attaches queued payload to ACK when ground station polls
  *
- * IMPORTANT: Telemetry packets are limited to 16 bytes maximum.
- * The nRF51 syslink implementation drops RADIO_RAW packets larger than
- * 16 bytes. This appears to be an undocumented limitation in the Bitcraze
- * nRF51 firmware.
+ * Packet limits: ESB max payload is 32 bytes. HAL uses 1 byte for framing,
+ * so max application payload is 30 bytes.
  *
  * Packet formats (must match comms_actor.c and ground_station.py):
- *   Type 0x01 - Attitude (13 bytes): type + gyro_xyz + roll/pitch/yaw
- *   Type 0x02 - Position (13 bytes): type + alt + vz/vx/vy + thrust + battery
+ *   HAL adds protocol framing automatically.
+ *   Type 0x01 - Attitude (18 bytes on wire): type + timestamp + gyro_xyz + roll/pitch/yaw
+ *   Type 0x02 - Position (18 bytes on wire): type + timestamp + alt + vz/vx/vy + thrust + battery
  *
  * Usage:
  *   make PLATFORM=crazyflie TEST=esb
@@ -46,40 +45,42 @@
 // Packet Definitions (must match comms_actor.c)
 // ============================================================================
 
-// Maximum telemetry packet size (nRF51 syslink limitation)
-#define MAX_TELEMETRY_SIZE 16
+// Maximum telemetry packet size (HAL uses 1 byte for framing, ESB limit is 32)
+#define MAX_TELEMETRY_SIZE 30
 
 // Packet type identifiers
 #define PACKET_TYPE_ATTITUDE 0x01
 #define PACKET_TYPE_POSITION 0x02
 
-// Packet type 0x01: Attitude and rates (13 bytes)
+// Packet type 0x01: Attitude and rates (17 bytes payload)
 typedef struct __attribute__((packed)) {
-    uint8_t type;   // 0x01
-    int16_t gyro_x; // Raw gyro X (millirad/s)
-    int16_t gyro_y; // Raw gyro Y (millirad/s)
-    int16_t gyro_z; // Raw gyro Z (millirad/s)
-    int16_t roll;   // Roll angle (millirad)
-    int16_t pitch;  // Pitch angle (millirad)
-    int16_t yaw;    // Yaw angle (millirad)
+    uint8_t type;          // 0x01
+    uint32_t timestamp_ms; // Milliseconds since boot
+    int16_t gyro_x;        // Raw gyro X (millirad/s)
+    int16_t gyro_y;        // Raw gyro Y (millirad/s)
+    int16_t gyro_z;        // Raw gyro Z (millirad/s)
+    int16_t roll;          // Roll angle (millirad)
+    int16_t pitch;         // Pitch angle (millirad)
+    int16_t yaw;           // Yaw angle (millirad)
 } telemetry_attitude_t;
 
-// Packet type 0x02: Position and altitude (13 bytes)
+// Packet type 0x02: Position and altitude (17 bytes payload)
 typedef struct __attribute__((packed)) {
-    uint8_t type;        // 0x02
-    int16_t altitude;    // Altitude (mm)
-    int16_t vz;          // Vertical velocity (mm/s)
-    int16_t vx;          // X velocity (mm/s)
-    int16_t vy;          // Y velocity (mm/s)
-    uint16_t thrust;     // Thrust (0-65535)
-    uint16_t battery_mv; // Battery voltage (millivolts)
+    uint8_t type;          // 0x02
+    uint32_t timestamp_ms; // Milliseconds since boot
+    int16_t altitude;      // Altitude (mm)
+    int16_t vz;            // Vertical velocity (mm/s)
+    int16_t vx;            // X velocity (mm/s)
+    int16_t vy;            // Y velocity (mm/s)
+    uint16_t thrust;       // Thrust (0-65535)
+    uint16_t battery_mv;   // Battery voltage (millivolts)
 } telemetry_position_t;
 
 // Verify packet sizes at compile time
 _Static_assert(sizeof(telemetry_attitude_t) <= MAX_TELEMETRY_SIZE,
-               "Attitude packet too large for nRF51 syslink");
+               "Attitude packet too large");
 _Static_assert(sizeof(telemetry_position_t) <= MAX_TELEMETRY_SIZE,
-               "Position packet too large for nRF51 syslink");
+               "Position packet too large");
 
 // ============================================================================
 // Test State
@@ -89,14 +90,17 @@ static volatile uint32_t s_rx_count = 0;
 static volatile uint32_t s_tx_count = 0;
 
 // ============================================================================
-// RX Callback
+// RX Callback - Send telemetry in response to received packets
 // ============================================================================
+
+static volatile bool s_send_response = false;
 
 static void radio_rx_callback(const void *data, size_t len, void *user_data) {
     (void)data;
     (void)len;
     (void)user_data;
     s_rx_count++;
+    s_send_response = true; // Signal main loop to send response
 }
 
 // ============================================================================
@@ -144,11 +148,10 @@ static bool wait_for_battery(void) {
 static void run_telemetry_loop(void) {
     HIVE_LOG_INFO("[ESB] Telemetry loop starting (%ds)",
                   TEST_DURATION_MS / 1000);
-    HIVE_LOG_INFO("[ESB] Sending ATT/POS packets at %d Hz",
-                  1000 / TELEMETRY_INTERVAL_MS);
+    HIVE_LOG_INFO(
+        "[ESB] Response mode: send telemetry when radio packet received");
 
     uint32_t start = hal_get_time_ms();
-    uint32_t last_tx = 0;
     uint32_t last_log = 0;
     uint32_t tx_ok = 0;
     uint32_t tx_busy = 0;
@@ -157,22 +160,20 @@ static void run_telemetry_loop(void) {
     while ((hal_get_time_ms() - start) < TEST_DURATION_MS) {
         uint32_t now = hal_get_time_ms();
 
-        // Poll for incoming packets
+        // Poll for incoming packets (this triggers RX callback)
         hal_esb_poll();
 
-        // Queue telemetry at fixed interval
-        if ((now - last_tx) >= TELEMETRY_INTERVAL_MS) {
-            last_tx = now;
+        // Send telemetry in response to received radio packet
+        if (s_send_response) {
+            s_send_response = false;
 
             if (!hal_esb_tx_ready()) {
                 tx_busy++;
-                continue;
-            }
-
-            if (next_is_attitude) {
+            } else if (next_is_attitude) {
                 // Send attitude packet with zeros (no sensors in test)
                 telemetry_attitude_t pkt = {
                     .type = PACKET_TYPE_ATTITUDE,
+                    .timestamp_ms = hal_get_time_ms(),
                     .gyro_x = 0,
                     .gyro_y = 0,
                     .gyro_z = 0,
@@ -185,11 +186,13 @@ static void run_telemetry_loop(void) {
                     s_tx_count++;
                     hal_led_toggle();
                 }
+                next_is_attitude = false;
             } else {
                 // Send position packet with battery voltage
                 float voltage = hal_power_get_battery();
                 telemetry_position_t pkt = {
                     .type = PACKET_TYPE_POSITION,
+                    .timestamp_ms = hal_get_time_ms(),
                     .altitude = 0,
                     .vz = 0,
                     .vx = 0,
@@ -202,9 +205,8 @@ static void run_telemetry_loop(void) {
                     s_tx_count++;
                     hal_led_toggle();
                 }
+                next_is_attitude = true;
             }
-
-            next_is_attitude = !next_is_attitude;
         }
 
         // Log status every 5 seconds

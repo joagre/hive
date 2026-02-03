@@ -9,7 +9,7 @@ Displays flight progress at regular intervals and identifies problems:
 - Thrust saturation
 
 Usage:
-    python3 flight_debug.py /tmp/pilot_telemetry.csv
+    python3 flight_debug.py /tmp/tlog.csv
     python3 flight_debug.py telemetry.csv --interval 1.0
     python3 flight_debug.py telemetry.csv --time 0 10
     python3 flight_debug.py telemetry.csv --verbose

@@ -10,6 +10,7 @@
 #include "hive_link.h"
 #include "hive_log.h"
 #include "hive_internal.h"
+#include "hive_select.h"
 #include "hal/hive_hal_event.h"
 #include "hal/hive_hal_time.h"
 #include <stdbool.h>
@@ -119,6 +120,39 @@ void hive_scheduler_cleanup(void) {
     s_scheduler.initialized = false;
 }
 
+// Wake actors waiting on HAL events that have fired
+// Called after hive_hal_event_poll() to check if any waiting actors
+// should be woken due to HAL event signals (e.g., UART IDLE interrupt)
+static void wake_hal_event_waiters(void) {
+    actor_table_t *table = hive_actor_get_table();
+    if (!table || !table->actors) {
+        return;
+    }
+
+    for (size_t i = 0; i < table->max_actors; i++) {
+        actor_t *a = &table->actors[i];
+
+        // Only check waiting actors with select sources
+        if (a->state != ACTOR_STATE_WAITING || !a->select_sources ||
+            a->select_source_count == 0) {
+            continue;
+        }
+
+        // Check if any HAL event source is set
+        for (size_t j = 0; j < a->select_source_count; j++) {
+            if (a->select_sources[j].type == HIVE_SEL_HAL_EVENT) {
+                if (hive_hal_event_is_set(a->select_sources[j].event)) {
+                    // HAL event fired - wake the actor
+                    HIVE_LOG_TRACE("Waking actor %u on HAL event %u", a->id,
+                                   a->select_sources[j].event);
+                    a->state = ACTOR_STATE_READY;
+                    break; // Only need to wake once
+                }
+            }
+        }
+    }
+}
+
 void hive_scheduler_run(void) {
     if (!s_scheduler.initialized) {
         HIVE_LOG_ERROR("Scheduler not initialized");
@@ -136,6 +170,9 @@ void hive_scheduler_run(void) {
     while (!s_scheduler.shutdown_requested && table->num_actors > 0) {
         // Poll for pending events (non-blocking)
         hive_hal_event_poll();
+
+        // Wake actors waiting on HAL events (ISR signals)
+        wake_hal_event_waiters();
 
         // Find next runnable actor_t
         actor_t *next = find_next_runnable();
@@ -165,6 +202,9 @@ hive_status_t hive_scheduler_run_until_blocked(void) {
     while (!s_scheduler.shutdown_requested && table->num_actors > 0) {
         // Poll for I/O events (non-blocking)
         hive_hal_event_poll();
+
+        // Wake actors waiting on HAL events (ISR signals)
+        wake_hal_event_waiters();
 
         // Find next ready actor_t
         actor_t *next = find_next_runnable();

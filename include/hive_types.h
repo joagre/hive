@@ -151,8 +151,9 @@ typedef uint32_t hive_bus_id_t;
 
 // Select source types
 typedef enum {
-    HIVE_SEL_IPC, // Wait for IPC message matching filter
-    HIVE_SEL_BUS, // Wait for data on bus
+    HIVE_SEL_IPC,       // Wait for IPC message matching filter
+    HIVE_SEL_BUS,       // Wait for data on bus
+    HIVE_SEL_HAL_EVENT, // Wait for HAL event (from ISR)
 } hive_select_type_t;
 
 // Select source (tagged union)
@@ -161,6 +162,7 @@ typedef struct {
     union {
         hive_recv_filter_t ipc; // For HIVE_SEL_IPC: message filter
         hive_bus_id_t bus;      // For HIVE_SEL_BUS: bus ID
+        uint8_t event;          // For HIVE_SEL_HAL_EVENT: event ID
     };
 } hive_select_source_t;
 

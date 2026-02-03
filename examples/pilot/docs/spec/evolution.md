@@ -405,30 +405,31 @@ No real-time flight data logging during flight
 **After**
 ```
 State Bus ──┬──► Comms Actor ──► HAL Radio ──► Crazyradio 2.0 ──► Ground Station
-Sensor Bus ─┤      (100Hz)
+Sensor Bus ─┤      (event-driven)
 Thrust Bus ─┘
 ```
 
 **Implementation**
 - Subscribes to sensor, state, and thrust buses (not position target bus)
-- Sends binary packets at 100Hz over syslink protocol
+- Uses event-driven RX via `hive_event_wait(hal_esb_get_rx_event())` - no polling
+- UART IDLE interrupt signals HAL event when packet arrives
+- Sends binary packets over syslink protocol
 
-**Constraint** - While ESB supports 31-byte payloads, the nRF51 syslink implementation
-silently drops RADIO_RAW packets larger than 16 bytes. This is an undocumented limitation
-in the Bitcraze nRF51 firmware. Telemetry packets are designed to fit within 16 bytes.
+**Packet limits** - ESB max payload is 32 bytes. HAL uses 1 byte for framing,
+so max application payload is 30 bytes.
 
 **Design choice** - Prioritize attitude, rates, and thrust in telemetry packets. Position
-targets are omitted due to packet size limit - use Webots CSV telemetry for position
-control tuning. Timestamps are derived from receive rate on the ground station.
+targets are omitted to keep packets small - use Webots CSV telemetry for position
+control tuning. Each packet includes a 32-bit timestamp (ms since boot).
 - Two operating modes:
   - Flight mode: Sends telemetry packets at 100Hz (alternating types at 50Hz each)
   - Download mode: Transfers flash log file to ground station on request
-- Telemetry packet types (13 bytes each, fits 16-byte syslink limit):
-  - Type 0x01: Attitude/rates (gyro XYZ, roll/pitch/yaw)
-  - Type 0x02: Position (altitude, velocities, thrust, battery voltage)
-- Log download packet types (use different flow, can be up to 31 bytes):
+- Telemetry packet types (17 bytes payload each):
+  - Type 0x01: Attitude/rates (timestamp, gyro XYZ, roll/pitch/yaw)
+  - Type 0x02: Position (timestamp, altitude, velocities, thrust, battery voltage)
+- Log download packet types:
   - Type 0x10: CMD_REQUEST_LOG (ground -> drone)
-  - Type 0x11: LOG_CHUNK (drone -> ground, 28 bytes data)
+  - Type 0x11: LOG_CHUNK (drone -> ground, 27 bytes data)
   - Type 0x12: LOG_COMPLETE (drone -> ground)
 - Runs at LOW priority so control loops run first each cycle
 - Radio send blocks ~370us (37 bytes * 10 bits/byte / 1Mbaud)
@@ -449,7 +450,7 @@ cat log.txt                                     # View log directly
 - Non-intrusive (LOW priority doesn't affect control loops)
 
 ### Step 10: Telemetry Logger Actor
-Add CSV logging for PID tuning and flight analysis (Webots only).
+Add CSV logging for PID tuning and flight analysis.
 
 **Before**
 ```

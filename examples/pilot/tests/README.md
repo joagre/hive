@@ -20,8 +20,8 @@ These tests are organized by what they validate:
 - `flash` and `sd` use the Hive runtime (`hive_file.h`, `hive_runtime.h`)
 - `main` combines all tests for use as a Webots controller
 
-For bare-metal hardware bring-up tests (direct register access), see
-`hal/crazyflie-2.1plus/bringup/`.
+For bare-metal hardware bring-up, use the `sensors_motors` test with motor
+testing disabled (default), then enable with `ENABLE_MOTOR_TEST=1`.
 
 ## Quick Start
 
@@ -50,7 +50,7 @@ Validates the complete pilot HAL API stack.
 4. `hal_arm()` - Arm motors
 5. Sensor loop - Read sensors for 5 seconds
 6. Individual motor test - Each motor separately (2s each, 2s pause between)
-   - M1 Front-Right (CCW), M2 Back-Right (CW), M3 Back-Left (CCW), M4 Front-Left (CW)
+   - M1 Front-Left (CCW), M2 Front-Right (CW), M3 Rear-Right (CCW), M4 Rear-Left (CW)
 7. All motors test - All 4 motors together (2 seconds at 15% thrust)
 8. `hal_disarm()` - Disarm motors
 9. `hal_cleanup()` - Cleanup
@@ -267,13 +267,12 @@ python3 ../tools/ground_station.py --uri radio://0/80/2M
 
 **Packet formats (must match comms_actor.c and ground_station.py):**
 
-IMPORTANT: Telemetry packets are limited to 16 bytes maximum due to an
-undocumented nRF51 syslink limitation.
+ESB max payload is 32 bytes. HAL uses 1 byte for framing, so max payload is 30 bytes.
 
-| Type | Name | Size | Contents |
-|------|------|------|----------|
-| 0x01 | Attitude | 13 bytes | type + gyro_xyz + roll/pitch/yaw (all int16) |
-| 0x02 | Position | 13 bytes | type + alt + vz/vx/vy + thrust + battery_mv |
+| Type | Name | Payload | Contents |
+|------|------|---------|----------|
+| 0x01 | Attitude | 17 bytes | type + timestamp_ms + gyro_xyz + roll/pitch/yaw |
+| 0x02 | Position | 17 bytes | type + timestamp_ms + alt + vz/vx/vy + thrust + battery_mv |
 
 **LED feedback:**
 | Pattern | Meaning |

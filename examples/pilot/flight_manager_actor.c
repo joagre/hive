@@ -71,6 +71,7 @@ void flight_manager_actor(void *args, const hive_spawn_info_t *siblings,
                   hal_power_get_battery());
 
 #ifndef SIMULATED_TIME
+#if FLIGHT_PROFILE != FLIGHT_PROFILE_GROUND_TEST
     // Real hardware: wait for startup delay before allowing flight
     HIVE_LOG_INFO("[FLM] Startup delay: 60 seconds");
 
@@ -84,6 +85,10 @@ void flight_manager_actor(void *args, const hive_spawn_info_t *siblings,
     }
 
     HIVE_LOG_INFO("[FLM] Startup delay complete");
+#else
+    // Ground test mode - skip startup delay
+    HIVE_LOG_INFO("[FLM] Ground test mode - no startup delay");
+#endif
 #else
     // Simulation mode
     HIVE_LOG_INFO("[FLM] Simulation mode");
