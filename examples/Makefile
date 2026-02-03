@@ -70,8 +70,8 @@ $(BUILD_DIR)/%: %.c $(LIB) | $(BUILD_DIR)
 	$(CC) $(CFLAGS) $(CPPFLAGS) $(DEPFLAGS) $< -o $@ -L$(BUILD_DIR) -lhive
 
 # Individual run targets
-.PHONY: run-pingpong run-bus run-echo run-fileio run-link_demo run-logging
-.PHONY: run-priority run-registry run-request_reply run-select
+.PHONY: run-pingpong run-bus run-echo run-fileio run-hal_event run-link_demo
+.PHONY: run-logging run-priority run-registry run-request_reply run-select
 .PHONY: run-supervisor run-supervisor_manual run-timer
 
 run-pingpong: $(BUILD_DIR)/pingpong
@@ -85,6 +85,9 @@ run-echo: $(BUILD_DIR)/echo
 
 run-fileio: $(BUILD_DIR)/fileio
 	@./$(BUILD_DIR)/fileio
+
+run-hal_event: $(BUILD_DIR)/hal_event
+	@./$(BUILD_DIR)/hal_event
 
 run-link_demo: $(BUILD_DIR)/link_demo
 	@./$(BUILD_DIR)/link_demo
@@ -150,7 +153,7 @@ help:
 	@echo "  clean        - Remove example binaries"
 	@echo ""
 	@echo "Available examples:"
-	@echo "  bus, echo, fileio, link_demo, logging, pingpong,"
+	@echo "  bus, echo, fileio, hal_event, link_demo, logging, pingpong,"
 	@echo "  priority, registry, request_reply, select,"
 	@echo "  supervisor, supervisor_manual, timer"
 

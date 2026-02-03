@@ -19,7 +19,7 @@ This is an actor-based runtime for embedded systems, targeting STM32 (ARM Cortex
 - **docs/spec/** - Complete design specification (design.md, api.md, internals.md)
 - **README.md** - Quick start and API overview
 - **man/man3/** - Unix man pages for all API functions
-- **examples/** - Working examples (pingpong, bus, supervisor, etc.)
+- **examples/** - Working examples (pingpong, bus, supervisor, hal_event, etc.)
 - **examples/pilot/** - Complete quadcopter autopilot (12 actors, Kalman filter, cascaded PID)
 
 Man pages available:
@@ -333,42 +333,13 @@ Bus shares the message data pool with IPC and has per-bus buffer limits:
 
 ### Unified Event Waiting (hive_select)
 
-`hive_select()` provides a unified primitive for waiting on multiple event sources: IPC messages, bus data, and HAL events (hardware interrupts). The existing blocking APIs are thin wrappers around this primitive.
+`hive_select()` is the single primitive for waiting on IPC messages, bus data, and HAL events (hardware interrupts). Sources are checked in array order - first ready wins.
 
-**Source types**
-- `HIVE_SEL_IPC` - Wait for IPC message matching filter
-- `HIVE_SEL_BUS` - Wait for bus data
-- `HIVE_SEL_HAL_EVENT` - Wait for hardware interrupt signal (ISR-safe)
+**Thin wrappers** - `hive_ipc_recv()`, `hive_bus_read()`, and `hive_event_wait()` wrap `hive_select()` for single-source cases.
 
-**API**
-- **`hive_select(sources, num_sources, result, timeout)`** - Wait on multiple sources simultaneously
+**HAL events** - ISR-safe signaling. ISRs call `hive_hal_event_signal(id)` to wake actors. See `examples/hal_event.c` for usage patterns.
 
-**Priority semantics**
-- Sources are checked in strict array order (first ready source wins)
-- No type-based priority - all source types are treated equally
-
-**Example**
-```c
-hive_select_source_t sources[] = {
-    {HIVE_SEL_BUS, .bus = sensor_bus},
-    {HIVE_SEL_IPC, .ipc = {HIVE_SENDER_ANY, HIVE_MSG_TIMER, heartbeat}},
-    {HIVE_SEL_HAL_EVENT, .event = uart_rx_event},  // Wake on UART interrupt
-};
-hive_select_result_t result;
-hive_select(sources, 3, &result, -1);
-// result.index tells which source triggered
-// result.type tells if it's IPC, bus, or HAL event
-// result.ipc or result.bus contains the data (HAL event has no data)
-```
-
-**HAL events** - Enable interrupt-driven I/O without polling. ISRs call `hive_hal_event_signal(id)` to wake actors waiting in `hive_select()`. See spec/api.md "HAL Event API" for details.
-
-**Convenience wrappers** - For the common case of waiting on a single source:
-- `hive_ipc_recv()`, `hive_ipc_recv_match()`, `hive_ipc_recv_matches()` - Wait for IPC message
-- `hive_bus_read()` - Wait for bus data
-- `hive_event_wait(event, timeout)` - Wait for HAL event
-
-All are thin wrappers around `hive_select()`. Use `hive_select()` directly when waiting on multiple heterogeneous sources.
+See README.md "Unified Event Waiting" or `man hive_select` for examples and details.
 
 ## Important Implementation Details
 

@@ -83,6 +83,7 @@ See [docs/spec/](docs/spec/) for design details.
 - File I/O (POSIX on Linux, flash-backed on STM32 with optional SD card)
 - Logging (compile-time filtering, dual output: console + plain text file)
 - Bus (pub-sub with retention policies)
+- HAL events (ISR-safe signaling to wake actors from hardware interrupts)
 - Pool exhaustion handling (optional blocking with priority-ordered wakeup)
 
 ## Hive vs QP/C
@@ -570,6 +571,9 @@ hive_supervisor_stop(supervisor);
 # Unified event waiting (hive_select)
 ./build/select
 
+# HAL event example (interrupt-driven actor wakeup)
+./build/hal_event
+
 # Priority scheduling example (4 levels, starvation demo)
 ./build/priority
 
@@ -746,60 +750,31 @@ Omits SSL/TLS, UDP, socket options by design. See `man hive_tcp` for rationale.
 
 ### Unified Event Waiting
 
-- `hive_select(sources, num_sources, result, timeout_ms)` - Wait on multiple event sources (IPC + bus + HAL events)
-- `hive_event_wait(event, timeout_ms)` - Convenience wrapper for waiting on a single HAL event
+Embedded code often needs to wait for multiple things: a hardware interrupt, a timer, and a command from another actor. Without unified waiting, you poll in a loop or build a state machine. `hive_select()` handles all sources in one blocking call - the actor sleeps until something is ready.
 
-`hive_select()` provides unified waiting on heterogeneous sources:
-
-**Source types:**
-- `HIVE_SEL_IPC` - Wait for IPC message matching filter
-- `HIVE_SEL_BUS` - Wait for bus data
-- `HIVE_SEL_HAL_EVENT` - Wait for hardware interrupt (ISR-safe)
 ```c
-enum { SEL_SENSOR, SEL_TIMER, SEL_SHUTDOWN };
 hive_select_source_t sources[] = {
-    [SEL_SENSOR]   = {HIVE_SEL_BUS, .bus = sensor_bus},
-    [SEL_TIMER]    = {HIVE_SEL_IPC, .ipc = {HIVE_SENDER_ANY, HIVE_MSG_TIMER, heartbeat}},
-    [SEL_SHUTDOWN] = {HIVE_SEL_IPC, .ipc = {HIVE_SENDER_ANY, HIVE_MSG_NOTIFY, CMD_SHUTDOWN}},
+    {HIVE_SEL_HAL_EVENT, .event = uart_rx_event},  // UART RX interrupt
+    {HIVE_SEL_IPC, .ipc = {HIVE_SENDER_ANY, HIVE_MSG_TIMER, timeout}},
+    {HIVE_SEL_BUS, .bus = sensor_bus},
 };
 hive_select_result_t result;
-hive_status_t status = hive_select(sources, 3, &result, -1);
-if (HIVE_FAILED(status)) {
-    // HIVE_ERR_TIMEOUT if timeout expires
-    // HIVE_ERR_WOULDBLOCK if no data ready (timeout=0)
-}
+hive_select(sources, 3, &result, -1);  // Block until any source ready
 
 switch (result.index) {
-case SEL_SENSOR:
-    process_sensor(result.bus.data, result.bus.len);
-    break;
-case SEL_TIMER:
-    handle_timer();
-    break;
-case SEL_SHUTDOWN:
-    handle_shutdown(&result.ipc);
-    break;
+case 0: hal_uart_read(buf, len); break;  // HAL event - read the data
+case 1: handle_timeout(); break;          // Timer fired
+case 2: process(result.bus.data); break;  // Bus data available
 }
 ```
 
-**Priority** - Strict array order. When multiple sources are ready, the first one in the array wins.
+**Source types** - `HIVE_SEL_IPC` (messages), `HIVE_SEL_BUS` (pub-sub), `HIVE_SEL_HAL_EVENT` (hardware interrupts). HAL events are ISR-safe: the ISR calls `hive_hal_event_signal(id)` to wake the actor.
 
-**HAL events** enable interrupt-driven I/O. ISRs call `hive_hal_event_signal(id)` to wake actors:
-```c
-// Simple case: wait for single HAL event
-hive_event_wait(uart_rx_event, -1);
-hal_uart_read(buf, sizeof(buf));
+**Priority** - Strict array order. First ready source wins.
 
-// Multiple sources: use hive_select() directly
-hive_select_source_t sources[] = {
-    {HIVE_SEL_HAL_EVENT, .event = uart_rx_event},
-    {HIVE_SEL_IPC, .ipc = {HIVE_SENDER_ANY, HIVE_MSG_TIMER, timeout_timer}},
-};
-hive_select(sources, 2, &result, -1);
-if (result.type == HIVE_SEL_HAL_EVENT) {
-    hal_uart_read(buf, sizeof(buf));  // Read data after wake
-}
-```
+**Thin wrappers** - `hive_ipc_recv()`, `hive_bus_read()`, and `hive_event_wait()` are wrappers around `hive_select()` for single-source cases. Use `hive_select()` directly when waiting on multiple sources.
+
+See `man hive_select` for details.
 
 ## Implementation Details
 
