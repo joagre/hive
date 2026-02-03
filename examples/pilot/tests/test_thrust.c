@@ -1,7 +1,7 @@
 /**
  * Thrust Calibration Test
  *
- * Tests motor thrust to find the HAL_BASE_THRUST value needed for hover.
+ * Tests motor thrust to find the HAL_HOVER_THRUST value needed for hover.
  * Run multiple times at different thrust levels to find where the Crazyflie
  * barely stays on the ground (light on skids = correct base thrust).
  *
@@ -13,7 +13,7 @@
  *      - No movement: increase thrust by 0.02
  *      - Light on skids: good base thrust found!
  *      - Lifts off: decrease thrust by 0.01
- *   5. Update HAL_BASE_THRUST in hal_config.h with the found value
+ *   5. Update HAL_HOVER_THRUST in hal_config.h with the found value
  *
  * Safety:
  *   - REMOVE PROPELLERS for initial testing!
@@ -172,7 +172,7 @@ static int run_thrust_test(void) {
     HIVE_LOG_INFO("Observations:");
     HIVE_LOG_INFO("  - No movement: increase to %.2f",
                   THRUST_TEST_VALUE + 0.02f);
-    HIVE_LOG_INFO("  - Light on skids: GOOD! Use %.2f as HAL_BASE_THRUST",
+    HIVE_LOG_INFO("  - Light on skids: GOOD! Use %.2f as HAL_HOVER_THRUST",
                   THRUST_TEST_VALUE);
     HIVE_LOG_INFO("  - Lifted off: decrease to %.2f",
                   THRUST_TEST_VALUE - 0.01f);

@@ -1251,20 +1251,12 @@ void platform_read_sensors(sensor_data_t *sensors) {
         sensors->gyro[2] = gyro_data.z * gyro_scale - s_gyro_bias[2];
     }
 
-    // Read barometer
-    if (bmp3_get_sensor_data(BMP3_ALL, &baro_data, &s_bmp3_dev) == BMP3_OK) {
-        sensors->pressure_hpa = baro_data.pressure / 100.0f; // Pa to hPa
-        sensors->baro_temp_c = baro_data.temperature;
-        sensors->baro_valid = true;
-        // Calculate altitude from pressure difference
-        if (s_ref_pressure > 0) {
-            sensors->baro_altitude =
-                44330.0f * (1.0f - powf(baro_data.pressure / s_ref_pressure,
-                                        1.0f / 5.255f));
-        }
-    } else {
-        sensors->baro_valid = false;
-    }
+    // Read barometer (disabled - using ToF rangefinder for altitude instead)
+    // Baro is unreliable due to prop wash and was causing sensor validation
+    // failures that blocked the entire control pipeline.
+    sensors->baro_valid = false;
+    sensors->baro_altitude = 0.0f;
+    (void)baro_data; // Suppress unused warning
 
     // No magnetometer on Crazyflie 2.1+
     sensors->mag[0] = 0.0f;

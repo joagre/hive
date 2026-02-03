@@ -10,8 +10,8 @@
 // Thrust
 // ----------------------------------------------------------------------------
 
-// Base thrust for hover (tuned for Webots Crazyflie simulation)
-#define HAL_BASE_THRUST 0.553f
+// Hover thrust (tuned for Webots Crazyflie simulation)
+#define HAL_HOVER_THRUST 0.553f
 
 // ----------------------------------------------------------------------------
 // Altitude Control

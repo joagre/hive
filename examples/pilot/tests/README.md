@@ -9,7 +9,7 @@ These tests are organized by what they validate:
 | Test | API Used | Description |
 |------|----------|-------------|
 | `sensors_motors` | Pilot HAL | HAL API validation (sensors, motors, calibration) |
-| `thrust` | Pilot HAL | Thrust calibration (find HAL_BASE_THRUST for hover) |
+| `thrust` | Pilot HAL | Thrust calibration (find HAL_HOVER_THRUST for hover) |
 | `flash` | Hive File API | Tests flash-backed `/log` via `hive_file_*()` |
 | `sd` | Hive File API | Tests SD-backed `/sd` via `hive_file_*()` |
 | `esb` | Pilot HAL + Hive | ESB radio communication test (interrupt-based syslink) |
@@ -77,7 +77,7 @@ make PLATFORM=crazyflie TEST=sensors_motors ENABLE_MOTOR_TEST=1
 
 Calibrates the base thrust value needed for hover.
 
-The `HAL_BASE_THRUST` parameter in `hal_config.h` must be calibrated for each
+The `HAL_HOVER_THRUST` parameter in `hal_config.h` must be calibrated for each
 Crazyflie based on battery charge and weight. This test helps find the correct
 value by running motors at a specified thrust level.
 
@@ -89,7 +89,7 @@ value by running motors at a specified thrust level.
    - **No movement:** increase thrust by 0.02
    - **Light on skids:** correct value found!
    - **Lifts off:** decrease thrust by 0.01
-5. Update `HAL_BASE_THRUST` in `hal/crazyflie-2.1plus/hal_config.h`
+5. Update `HAL_HOVER_THRUST` in `hal/crazyflie-2.1plus/hal_config.h`
 
 **Usage:**
 ```bash
@@ -143,7 +143,7 @@ Running at 0.38 thrust... 4000 ms / 5000 ms
 Tested thrust: 0.38
 Observations:
   - No movement: increase to 0.40
-  - Light on skids: GOOD! Use 0.38 as HAL_BASE_THRUST
+  - Light on skids: GOOD! Use 0.38 as HAL_HOVER_THRUST
   - Lifted off: decrease to 0.37
 Update hal/crazyflie-2.1plus/hal_config.h with found value
 ```

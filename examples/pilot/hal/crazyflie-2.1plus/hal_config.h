@@ -3,9 +3,6 @@
 #ifndef HAL_CONFIG_H
 #define HAL_CONFIG_H
 
-// Motor thrust base value (matching Bitcraze)
-#define HAL_BASE_THRUST 36000
-
 // Calibrated hover thrust (normalized 0.0-1.0)
 // Measured with thrust test - drone light on skids at this value
 #define HAL_HOVER_THRUST 0.38f

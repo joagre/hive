@@ -131,8 +131,8 @@ The drone will automatically:
 | Flips on takeoff | Wrong prop direction or position | Check prop placement |
 | Oscillates rapidly | PID gains too high | Reduce rate PID gains |
 | Drifts slowly | PID gains too low | Increase attitude PID gains |
-| Can't lift off | Thrust too low | Increase HAL_BASE_THRUST |
-| Shoots up | Thrust too high | Decrease HAL_BASE_THRUST |
+| Can't lift off | Thrust too low | Increase HAL_HOVER_THRUST |
+| Shoots up | Thrust too high | Decrease HAL_HOVER_THRUST |
 | Altitude oscillates | Alt PID needs tuning | Adjust HAL_ALT_PID_* |
 
 ---
@@ -237,7 +237,6 @@ HAL_VVEL_DAMPING_GAIN 0.25  // Conservative (Webots: 0.35)
 
 // Hover thrust (normalized 0.0-1.0)
 HAL_HOVER_THRUST    0.38    // Calibrated with thrust test
-HAL_BASE_THRUST     36000   // Raw PWM value
 ```
 
 **Note** - Crazyflie gains are intentionally conservative for first flights.

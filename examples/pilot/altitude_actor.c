@@ -208,7 +208,7 @@ void altitude_actor(void *args, const hive_spawn_info_t *siblings,
                 float velocity_error =
                     LANDING_DESCENT_RATE - est.vertical_velocity;
                 thrust =
-                    HAL_BASE_THRUST + LANDING_VELOCITY_GAIN * velocity_error;
+                    HAL_HOVER_THRUST + LANDING_VELOCITY_GAIN * velocity_error;
                 thrust = CLAMPF(thrust, 0.0f, 1.0f);
             }
         } else {
@@ -235,7 +235,7 @@ void altitude_actor(void *args, const hive_spawn_info_t *siblings,
                              : 1.0f;
 
             thrust =
-                ramp * CLAMPF(HAL_BASE_THRUST + pos_correction + vel_damping,
+                ramp * CLAMPF(HAL_HOVER_THRUST + pos_correction + vel_damping,
                               0.0f, 1.0f);
         }
 

@@ -124,7 +124,7 @@
 // The following are defined in hal_config.h (platform-specific):
 //
 // Thrust:
-//   HAL_BASE_THRUST
+//   HAL_HOVER_THRUST
 //
 // Altitude control:
 //   HAL_ALT_PID_KP, HAL_ALT_PID_KI, HAL_ALT_PID_KD
