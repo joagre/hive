@@ -65,6 +65,19 @@ int main(void) {
         hal_cleanup();
         return 1;
     }
+
+    // Grace period - 15 seconds to step back and place drone
+    hal_printf(
+        "[PILOT] 15 second grace period - place drone on level surface\n");
+    for (int i = 15; i > 0; i--) {
+        hal_printf("[PILOT] %2d seconds...\n", i);
+        hal_led_on();
+        hal_delay_ms(500);
+        hal_led_off();
+        hal_delay_ms(500);
+    }
+    hal_printf("[PILOT] Starting calibration - KEEP STILL!\n");
+
     hal_calibrate();
     hal_arm();
 

@@ -85,11 +85,10 @@ static volatile float s_battery_voltage = 0.0f;
 // HAL event for RX notification (signals when UART goes idle after receiving)
 static hive_hal_event_id_t s_rx_event = HIVE_HAL_EVENT_INVALID;
 
-// RX callback with user data
-typedef void (*radio_rx_callback_t)(const void *data, size_t len,
-                                    void *user_data);
-static radio_rx_callback_t s_rx_callback = NULL;
-static void *s_rx_callback_user_data = NULL;
+// Parsed radio packet buffer (for hal_esb_recv)
+static uint8_t s_radio_packet[SYSLINK_MTU];
+static size_t s_radio_packet_len = 0;
+static bool s_radio_packet_ready = false;
 
 // RX state machine
 typedef enum {
@@ -299,9 +298,11 @@ static int syslink_send(uint8_t type, const void *data, size_t len) {
 static void syslink_process_packet(void) {
     switch (s_rx_type) {
     case SYSLINK_RADIO_RAW:
-        // Pass to application if callback registered and data present
-        if (s_rx_callback && s_rx_length > 0) {
-            s_rx_callback(s_rx_data, s_rx_length, s_rx_callback_user_data);
+        // Buffer radio packet for hal_esb_recv()
+        if (s_rx_length > 0 && !s_radio_packet_ready) {
+            memcpy(s_radio_packet, s_rx_data, s_rx_length);
+            s_radio_packet_len = s_rx_length;
+            s_radio_packet_ready = true;
         }
         break;
 
@@ -393,8 +394,8 @@ int hal_esb_init(void) {
     uart_init();
 
     s_rx_state = RX_START1;
-    s_rx_callback = NULL;
-    s_rx_callback_user_data = NULL;
+    s_radio_packet_ready = false;
+    s_radio_packet_len = 0;
     s_battery_voltage = 0.0f;
     s_initialized = true;
 
@@ -407,8 +408,13 @@ int hal_esb_init(void) {
 
     // Wait for nRF51 to respond with battery voltage (confirms link is working)
     uint32_t start = hal_get_time_ms();
+    uint8_t dummy[32];
+    size_t dummy_len;
     while ((hal_get_time_ms() - start) < 5000) {
-        hal_esb_poll();
+        // Process incoming packets (battery handled internally)
+        while (hal_esb_recv(dummy, sizeof(dummy), &dummy_len)) {
+            // Discard any radio packets during init
+        }
         if (s_battery_voltage > 0.1f) {
             return 0; // nRF51 ready
         }
@@ -444,33 +450,49 @@ bool hal_esb_tx_ready(void) {
     return s_initialized && txen_ready();
 }
 
-void hal_esb_poll(void) {
+bool hal_esb_recv(void *buf, size_t max_len, size_t *out_len) {
     if (!s_initialized) {
-        return;
+        return false;
     }
 
-    // Get current DMA write position
+    // If we already have a buffered packet, return it
+    if (s_radio_packet_ready) {
+        size_t copy_len =
+            (s_radio_packet_len < max_len) ? s_radio_packet_len : max_len;
+        memcpy(buf, s_radio_packet, copy_len);
+        if (out_len) {
+            *out_len = copy_len;
+        }
+        s_radio_packet_ready = false;
+        return true;
+    }
+
+    // Process DMA buffer until we find a radio packet or run out of data
     uint32_t write_pos = dma_get_write_pos();
     uint32_t read_pos = s_dma_rx_read_pos;
 
-    // Process all bytes between read and write positions
     while (read_pos != write_pos) {
         uint8_t byte = s_dma_rx_buffer[read_pos];
         syslink_rx_byte(byte);
 
         // Advance read position with wrap
         read_pos = (read_pos + 1) & (DMA_RX_BUFFER_SIZE - 1);
+        s_dma_rx_read_pos = read_pos;
+
+        // Check if we got a radio packet
+        if (s_radio_packet_ready) {
+            size_t copy_len =
+                (s_radio_packet_len < max_len) ? s_radio_packet_len : max_len;
+            memcpy(buf, s_radio_packet, copy_len);
+            if (out_len) {
+                *out_len = copy_len;
+            }
+            s_radio_packet_ready = false;
+            return true;
+        }
     }
 
-    // Update read position
-    s_dma_rx_read_pos = read_pos;
-}
-
-void hal_esb_set_rx_callback(void (*callback)(const void *data, size_t len,
-                                              void *user_data),
-                             void *user_data) {
-    s_rx_callback = callback;
-    s_rx_callback_user_data = user_data;
+    return false;
 }
 
 float hal_power_get_battery(void) {

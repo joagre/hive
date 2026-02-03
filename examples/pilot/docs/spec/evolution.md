@@ -31,18 +31,21 @@ The following safety features run on all platforms (Webots and STM32):
 
 | Feature | Location | Behavior |
 |---------|----------|----------|
+| Motor START gate | motor_actor.c | Motors stay OFF until flight_manager sends authorization |
+| Crash latch | altitude_actor.c | Once attitude exceeds 45 deg, motors stay OFF until reboot |
 | Attitude cutoff | altitude_actor.c | Motors off if roll or pitch >45 deg |
 | Altitude cutoff | altitude_actor.c | Motors off if altitude >2m |
 | Landed detection | altitude_actor.c | Motors off when target <5cm and altitude <15cm |
 | Thrust ramp | altitude_actor.c | Gradual thrust increase over 0.5 seconds on takeoff |
 | Motor deadman | motor_actor.c | Motors zeroed if no torque command within 50ms |
-| Flight duration | flight_manager_actor.c | Controlled landing after timeout (10-60s depending on flight profile) |
+| Flight duration | flight_manager_actor.c | Controlled landing after timeout (6-60s depending on flight profile) |
+| Landing timeout | flight_manager_actor.c | Forces shutdown if landing detection fails (10s max) |
 
 The following safety features are STM32-only (disabled in Webots):
 
 | Feature | Location | Behavior |
 |---------|----------|----------|
-| Startup delay | flight_manager_actor.c | Flight blocked for 60 seconds after boot |
+| Startup delay | flight_manager_actor.c | Flight blocked for 60 seconds after boot (motors OFF) |
 
 ### Future Safety Features
 
@@ -365,7 +368,8 @@ Waypoint actor starts immediately
 
 **After**
 ```
-Flight Manager ──► START ──► Waypoint Actor
+Flight Manager ──► START ──► Motor Actor (enables output)
+               ──► START ──► Waypoint Actor (begins navigation)
                               │
                               v (flight begins)
                ──► LANDING ──► Altitude Actor
@@ -378,8 +382,9 @@ Flight Manager ──► START ──► Waypoint Actor
 ```
 
 **Implementation**
-- Handles 60-second startup delay (hardware only)
+- Handles 60-second startup delay (hardware only, motors stay OFF)
 - Opens log file (erases flash sector on STM32)
+- Sends START notification to motor actor (enables motor output)
 - Sends START notification to waypoint actor to begin flight
 - Periodic log sync every 4 seconds
 - Flight duration per profile (10s/40s/60s)

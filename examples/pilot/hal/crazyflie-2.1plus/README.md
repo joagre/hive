@@ -215,10 +215,10 @@ PC12 - SD_CS      (SD card deck, IO4 on expansion)
 
 ### TIM2/TIM4 PWM (Motors)
 ```
-PA1  - TIM2_CH2 (M1, front-left, CCW)
-PB11 - TIM2_CH4 (M2, front-right, CW)
-PA15 - TIM2_CH1 (M3, rear-right, CCW)
-PB9  - TIM4_CH4 (M4, rear-left, CW)
+PA1  - TIM2_CH2 (M1, front-right, CCW)
+PB11 - TIM2_CH4 (M2, back-right, CW)
+PA15 - TIM2_CH1 (M3, back-left, CCW)
+PB9  - TIM4_CH4 (M4, front-left, CW)
 ```
 
 ### Debug
@@ -505,7 +505,7 @@ Ground Station                 nRF51 (PRX)                    STM32 (comms_actor
       |                            |                                |
       |                            |                         comms_actor wakes
       |                            |                                |
-      |                            |                         hal_esb_poll()
+      |                            |                         hal_esb_recv()
       |                            |                                |
       |                            |<-- syslink (next telemetry) ---|
       |                            |    (queued for next ACK)       |
@@ -572,32 +572,33 @@ Detection uses Model ID register (0x010F) which returns 0xEACC for VL53L1x.
 
 ## Motor Layout
 
-Standard Bitcraze X-configuration:
+Standard Bitcraze X-configuration (viewed from above):
 
 ```
-         FRONT
-     M1(CCW)  M2(CW)
-         +--+
-         |  |
-         +--+
-     M4(CW)  M3(CCW)
-         REAR
+            FRONT
+        M4(CW)   M1(CCW)
+            \   /
+             \ /
+             / \
+            /   \
+        M3(CCW)  M2(CW)
+            BACK
 ```
 
 | Motor | Position | Rotation | Pin | Timer |
 |-------|----------|----------|-----|-------|
-| M1 | Front-left | CCW | PA1 | TIM2_CH2 |
-| M2 | Front-right | CW | PB11 | TIM2_CH4 |
-| M3 | Rear-right | CCW | PA15 | TIM2_CH1 |
-| M4 | Rear-left | CW | PB9 | TIM4_CH4 |
+| M1 | Front-right | CCW | PA1 | TIM2_CH2 |
+| M2 | Back-right | CW | PB11 | TIM2_CH4 |
+| M3 | Back-left | CCW | PA15 | TIM2_CH1 |
+| M4 | Front-left | CW | PB9 | TIM4_CH4 |
 
-**Motor mixing (in hal_motors.c)**
+**Motor mixing (in hal_motors.c, matches Bitcraze power_distribution_quadrotor.c)**
 
 ```
-M1 = thrust - roll + pitch + yaw  (front-left, CCW)
-M2 = thrust + roll + pitch - yaw  (front-right, CW)
-M3 = thrust + roll - pitch + yaw  (rear-right, CCW)
-M4 = thrust - roll - pitch - yaw  (rear-left, CW)
+M1 = thrust - roll + pitch + yaw  (front-right, CCW)
+M2 = thrust - roll - pitch - yaw  (back-right, CW)
+M3 = thrust + roll - pitch + yaw  (back-left, CCW)
+M4 = thrust + roll + pitch - yaw  (front-left, CW)
 ```
 
 ## Troubleshooting

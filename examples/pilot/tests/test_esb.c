@@ -90,20 +90,6 @@ static volatile uint32_t s_rx_count = 0;
 static volatile uint32_t s_tx_count = 0;
 
 // ============================================================================
-// RX Callback - Send telemetry in response to received packets
-// ============================================================================
-
-static volatile bool s_send_response = false;
-
-static void radio_rx_callback(const void *data, size_t len, void *user_data) {
-    (void)data;
-    (void)len;
-    (void)user_data;
-    s_rx_count++;
-    s_send_response = true; // Signal main loop to send response
-}
-
-// ============================================================================
 // LED Helpers
 // ============================================================================
 
@@ -124,9 +110,14 @@ static bool wait_for_battery(void) {
     HIVE_LOG_INFO("[ESB] Waiting for battery from nRF51...");
 
     uint32_t start = hal_get_time_ms();
+    uint8_t rx_buf[32];
+    size_t rx_len;
 
     while ((hal_get_time_ms() - start) < BATTERY_TIMEOUT_MS) {
-        hal_esb_poll();
+        // Process incoming packets (battery handled internally by HAL)
+        while (hal_esb_recv(rx_buf, sizeof(rx_buf), &rx_len)) {
+            // Discard any radio packets during init
+        }
 
         float voltage = hal_power_get_battery();
         if (voltage > 0.1f) {
@@ -156,17 +147,20 @@ static void run_telemetry_loop(void) {
     uint32_t tx_ok = 0;
     uint32_t tx_busy = 0;
     bool next_is_attitude = true;
+    uint8_t rx_buf[32];
+    size_t rx_len;
 
     while ((hal_get_time_ms() - start) < TEST_DURATION_MS) {
         uint32_t now = hal_get_time_ms();
 
-        // Poll for incoming packets (this triggers RX callback)
-        hal_esb_poll();
+        // Check for incoming packets
+        bool got_packet = hal_esb_recv(rx_buf, sizeof(rx_buf), &rx_len);
+        if (got_packet) {
+            s_rx_count++;
+        }
 
         // Send telemetry in response to received radio packet
-        if (s_send_response) {
-            s_send_response = false;
-
+        if (got_packet) {
             if (!hal_esb_tx_ready()) {
                 tx_busy++;
             } else if (next_is_attitude) {
@@ -241,8 +235,6 @@ static void esb_test_actor(void *args, const hive_spawn_info_t *siblings,
     HIVE_LOG_INFO("========================================");
     HIVE_LOG_INFO("  ESB Radio Test");
     HIVE_LOG_INFO("========================================");
-
-    hal_esb_set_rx_callback(radio_rx_callback, NULL);
 
     // 2 blinks = radio ready
     blink(2, 200, 200);

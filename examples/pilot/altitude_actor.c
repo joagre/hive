@@ -75,6 +75,7 @@ void altitude_actor(void *args, const hive_spawn_info_t *siblings,
     uint64_t ramp_start_time = 0;
     bool landing_mode = false;
     bool landed = false;
+    bool crash_detected = false; // Latched - once true, motors stay off
     int count = 0;
 
     HIVE_LOG_INFO("[ALT] Started, waiting for target altitude");
@@ -144,29 +145,33 @@ void altitude_actor(void *args, const hive_spawn_info_t *siblings,
                                   (fabsf(est.pitch) > EMERGENCY_TILT_LIMIT);
         bool altitude_emergency = (est.altitude > EMERGENCY_ALTITUDE_MAX);
 
+        // Latch crash condition - once triggered, motors stay off until reboot
+        if (attitude_emergency || altitude_emergency) {
+            crash_detected = true;
+        }
+
         // Touchdown detection (only in landing mode)
         bool touchdown = landing_mode &&
                          (est.altitude < LANDED_ACTUAL_THRESHOLD) &&
                          (fabsf(est.vertical_velocity) < 0.1f);
 
-        bool cutoff = attitude_emergency || altitude_emergency || touchdown;
+        bool cutoff = crash_detected || touchdown;
 
         // Log emergency conditions (once per event)
-        static bool logged_attitude_emergency = false;
-        static bool logged_altitude_emergency = false;
-        if (attitude_emergency && !logged_attitude_emergency) {
+        static bool logged_crash = false;
+        if (crash_detected && !logged_crash) {
             HIVE_LOG_ERROR(
-                "[ALT] EMERGENCY: tilt exceeded! roll=%.1f pitch=%.1f "
-                "limit=%.1f deg",
-                est.roll * RAD_TO_DEG, est.pitch * RAD_TO_DEG,
-                EMERGENCY_TILT_LIMIT * RAD_TO_DEG);
-            logged_attitude_emergency = true;
-        }
-        if (altitude_emergency && !logged_altitude_emergency) {
-            HIVE_LOG_ERROR("[ALT] EMERGENCY: altitude exceeded! alt=%.2f "
-                           "limit=%.2f m",
-                           est.altitude, EMERGENCY_ALTITUDE_MAX);
-            logged_altitude_emergency = true;
+                "[ALT] CRASH DETECTED - motors disabled until reboot! "
+                "roll=%.1f pitch=%.1f alt=%.2f",
+                est.roll * RAD_TO_DEG, est.pitch * RAD_TO_DEG, est.altitude);
+            logged_crash = true;
+
+            // Notify flight manager that we've crashed (treat as landed)
+            if (!landed) {
+                landed = true;
+                hive_ipc_notify(state->flight_manager, NOTIFY_FLIGHT_LANDED,
+                                NULL, 0);
+            }
         }
 
         float thrust;

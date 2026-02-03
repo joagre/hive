@@ -153,21 +153,16 @@ typedef struct {
     uint16_t log_sequence;
 } comms_state_t;
 
-// RX callback - handles incoming commands from ground station
-static void radio_rx_callback(const void *data, size_t len, void *user_data) {
-    comms_state_t *state = (comms_state_t *)user_data;
-    if (!state) {
-        return;
-    }
-
-    // Need at least HAL frame header + command byte for commands
+// Handle incoming command from ground station
+static void handle_rx_command(comms_state_t *state, const uint8_t *data,
+                              size_t len) {
+    // Need at least HAL frame header + command byte
     if (len < 2) {
         return;
     }
 
-    const uint8_t *bytes = (const uint8_t *)data;
     // Skip HAL frame header (byte 0), command is in byte 1
-    uint8_t cmd = bytes[1];
+    uint8_t cmd = data[1];
 
     if (cmd == CMD_REQUEST_LOG) {
         // Ground station requests log download
@@ -224,9 +219,6 @@ void comms_actor(void *args, const hive_spawn_info_t *siblings,
     comms_state_t *state = args;
 
     // Radio already initialized from main() via hal_esb_init()
-    // Register RX callback for ground station commands
-    hal_esb_set_rx_callback(radio_rx_callback, state);
-
     HIVE_LOG_INFO("[COMMS] Radio initialized");
 
     // Subscribe to buses
@@ -261,8 +253,12 @@ void comms_actor(void *args, const hive_spawn_info_t *siblings,
             hive_exit(HIVE_EXIT_REASON_CRASH);
         }
 
-        // Always poll to process any pending RX data (from DMA buffer)
-        hal_esb_poll();
+        // Process any pending RX packets (commands from ground station)
+        uint8_t rx_buf[32];
+        size_t rx_len;
+        while (hal_esb_recv(rx_buf, sizeof(rx_buf), &rx_len)) {
+            handle_rx_command(state, rx_buf, rx_len);
+        }
 
         // Read latest bus data (non-blocking)
         size_t bytes_read;

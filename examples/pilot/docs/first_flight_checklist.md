@@ -53,7 +53,7 @@ Flash the pilot firmware and verify control response without props.
 
 ```bash
 cd examples/pilot
-make -f Makefile.crazyflie-2.1plus FLIGHT_PROFILE=1
+make -f Makefile.crazyflie-2.1plus FLIGHT_PROFILE=FLIGHT_PROFILE_FIRST_TEST
 make -f Makefile.crazyflie-2.1plus flash
 ```
 
@@ -96,12 +96,25 @@ First powered test with propellers installed.
 - [ ] Wait for calibration (LED blinking -> solid)
 - [ ] Stand clear (2m minimum)
 
-### Flight Test (FLIGHT_PROFILE=1: 10s hover at 0.5m)
+### Flight Test (FLIGHT_PROFILE_FIRST_TEST: 6s hover at 0.5m)
+
+**Timeline after power-on:**
+
+| Time | Phase | Motors |
+|------|-------|--------|
+| 0-15s | Grace period (LED blinking) | OFF |
+| 15-20s | Calibration (keep still!) | OFF |
+| 20-80s | Startup delay (step back!) | OFF |
+| 80s | Flight start | ON |
+| 80-86s | Hover at 0.5m | ON |
+| 86s+ | Landing | OFF |
+
+**Motors stay OFF for the first ~80 seconds.** Use this time to step back safely.
 
 The drone will automatically:
-1. Arm motors
+1. Wait for flight authorization (60s countdown)
 2. Ramp up thrust
-3. Attempt to hover at 0.5m for 10 seconds
+3. Attempt to hover at 0.5m for 6 seconds
 4. Land and disarm
 
 **Observe**
@@ -138,14 +151,14 @@ Only proceed if tethered flight was stable.
 ### Flight Profiles
 
 ```bash
-# Conservative hover test
-make -f Makefile.crazyflie-2.1plus FLIGHT_PROFILE=1  # 10s at 0.5m
+# Conservative hover test (6s at 0.5m)
+make -f Makefile.crazyflie-2.1plus FLIGHT_PROFILE=FLIGHT_PROFILE_FIRST_TEST
 
 # Altitude changes (max 1.2m, within flow deck range)
-make -f Makefile.crazyflie-2.1plus FLIGHT_PROFILE=2  # 0.5m -> 0.8m -> 1.2m -> 0.8m
+make -f Makefile.crazyflie-2.1plus FLIGHT_PROFILE=FLIGHT_PROFILE_ALTITUDE
 
 # Full 3D (requires Flow deck, max 1.2m)
-make -f Makefile.crazyflie-2.1plus FLIGHT_PROFILE=3  # Waypoint navigation
+make -f Makefile.crazyflie-2.1plus FLIGHT_PROFILE=FLIGHT_PROFILE_FULL_3D
 ```
 
 ### Tuning Sequence
@@ -201,34 +214,35 @@ First flight is successful if:
 
 ## PID Tuning Reference
 
-Default values in `hal_config.h` (tuned in Webots with 20ms motor lag):
+Default values in `hal/crazyflie-2.1plus/hal_config.h` (conservative for first flights):
 
 ```c
-// Rate (innermost loop) - tuned for motor response lag
-HAL_RATE_PID_KP     0.028
-HAL_RATE_PID_KI     0.002
-HAL_RATE_PID_KD     0.003
+// Rate (innermost loop)
+HAL_RATE_PID_KP     0.018   // Conservative (Webots: 0.028)
+HAL_RATE_PID_KI     0.001   // Conservative (Webots: 0.002)
+HAL_RATE_PID_KD     0.001   // Conservative (Webots: 0.003)
 
 // Attitude (middle loop)
-HAL_ATTITUDE_PID_KP 2.5
+HAL_ATTITUDE_PID_KP 1.5     // Conservative (Webots: 2.5)
 HAL_ATTITUDE_PID_KI 0.0
-HAL_ATTITUDE_PID_KD 0.15
+HAL_ATTITUDE_PID_KD 0.08    // Conservative (Webots: 0.15)
 
 // Altitude
-HAL_ALT_PID_KP      0.18
-HAL_ALT_PID_KI      0.03
+HAL_ALT_PID_KP      0.12    // Conservative (Webots: 0.18)
+HAL_ALT_PID_KI      0.01    // Conservative (Webots: 0.03)
 HAL_ALT_PID_KD      0.0
 
 // Vertical velocity damping
-HAL_VVEL_DAMPING_GAIN 0.35
+HAL_VVEL_DAMPING_GAIN 0.25  // Conservative (Webots: 0.35)
 
-// Base thrust (hover point) - MUST BE CALIBRATED on actual hardware
-HAL_BASE_THRUST     0.38
+// Hover thrust (normalized 0.0-1.0)
+HAL_HOVER_THRUST    0.38    // Calibrated with thrust test
+HAL_BASE_THRUST     36000   // Raw PWM value
 ```
 
-**Note** - Only HAL_BASE_THRUST typically needs calibration on real hardware.
-Start at 0.38 and adjust until stable hover is achieved. Other gains were
-tuned in Webots with realistic motor lag simulation and should transfer well.
+**Note** - Crazyflie gains are intentionally conservative for first flights.
+If drone is sluggish but stable, gradually increase toward Webots values.
+HAL_HOVER_THRUST may need calibration - start at 0.38 and adjust.
 
 Adjust in 10-20% increments. Reflash after each change.
 

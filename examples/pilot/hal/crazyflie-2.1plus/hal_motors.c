@@ -15,27 +15,33 @@
 
 // Crazyflie 2.1+ X-configuration mixer
 //
-// Motor layout (viewed from above):
+// Motor layout (viewed from above, Bitcraze standard):
 //
 //          Front
-//      M1(CCW)  M2(CW)
-//          +--+
-//          |  |
-//          +--+
-//      M4(CW)  M3(CCW)
-//          Rear
+//      M4(CW)   M1(CCW)
+//          \   /
+//           \ /
+//           / \
+//          /   \
+//      M3(CCW)  M2(CW)
+//          Back
 //
-// Channel mapping (Bitcraze reference):
-//   M1 (front-left, CCW):  TIM2_CH2 (PA1)
-//   M2 (front-right, CW):  TIM2_CH4 (PB11)
-//   M3 (rear-right, CCW):  TIM2_CH1 (PA15)
-//   M4 (rear-left, CW):    TIM4_CH4 (PB9)
+// Channel mapping:
+//   M1 (front-right, CCW): TIM2_CH2 (PA1)
+//   M2 (back-right, CW):   TIM2_CH4 (PB11)
+//   M3 (back-left, CCW):   TIM2_CH1 (PA15)
+//   M4 (front-left, CW):   TIM4_CH4 (PB9)
 //
-// Mixer equations (standard X-quad):
-//   M1 = thrust - roll + pitch + yaw  (front-left, CCW)
-//   M2 = thrust + roll + pitch - yaw  (front-right, CW)
-//   M3 = thrust + roll - pitch + yaw  (rear-right, CCW)
-//   M4 = thrust - roll - pitch - yaw  (rear-left, CW)
+// Sign conventions (matching Bitcraze):
+//   +roll  = right wing down (right motors less, left motors more)
+//   +pitch = nose up (front motors more, back motors less)
+//   +yaw   = CCW rotation (CW motors more, CCW motors less)
+//
+// Mixer equations (from Bitcraze power_distribution_quadrotor.c):
+//   M1 = thrust - roll + pitch + yaw  (front-right, CCW)
+//   M2 = thrust - roll - pitch - yaw  (back-right, CW)
+//   M3 = thrust + roll - pitch + yaw  (back-left, CCW)
+//   M4 = thrust + roll + pitch - yaw  (front-left, CW)
 
 static inline float clampf(float x, float lo, float hi) {
     return (x < lo) ? lo : ((x > hi) ? hi : x);
@@ -50,14 +56,15 @@ void hal_write_torque(const torque_cmd_t *cmd) {
     // Apply mixer: convert torque to individual motor commands
     motor_cmd_t motors;
 
-    motors.motor[0] =
-        cmd->thrust - cmd->roll + cmd->pitch + cmd->yaw; // M1 (front-left, CCW)
+    // Mixer matches Bitcraze power_distribution_quadrotor.c (legacy mode)
+    motors.motor[0] = cmd->thrust - cmd->roll + cmd->pitch +
+                      cmd->yaw; // M1 (front-right, CCW)
     motors.motor[1] =
-        cmd->thrust + cmd->roll + cmd->pitch - cmd->yaw; // M2 (front-right, CW)
+        cmd->thrust - cmd->roll - cmd->pitch - cmd->yaw; // M2 (back-right, CW)
     motors.motor[2] =
-        cmd->thrust + cmd->roll - cmd->pitch + cmd->yaw; // M3 (rear-right, CCW)
+        cmd->thrust + cmd->roll - cmd->pitch + cmd->yaw; // M3 (back-left, CCW)
     motors.motor[3] =
-        cmd->thrust - cmd->roll - cmd->pitch - cmd->yaw; // M4 (rear-left, CW)
+        cmd->thrust + cmd->roll + cmd->pitch - cmd->yaw; // M4 (front-left, CW)
 
     // Clamp motor values and detect saturation
     bool saturated = false;

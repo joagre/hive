@@ -10,11 +10,21 @@
 // Measured with thrust test - drone light on skids at this value
 #define HAL_HOVER_THRUST 0.38f
 
-// Motor mapping (rotation viewed from above):
-// M1 (TIM2_CH1) - Front Right (CCW)
-// M2 (TIM2_CH2) - Back Right (CW)
-// M3 (TIM2_CH3) - Back Left (CCW)
-// M4 (TIM2_CH4) - Front Left (CW)
+// Motor mapping (Bitcraze standard, viewed from above):
+//
+//        Front
+//     M4(CW)   M1(CCW)
+//         \   /
+//          \ /
+//          / \
+//         /   \
+//     M3(CCW)  M2(CW)
+//        Back
+//
+// M1 (front-right, CCW): TIM2_CH2 (PA1)
+// M2 (back-right, CW):   TIM2_CH4 (PB11)
+// M3 (back-left, CCW):   TIM2_CH1 (PA15)
+// M4 (front-left, CW):   TIM4_CH4 (PB9)
 
 // Sensor update rate (Hz)
 #define HAL_SENSOR_RATE 1000

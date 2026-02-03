@@ -129,20 +129,15 @@ int hal_esb_send(const void *data, size_t len);
 // ESB is half-duplex: can only TX after receiving from ground.
 bool hal_esb_tx_ready(void);
 
-// Poll for incoming ESB packets.
-// Call periodically to process RX data.
-void hal_esb_poll(void);
-
-// Register callback for received ESB data.
-// Callback is called from hal_esb_poll() context.
-// user_data is passed back to callback for context.
-void hal_esb_set_rx_callback(void (*callback)(const void *data, size_t len,
-                                              void *user_data),
-                             void *user_data);
+// Receive next radio packet from ground station.
+// Processes DMA buffer and returns next complete packet.
+// Battery packets are handled internally (transparent to caller).
+// Returns true if packet available, false if none pending.
+bool hal_esb_recv(void *buf, size_t max_len, size_t *out_len);
 
 // Get HAL event ID for RX notification.
 // This event is signaled by the UART IDLE interrupt when data arrives.
-// Use with hive_select(HIVE_SEL_HAL_EVENT) for efficient waiting.
+// Use with hive_event_wait() or hive_select(HIVE_SEL_HAL_EVENT).
 // Returns HIVE_HAL_EVENT_INVALID if radio not initialized.
 hive_hal_event_id_t hal_esb_get_rx_event(void);
 

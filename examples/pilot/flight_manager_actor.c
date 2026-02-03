@@ -27,7 +27,7 @@
 
 // Flight duration per profile (flight manager decides when to land)
 #if FLIGHT_PROFILE == FLIGHT_PROFILE_FIRST_TEST
-#define FLIGHT_DURATION_US (10 * 1000000) // 10 seconds
+#define FLIGHT_DURATION_US (6 * 1000000) // 6 seconds - short for safety
 #elif FLIGHT_PROFILE == FLIGHT_PROFILE_ALTITUDE
 #define FLIGHT_DURATION_US (40 * 1000000) // 40 seconds
 #elif FLIGHT_PROFILE == FLIGHT_PROFILE_FULL_3D
@@ -71,8 +71,19 @@ void flight_manager_actor(void *args, const hive_spawn_info_t *siblings,
                   hal_power_get_battery());
 
 #ifndef SIMULATED_TIME
-#if FLIGHT_PROFILE != FLIGHT_PROFILE_GROUND_TEST
-    // Real hardware: wait for startup delay before allowing flight
+#if FLIGHT_PROFILE == FLIGHT_PROFILE_FIRST_TEST
+    // First test: 60 second delay to step back safely
+    HIVE_LOG_INFO("[FLM] Startup delay: 60 seconds");
+    for (int i = 6; i > 0; i--) {
+        hive_sleep(10 * 1000000); // 10 seconds
+        if (i > 1) {
+            HIVE_LOG_INFO("[FLM] Startup delay: %d seconds remaining",
+                          (i - 1) * 10);
+        }
+    }
+    HIVE_LOG_INFO("[FLM] Startup delay complete");
+#elif FLIGHT_PROFILE != FLIGHT_PROFILE_GROUND_TEST
+    // Other profiles: full 60 second delay for safety
     HIVE_LOG_INFO("[FLM] Startup delay: 60 seconds");
 
     // Sleep in 10-second intervals with progress logging
@@ -134,8 +145,9 @@ void flight_manager_actor(void *args, const hive_spawn_info_t *siblings,
     }
 
     // === FLIGHT PHASE ===
-    // Notify waypoint actor to begin flight sequence
+    // Notify motor and waypoint actors to begin flight
     HIVE_LOG_INFO("[FLM] Notifying START - flight authorized");
+    hive_ipc_notify(motor, NOTIFY_FLIGHT_START, NULL, 0);
     hive_ipc_notify(waypoint, NOTIFY_FLIGHT_START, NULL, 0);
 
     // Flight duration timer, then initiate controlled landing
@@ -184,19 +196,25 @@ void flight_manager_actor(void *args, const hive_spawn_info_t *siblings,
     // Notify altitude actor to begin landing
     hive_ipc_notify(altitude, NOTIFY_LANDING, NULL, 0);
 
+    // Landing timeout - don't wait forever if something goes wrong
+    hive_timer_id_t landing_timeout;
+    hive_timer_after(10 * 1000000, &landing_timeout); // 10 second max
+
     // Wait for LANDED notification (keep syncing logs while waiting)
-    enum { SEL_SYNC, SEL_LANDED };
+    enum { SEL_SYNC, SEL_LANDED, SEL_TIMEOUT };
     hive_select_source_t landing_sources[] = {
         [SEL_SYNC] = {HIVE_SEL_IPC,
                       .ipc = {HIVE_SENDER_ANY, HIVE_MSG_TIMER, sync_timer}},
         [SEL_LANDED] = {HIVE_SEL_IPC, .ipc = {altitude, HIVE_MSG_NOTIFY,
                                               NOTIFY_FLIGHT_LANDED}},
+        [SEL_TIMEOUT] = {HIVE_SEL_IPC, .ipc = {HIVE_SENDER_ANY, HIVE_MSG_TIMER,
+                                               landing_timeout}},
     };
 
     bool landed = false;
     while (!landed) {
         hive_select_result_t result;
-        status = hive_select(landing_sources, 2, &result, -1);
+        status = hive_select(landing_sources, 3, &result, -1);
         if (HIVE_FAILED(status)) {
             HIVE_LOG_ERROR("[FLM] select (landing) failed: %s",
                            HIVE_ERR_STR(status));
@@ -207,11 +225,15 @@ void flight_manager_actor(void *args, const hive_spawn_info_t *siblings,
             if (log_file_open) {
                 hive_log_file_sync();
             }
+        } else if (result.index == SEL_TIMEOUT) {
+            HIVE_LOG_WARN("[FLM] Landing timeout - forcing shutdown");
+            landed = true;
         } else {
             landed = true;
         }
     }
 
+    hive_timer_cancel(landing_timeout);
     HIVE_LOG_INFO("[FLM] Landing confirmed - stopping motors");
 
     // Notify STOP to motor actor

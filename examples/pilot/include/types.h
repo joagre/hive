@@ -79,9 +79,9 @@ typedef struct {
 
 // Motor commands as normalized values (0.0 to 1.0).
 // The platform layer converts these to actual motor velocities.
+// Motor positions are platform-specific - see hal/<platform>/README.md
 typedef struct {
-    float motor[4]; // [0]=M1(rear-left), [1]=M2(front-left),
-                    // [2]=M3(front-right), [3]=M4(rear-right)
+    float motor[4]; // [0]=M1, [1]=M2, [2]=M3, [3]=M4
 } motor_cmd_t;
 
 // Zero motor command initializer

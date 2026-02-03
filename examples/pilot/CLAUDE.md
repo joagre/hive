@@ -34,8 +34,8 @@ make STACK_PROFILE=1    # Build with stack profiling
 # Ground test mode (motors disabled, safe for testing)
 make -f Makefile.crazyflie-2.1plus FLIGHT_PROFILE=FLIGHT_PROFILE_GROUND_TEST
 
-# Indoor flight (conservative limits)
-make -f Makefile.crazyflie-2.1plus FLIGHT_PROFILE=FLIGHT_PROFILE_INDOOR
+# First flight test (6s hover at 0.5m)
+make -f Makefile.crazyflie-2.1plus FLIGHT_PROFILE=FLIGHT_PROFILE_FIRST_TEST
 
 # With SD card logging
 make -f Makefile.crazyflie-2.1plus ENABLE_SD=1
@@ -102,9 +102,10 @@ Build-time selection via `FLIGHT_PROFILE=`:
 
 | Profile | Motors | Duration | Use Case |
 |---------|--------|----------|----------|
-| `FLIGHT_PROFILE_GROUND_TEST` | Disabled | N/A | ESB/telemetry testing |
-| `FLIGHT_PROFILE_INDOOR` | Enabled | 40s | Indoor flight |
-| `FLIGHT_PROFILE_OUTDOOR` | Enabled | 60s | Outdoor flight |
+| `FLIGHT_PROFILE_GROUND_TEST` | Disabled | 60s | ESB/telemetry testing |
+| `FLIGHT_PROFILE_FIRST_TEST` | Enabled | 6s | First flight (hover at 0.5m) |
+| `FLIGHT_PROFILE_ALTITUDE` | Enabled | 20s | Altitude waypoints (0.5-1.2m) |
+| `FLIGHT_PROFILE_FULL_3D` | Enabled | 10s | Full 3D waypoint navigation |
 
 ## Key Files
 
@@ -159,10 +160,13 @@ ONE_FOR_ALL strategy - if any flight-critical actor crashes, all restart togethe
 
 ### Motor Safety
 
+- **START gate** - Motors stay OFF until flight_manager sends authorization (after 60s startup delay)
+- **Crash latch** - Once attitude exceeds 45 degrees, motors stay OFF until reboot
 - 50ms deadman timeout in motor_actor (zeros motors if no command)
 - Attitude cutoff at 45 degrees
 - Altitude cutoff at 2m
 - Thrust ramp on takeoff (0.5s)
+- 10-second landing timeout (forces shutdown if landing detection fails)
 
 ## ESB Radio Protocol
 

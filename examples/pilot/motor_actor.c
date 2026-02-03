@@ -80,6 +80,23 @@ void motor_actor(void *args, const hive_spawn_info_t *siblings,
         hive_exit(HIVE_EXIT_REASON_CRASH);
     }
 
+    // === WAIT FOR START ===
+    // Motors stay disabled until flight_manager authorizes flight.
+    // This prevents motors spinning during startup delay.
+    HIVE_LOG_INFO("[MOTOR] Waiting for flight authorization...");
+    hive_select_source_t start_source[] = {
+        {HIVE_SEL_IPC,
+         .ipc = {state->flight_manager, HIVE_MSG_NOTIFY, NOTIFY_FLIGHT_START}},
+    };
+    hive_select_result_t start_result;
+    status = hive_select(start_source, 1, &start_result, -1);
+    if (HIVE_FAILED(status)) {
+        HIVE_LOG_ERROR("[MOTOR] select (start) failed: %s",
+                       HIVE_ERR_STR(status));
+        hive_exit(HIVE_EXIT_REASON_CRASH);
+    }
+    HIVE_LOG_INFO("[MOTOR] Flight authorized - motors enabled");
+
     bool stopped = false;
     bool first_thrust_logged = false;
 

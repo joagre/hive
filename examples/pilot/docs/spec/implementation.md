@@ -128,8 +128,7 @@ void hal_write_torque(const torque_cmd_t *cmd);
 int hal_esb_init(void);
 int hal_esb_send(const void *data, size_t len);
 bool hal_esb_tx_ready(void);
-void hal_esb_poll(void);
-void hal_esb_set_rx_callback(void (*cb)(const void*, size_t, void*), void *ctx);
+bool hal_esb_recv(void *buf, size_t max_len, size_t *out_len);
 hive_hal_event_id_t hal_esb_get_rx_event(void);  // For event-driven RX
 
 // Power interface
