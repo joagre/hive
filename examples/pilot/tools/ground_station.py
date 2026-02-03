@@ -77,6 +77,10 @@ LOG_CHUNK_DATA_SIZE = 27
 # Scale factors (inverse of transmitter)
 SCALE_ANGLE = 1000.0   # millirad -> rad
 SCALE_RATE = 1000.0    # millirad/s -> rad/s
+
+# Poll rate - matches drone's telemetry update rate (comms_actor.c)
+POLL_RATE_HZ = 100
+POLL_INTERVAL = 1.0 / POLL_RATE_HZ
 SCALE_POS = 1000.0     # mm -> m
 SCALE_VEL = 1000.0     # mm/s -> m/s
 SCALE_THRUST = 65535.0 # 0-65535 -> 0.0-1.0
@@ -285,6 +289,7 @@ class TelemetryReceiver:
         self.start_time = time.time()
 
         while self.running:
+            loop_start = time.time()
             try:
                 data = self.poll()
 
@@ -315,6 +320,11 @@ class TelemetryReceiver:
             except Exception as e:
                 print(f"Error: {e}", file=sys.stderr)
                 self.errors += 1
+
+            # Rate limit to match drone's telemetry update rate
+            elapsed = time.time() - loop_start
+            if elapsed < POLL_INTERVAL:
+                time.sleep(POLL_INTERVAL - elapsed)
 
     def _write_csv_row(self, writer, pkt):
         """Write packet to CSV file."""
