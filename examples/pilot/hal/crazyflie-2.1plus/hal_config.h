@@ -44,25 +44,26 @@
 #define HAL_VVEL_DAMPING_GAIN 0.25f // Conservative (Webots: 0.35)
 
 // ----------------------------------------------------------------------------
-// Attitude Control (conservative for first flights)
+// Attitude Control (tuned - between old weak and new oscillating values)
 // ----------------------------------------------------------------------------
 
 // Attitude PID gains (attitude angle error -> rate setpoint)
-#define HAL_ATTITUDE_PID_KP 1.5f // Conservative (Webots: 2.5)
+#define HAL_ATTITUDE_PID_KP 1.8f // Tuned (was 1.5 weak, 2.2 oscillated)
 #define HAL_ATTITUDE_PID_KI 0.0f
-#define HAL_ATTITUDE_PID_KD 0.08f  // Conservative (Webots: 0.15)
+#define HAL_ATTITUDE_PID_KD 0.10f  // Tuned (was 0.08 weak, 0.12 oscillated)
 #define HAL_ATTITUDE_PID_IMAX 0.5f // Integral limit
 #define HAL_ATTITUDE_PID_OMAX 2.0f // Max rate setpoint (rad/s)
 
 // ----------------------------------------------------------------------------
-// Rate Control (conservative for first flights)
+// Rate Control (tuned - between old weak and new oscillating values)
 // ----------------------------------------------------------------------------
 
 // Rate PID gains (rate error -> torque)
-#define HAL_RATE_PID_KP 0.018f // Conservative (Webots: 0.028)
-#define HAL_RATE_PID_KI 0.001f // Conservative (Webots: 0.002)
-#define HAL_RATE_PID_KD 0.001f // Conservative (Webots: 0.003)
-#define HAL_RATE_PID_IMAX 0.3f // Integral limit
+#define HAL_RATE_PID_KP 0.020f // Tuned (was 0.018 weak, 0.024 oscillated)
+#define HAL_RATE_PID_KI \
+    0.001f // Back to original (integral can cause overshoot)
+#define HAL_RATE_PID_KD 0.0015f // Tuned (was 0.001 weak, 0.002 oscillated)
+#define HAL_RATE_PID_IMAX 0.3f  // Integral limit
 #define HAL_RATE_PID_OMAX_ROLL 0.12f
 #define HAL_RATE_PID_OMAX_PITCH 0.12f
 #define HAL_RATE_PID_OMAX_YAW 0.15f
