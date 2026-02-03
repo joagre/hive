@@ -134,9 +134,16 @@ void altitude_actor(void *args, const hive_spawn_info_t *siblings,
         }
 
         // Read target altitude (non-blocking)
-        if (hive_bus_read(state->position_target_bus, &target, sizeof(target),
-                          &len, HIVE_TIMEOUT_NONBLOCKING)
-                .code == HIVE_OK) {
+        hive_status_t read_status =
+            hive_bus_read(state->position_target_bus, &target, sizeof(target),
+                          &len, HIVE_TIMEOUT_NONBLOCKING);
+        if (read_status.code == HIVE_OK) {
+            // Log first successful read
+            static bool first_read = true;
+            if (first_read && target.z != target_altitude) {
+                HIVE_LOG_INFO("[ALT] Got target z=%.2f", target.z);
+                first_read = false;
+            }
             target_altitude = target.z;
         }
 

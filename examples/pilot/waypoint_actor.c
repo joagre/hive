@@ -89,6 +89,9 @@ void waypoint_actor(void *args, const hive_spawn_info_t *siblings,
         hive_exit(HIVE_EXIT_REASON_CRASH);
     }
     HIVE_LOG_INFO("[WPT] START received - beginning flight sequence");
+    HIVE_LOG_INFO("[WPT] First waypoint: (%.1f, %.1f, %.1f) yaw=%.0f",
+                  waypoints[0].x, waypoints[0].y, waypoints[0].z,
+                  waypoints[0].yaw * 57.3f);
 
     int waypoint_index = 0;
     hive_timer_id_t hover_timer = HIVE_TIMER_ID_INVALID;
@@ -107,6 +110,13 @@ void waypoint_actor(void *args, const hive_spawn_info_t *siblings,
                                   sizeof(target));
         if (HIVE_FAILED(status)) {
             HIVE_LOG_WARN("[WPT] bus publish failed: %s", HIVE_ERR_STR(status));
+        }
+
+        // Log first publish only
+        static bool first_publish = true;
+        if (first_publish) {
+            HIVE_LOG_INFO("[WPT] Published target z=%.2f", target.z);
+            first_publish = false;
         }
 
         // Wait for state update OR hover timer (unified event waiting)

@@ -38,6 +38,7 @@ Requirements:
 Usage:
   sudo ./ground_station.py                         # Display telemetry to stdout
   sudo ./ground_station.py -o flight.csv           # Log telemetry to CSV file
+  sudo ./ground_station.py --go                    # Start flight (60s countdown)
   sudo ./ground_station.py --download-log flight.log  # Download log file
   sudo ./ground_station.py --uri radio://0/80/2M   # Custom radio URI
 
@@ -70,6 +71,9 @@ PACKET_TYPE_POSITION = 0x02
 CMD_REQUEST_LOG = 0x10
 PACKET_LOG_CHUNK = 0x11
 PACKET_LOG_DONE = 0x12
+
+# Packet type identifiers - flight go command (must match comms_actor.c)
+CMD_GO = 0x20
 
 # Log chunk data size (31 - 4 byte header = 27 bytes)
 LOG_CHUNK_DATA_SIZE = 27
@@ -368,6 +372,27 @@ class TelemetryReceiver:
         print(f"  Unknown: {self.unknown_count}", file=sys.stderr)
         print(f"Errors: {self.errors}", file=sys.stderr)
 
+    def send_go(self) -> bool:
+        """Send GO command to drone.
+
+        This command tells the drone to start its flight sequence.
+        The drone will then begin a 60-second countdown before flight.
+        Returns True if ACK received.
+        """
+        print("Sending GO command...", file=sys.stderr)
+
+        # Send GO command (with CRTP header)
+        response = self.radio.send_packet((CRTP_HEADER_TELEMETRY, CMD_GO))
+
+        if response and response.ack:
+            print("GO command sent successfully!", file=sys.stderr)
+            print("*** DRONE WILL START 60-SECOND COUNTDOWN ***", file=sys.stderr)
+            print("*** STEP BACK TO SAFE DISTANCE NOW ***", file=sys.stderr)
+            return True
+        else:
+            print("Error: No ACK for GO command", file=sys.stderr)
+            return False
+
     def download_log(self, output_path: str) -> bool:
         """Download log file from drone.
 
@@ -475,6 +500,10 @@ def main():
         "--download-log", type=str, metavar="FILE",
         help="Download log file from drone flash storage"
     )
+    parser.add_argument(
+        "--go", action="store_true",
+        help="Send GO command to drone (starts 60-second countdown, then flight)"
+    )
 
     args = parser.parse_args()
 
@@ -498,7 +527,11 @@ def main():
     try:
         receiver.connect()
 
-        if args.download_log:
+        if args.go:
+            # GO mode - send go command and exit
+            success = receiver.send_go()
+            sys.exit(0 if success else 1)
+        elif args.download_log:
             # Log download mode
             success = receiver.download_log(args.download_log)
             sys.exit(0 if success else 1)

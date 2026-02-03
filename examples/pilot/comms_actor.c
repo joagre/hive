@@ -27,6 +27,7 @@
 
 #include "comms_actor.h"
 #include "pilot_buses.h"
+#include "notifications.h"
 #include "config.h"
 #include "hal/hal.h"
 #include "hive_runtime.h"
@@ -47,6 +48,9 @@
 #define CMD_REQUEST_LOG 0x10  // Ground -> drone: request log download
 #define PACKET_LOG_CHUNK 0x11 // Drone -> ground: log data chunk
 #define PACKET_LOG_DONE 0x12  // Drone -> ground: download complete
+
+// Packet type identifiers - flight go command
+#define CMD_GO 0x20 // Ground -> drone: start flight sequence
 
 // Log chunk data size (30 - 3 byte header = 27 bytes)
 // HAL uses 1 byte for framing, leaving 30 bytes for payload
@@ -145,7 +149,8 @@ typedef struct {
     hive_bus_id_t state_bus;
     hive_bus_id_t sensor_bus;
     hive_bus_id_t thrust_bus;
-    bool next_is_attitude; // Alternate between packet types
+    hive_actor_id_t flight_manager; // For ARM notification
+    bool next_is_attitude;          // Alternate between packet types
     // Log download state
     comms_mode_t mode;
     int log_fd;
@@ -163,6 +168,15 @@ static void handle_rx_command(comms_state_t *state, const uint8_t *data,
 
     // Skip HAL frame header (byte 0), command is in byte 1
     uint8_t cmd = data[1];
+
+    if (cmd == CMD_GO) {
+        // Ground station sends GO to start flight sequence
+        HIVE_LOG_INFO("[COMMS] GO command received from ground station");
+        if (state->flight_manager != HIVE_ACTOR_ID_INVALID) {
+            hive_ipc_notify(state->flight_manager, NOTIFY_GO, NULL, 0);
+        }
+        return;
+    }
 
     if (cmd == CMD_REQUEST_LOG) {
         // Ground station requests log download
@@ -203,6 +217,7 @@ void *comms_actor_init(void *init_args) {
     state.state_bus = buses->state_bus;
     state.sensor_bus = buses->sensor_bus;
     state.thrust_bus = buses->thrust_bus;
+    state.flight_manager = HIVE_ACTOR_ID_INVALID; // Set from siblings in actor
     state.next_is_attitude = true;
     state.mode = COMMS_MODE_FLIGHT;
     state.log_fd = -1;
@@ -213,10 +228,15 @@ void *comms_actor_init(void *init_args) {
 
 void comms_actor(void *args, const hive_spawn_info_t *siblings,
                  size_t sibling_count) {
-    (void)siblings;
-    (void)sibling_count;
-
     comms_state_t *state = args;
+
+    // Find flight_manager sibling for ARM notification
+    state->flight_manager =
+        hive_find_sibling(siblings, sibling_count, "flight_manager");
+    if (state->flight_manager == HIVE_ACTOR_ID_INVALID) {
+        HIVE_LOG_WARN(
+            "[COMMS] flight_manager sibling not found - ARM disabled");
+    }
 
     // Radio already initialized from main() via hal_esb_init()
     HIVE_LOG_INFO("[COMMS] Radio initialized");
@@ -244,6 +264,7 @@ void comms_actor(void *args, const hive_spawn_info_t *siblings,
     sensor_data_t latest_sensors = SENSOR_DATA_ZERO;
     thrust_cmd_t latest_thrust = THRUST_CMD_ZERO;
 
+    static uint32_t wake_count = 0;
     while (1) {
         // Wait for RX event (UART IDLE interrupt signals ground station poll)
         hive_status_t status = hive_event_wait(rx_event, -1);
@@ -252,11 +273,18 @@ void comms_actor(void *args, const hive_spawn_info_t *siblings,
                            HIVE_ERR_STR(status));
             hive_exit(HIVE_EXIT_REASON_CRASH);
         }
+        wake_count++;
+        if ((wake_count % 500) == 1) {
+            HIVE_LOG_INFO("[COMMS] wake %lu", wake_count);
+        }
 
         // Process any pending RX packets (commands from ground station)
         uint8_t rx_buf[32];
         size_t rx_len;
         while (hal_esb_recv(rx_buf, sizeof(rx_buf), &rx_len)) {
+            HIVE_LOG_INFO("[COMMS] RX len=%zu: %02x %02x", rx_len,
+                          rx_len > 0 ? rx_buf[0] : 0,
+                          rx_len > 1 ? rx_buf[1] : 0);
             handle_rx_command(state, rx_buf, rx_len);
         }
 
@@ -291,6 +319,9 @@ void comms_actor(void *args, const hive_spawn_info_t *siblings,
 
         // Check hardware flow control before sending
         if (!hal_esb_tx_ready()) {
+            if ((wake_count % 1000) == 1) {
+                HIVE_LOG_WARN("[COMMS] TX not ready");
+            }
             continue;
         }
 

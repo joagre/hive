@@ -161,6 +161,12 @@ void estimator_actor(void *args, const hive_spawn_info_t *siblings,
     float last_valid_x = 0.0f;
     float last_valid_y = 0.0f;
 
+    // Rangefinder mode (like Bitcraze's "surfaceFollowingMode")
+    // Once rangefinder gives valid reading, we stay in this mode and NEVER
+    // fall back to baro (which is unreliable due to prop wash)
+    bool rangefinder_mode = false;
+    float last_valid_rangefinder_alt = 0.0f;
+
     // Track sensor state transitions for logging
     bool prev_gps_valid = false;
     bool prev_velocity_valid = false;
@@ -239,10 +245,23 @@ void estimator_actor(void *args, const hive_spawn_info_t *siblings,
             // controller from generating aggressive corrections.
             est.x = last_valid_x;
             est.y = last_valid_y;
-            // Altitude from barometer (HAL computes from calibrated reference)
-            if (sensors.baro_valid) {
-                measured_altitude = sensors.baro_altitude;
-            }
+        }
+
+        // Altitude source: Rangefinder only (like Bitcraze's "surfaceFollowingMode")
+        // Once rangefinder works, we stay in rangefinder mode and NEVER use baro.
+        // Baro is unreliable at low altitude due to prop wash from motors.
+        if (sensors.gps_z >= 0.01f && sensors.gps_z <= 1.3f) {
+            // Good rangefinder reading - use it
+            measured_altitude = sensors.gps_z;
+            last_valid_rangefinder_alt = sensors.gps_z;
+            rangefinder_mode = true;
+        } else if (rangefinder_mode) {
+            // Rangefinder invalid but we've used it before - hold last value.
+            // The Kalman filter will coast on accelerometer integration.
+            measured_altitude = last_valid_rangefinder_alt;
+        } else if (sensors.baro_valid) {
+            // Never had rangefinder - use baro (pre-flight on ground)
+            measured_altitude = sensors.baro_altitude;
         }
 
         // -----------------------------------------------------------------

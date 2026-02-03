@@ -18,6 +18,7 @@ typedef enum {
     NOTIFY_LANDING =
         0x03, // Flight manager -> altitude: initiate controlled landing
     NOTIFY_FLIGHT_LANDED = 0x04, // Altitude -> flight manager: landing complete
+    NOTIFY_GO = 0x05, // Comms -> flight manager: ground station sent GO command
 } pilot_notification_t;
 
 #endif // PILOT_NOTIFICATIONS_H

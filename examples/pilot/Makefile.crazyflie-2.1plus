@@ -10,7 +10,7 @@
 # Build Configuration (override via command line)
 # =============================================================================
 
-FLIGHT_PROFILE := FLIGHT_PROFILE_GROUND_TEST
+FLIGHT_PROFILE := FLIGHT_PROFILE_FIRST_TEST
 LOG_LEVEL := INFO
 LOG_TO_STDOUT := 1
 LOG_TO_FILE := 1
