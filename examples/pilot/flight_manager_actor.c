@@ -2,14 +2,13 @@
 //
 // Controls flight lifecycle:
 // 1. Startup delay (real hardware only)
-// 2. Open log file (ARM phase)
-// 3. Notify START to waypoint actor
-// 4. Periodic log sync (every 4 seconds)
-// 5. Flight duration timer
-// 6. Notify LANDING to altitude actor
-// 7. Wait for LANDED, then notify STOP to motor actor
-// 8. Close log file (DISARM phase)
+// 2. Notify START to waypoint and motor actors
+// 3. Periodic log sync (every 4 seconds)
+// 4. Flight duration timer
+// 5. Notify LANDING to altitude actor
+// 6. Wait for LANDED, then notify STOP to motor actor
 //
+// Log file is opened/closed in pilot.c; flight_manager just syncs.
 // Uses sibling info to find waypoint, altitude, motor actors.
 
 #include "flight_manager_actor.h"
@@ -22,7 +21,6 @@
 #include "hive_select.h"
 #include "hive_timer.h"
 #include "hive_log.h"
-#include "hive_file.h"
 #include "stack_profile.h"
 
 // Flight duration per profile (flight manager decides when to land)
@@ -71,71 +69,53 @@ void flight_manager_actor(void *args, const hive_spawn_info_t *siblings,
                   hal_power_get_battery());
 
 #ifndef SIMULATED_TIME
-#if FLIGHT_PROFILE == FLIGHT_PROFILE_FIRST_TEST
-    // First test: 60 second delay to step back safely
-    HIVE_LOG_INFO("[FLM] Startup delay: 60 seconds");
-    for (int i = 6; i > 0; i--) {
-        hive_sleep(10 * 1000000); // 10 seconds
-        if (i > 1) {
-            HIVE_LOG_INFO("[FLM] Startup delay: %d seconds remaining",
-                          (i - 1) * 10);
-        }
-    }
-    HIVE_LOG_INFO("[FLM] Startup delay complete");
-#elif FLIGHT_PROFILE != FLIGHT_PROFILE_GROUND_TEST
-    // Other profiles: full 60 second delay for safety
-    HIVE_LOG_INFO("[FLM] Startup delay: 60 seconds");
-
-    // Sleep in 10-second intervals with progress logging
-    for (int i = 6; i > 0; i--) {
-        hive_sleep(10 * 1000000); // 10 seconds
-        if (i > 1) {
-            HIVE_LOG_INFO("[FLM] Startup delay: %d seconds remaining",
-                          (i - 1) * 10);
-        }
-    }
-
-    HIVE_LOG_INFO("[FLM] Startup delay complete");
+#if FLIGHT_PROFILE == FLIGHT_PROFILE_GROUND_TEST
+    // Ground test mode - skip arming and startup delay (motors disabled)
+    HIVE_LOG_INFO("[FLM] Ground test mode - no arming required");
 #else
-    // Ground test mode - skip startup delay
-    HIVE_LOG_INFO("[FLM] Ground test mode - no startup delay");
+    // === WAIT FOR GO COMMAND FROM GROUND STATION ===
+    // This is a CRITICAL safety gate - flight will NOT start without explicit
+    // radio command from ground station. User must run:
+    //   python3 tools/ground_station.py --go
+    HIVE_LOG_INFO("[FLM] *** WAITING FOR GO COMMAND ***");
+    HIVE_LOG_INFO("[FLM] Run: python3 tools/ground_station.py --go");
+
+    // Find comms actor to receive GO notification
+    hive_actor_id_t comms = hive_find_sibling(siblings, sibling_count, "comms");
+    if (comms == HIVE_ACTOR_ID_INVALID) {
+        HIVE_LOG_ERROR("[FLM] comms sibling not found - cannot receive GO");
+        hive_exit(HIVE_EXIT_REASON_CRASH);
+    }
+
+    // Wait indefinitely for GO notification
+    hive_message_t go_msg;
+    hive_status_t go_status =
+        hive_ipc_recv_match(comms, HIVE_MSG_NOTIFY, NOTIFY_GO, &go_msg, -1);
+    if (HIVE_FAILED(go_status)) {
+        HIVE_LOG_ERROR("[FLM] GO wait failed: %s", HIVE_ERR_STR(go_status));
+        hive_exit(HIVE_EXIT_REASON_CRASH);
+    }
+
+    HIVE_LOG_INFO("[FLM] *** GO RECEIVED - STARTING COUNTDOWN ***");
+
+    // 60 second countdown to step back safely
+    HIVE_LOG_INFO("[FLM] Startup delay: 60 seconds - STEP BACK NOW");
+    for (int i = 6; i > 0; i--) {
+        hive_sleep(10 * 1000000); // 10 seconds
+        if (i > 1) {
+            HIVE_LOG_INFO("[FLM] Startup delay: %d seconds remaining",
+                          (i - 1) * 10);
+        }
+    }
+    HIVE_LOG_INFO("[FLM] Startup delay complete - FLIGHT STARTING");
 #endif
 #else
-    // Simulation mode
+    // Simulation mode - no arming required
     HIVE_LOG_INFO("[FLM] Simulation mode");
 #endif
 
-    // === ARM PHASE: Open log file ===
-    // Select storage path based on mount availability
-    // Prefer SD card, fall back to flash (/log), then /tmp (simulation)
-    // On STM32, opening /log erases the flash sector (blocks 1-4 seconds)
-    const char *log_path = NULL;
-    bool log_file_open = false;
-
-    if (HIVE_SUCCEEDED(hive_file_mount_available("/sd"))) {
-        log_path = "/sd/flm.log";
-    } else if (HIVE_SUCCEEDED(hive_file_mount_available("/log"))) {
-        log_path = "/log";
-    } else if (HIVE_SUCCEEDED(hive_file_mount_available("/tmp"))) {
-        log_path = "/tmp/flm.log";
-    }
-
-    if (log_path) {
-        HIVE_LOG_INFO("[FLM] Opening log file: %s", log_path);
-        hive_status_t log_status = hive_log_file_open(log_path);
-        if (HIVE_SUCCEEDED(log_status)) {
-            log_file_open = true;
-            HIVE_LOG_INFO("[FLM] Log file opened");
-        } else {
-            HIVE_LOG_WARN("[FLM] Failed to open log file: %s",
-                          HIVE_ERR_STR(log_status));
-        }
-    } else {
-        HIVE_LOG_WARN("[FLM] No storage available - continuing without file "
-                      "logging");
-    }
-
     // Start periodic log sync timer (every 4 seconds)
+    // Log file is opened/closed in pilot.c; we just sync periodically
     hive_timer_id_t sync_timer;
     hive_status_t status = hive_timer_every(LOG_SYNC_INTERVAL_US, &sync_timer);
     if (HIVE_FAILED(status)) {
@@ -183,9 +163,7 @@ void flight_manager_actor(void *args, const hive_spawn_info_t *siblings,
         }
 
         if (result.index == SEL_SYNC_TIMER) {
-            if (log_file_open) {
-                hive_log_file_sync();
-            }
+            hive_log_file_sync();
         } else {
             flight_timer_fired = true;
         }
@@ -222,9 +200,7 @@ void flight_manager_actor(void *args, const hive_spawn_info_t *siblings,
         }
 
         if (result.index == SEL_SYNC) {
-            if (log_file_open) {
-                hive_log_file_sync();
-            }
+            hive_log_file_sync();
         } else if (result.index == SEL_TIMEOUT) {
             HIVE_LOG_WARN("[FLM] Landing timeout - forcing shutdown");
             landed = true;
@@ -239,13 +215,8 @@ void flight_manager_actor(void *args, const hive_spawn_info_t *siblings,
     // Notify STOP to motor actor
     hive_ipc_notify(motor, NOTIFY_FLIGHT_STOP, NULL, 0);
 
-    // === DISARM PHASE: Close log file ===
+    // Cancel sync timer (log file closed in pilot.c)
     hive_timer_cancel(sync_timer);
-    if (log_file_open) {
-        HIVE_LOG_INFO("[FLM] Closing log file...");
-        hive_log_file_close();
-        HIVE_LOG_INFO("[FLM] Log file closed");
-    }
 
     stack_profile_capture("flight_mgr");
     stack_profile_request();

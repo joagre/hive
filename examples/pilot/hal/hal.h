@@ -108,6 +108,12 @@ void hal_led_toggle(void);
 void hal_debug_init(void);
 void hal_printf(const char *fmt, ...);
 
+// Flush early log buffer to hive log file.
+// On Crazyflie: replays hal_printf() output from before log file was opened.
+// On simulation: no-op (no early buffering needed).
+// Call after hive_log_file_open() succeeds.
+void hal_flush_early_log(void);
+
 // ----------------------------------------------------------------------------
 // ESB Radio Interface (optional, for telemetry)
 // ----------------------------------------------------------------------------

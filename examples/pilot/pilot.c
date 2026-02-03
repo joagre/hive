@@ -84,6 +84,18 @@ int main(void) {
     // Initialize actor runtime
     hive_init();
 
+    // Open log file early to capture HAL init messages
+    // Try each mount in order until one succeeds
+    const char *log_paths[] = {"/sd/hive.log", "/log", "/tmp/hive.log", NULL};
+    for (int i = 0; log_paths[i] != NULL; i++) {
+        hive_status_t log_status = hive_log_file_open(log_paths[i]);
+        if (HIVE_SUCCEEDED(log_status)) {
+            hal_flush_early_log();
+            hal_printf("[PILOT] Log file: %s\n", log_paths[i]);
+            break;
+        }
+    }
+
     // Create buses (single entry = latest value only)
     // All actors share these via pilot_buses_t struct passed through init_args
     static pilot_buses_t buses;
@@ -314,6 +326,7 @@ int main(void) {
 #endif
 
     // Cleanup
+    hive_log_file_close();
     hal_disarm();
     hive_cleanup();
     hal_cleanup();

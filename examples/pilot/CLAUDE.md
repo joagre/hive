@@ -127,6 +127,8 @@ Build-time selection via `FLIGHT_PROFILE=`:
 - `hal/hal.h` - Common HAL interface
 - `hal/crazyflie-2.1plus/` - Crazyflie HAL (STM32F405)
 - `hal/crazyflie-2.1plus/hal_syslink.c` - Syslink UART with DMA and IDLE interrupt
+- `hal/crazyflie-2.1plus/hal_debug.c` - Debug output (SWO + early log buffer)
+- `hal/crazyflie-2.1plus/early_log.c` - Captures hal_printf() before hive log ready
 - `hal/webots-crazyflie/` - Webots simulation HAL
 
 ### Configuration
@@ -142,6 +144,18 @@ Build-time selection via `FLIGHT_PROFILE=`:
 - `tools/plot_telemetry.py` - Telemetry visualization
 
 ## Architecture Notes
+
+### Early Log Buffer (Crazyflie only)
+
+HAL init runs before hive_log_file_open(), so HIVE_LOG_* can't capture early messages.
+The early log buffer solves this:
+
+1. `hal_printf()` writes to both SWO trace (if debugger connected) and early log buffer
+2. After `hive_log_file_open()`, `hal_flush_early_log()` replays buffered messages to hive log
+3. Buffer is then disabled (further hal_printf goes only to SWO)
+
+This ensures HAL init messages appear in the log file even though the file wasn't open yet.
+On Webots, `hal_flush_early_log()` is a no-op (printf goes to stdout, no buffering needed).
 
 ### Event-Driven Radio RX
 

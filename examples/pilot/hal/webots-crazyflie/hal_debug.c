@@ -16,3 +16,7 @@ void hal_printf(const char *fmt, ...) {
     vprintf(fmt, args);
     va_end(args);
 }
+
+void hal_flush_early_log(void) {
+    // No-op for Webots - no early buffering needed
+}

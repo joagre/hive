@@ -159,7 +159,7 @@ the lengthy configuration sequence.
 | `hal_motors.c` | hal_write_torque (mixer, PWM output) |
 | `hal_time.c` | hal_delay_ms, hal_get_time_ms |
 | `hal_led.c` | hal_led_on/off/toggle |
-| `hal_debug.c` | hal_debug_init, hal_printf |
+| `hal_debug.c` | hal_debug_init, hal_printf, hal_flush_early_log |
 | `hal_config.h` | Platform-specific PID gains, thrust, bus config |
 
 ### Platform Layer
@@ -170,7 +170,8 @@ the lengthy configuration sequence.
 | `platform.h` | Platform API declarations |
 | `i2c_drv.c` | DMA/interrupt I2C3 driver (Bitcraze-derived) |
 | `i2cdev.c` | I2C device abstraction layer |
-| `debug_swo.c` | SWO debug output with printf support |
+| `debug_swo.c` | SWO debug output (ITM trace only) |
+| `early_log.c` | Early log buffer (captures hal_printf before hive log ready) |
 | `hal_syslink.c` | NRF51 radio communication (interrupt RX, polled TX) for ESB telemetry |
 | `spi_ll_sd.c` | SD card low-level SPI driver (shares SPI1 with flow deck) |
 

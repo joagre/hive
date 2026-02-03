@@ -5,6 +5,9 @@
 //
 // Use st-trace to view output:
 //   st-trace -c 168
+//
+// This module ONLY handles SWO output. Early log buffering is handled
+// at the hal_printf() layer in hal_debug.c.
 
 #include "debug_swo.h"
 #include "stm32f4xx.h"
@@ -53,16 +56,23 @@ void debug_swo_init(uint32_t cpu_freq_hz, uint32_t swo_baud) {
 }
 
 int debug_swo_enabled(void) {
+    // Check if debugger is actually connected (C_DEBUGEN bit in DHCSR)
+    // Without debugger, SWO output has nowhere to go - skip it entirely
+    if (!(CoreDebug->DHCSR & CoreDebug_DHCSR_C_DEBUGEN_Msk)) {
+        return 0;
+    }
     return s_swo_initialized && (ITM->TCR & ITM_TCR_ITMENA_Msk) &&
            (ITM->TER & 1);
 }
 
 void debug_swo_putc(char c) {
-    if (debug_swo_enabled()) {
-        while (ITM->PORT[0].u32 == 0)
-            ;
-        ITM->PORT[0].u8 = (uint8_t)c;
+    if (!debug_swo_enabled()) {
+        return;
     }
+    // Wait for ITM FIFO ready (debugger drains it)
+    while (ITM->PORT[0].u32 == 0)
+        ;
+    ITM->PORT[0].u8 = (uint8_t)c;
 }
 
 void debug_swo_puts(const char *s) {

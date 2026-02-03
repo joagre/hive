@@ -54,6 +54,7 @@ CFLAGS += -Ivendor/STM32F4xx_StdPeriph_Driver/inc
 CFLAGS += -Ivendor/bosch
 CFLAGS += -Ivendor/bitcraze/pmw3901
 CFLAGS += -Ivendor/st/vl53l1x
+CFLAGS += -I../../../../lib/printf
 
 # Assembler flags
 ASFLAGS = $(MCU) -g
@@ -61,6 +62,7 @@ ASFLAGS = $(MCU) -g
 # Source files - platform (DMA I2C driver)
 C_SOURCES = \
     debug_swo.c \
+    early_log.c \
     hal_init.c \
     hal_sensors.c \
     hal_motors.c \

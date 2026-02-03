@@ -148,7 +148,7 @@ Hardware Abstraction Layer (HAL) provides platform independence:
 - `hal_esb_*()` - ESB radio telemetry (Crazyflie only, event-driven RX)
 - `hal_power_get_battery()` - battery voltage
 - `hal_step()` - advance simulation (Webots only)
-- `hal_debug_init()`, `hal_printf()` - debug output
+- `hal_debug_init()`, `hal_printf()`, `hal_flush_early_log()` - debug output
 - `hal_delay_ms()`, `hal_get_time_ms()` - timing utilities
 - `hal_led_*()` - debug LED control
 

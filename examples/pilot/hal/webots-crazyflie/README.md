@@ -90,7 +90,7 @@ Build with custom level: `make SENSOR_NOISE=0`
 | `hal_motors.c` | hal_write_torque (with motor lag simulation) |
 | `hal_time.c` | hal_delay_ms, hal_get_time_ms |
 | `hal_led.c` | hal_led_on/off/toggle (no-op in simulation) |
-| `hal_debug.c` | hal_debug_init, hal_printf |
+| `hal_debug.c` | hal_debug_init, hal_printf, hal_flush_early_log |
 | `hal_internal.h` | Shared state (motors, Webots devices) |
 | `hal_config.h` | Platform-specific PID gains, thrust, bus config |
 
