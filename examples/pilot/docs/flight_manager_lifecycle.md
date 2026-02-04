@@ -13,7 +13,7 @@ This is slow and inflexible. We want to send GO multiple times in a single power
 
 ## Solution
 
-Flight manager becomes a looping state machine. After landing, it returns to IDLE and waits for the next GO. Before each flight, it broadcasts RESET to siblings so all actors start with clean state.
+Flight manager becomes a looping state machine. After landing, it returns to IDLE and waits for the next GO. Before each flight, it requests RESET from all siblings so all actors start with clean state.
 
 ## State Machine
 
@@ -156,7 +156,7 @@ Each actor handles RESET and replies with success or failure:
 | logger_actor | Truncate logs | ok or error code |
 | motor_actor | Clear started flag, zero outputs | ok (always succeeds) |
 | waypoint_actor | Reset index to 0 | ok (always succeeds) |
-| comms_actor | Ignore (stateless) | ok (always succeeds) |
+| comms_actor | No-op (stateless) | ok (always succeeds) |
 
 If any actor replies with an error, flight_manager aborts preflight and returns to IDLE.
 
@@ -476,10 +476,10 @@ typedef struct {
 11. **pid.c** - Add `pid_reset()` function if not present
 12. **tunable_params.h/c** - Add `armed_countdown_s` and `auto_go_delay_s` parameters
 
-### Actors Unchanged
+### Actors With Minimal Changes
 
-- position_actor.c (minimal state, or add RESET if needed)
-- comms_actor.c (stateless relay, replies RESET_OK)
+- **position_actor.c** - Handle RESET request (reset PID if any, reply ok)
+- **comms_actor.c** - Handle RESET request (no-op, reply ok)
 
 ## Testing
 
