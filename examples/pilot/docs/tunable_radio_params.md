@@ -307,9 +307,6 @@ void altitude_actor(void *args, ...) {
 | `CMD_SET_PARAM` | 0x10 | Set a parameter value |
 | `CMD_GET_PARAM` | 0x11 | Request a parameter value |
 | `CMD_PARAM_VALUE` | 0x12 | Response with parameter value |
-| `CMD_SAVE_PARAMS` | 0x13 | Save current params to flash |
-| `CMD_LOAD_PARAMS` | 0x14 | Load params from flash |
-| `CMD_RESET_PARAMS` | 0x15 | Reset to compiled defaults |
 
 ### Packet Format
 
@@ -357,49 +354,19 @@ att_kp = 2.0
 rate_kp_roll = 0.020
 rate_ki_roll = 0.001
 ...
-
-# Save to drone flash
-> save
-OK: Parameters saved to /config
-
-# Reset to defaults
-> reset
-OK: Parameters reset to defaults
-
-# Load profile
-> profile aggressive
-OK: Loaded aggressive profile
 ```
 
-### Profiles
-
-Pre-configured parameter sets for quick switching:
-
-| Profile | Description |
-|---------|-------------|
-| `safe` | Low gains, tight limits - for testing |
-| `normal` | Balanced performance |
-| `aggressive` | High gains, fast response |
+**Workflow:** Tune via radio until happy, then update `hal_config.h` with final
+values and reflash. No runtime persistence needed.
 
 ---
 
-## Persistence
-
-### Flash Storage
-
-- `CMD_SAVE_PARAMS` writes entire `tunable_params_t` struct to `/config`
-- On boot, if `/config` exists and is valid, load from flash
-- Otherwise use compiled defaults from `hal_config.h`
-- Include version/checksum to detect incompatible saved params
-
-### Validation
+## Validation
 
 Before applying any parameter:
 1. Check `param_id` is valid (< PARAM_COUNT)
 2. Check value is within valid range (defined per-parameter)
 3. Log all parameter changes
-
-Some parameters may require disarm before changing (e.g., motor trim).
 
 ---
 
@@ -411,6 +378,5 @@ Some parameters may require disarm before changing (e.g., motor trim).
 - [ ] Update actors to read from shared params (not hal_config.h constants)
 - [ ] Add `CMD_SET_PARAM` / `CMD_GET_PARAM` handling to `comms_actor.c`
 - [ ] Update `ground_station.py` with set/get commands
-- [ ] Add persistence to `/config` flash
 - [ ] Add validation ranges per parameter
 - [ ] Test with live tuning
