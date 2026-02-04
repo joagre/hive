@@ -170,6 +170,9 @@ Ground Station
       │                                           │
       ├──GO/ABORT──> flight_manager               │ reads state_bus
       │                   │                       │ for telemetry
+      ├──STATUS──> flight_manager ──reply──┐      │
+      │<───────────────────────────────────┘      │
+      │                   │                       │
       │                   ├──RESET──> [all siblings] ──reply──┐
       │                   │<────────────────────────────────────┘
       │                   │
@@ -383,7 +386,7 @@ On power-on, the system boots directly to IDLE state:
 4. Flight manager enters IDLE
 5. Wait for GO command (hardware) or auto-GO after delay (simulation)
 
-Calibration and self-test now happen per-flight in PREFLIGHT, not at boot. This means:
+Calibration now happens per-flight in PREFLIGHT, not at boot. This means:
 - Faster boot to IDLE
 - Fresh calibration for each flight
 - Gyro bias measured closer to actual flight time
@@ -392,11 +395,14 @@ Calibration and self-test now happen per-flight in PREFLIGHT, not at boot. This 
 
 ### Preflight Failure
 
-Actors report errors explicitly via RESET reply:
+Actors report errors explicitly via request replies:
 
+**RESET failures:**
 - **sensor_actor** - `hal_calibrate()` failed (sensor hardware issue)
 - **estimator_actor** - Filter initialization failed (invalid initial state)
 - **logger_actor** - Log file operations failed (storage issue)
+
+**ARM failure:**
 - **motor_actor** - `hal_arm()` failed (motor hardware issue)
 
 If any RESET or ARM request fails:
@@ -429,6 +435,7 @@ If any supervised actor crashes:
 |---------|-----|--------------|--------|
 | GO | 0x20 | IDLE | Transition IDLE -> PREFLIGHT |
 | ABORT | 0x21 | ARMED | Disarm and return to IDLE |
+| STATUS | 0x22 | Any | Query state and countdown |
 
 ### New Command: ABORT
 
@@ -463,7 +470,7 @@ typedef struct {
 
 ### Changes Required
 
-1. **flight_manager_actor.c** - Rewrite as state machine loop, use request/reply for RESET and ARM/DISARM, add auto-GO for simulation
+1. **flight_manager_actor.c** - Rewrite as state machine loop, use request/reply for RESET and ARM/DISARM, handle STATUS request, add auto-GO for simulation
 2. **sensor_actor.c** - Handle RESET request (call hal_calibrate, reply ok/fail)
 3. **motor_actor.c** - Handle RESET request (clear started flag, reply ok), handle ARM/DISARM requests (call hal_arm/hal_disarm, reply ok/fail)
 4. **estimator_actor.c** - Handle RESET request (reset filters, reply ok/fail)
