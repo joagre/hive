@@ -13,7 +13,7 @@
 #include "hive_runtime.h"
 
 // Parameter count (must match enum)
-#define TUNABLE_PARAM_COUNT 45
+#define TUNABLE_PARAM_COUNT 47
 
 // Parameter identifiers
 // Grouped by subsystem for easier navigation
@@ -84,6 +84,10 @@ typedef enum {
 
     // Horizontal velocity filter (44)
     PARAM_HVEL_FILTER_ALPHA = 44,
+
+    // Flight manager lifecycle (45-46)
+    PARAM_ARMED_COUNTDOWN_S = 45,
+    PARAM_AUTO_GO_DELAY_S = 46,
 } tunable_param_id_t;
 
 // All tunable parameters in a single struct
@@ -155,6 +159,10 @@ typedef struct {
 
     // Horizontal velocity filter
     float hvel_filter_alpha;
+
+    // Flight manager lifecycle
+    float armed_countdown_s;
+    float auto_go_delay_s;
 } tunable_params_t;
 
 // Initialize parameters with platform defaults from HAL_* defines

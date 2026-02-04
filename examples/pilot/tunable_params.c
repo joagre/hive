@@ -90,6 +90,10 @@ static const param_meta_t param_meta[TUNABLE_PARAM_COUNT] = {
 
     // Horizontal velocity filter (44)
     [PARAM_HVEL_FILTER_ALPHA] = {"hvel_filter_alpha", 0.5f, 0.999f},
+
+    // Flight manager lifecycle (45-46)
+    [PARAM_ARMED_COUNTDOWN_S] = {"armed_countdown_s", 5.0f, 300.0f},
+    [PARAM_AUTO_GO_DELAY_S] = {"auto_go_delay_s", 0.0f, 60.0f},
 };
 
 void tunable_params_init(tunable_params_t *params) {
@@ -160,6 +164,15 @@ void tunable_params_init(tunable_params_t *params) {
 
     // Horizontal velocity filter - from config.h
     params->hvel_filter_alpha = HVEL_FILTER_ALPHA;
+
+    // Flight manager lifecycle
+#ifdef SIMULATED_TIME
+    params->armed_countdown_s = 5.0f; // Short countdown for testing
+    params->auto_go_delay_s = 2.0f;   // Auto-GO after 2s in simulation
+#else
+    params->armed_countdown_s = 60.0f; // Full countdown on hardware
+    params->auto_go_delay_s = 0.0f;    // Require manual GO on hardware
+#endif
 }
 
 hive_status_t tunable_params_set(tunable_params_t *params,

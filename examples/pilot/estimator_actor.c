@@ -5,6 +5,7 @@
 
 #include "estimator_actor.h"
 #include "pilot_buses.h"
+#include "notifications.h"
 #include "tunable_params.h"
 #include "types.h"
 #include "config.h"
@@ -13,9 +14,12 @@
 #include "fusion/altitude_kf.h"
 #include "hive_runtime.h"
 #include "hive_bus.h"
+#include "hive_ipc.h"
+#include "hive_select.h"
 #include "hive_log.h"
 #include "hive_timer.h"
 #include <stdbool.h>
+#include <string.h>
 #include <math.h>
 
 #define GRAVITY 9.81f
@@ -112,6 +116,7 @@ typedef struct {
     hive_bus_id_t sensor_bus;
     hive_bus_id_t state_bus;
     tunable_params_t *params;
+    hive_actor_id_t flight_manager;
 } estimator_state_t;
 
 void *estimator_actor_init(void *init_args) {
@@ -120,15 +125,21 @@ void *estimator_actor_init(void *init_args) {
     state.sensor_bus = buses->sensor_bus;
     state.state_bus = buses->state_bus;
     state.params = buses->params;
+    state.flight_manager = HIVE_ACTOR_ID_INVALID;
     return &state;
 }
 
 void estimator_actor(void *args, const hive_spawn_info_t *siblings,
                      size_t sibling_count) {
-    (void)siblings;
-    (void)sibling_count;
-
     estimator_state_t *state = args;
+
+    // Look up flight_manager from sibling info
+    state->flight_manager =
+        hive_find_sibling(siblings, sibling_count, "flight_manager");
+    if (state->flight_manager == HIVE_ACTOR_ID_INVALID) {
+        HIVE_LOG_ERROR("[EST] Failed to find flight_manager sibling");
+        hive_exit(HIVE_EXIT_REASON_CRASH);
+    }
 
     hive_status_t status = hive_bus_subscribe(state->sensor_bus);
     if (HIVE_FAILED(status)) {
@@ -183,18 +194,63 @@ void estimator_actor(void *args, const hive_spawn_info_t *siblings,
     // For measuring dt
     uint64_t prev_time = hive_get_time();
 
+    // Set up hive_select() sources: sensor bus + RESET request
+    enum { SEL_SENSOR, SEL_RESET };
+    hive_select_source_t sources[] = {
+        [SEL_SENSOR] = {HIVE_SEL_BUS, .bus = state->sensor_bus},
+        [SEL_RESET] = {HIVE_SEL_IPC, .ipc = {state->flight_manager,
+                                             HIVE_MSG_REQUEST, HIVE_TAG_ANY}},
+    };
+
     while (1) {
         sensor_data_t sensors;
         state_estimate_t est;
-        size_t len;
 
-        // Block until sensor data available
-        status = hive_bus_read(state->sensor_bus, &sensors, sizeof(sensors),
-                               &len, HIVE_TIMEOUT_INFINITE);
+        // Wait for sensor data OR RESET request
+        hive_select_result_t result;
+        status = hive_select(sources, 2, &result, -1);
         if (HIVE_FAILED(status)) {
-            HIVE_LOG_ERROR("[EST] bus read failed: %s", HIVE_ERR_STR(status));
+            HIVE_LOG_ERROR("[EST] select failed: %s", HIVE_ERR_STR(status));
             hive_exit(HIVE_EXIT_REASON_CRASH);
         }
+
+        if (result.index == SEL_RESET) {
+            // Verify it's a RESET request
+            uint8_t reply = REPLY_OK;
+            if (result.ipc.len != 1 ||
+                ((uint8_t *)result.ipc.data)[0] != REQUEST_RESET) {
+                HIVE_LOG_WARN("[EST] Unknown request ignored");
+                reply = REPLY_FAIL;
+                hive_ipc_reply(&result.ipc, &reply, sizeof(reply));
+                continue;
+            }
+            // RESET request - reinitialize filters
+            HIVE_LOG_INFO("[EST] RESET - reinitializing filters");
+            cf_init(&filter, &cf_config);
+            altitude_kf_init(&alt_kf, &kf_config);
+            prev_x = 0.0f;
+            prev_y = 0.0f;
+            x_velocity = 0.0f;
+            y_velocity = 0.0f;
+            first_sample = true;
+            last_valid_x = 0.0f;
+            last_valid_y = 0.0f;
+            rangefinder_mode = false;
+            last_valid_rangefinder_alt = 0.0f;
+            prev_gps_valid = false;
+            prev_velocity_valid = false;
+            prev_time = hive_get_time();
+            hive_ipc_reply(&result.ipc, &reply, sizeof(reply));
+            continue;
+        }
+
+        // SEL_SENSOR: Copy sensor data from select result
+        if (result.bus.len != sizeof(sensors)) {
+            HIVE_LOG_ERROR("[EST] Sensor bus corrupted: size=%zu expected=%zu",
+                           result.bus.len, sizeof(sensors));
+            continue;
+        }
+        memcpy(&sensors, result.bus.data, sizeof(sensors));
 
         // Validate sensor data - reject garbage readings
         // (validate_sensors logs which sensor failed)

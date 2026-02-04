@@ -5,12 +5,14 @@
 // If no storage is available, logs a warning and exits gracefully.
 
 #include "telemetry_logger_actor.h"
+#include "notifications.h"
 #include "types.h"
 #include "config.h"
 #include "hive_runtime.h"
 #include "hive_bus.h"
 #include "hive_timer.h"
 #include "hive_ipc.h"
+#include "hive_select.h"
 #include "hive_file.h"
 #include "hive_log.h"
 #include "printf.h"
@@ -32,6 +34,7 @@ typedef struct {
     hive_bus_id_t sensor_bus;
     hive_bus_id_t thrust_bus;
     hive_bus_id_t position_target_bus;
+    hive_actor_id_t flight_manager;
     char log_path[64];
     int log_fd;
 } telemetry_logger_state_t;
@@ -43,18 +46,41 @@ void *telemetry_logger_init(void *init_args) {
     state.sensor_bus = cfg->buses->sensor_bus;
     state.thrust_bus = cfg->buses->thrust_bus;
     state.position_target_bus = cfg->buses->position_target_bus;
+    state.flight_manager = HIVE_ACTOR_ID_INVALID;
     state.log_path[0] = '\0';
     state.log_fd = -1;
     return &state;
 }
 
+// Helper to write CSV header
+static void write_csv_header(int fd, char *line_buf, size_t buf_size) {
+    int len = snprintf_(line_buf, buf_size,
+                        "time_ms,"
+                        "roll,pitch,yaw,"
+                        "roll_rate,pitch_rate,yaw_rate,"
+                        "x,y,altitude,"
+                        "vx,vy,vz,"
+                        "thrust,"
+                        "target_x,target_y,target_z,target_yaw,"
+                        "gyro_x,gyro_y,gyro_z,"
+                        "accel_x,accel_y,accel_z\n");
+    size_t bytes_written;
+    hive_file_write(fd, line_buf, (size_t)len, &bytes_written);
+    hive_file_sync(fd);
+}
+
 void telemetry_logger_actor(void *args, const hive_spawn_info_t *siblings,
                             size_t sibling_count) {
-    (void)siblings;
-    (void)sibling_count;
-
     telemetry_logger_state_t *state = args;
     char line_buf[LINE_BUF_SIZE];
+
+    // Look up flight_manager from sibling info
+    state->flight_manager =
+        hive_find_sibling(siblings, sibling_count, "flight_manager");
+    if (state->flight_manager == HIVE_ACTOR_ID_INVALID) {
+        HIVE_LOG_WARN(
+            "[TLOG] flight_manager sibling not found - RESET disabled");
+    }
 
     // Select storage path based on mount availability
     // Prefer SD card, fall back to /tmp (simulation)
@@ -81,19 +107,7 @@ void telemetry_logger_actor(void *args, const hive_spawn_info_t *siblings,
     }
 
     // Write CSV header
-    int len = snprintf_(line_buf, sizeof(line_buf),
-                        "time_ms,"
-                        "roll,pitch,yaw,"
-                        "roll_rate,pitch_rate,yaw_rate,"
-                        "x,y,altitude,"
-                        "vx,vy,vz,"
-                        "thrust,"
-                        "target_x,target_y,target_z,target_yaw,"
-                        "gyro_x,gyro_y,gyro_z,"
-                        "accel_x,accel_y,accel_z\n");
-    size_t bytes_written;
-    hive_file_write(state->log_fd, line_buf, (size_t)len, &bytes_written);
-    hive_file_sync(state->log_fd);
+    write_csv_header(state->log_fd, line_buf, sizeof(line_buf));
 
     HIVE_LOG_INFO("[TLOG] Logging to %s at %d Hz", state->log_path,
                   TELEMETRY_LOG_RATE_HZ);
@@ -125,17 +139,69 @@ void telemetry_logger_actor(void *args, const hive_spawn_info_t *siblings,
     uint32_t start_time = hive_get_time();
     uint32_t log_count = 0;
 
+    // Set up hive_select() sources: timer + RESET request
+    enum { SEL_TIMER, SEL_RESET };
+    hive_select_source_t sources[] = {
+        [SEL_TIMER] = {HIVE_SEL_IPC,
+                       .ipc = {HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer}},
+        [SEL_RESET] = {HIVE_SEL_IPC, .ipc = {state->flight_manager,
+                                             HIVE_MSG_REQUEST, HIVE_TAG_ANY}},
+    };
+    // Only include RESET source if flight_manager is valid
+    size_t num_sources =
+        (state->flight_manager != HIVE_ACTOR_ID_INVALID) ? 2 : 1;
+
     while (1) {
-        hive_message_t msg;
-        status = hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer,
-                                     &msg, -1);
+        hive_select_result_t result;
+        status = hive_select(sources, num_sources, &result, -1);
         if (HIVE_FAILED(status)) {
-            HIVE_LOG_ERROR("[TLOG] recv_match failed: %s",
-                           HIVE_ERR_STR(status));
+            HIVE_LOG_ERROR("[TLOG] select failed: %s", HIVE_ERR_STR(status));
             break;
         }
 
-        // Read latest bus data (non-blocking)
+        if (result.index == SEL_RESET) {
+            // Verify it's a RESET request
+            if (result.ipc.len != 1 ||
+                ((uint8_t *)result.ipc.data)[0] != REQUEST_RESET) {
+                HIVE_LOG_WARN("[TLOG] Unknown request ignored");
+                uint8_t reply = REPLY_FAIL;
+                hive_ipc_reply(&result.ipc, &reply, sizeof(reply));
+                continue;
+            }
+
+            // RESET request - truncate log file for new flight
+            HIVE_LOG_INFO("[TLOG] RESET - truncating log file");
+            hive_file_close(state->log_fd);
+
+            // Reopen file with truncation
+            status = hive_file_open(state->log_path,
+                                    HIVE_O_WRONLY | HIVE_O_CREAT | HIVE_O_TRUNC,
+                                    0644, &state->log_fd);
+            if (HIVE_FAILED(status)) {
+                HIVE_LOG_ERROR("[TLOG] Cannot reopen %s: %s", state->log_path,
+                               HIVE_ERR_STR(status));
+                uint8_t reply = REPLY_FAIL;
+                hive_ipc_reply(&result.ipc, &reply, sizeof(reply));
+                break;
+            }
+
+            // Write CSV header
+            write_csv_header(state->log_fd, line_buf, sizeof(line_buf));
+
+            // Reset counters
+            start_time = hive_get_time();
+            log_count = 0;
+            latest_state = (state_estimate_t)STATE_ESTIMATE_ZERO;
+            latest_sensors = (sensor_data_t)SENSOR_DATA_ZERO;
+            latest_thrust = (thrust_cmd_t)THRUST_CMD_ZERO;
+            latest_target = (position_target_t)POSITION_TARGET_ZERO;
+
+            uint8_t reply = REPLY_OK;
+            hive_ipc_reply(&result.ipc, &reply, sizeof(reply));
+            continue;
+        }
+
+        // SEL_TIMER: Read latest bus data (non-blocking)
         size_t bytes_read;
 
         state_estimate_t tmp_state;
@@ -179,29 +245,30 @@ void telemetry_logger_actor(void *args, const hive_spawn_info_t *siblings,
         uint32_t time_ms = (now - start_time) / 1000;
 
         // Format CSV row
-        len = snprintf_(line_buf, sizeof(line_buf),
-                        "%u,"
-                        "%.4f,%.4f,%.4f,"
-                        "%.4f,%.4f,%.4f,"
-                        "%.4f,%.4f,%.4f,"
-                        "%.4f,%.4f,%.4f,"
-                        "%.4f,"
-                        "%.4f,%.4f,%.4f,%.4f,"
-                        "%.4f,%.4f,%.4f,"
-                        "%.4f,%.4f,%.4f\n",
-                        (unsigned)time_ms, latest_state.roll,
-                        latest_state.pitch, latest_state.yaw,
-                        latest_state.roll_rate, latest_state.pitch_rate,
-                        latest_state.yaw_rate, latest_state.x, latest_state.y,
-                        latest_state.altitude, latest_state.x_velocity,
-                        latest_state.y_velocity, latest_state.vertical_velocity,
-                        latest_thrust.thrust, latest_target.x, latest_target.y,
-                        latest_target.z, latest_target.yaw,
-                        latest_sensors.gyro[0], latest_sensors.gyro[1],
-                        latest_sensors.gyro[2], latest_sensors.accel[0],
-                        latest_sensors.accel[1], latest_sensors.accel[2]);
+        int len = snprintf_(
+            line_buf, sizeof(line_buf),
+            "%u,"
+            "%.4f,%.4f,%.4f,"
+            "%.4f,%.4f,%.4f,"
+            "%.4f,%.4f,%.4f,"
+            "%.4f,%.4f,%.4f,"
+            "%.4f,"
+            "%.4f,%.4f,%.4f,%.4f,"
+            "%.4f,%.4f,%.4f,"
+            "%.4f,%.4f,%.4f\n",
+            (unsigned)time_ms, latest_state.roll, latest_state.pitch,
+            latest_state.yaw, latest_state.roll_rate, latest_state.pitch_rate,
+            latest_state.yaw_rate, latest_state.x, latest_state.y,
+            latest_state.altitude, latest_state.x_velocity,
+            latest_state.y_velocity, latest_state.vertical_velocity,
+            latest_thrust.thrust, latest_target.x, latest_target.y,
+            latest_target.z, latest_target.yaw, latest_sensors.gyro[0],
+            latest_sensors.gyro[1], latest_sensors.gyro[2],
+            latest_sensors.accel[0], latest_sensors.accel[1],
+            latest_sensors.accel[2]);
 
         // Write CSV row
+        size_t bytes_written;
         status = hive_file_write(state->log_fd, line_buf, (size_t)len,
                                  &bytes_written);
         if (HIVE_FAILED(status) || bytes_written != (size_t)len) {

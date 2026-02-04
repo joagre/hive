@@ -50,8 +50,13 @@
 #define PACKET_LOG_CHUNK 0x11 // Drone -> ground: log data chunk
 #define PACKET_LOG_DONE 0x12  // Drone -> ground: download complete
 
-// Packet type identifiers - flight go command
-#define CMD_GO 0x20 // Ground -> drone: start flight sequence
+// Packet type identifiers - flight control
+#define CMD_GO 0x20     // Ground -> drone: start flight sequence
+#define CMD_ABORT 0x21  // Ground -> drone: abort countdown/flight
+#define CMD_STATUS 0x22 // Ground -> drone: request status
+
+// Response packet types - flight control
+#define RESP_STATUS 0x23 // Drone -> ground: status [state:u8][countdown_s:u8]
 
 // Packet type identifiers - parameter tuning (0x30-0x32)
 #define CMD_SET_PARAM 0x30 // Ground -> drone: set parameter [id:u8][value:f32]
@@ -181,6 +186,13 @@ typedef struct __attribute__((packed)) {
     } params[PARAM_LIST_MAX_PER_PACKET];
 } param_list_packet_t;
 
+// Packet type RESP_STATUS: Flight status (3 bytes payload)
+typedef struct __attribute__((packed)) {
+    uint8_t type;        // RESP_STATUS (0x23)
+    uint8_t state;       // FM_STATE_* enum value
+    uint8_t countdown_s; // Seconds remaining in countdown (0 if not in ARMED)
+} status_response_packet_t;
+
 // Actor state
 typedef struct {
     hive_bus_id_t state_bus;
@@ -214,6 +226,37 @@ static void handle_rx_command(comms_state_t *state, const uint8_t *data,
         HIVE_LOG_INFO("[COMMS] GO command received from ground station");
         if (state->flight_manager != HIVE_ACTOR_ID_INVALID) {
             hive_ipc_notify(state->flight_manager, NOTIFY_GO, NULL, 0);
+        }
+        return;
+    }
+
+    if (cmd == CMD_ABORT) {
+        // Ground station sends ABORT to stop countdown/flight
+        HIVE_LOG_INFO("[COMMS] ABORT command received from ground station");
+        if (state->flight_manager != HIVE_ACTOR_ID_INVALID) {
+            hive_ipc_notify(state->flight_manager, NOTIFY_ABORT, NULL, 0);
+        }
+        return;
+    }
+
+    if (cmd == CMD_STATUS) {
+        // Ground station requests status
+        if (state->flight_manager != HIVE_ACTOR_ID_INVALID) {
+            // Request status from flight manager
+            hive_message_t reply;
+            hive_status_t s = hive_ipc_request(state->flight_manager, NULL, 0,
+                                               &reply, 500); // 500ms timeout
+            if (HIVE_SUCCEEDED(s) && reply.len >= 2) {
+                // Flight manager returns [state:u8, countdown_s:u8]
+                status_response_packet_t pkt = {
+                    .type = RESP_STATUS,
+                    .state = reply.data[0],
+                    .countdown_s = reply.data[1],
+                };
+                hal_esb_send(&pkt, sizeof(pkt));
+            } else {
+                HIVE_LOG_WARN("[COMMS] STATUS request failed or timeout");
+            }
         }
         return;
     }

@@ -77,25 +77,16 @@ int main(void) {
         hal_led_off();
         hal_delay_ms(500);
     }
-    hal_printf("[PILOT] Starting calibration - KEEP STILL!\n");
+    hal_printf("[PILOT] Grace period complete\n");
 
-    hal_calibrate();
-    hal_arm();
+    // Note: Calibration and arming now handled by flight_manager via actors
+    // (sensor_actor calls hal_calibrate() on RESET, motor_actor calls hal_arm())
 
     // Initialize actor runtime
     hive_init();
 
-    // Open log file early to capture HAL init messages
-    // Try each mount in order until one succeeds
-    const char *log_paths[] = {"/sd/hive.log", "/log", "/tmp/hive.log", NULL};
-    for (int i = 0; log_paths[i] != NULL; i++) {
-        hive_status_t log_status = hive_log_file_open(log_paths[i]);
-        if (HIVE_SUCCEEDED(log_status)) {
-            hal_flush_early_log();
-            hal_printf("[PILOT] Log file: %s\n", log_paths[i]);
-            break;
-        }
-    }
+    // Note: Log file lifecycle now managed by telemetry_logger_actor
+    // (opens on start, truncates on RESET, closes on exit)
 
     // Initialize tunable parameters with platform defaults
     static tunable_params_t g_tunable_params;
@@ -254,7 +245,7 @@ int main(void) {
          .init_args_size = sizeof(buses),
          .name = "flight_manager",
          .auto_register = true,
-         .restart = HIVE_CHILD_TRANSIENT, // Normal exit = mission complete
+         .restart = HIVE_CHILD_PERMANENT, // Loops for multiple flights
          .actor_cfg = {.priority = HIVE_PRIORITY_CRITICAL,
                        .name = "flight_mgr",
                        .pool_block =
@@ -332,8 +323,7 @@ int main(void) {
 #endif
 
     // Cleanup
-    hive_log_file_close();
-    hal_disarm();
+    // Note: hal_disarm() now handled by motor_actor via DISARM request
     hive_cleanup();
     hal_cleanup();
 

@@ -5,14 +5,18 @@
 
 #include "rate_actor.h"
 #include "pilot_buses.h"
+#include "notifications.h"
 #include "tunable_params.h"
 #include "types.h"
 #include "config.h"
 #include "pid.h"
 #include "hive_runtime.h"
 #include "hive_bus.h"
+#include "hive_ipc.h"
+#include "hive_select.h"
 #include "hive_log.h"
 #include "hive_timer.h"
+#include <string.h>
 
 // Actor state - initialized by rate_actor_init
 typedef struct {
@@ -21,6 +25,7 @@ typedef struct {
     hive_bus_id_t rate_setpoint_bus;
     hive_bus_id_t torque_bus;
     tunable_params_t *params;
+    hive_actor_id_t flight_manager;
 } rate_state_t;
 
 void *rate_actor_init(void *init_args) {
@@ -31,15 +36,21 @@ void *rate_actor_init(void *init_args) {
     state.rate_setpoint_bus = buses->rate_setpoint_bus;
     state.torque_bus = buses->torque_bus;
     state.params = buses->params;
+    state.flight_manager = HIVE_ACTOR_ID_INVALID;
     return &state;
 }
 
 void rate_actor(void *args, const hive_spawn_info_t *siblings,
                 size_t sibling_count) {
-    (void)siblings;
-    (void)sibling_count;
-
     rate_state_t *state = args;
+
+    // Look up flight_manager from sibling info
+    state->flight_manager =
+        hive_find_sibling(siblings, sibling_count, "flight_manager");
+    if (state->flight_manager == HIVE_ACTOR_ID_INVALID) {
+        HIVE_LOG_ERROR("[RATE] Failed to find flight_manager sibling");
+        hive_exit(HIVE_EXIT_REASON_CRASH);
+    }
 
     if (HIVE_FAILED(hive_bus_subscribe(state->state_bus)) ||
         HIVE_FAILED(hive_bus_subscribe(state->thrust_bus)) ||
@@ -65,6 +76,14 @@ void rate_actor(void *args, const hive_spawn_info_t *siblings,
     // For measuring dt
     uint64_t prev_time = hive_get_time();
 
+    // Set up hive_select() sources: state bus + RESET request
+    enum { SEL_STATE, SEL_RESET };
+    hive_select_source_t sources[] = {
+        [SEL_STATE] = {HIVE_SEL_BUS, .bus = state->state_bus},
+        [SEL_RESET] = {HIVE_SEL_IPC, .ipc = {state->flight_manager,
+                                             HIVE_MSG_REQUEST, HIVE_TAG_ANY}},
+    };
+
     while (1) {
         state_estimate_t est;
         thrust_cmd_t thrust_cmd;
@@ -72,13 +91,41 @@ void rate_actor(void *args, const hive_spawn_info_t *siblings,
         size_t len;
         hive_status_t status;
 
-        // Block until state available
-        status = hive_bus_read(state->state_bus, &est, sizeof(est), &len,
-                               HIVE_TIMEOUT_INFINITE);
+        // Wait for state OR RESET request
+        hive_select_result_t result;
+        status = hive_select(sources, 2, &result, -1);
         if (HIVE_FAILED(status)) {
-            HIVE_LOG_ERROR("[RATE] bus read failed: %s", HIVE_ERR_STR(status));
+            HIVE_LOG_ERROR("[RATE] select failed: %s", HIVE_ERR_STR(status));
             hive_exit(HIVE_EXIT_REASON_CRASH);
         }
+
+        if (result.index == SEL_RESET) {
+            // Verify it's a RESET request
+            uint8_t reply = REPLY_OK;
+            if (result.ipc.len != 1 ||
+                ((uint8_t *)result.ipc.data)[0] != REQUEST_RESET) {
+                HIVE_LOG_WARN("[RATE] Unknown request ignored");
+                reply = REPLY_FAIL;
+            } else {
+                HIVE_LOG_INFO("[RATE] RESET - clearing PIDs");
+                pid_reset(&roll_pid);
+                pid_reset(&pitch_pid);
+                pid_reset(&yaw_pid);
+                thrust = 0.0f;
+                rate_sp = (rate_setpoint_t)RATE_SETPOINT_ZERO;
+                prev_time = hive_get_time();
+            }
+            hive_ipc_reply(&result.ipc, &reply, sizeof(reply));
+            continue;
+        }
+
+        // SEL_STATE: Copy state data from select result
+        if (result.bus.len != sizeof(est)) {
+            HIVE_LOG_ERROR("[RATE] State bus corrupted: size=%zu expected=%zu",
+                           result.bus.len, sizeof(est));
+            continue;
+        }
+        memcpy(&est, result.bus.data, sizeof(est));
 
         // Measure actual dt
         uint64_t now = hive_get_time();

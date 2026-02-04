@@ -79,18 +79,49 @@ void waypoint_actor(void *args, const hive_spawn_info_t *siblings,
     }
 
     // Wait for START signal from flight manager before beginning flight
+    // Also handle RESET requests during this wait
     HIVE_LOG_INFO("[WPT] Flight profile: %s (%d waypoints, %.0fs hover)",
                   FLIGHT_PROFILE_NAME, (int)NUM_WAYPOINTS,
                   WAYPOINT_HOVER_TIME_US / 1000000.0f);
     HIVE_LOG_INFO("[WPT] Waiting for flight manager START signal");
-    hive_message_t msg;
-    status = hive_ipc_recv_match(state->flight_manager, HIVE_MSG_NOTIFY,
-                                 NOTIFY_FLIGHT_START, &msg, -1);
-    if (HIVE_FAILED(status)) {
-        HIVE_LOG_ERROR("[WPT] recv_match START failed: %s",
-                       HIVE_ERR_STR(status));
-        hive_exit(HIVE_EXIT_REASON_CRASH);
+
+    // Wait for START or RESET using hive_select
+    enum { SEL_START, SEL_RESET_WAIT };
+    hive_select_source_t wait_sources[] = {
+        [SEL_START] = {HIVE_SEL_IPC,
+                       .ipc = {state->flight_manager, HIVE_MSG_NOTIFY,
+                               NOTIFY_FLIGHT_START}},
+        [SEL_RESET_WAIT] = {HIVE_SEL_IPC,
+                            .ipc = {state->flight_manager, HIVE_MSG_REQUEST,
+                                    HIVE_TAG_ANY}},
+    };
+
+    while (1) {
+        hive_select_result_t wait_result;
+        status = hive_select(wait_sources, 2, &wait_result, -1);
+        if (HIVE_FAILED(status)) {
+            HIVE_LOG_ERROR("[WPT] select failed: %s", HIVE_ERR_STR(status));
+            hive_exit(HIVE_EXIT_REASON_CRASH);
+        }
+
+        if (wait_result.index == SEL_RESET_WAIT) {
+            // Handle RESET request while waiting for START
+            uint8_t reply = REPLY_OK;
+            if (wait_result.ipc.len != 1 ||
+                ((uint8_t *)wait_result.ipc.data)[0] != REQUEST_RESET) {
+                HIVE_LOG_WARN("[WPT] Unknown request ignored");
+                reply = REPLY_FAIL;
+            } else {
+                HIVE_LOG_INFO("[WPT] RESET (while waiting for START)");
+            }
+            hive_ipc_reply(&wait_result.ipc, &reply, sizeof(reply));
+            continue; // Keep waiting for START
+        }
+
+        // SEL_START: START signal received
+        break;
     }
+
     HIVE_LOG_INFO("[WPT] START received - beginning flight sequence");
     HIVE_LOG_INFO("[WPT] First waypoint: (%.1f, %.1f, %.1f) yaw=%.0f",
                   waypoints[0].x, waypoints[0].y, waypoints[0].z,
@@ -99,9 +130,10 @@ void waypoint_actor(void *args, const hive_spawn_info_t *siblings,
     int waypoint_index = 0;
     hive_timer_id_t hover_timer = HIVE_TIMER_ID_INVALID;
     bool hovering = false;
+    bool first_publish = true;
 
     // Set up hive_select() sources (dynamically adjust count based on hovering)
-    enum { SEL_STATE, SEL_HOVER_TIMER };
+    enum { SEL_STATE, SEL_HOVER_TIMER, SEL_RESET };
 
     while (1) {
         const waypoint_t *wp = &waypoints[waypoint_index];
@@ -116,27 +148,67 @@ void waypoint_actor(void *args, const hive_spawn_info_t *siblings,
         }
 
         // Log first publish only
-        static bool first_publish = true;
         if (first_publish) {
             HIVE_LOG_INFO("[WPT] Published target z=%.2f", target.z);
             first_publish = false;
         }
 
-        // Wait for state update OR hover timer (unified event waiting)
+        // Wait for state update OR hover timer OR RESET
         hive_select_source_t sources[] = {
             [SEL_STATE] = {HIVE_SEL_BUS, .bus = state->state_bus},
             [SEL_HOVER_TIMER] = {HIVE_SEL_IPC,
                                  .ipc = {HIVE_SENDER_ANY, HIVE_MSG_TIMER,
                                          hover_timer}},
+            [SEL_RESET] = {HIVE_SEL_IPC,
+                           .ipc = {state->flight_manager, HIVE_MSG_REQUEST,
+                                   HIVE_TAG_ANY}},
         };
 
         hive_select_result_t result;
-        // Only include hover timer source when hovering
-        size_t num_sources = hovering ? 2 : 1;
-        status = hive_select(sources, num_sources, &result, -1);
-        if (HIVE_FAILED(status)) {
-            HIVE_LOG_ERROR("[WPT] select failed: %s", HIVE_ERR_STR(status));
-            hive_exit(HIVE_EXIT_REASON_CRASH);
+        // If not hovering, use only state bus and RESET (skip hover timer)
+        if (!hovering) {
+            // Reorder sources to [SEL_STATE, SEL_RESET]
+            hive_select_source_t sources_no_timer[] = {
+                [0] = {HIVE_SEL_BUS, .bus = state->state_bus},
+                [1] = {HIVE_SEL_IPC, .ipc = {state->flight_manager,
+                                             HIVE_MSG_REQUEST, HIVE_TAG_ANY}},
+            };
+            status = hive_select(sources_no_timer, 2, &result, -1);
+            if (HIVE_FAILED(status)) {
+                HIVE_LOG_ERROR("[WPT] select failed: %s", HIVE_ERR_STR(status));
+                hive_exit(HIVE_EXIT_REASON_CRASH);
+            }
+            // Map result index back to SEL_* enum
+            if (result.index == 1) {
+                result.index = SEL_RESET;
+            }
+        } else {
+            status = hive_select(sources, 3, &result, -1);
+            if (HIVE_FAILED(status)) {
+                HIVE_LOG_ERROR("[WPT] select failed: %s", HIVE_ERR_STR(status));
+                hive_exit(HIVE_EXIT_REASON_CRASH);
+            }
+        }
+
+        if (result.index == SEL_RESET) {
+            // Verify it's a RESET request
+            uint8_t reply = REPLY_OK;
+            if (result.ipc.len != 1 ||
+                ((uint8_t *)result.ipc.data)[0] != REQUEST_RESET) {
+                HIVE_LOG_WARN("[WPT] Unknown request ignored");
+                reply = REPLY_FAIL;
+            } else {
+                HIVE_LOG_INFO("[WPT] RESET - resetting to waypoint 0");
+                waypoint_index = 0;
+                if (hover_timer != HIVE_TIMER_ID_INVALID) {
+                    hive_timer_cancel(hover_timer);
+                    hover_timer = HIVE_TIMER_ID_INVALID;
+                }
+                hovering = false;
+                first_publish = true;
+            }
+            hive_ipc_reply(&result.ipc, &reply, sizeof(reply));
+            continue;
         }
 
         if (result.index == SEL_HOVER_TIMER) {

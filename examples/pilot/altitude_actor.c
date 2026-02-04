@@ -79,13 +79,18 @@ void altitude_actor(void *args, const hive_spawn_info_t *siblings,
 
     uint64_t prev_time = hive_get_time();
 
-    // Set up hive_select() sources: state bus + landing command
-    enum { SEL_STATE, SEL_LANDING };
+    // Track crash logging (not static so RESET can clear it)
+    bool logged_crash = false;
+
+    // Set up hive_select() sources: state bus + landing command + RESET
+    enum { SEL_STATE, SEL_LANDING, SEL_RESET };
     hive_select_source_t sources[] = {
         [SEL_STATE] = {HIVE_SEL_BUS, .bus = state->state_bus},
         [SEL_LANDING] = {HIVE_SEL_IPC,
                          .ipc = {state->flight_manager, HIVE_MSG_NOTIFY,
                                  NOTIFY_LANDING}},
+        [SEL_RESET] = {HIVE_SEL_IPC, .ipc = {state->flight_manager,
+                                             HIVE_MSG_REQUEST, HIVE_TAG_ANY}},
     };
 
     while (1) {
@@ -94,12 +99,35 @@ void altitude_actor(void *args, const hive_spawn_info_t *siblings,
         size_t len;
         hive_status_t status;
 
-        // Wait for state update OR landing command (unified event waiting)
+        // Wait for state update OR landing command OR RESET
         hive_select_result_t result;
-        status = hive_select(sources, 2, &result, -1);
+        status = hive_select(sources, 3, &result, -1);
         if (HIVE_FAILED(status)) {
             HIVE_LOG_ERROR("[ALT] select failed: %s", HIVE_ERR_STR(status));
             hive_exit(HIVE_EXIT_REASON_CRASH);
+        }
+
+        if (result.index == SEL_RESET) {
+            // Verify it's a RESET request
+            uint8_t reply = REPLY_OK;
+            if (result.ipc.len != 1 ||
+                ((uint8_t *)result.ipc.data)[0] != REQUEST_RESET) {
+                HIVE_LOG_WARN("[ALT] Unknown request ignored");
+                reply = REPLY_FAIL;
+            } else {
+                HIVE_LOG_INFO("[ALT] RESET - clearing PID and landing state");
+                pid_reset(&alt_pid);
+                target_altitude = 0.0f;
+                ramp_start_time = 0;
+                landing_mode = false;
+                landed = false;
+                crash_detected = false;
+                logged_crash = false;
+                count = 0;
+                prev_time = hive_get_time();
+            }
+            hive_ipc_reply(&result.ipc, &reply, sizeof(reply));
+            continue;
         }
 
         if (result.index == SEL_LANDING) {
@@ -166,7 +194,6 @@ void altitude_actor(void *args, const hive_spawn_info_t *siblings,
         bool cutoff = crash_detected || touchdown;
 
         // Log emergency conditions (once per event)
-        static bool logged_crash = false;
         if (crash_detected && !logged_crash) {
             HIVE_LOG_ERROR(
                 "[ALT] CRASH DETECTED - motors disabled until reboot! "

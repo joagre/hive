@@ -2,8 +2,14 @@
 //
 // Subscribes to torque bus, writes to hardware via HAL.
 // The HAL handles mixing (converting torque to individual motor commands).
-// Uses hive_select() to wait on torque bus OR STOP notification simultaneously,
-// ensuring immediate response to STOP commands (critical for safety).
+// Uses hive_select() to wait on torque bus OR control messages simultaneously.
+//
+// Lifecycle messages from flight_manager:
+//   ARM - call hal_arm(), enable motor output
+//   DISARM - call hal_disarm(), disable motor output
+//   RESET - clear state for new flight
+//   START - begin flight, arm must have been called first
+//   STOP - stop motors
 //
 // DEADMAN WATCHDOG: If no torque command is received within
 // MOTOR_DEADMAN_TIMEOUT_MS, motors are automatically zeroed. This prevents
@@ -80,47 +86,41 @@ void motor_actor(void *args, const hive_spawn_info_t *siblings,
         hive_exit(HIVE_EXIT_REASON_CRASH);
     }
 
-    // === WAIT FOR START ===
-    // Motors stay disabled until flight_manager authorizes flight.
-    // This prevents motors spinning during startup delay.
-    HIVE_LOG_INFO("[MOTOR] Waiting for flight authorization...");
-    hive_select_source_t start_source[] = {
-        {HIVE_SEL_IPC,
-         .ipc = {state->flight_manager, HIVE_MSG_NOTIFY, NOTIFY_FLIGHT_START}},
-    };
-    hive_select_result_t start_result;
-    status = hive_select(start_source, 1, &start_result, -1);
-    if (HIVE_FAILED(status)) {
-        HIVE_LOG_ERROR("[MOTOR] select (start) failed: %s",
-                       HIVE_ERR_STR(status));
-        hive_exit(HIVE_EXIT_REASON_CRASH);
-    }
-    HIVE_LOG_INFO("[MOTOR] Flight authorized - motors enabled");
-
+    // Motor state
+    bool armed = false;
+    bool started = false;
     bool stopped = false;
     bool first_thrust_logged = false;
 
-    // Set up hive_select() sources: torque bus + STOP notification
-    enum { SEL_TORQUE, SEL_STOP };
+    HIVE_LOG_INFO("[MOTOR] Waiting for ARM command");
+
+    // Set up hive_select() sources
+    // Note: REQUEST uses HIVE_TAG_ANY since hive_ipc_request() generates tags
+    enum { SEL_TORQUE, SEL_START, SEL_STOP, SEL_REQUEST };
     hive_select_source_t sources[] = {
         [SEL_TORQUE] = {HIVE_SEL_BUS, .bus = state->torque_bus},
+        [SEL_START] = {HIVE_SEL_IPC,
+                       .ipc = {state->flight_manager, HIVE_MSG_NOTIFY,
+                               NOTIFY_FLIGHT_START}},
         [SEL_STOP] = {HIVE_SEL_IPC,
                       .ipc = {state->flight_manager, HIVE_MSG_NOTIFY,
                               NOTIFY_FLIGHT_STOP}},
+        [SEL_REQUEST] = {HIVE_SEL_IPC, .ipc = {state->flight_manager,
+                                               HIVE_MSG_REQUEST, HIVE_TAG_ANY}},
     };
 
     while (1) {
-        torque_cmd_t torque;
+        torque_cmd_t torque = TORQUE_CMD_ZERO;
 
-        // Wait for torque command OR STOP notification (unified event waiting)
-        // Timeout implements deadman watchdog - zero motors if no command
+        // Wait for torque command OR control messages
+        // Use deadman timeout only when started (flying)
+        int64_t timeout = started ? MOTOR_DEADMAN_TIMEOUT_MS : -1;
         hive_select_result_t result;
-        status = hive_select(sources, 2, &result, MOTOR_DEADMAN_TIMEOUT_MS);
+        status = hive_select(sources, 4, &result, timeout);
 
         if (status.code == HIVE_ERR_TIMEOUT) {
             // DEADMAN TIMEOUT - no torque command received, zero motors
             HIVE_LOG_WARN("[MOTOR] Deadman timeout - zeroing motors");
-            torque = (torque_cmd_t)TORQUE_CMD_ZERO;
             hal_write_torque(&torque);
             continue;
         }
@@ -130,46 +130,99 @@ void motor_actor(void *args, const hive_spawn_info_t *siblings,
             hive_exit(HIVE_EXIT_REASON_CRASH);
         }
 
-        if (result.index == SEL_STOP) {
-            // STOP received - respond immediately
+        switch (result.index) {
+        case SEL_REQUEST: {
+            // Handle REQUEST from flight_manager
+            // Dispatch based on payload byte: RESET, ARM, or DISARM
+            uint8_t reply = REPLY_OK;
+            uint8_t req_type =
+                (result.ipc.len == 1) ? ((uint8_t *)result.ipc.data)[0] : 0xFF;
+
+            if (req_type == REQUEST_RESET) {
+                // RESET request - clear state for new flight
+                HIVE_LOG_INFO("[MOTOR] RESET - clearing state");
+                started = false;
+                stopped = false;
+                first_thrust_logged = false;
+                hal_write_torque(&torque); // Zero motors
+            } else if (req_type == REQUEST_ARM) {
+                // ARM request - enable motor output
+                HIVE_LOG_INFO("[MOTOR] ARM - enabling motors");
+                hal_arm();
+                armed = true;
+            } else if (req_type == REQUEST_DISARM) {
+                // DISARM request - disable motor output
+                HIVE_LOG_INFO("[MOTOR] DISARM - disabling motors");
+                hal_write_torque(&torque); // Zero motors first
+                hal_disarm();
+                armed = false;
+                started = false;
+                stopped = false;
+            } else {
+                HIVE_LOG_WARN("[MOTOR] Unknown request (len=%zu)",
+                              result.ipc.len);
+                reply = REPLY_FAIL;
+            }
+            hive_ipc_reply(&result.ipc, &reply, sizeof(reply));
+            continue;
+        }
+
+        case SEL_START: {
+            // START notification - begin flight
+            if (!armed) {
+                HIVE_LOG_WARN("[MOTOR] START received but not armed");
+            } else {
+                HIVE_LOG_INFO("[MOTOR] START - flight authorized");
+                started = true;
+                stopped = false;
+            }
+            continue;
+        }
+
+        case SEL_STOP: {
+            // STOP notification - stop motors
             if (!stopped) {
                 HIVE_LOG_INFO("[MOTOR] STOP received - motors disabled");
                 stopped = true;
             }
-            torque = (torque_cmd_t)TORQUE_CMD_ZERO;
-            hal_write_torque(&torque);
-            continue; // Loop back to wait for next event
-        }
-
-        // SEL_TORQUE: Copy torque data from select result
-        if (result.bus.len != sizeof(torque)) {
-            HIVE_LOG_ERROR(
-                "[MOTOR] Torque bus corrupted: size=%zu expected=%zu",
-                result.bus.len, sizeof(torque));
+            hal_write_torque(&torque); // Zero motors
             continue;
         }
-        memcpy(&torque, result.bus.data, sizeof(torque));
 
-        // Validate torque command - last line of defense against garbage data
-        if (!validate_torque(&torque)) {
-            HIVE_LOG_ERROR("[MOTOR] Invalid torque rejected: t=%.2f r=%.2f "
-                           "p=%.2f y=%.2f - control system failure!",
-                           torque.thrust, torque.roll, torque.pitch,
-                           torque.yaw);
-            torque = (torque_cmd_t)TORQUE_CMD_ZERO;
+        case SEL_TORQUE: {
+            // SEL_TORQUE: Copy torque data from select result
+            if (result.bus.len != sizeof(torque)) {
+                HIVE_LOG_ERROR(
+                    "[MOTOR] Torque bus corrupted: size=%zu expected=%zu",
+                    result.bus.len, sizeof(torque));
+                continue;
+            }
+            memcpy(&torque, result.bus.data, sizeof(torque));
+
+            // Validate torque command - last line of defense
+            if (!validate_torque(&torque)) {
+                HIVE_LOG_ERROR("[MOTOR] Invalid torque rejected: t=%.2f r=%.2f "
+                               "p=%.2f y=%.2f - control system failure!",
+                               torque.thrust, torque.roll, torque.pitch,
+                               torque.yaw);
+                torque = (torque_cmd_t)TORQUE_CMD_ZERO;
+            }
+
+            // Only apply torque if armed, started, and not stopped
+            if (!armed || !started || stopped) {
+                torque = (torque_cmd_t)TORQUE_CMD_ZERO;
+            }
+
+            // Log first non-zero thrust (takeoff moment)
+            if (!first_thrust_logged && torque.thrust > 0.01f) {
+                HIVE_LOG_INFO("[MOTOR] First thrust: %.3f - MOTORS ENGAGED",
+                              torque.thrust);
+                first_thrust_logged = true;
+            }
+
+            hal_write_torque(&torque);
+            continue;
         }
-
-        if (stopped) {
-            torque = (torque_cmd_t)TORQUE_CMD_ZERO;
         }
-
-        // Log first non-zero thrust (takeoff moment)
-        if (!first_thrust_logged && torque.thrust > 0.01f) {
-            HIVE_LOG_INFO("[MOTOR] First thrust: %.3f - MOTORS ENGAGED",
-                          torque.thrust);
-            first_thrust_logged = true;
-        }
-
-        hal_write_torque(&torque);
     }
 }
