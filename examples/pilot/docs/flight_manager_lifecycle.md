@@ -86,7 +86,7 @@ The ARMED state provides a safety window between arming and flight:
 
 - **Countdown** - 60 seconds by default (tunable via `armed_countdown_s` parameter)
 - **ABORT command** - Operator can abort during countdown, returns to IDLE
-- **Telemetry** - Countdown remaining sent to ground station for display
+- **Telemetry** - Ground station polls STATUS to display countdown remaining
 - **No motor spin** - Motors armed but not spinning (ready for instant response)
 
 ```
@@ -199,7 +199,7 @@ Ground Station
 | DISARM | flight_manager | motor_actor | request/reply |
 | LANDING | flight_manager | altitude_actor | notify |
 | LANDED | altitude_actor | flight_manager | notify |
-| STATUS | comms_actor | flight_manager | request/reply (optional) |
+| STATUS | comms_actor | flight_manager | request/reply |
 
 **Notify messages** (fire-and-forget): GO, ABORT, LANDING, LANDED
 **Request/reply messages** (explicit error handling): RESET, ARM, DISARM, STATUS
@@ -444,9 +444,9 @@ Allows operator to cancel flight during the armed countdown window.
 If received in ARMED state: disarm motors, return to IDLE.
 If received in other states: ignored (log warning).
 
-### Optional Enhancement: STATUS
+### STATUS Request
 
-Query current state for ground station display:
+Query current state for ground station display. Ground station polls during ARMED to show countdown:
 
 ```c
 #define CMD_GET_STATUS 0x22
