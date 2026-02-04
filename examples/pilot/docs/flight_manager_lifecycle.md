@@ -57,14 +57,15 @@ Flight manager becomes a looping state machine. After landing, it returns to IDL
     │                        FLYING                                │
     │  - Execute waypoint sequence                                 │
     │  - Normal flight control loop                                │
+    │  - Wait for flight duration timer                            │
     └──────────────────────────────────────────────────────────────┘
                           │
-                          │ Final waypoint reached (land command)
+                          │ Flight duration complete
                           v
     ┌──────────────────────────────────────────────────────────────┐
     │                       LANDING                                │
-    │  - Execute landing sequence                                  │
-    │  - Wait for landed confirmation                              │
+    │  1. Send LANDING notification to altitude_actor              │
+    │  2. Wait for LANDED notification from altitude_actor         │
     └──────────────────────────────────────────────────────────────┘
                           │
                           │ Landed confirmed
@@ -133,7 +134,7 @@ Clear separation of concerns:
 |-------|------|----------------|
 | **sensor_actor** | Hardware sensors | Read sensors, calibrate on RESET (hal_calibrate) |
 | **estimator_actor** | State estimation | Fuse sensors into state estimate |
-| **altitude_actor** | Vertical control | Altitude PID, landing detection |
+| **altitude_actor** | Vertical control | Altitude PID, landing sequence, sends LANDED |
 | **position_actor** | Horizontal control | Position PID |
 | **attitude_actor** | Angle control | Attitude PIDs |
 | **rate_actor** | Angular rate control | Rate PIDs |
@@ -175,6 +176,9 @@ Ground Station
       │                   ├──ARM/DISARM──> motor_actor ──reply──┐
       │                   │<────────────────────────────────────┘
       │                   │
+      │                   ├──LANDING──> altitude_actor
+      │                   │<──LANDED───
+      │                   │
       │              [state_bus] <─────────────────┘
       │
       └──PARAM_SET/GET──> (comms_actor handles directly via tunable_params struct)
@@ -193,10 +197,12 @@ Ground Station
 | RESET | flight_manager | all siblings | request/reply |
 | ARM | flight_manager | motor_actor | request/reply |
 | DISARM | flight_manager | motor_actor | request/reply |
+| LANDING | flight_manager | altitude_actor | notify |
+| LANDED | altitude_actor | flight_manager | notify |
 | STATUS | comms_actor | flight_manager | request/reply (optional) |
 
-GO and ABORT are fire-and-forget notifications from ground station.
-RESET, ARM, and DISARM use request/reply for explicit error handling.
+**Notify messages** (fire-and-forget): GO, ABORT, LANDING, LANDED
+**Request/reply messages** (explicit error handling): RESET, ARM, DISARM, STATUS
 
 ## RESET Request
 
@@ -294,6 +300,41 @@ if (HIVE_SUCCEEDED(hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_REQUEST,
 }
 ```
 
+## LANDING/LANDED Notifications
+
+Simple fire-and-forget notifications for landing sequence coordination.
+
+### Message Format
+
+```c
+#define MSG_TAG_LANDING 0x4C44  // "LD" in ASCII
+#define MSG_TAG_LANDED  0x444E  // "DN" in ASCII
+
+// flight_manager initiates landing:
+hive_ipc_notify(altitude_actor_id, MSG_TAG_LANDING, NULL, 0);
+
+// altitude_actor confirms landing complete (or emergency cutoff):
+hive_ipc_notify(flight_manager_id, MSG_TAG_LANDED, NULL, 0);
+```
+
+### altitude_actor Implementation
+
+```c
+// Check for LANDING notification
+if (HIVE_SUCCEEDED(hive_ipc_recv_match(flight_manager_id, HIVE_MSG_NOTIFY,
+                                        MSG_TAG_LANDING, &msg, 0))) {
+    landing_requested = true;
+}
+
+// In control loop: execute landing or emergency cutoff
+if (landing_requested || emergency_cutoff_triggered) {
+    // ... landing/cutoff logic ...
+    if (landed_confirmed) {
+        hive_ipc_notify(flight_manager_id, MSG_TAG_LANDED, NULL, 0);
+    }
+}
+```
+
 ## Log File Handling
 
 Both log files are owned by logger_actor (renamed from telemetry_logger_actor). This single-owner design keeps file lifecycle management in one place. Flight manager orchestrates flights, logger_actor manages logs.
@@ -366,11 +407,14 @@ If any RESET or ARM request fails:
 
 ### Flight Abort
 
-If emergency cutoff triggers during FLYING:
-- Motors are killed by altitude_actor (existing behavior)
-- Flight manager detects armed=false, transitions to LANDED
-- Normal LANDED cleanup, return to IDLE
-- System ready for another GO (after operator investigates)
+If emergency cutoff triggers during FLYING (tilt > 45°, altitude > max):
+1. altitude_actor kills motors immediately (existing behavior)
+2. altitude_actor sends LANDED notification to flight_manager
+3. flight_manager transitions to LANDED state
+4. Normal LANDED cleanup (DISARM request), return to IDLE
+5. System ready for another GO (after operator investigates)
+
+The same LANDED notification is used for both normal landing completion and emergency cutoff. flight_manager doesn't need to distinguish - in both cases it proceeds to LANDED state cleanup.
 
 ### Actor Crash
 
