@@ -31,13 +31,15 @@ Flight manager becomes a looping state machine. After landing, it returns to IDL
                           v
     ┌──────────────────────────────────────────────────────────────┐
     │                       PREFLIGHT                              │
-    │  1. Call hal_calibrate() (gyro bias, baro zero, etc.)        │
-    │  2. Broadcast RESET to all siblings                          │
-    │     - estimator_actor: reset filters, set initial state      │
-    │     - logger_actor: truncate logs                            │
-    │     - others: reset state (PIDs, waypoints, etc.)            │
-    │  3. Run self-test (validate state data is sane)              │
-    │  4. Call hal_arm() to enable motor output                    │
+    │  1. Request RESET from all siblings, wait for replies        │
+    │     - sensor_actor: call hal_calibrate(), reply ok/fail      │
+    │     - estimator_actor: reset filters, reply ok/fail          │
+    │     - logger_actor: truncate logs, reply ok/fail             │
+    │     - others: reset state (PIDs, waypoints, etc.), reply ok  │
+    │  2. If any RESET failed: log error, return to IDLE           │
+    │  3. Request ARM from motor_actor, wait for reply             │
+    │     - motor_actor: call hal_arm(), reply ok/fail             │
+    │  4. If ARM failed: log error, return to IDLE                 │
     └──────────────────────────────────────────────────────────────┘
                           │
                           │ Preflight complete
@@ -69,7 +71,8 @@ Flight manager becomes a looping state machine. After landing, it returns to IDL
                           v
     ┌──────────────────────────────────────────────────────────────┐
     │                       LANDED                                 │
-    │  1. Call hal_disarm() to disable motor output                │
+    │  1. Request DISARM from motor_actor                          │
+    │     - motor_actor: call hal_disarm(), reply ok               │
     │  2. Transition to IDLE                                       │
     └──────────────────────────────────────────────────────────────┘
                           │
@@ -92,7 +95,7 @@ ARMED ──timeout──> FLYING
 ```
 
 If ABORT is received:
-1. Call hal_disarm() to disable motor output
+1. Request DISARM from motor_actor (motor_actor calls hal_disarm())
 2. Log abort event
 3. Return to IDLE (no RESET needed - state is already clean)
 
@@ -128,35 +131,33 @@ Clear separation of concerns:
 
 | Actor | Owns | Responsibility |
 |-------|------|----------------|
-| **sensor_actor** | Hardware sensors | Read sensors (calibration done by flight_manager) |
+| **sensor_actor** | Hardware sensors | Read sensors, calibrate on RESET (hal_calibrate) |
 | **estimator_actor** | State estimation | Fuse sensors into state estimate |
 | **altitude_actor** | Vertical control | Altitude PID, landing detection |
 | **position_actor** | Horizontal control | Position PID |
 | **attitude_actor** | Angle control | Attitude PIDs |
 | **rate_actor** | Angular rate control | Rate PIDs |
-| **motor_actor** | Motor output | Gate outputs (arm/disarm done by flight_manager via HAL) |
+| **motor_actor** | Motor output | Gate outputs, arm/disarm on request (hal_arm/hal_disarm) |
 | **waypoint_actor** | Mission | Track waypoint sequence |
-| **flight_manager** | Flight phases | Orchestrate state machine, self-tests |
+| **flight_manager** | Flight phases | Orchestrate state machine via requests |
 | **logger_actor** | Logs | Hive log + telemetry CSV lifecycle |
 | **comms_actor** | Radio | Relay commands, read state_bus for telemetry, handle params |
 
-### Preparation vs Self-Test
+### RESET Request/Reply
 
-**Calibration** (flight_manager before RESET):
-- flight_manager calls `hal_calibrate()` (gyro bias, baro zero, etc.)
-- This is a system-level operation, not per-actor
+Each actor handles RESET and replies with success or failure:
 
-**Preparation** (each actor on RESET):
-- estimator_actor: reset filters, establish initial attitude/position
-- PID actors: reset integrators
-- logger_actor: truncate logs
-- Each actor logs errors internally if prep fails
+| Actor | Action on RESET | Reply |
+|-------|-----------------|-------|
+| sensor_actor | Call `hal_calibrate()` | ok or error code |
+| estimator_actor | Reset filters, establish initial state | ok or error code |
+| PID actors | Reset integrators | ok (always succeeds) |
+| logger_actor | Truncate logs | ok or error code |
+| motor_actor | Clear started flag, zero outputs | ok (always succeeds) |
+| waypoint_actor | Reset index to 0 | ok (always succeeds) |
+| comms_actor | Ignore (stateless) | ok (always succeeds) |
 
-**Self-test** (flight_manager after RESET):
-- System-level sanity checks
-- Read state_bus, verify data is valid (not NaN, within bounds)
-- Check state estimate is stable
-- If any actor's prep failed, self-test catches bad data
+If any actor replies with an error, flight_manager aborts preflight and returns to IDLE.
 
 ## Message Flow
 
@@ -168,9 +169,11 @@ Ground Station
       │                                           │
       ├──GO/ABORT──> flight_manager               │ reads state_bus
       │                   │                       │ for telemetry
-      │                   ├──RESET──> [all siblings]
+      │                   ├──RESET──> [all siblings] ──reply──┐
+      │                   │<────────────────────────────────────┘
       │                   │
-      │                   ├──hal_arm()/hal_disarm()  (direct HAL calls)
+      │                   ├──ARM/DISARM──> motor_actor ──reply──┐
+      │                   │<────────────────────────────────────┘
       │                   │
       │              [state_bus] <─────────────────┘
       │
@@ -187,59 +190,109 @@ Ground Station
 |---------|------|-----|---------|
 | GO | comms_actor | flight_manager | notify |
 | ABORT | comms_actor | flight_manager | notify |
-| RESET | flight_manager | all siblings | notify (broadcast) |
-| STATUS | comms_actor | flight_manager | request/reply |
+| RESET | flight_manager | all siblings | request/reply |
+| ARM | flight_manager | motor_actor | request/reply |
+| DISARM | flight_manager | motor_actor | request/reply |
+| STATUS | comms_actor | flight_manager | request/reply (optional) |
 
-All command messages are fire-and-forget notifications. STATUS is the only request/reply (optional feature for ground station display).
+GO and ABORT are fire-and-forget notifications from ground station.
+RESET, ARM, and DISARM use request/reply for explicit error handling.
 
-**Note:** Motor arming is done via direct HAL calls (`hal_arm()`/`hal_disarm()`), not IPC messages.
+## RESET Request
 
-## RESET Notification
-
-Flight manager sends `RESET` notification to all siblings during PREFLIGHT. Each actor prepares itself for a new flight. This is a fire-and-forget broadcast - no replies expected.
+Flight manager sends `RESET` request to all siblings during PREFLIGHT. Each actor prepares itself for a new flight and replies with success or failure.
 
 ### Message Format
 
 ```c
 #define MSG_TAG_RESET 0x5245  // "RE" in ASCII
 
-// Flight manager broadcasts to all siblings:
+// Reply payload (1 byte)
+#define RESET_OK    0x00
+#define RESET_FAIL  0x01
+
+// Flight manager requests RESET from all siblings:
+uint8_t reply;
 for (size_t i = 0; i < sibling_count; i++) {
-    hive_ipc_notify(siblings[i].id, MSG_TAG_RESET, NULL, 0);
+    hive_status_t status = hive_ipc_request(
+        siblings[i].id, NULL, 0, &reply, sizeof(reply), RESET_TIMEOUT_MS);
+    if (HIVE_FAILED(status) || reply != RESET_OK) {
+        HIVE_LOG_ERROR("[FLM] RESET failed for %s", siblings[i].name);
+        return false;  // Abort preflight
+    }
 }
 ```
 
 ### Actor Responses
 
-Each actor handles RESET according to its own needs. Actors that have no state to reset simply ignore the message.
+Each actor handles RESET according to its own needs and replies with status.
 
-| Actor | Action on RESET |
-|-------|-----------------|
-| sensor_actor | Ignore (calibration done by flight_manager via hal_calibrate) |
-| estimator_actor | Reset Kalman filter and complementary filter, set initial attitude/position |
-| altitude_actor | Reset PID integrator, clear landing state |
-| position_actor | Reset PID integrator (if any) |
-| attitude_actor | Reset PID integrators |
-| rate_actor | Reset PID integrators |
-| motor_actor | Clear "started" flag, zero motor outputs |
-| waypoint_actor | Reset waypoint index to 0, clear arrival state |
-| logger_actor | Truncate hive log and telemetry CSV (see Log File Handling) |
-| comms_actor | Ignore (stateless relay) |
+| Actor | Action on RESET | Reply |
+|-------|-----------------|-------|
+| sensor_actor | Call `hal_calibrate()` (gyro bias, baro zero) | RESET_OK or RESET_FAIL |
+| estimator_actor | Reset Kalman filter and complementary filter | RESET_OK or RESET_FAIL |
+| altitude_actor | Reset PID integrator, clear landing state | RESET_OK |
+| position_actor | Reset PID integrator (if any) | RESET_OK |
+| attitude_actor | Reset PID integrators | RESET_OK |
+| rate_actor | Reset PID integrators | RESET_OK |
+| motor_actor | Clear "started" flag, zero motor outputs | RESET_OK |
+| waypoint_actor | Reset waypoint index to 0, clear arrival state | RESET_OK |
+| logger_actor | Truncate hive log and telemetry CSV | RESET_OK or RESET_FAIL |
+| comms_actor | No-op (stateless relay) | RESET_OK |
 
 ### Implementation Pattern
 
 ```c
-// In each actor's main loop, check for RESET:
+// In each actor's main loop, handle RESET request:
 hive_message_t msg;
-if (HIVE_SUCCEEDED(hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_NOTIFY,
+if (HIVE_SUCCEEDED(hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_REQUEST,
                                         MSG_TAG_RESET, &msg, 0))) {
     // Reset actor-specific state
     pid_reset(&my_pid);
     // ... other resets
+
+    // Reply with status
+    uint8_t reply = RESET_OK;
+    hive_ipc_reply(&msg, &reply, sizeof(reply));
 }
 ```
 
 Actors that use `hive_select()` for multiple event sources add RESET as a filter option.
+
+## ARM/DISARM Requests
+
+Motor arming is owned by motor_actor for clean separation of concerns.
+
+### Message Format
+
+```c
+#define MSG_TAG_ARM    0x4152  // "AR" in ASCII
+#define MSG_TAG_DISARM 0x4441  // "DA" in ASCII
+
+// Reply payload (1 byte)
+#define ARM_OK    0x00
+#define ARM_FAIL  0x01
+```
+
+### motor_actor Implementation
+
+```c
+// Handle ARM request
+if (HIVE_SUCCEEDED(hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_REQUEST,
+                                        MSG_TAG_ARM, &msg, 0))) {
+    hal_arm();  // Enable motor output
+    uint8_t reply = ARM_OK;
+    hive_ipc_reply(&msg, &reply, sizeof(reply));
+}
+
+// Handle DISARM request
+if (HIVE_SUCCEEDED(hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_REQUEST,
+                                        MSG_TAG_DISARM, &msg, 0))) {
+    hal_disarm();  // Disable motor output
+    uint8_t reply = ARM_OK;
+    hive_ipc_reply(&msg, &reply, sizeof(reply));
+}
+```
 
 ## Log File Handling
 
@@ -298,12 +351,18 @@ Calibration and self-test now happen per-flight in PREFLIGHT, not at boot. This 
 
 ### Preflight Failure
 
-If calibration or any actor's preparation fails (filter init, etc.), the state data will be invalid. flight_manager's self-test catches this:
+Actors report errors explicitly via RESET reply:
 
-- Self-test reads state_bus, checks for valid data (not NaN, within bounds)
-- If invalid: log error, return to IDLE without arming
-- Check logs for specific failure (each actor logs its own errors)
-- Comms_actor can report failure to ground station via telemetry
+- **sensor_actor** - `hal_calibrate()` failed (sensor hardware issue)
+- **estimator_actor** - Filter initialization failed (invalid initial state)
+- **logger_actor** - Log file operations failed (storage issue)
+- **motor_actor** - `hal_arm()` failed (motor hardware issue)
+
+If any RESET or ARM request fails:
+1. flight_manager logs which actor failed and why
+2. flight_manager returns to IDLE without starting flight
+3. comms_actor can report failure to ground station via telemetry
+4. Operator investigates and retries with another GO command
 
 ### Flight Abort
 
@@ -360,33 +419,34 @@ typedef struct {
 
 ### Changes Required
 
-1. **flight_manager_actor.c** - Rewrite as state machine loop, call hal_calibrate() in PREFLIGHT, add self-test, add auto-GO for simulation
-2. **sensor_actor.c** - No changes needed (calibration done by flight_manager)
-3. **motor_actor.c** - Handle RESET (clear started flag)
-4. **estimator_actor.c** - Handle RESET (reset filters)
-5. **altitude_actor.c** - Handle RESET (reset PID, landing state)
-6. **attitude_actor.c** - Handle RESET (reset PIDs)
-7. **rate_actor.c** - Handle RESET (reset PIDs)
-8. **waypoint_actor.c** - Handle RESET (reset index)
-9. **telemetry_logger_actor.c** - Rename to logger_actor, handle RESET (truncate both hive log and telemetry CSV), move hive log open and early flush from pilot.c to init
-10. **pilot.c** - Remove hive log open/flush (now in logger_actor)
+1. **flight_manager_actor.c** - Rewrite as state machine loop, use request/reply for RESET and ARM/DISARM, add auto-GO for simulation
+2. **sensor_actor.c** - Handle RESET request (call hal_calibrate, reply ok/fail)
+3. **motor_actor.c** - Handle RESET request (clear started flag, reply ok), handle ARM/DISARM requests (call hal_arm/hal_disarm, reply ok/fail)
+4. **estimator_actor.c** - Handle RESET request (reset filters, reply ok/fail)
+5. **altitude_actor.c** - Handle RESET request (reset PID, landing state, reply ok)
+6. **attitude_actor.c** - Handle RESET request (reset PIDs, reply ok)
+7. **rate_actor.c** - Handle RESET request (reset PIDs, reply ok)
+8. **waypoint_actor.c** - Handle RESET request (reset index, reply ok)
+9. **telemetry_logger_actor.c** - Rename to logger_actor, handle RESET request (truncate logs, reply ok/fail), move hive log open and early flush from pilot.c to init
+10. **pilot.c** - Remove hive log open/flush and hal_calibrate/hal_arm (now in actors)
 11. **pid.c** - Add `pid_reset()` function if not present
 12. **tunable_params.h/c** - Add `armed_countdown_s` and `auto_go_delay_s` parameters
 
 ### Actors Unchanged
 
-- sensor_actor.c (calibration done by flight_manager)
 - position_actor.c (minimal state, or add RESET if needed)
-- comms_actor.c (stateless relay)
+- comms_actor.c (stateless relay, replies RESET_OK)
 
 ## Testing
 
 1. **Single flight** - Verify normal IDLE -> PREFLIGHT -> ARMED -> FLYING -> LANDING -> LANDED -> IDLE
 2. **Multiple flights** - Send GO, complete flight, send GO again, verify clean state
-3. **Preflight failure** - Inject bad sensor data, verify self-test fails, return to IDLE
-4. **Armed countdown** - Verify 60s countdown in ARMED state, then transition to FLYING
-5. **Abort during armed** - Send ABORT during countdown, verify return to IDLE, motors disarmed
-6. **Abort in wrong state** - Send ABORT in IDLE or FLYING, verify ignored with warning
-7. **Emergency cutoff** - Trigger emergency cutoff mid-flight, verify return to IDLE
-8. **Log truncation** - Verify logs are fresh after each GO (no data from previous run)
-9. **Parameter tuning** - Change params in IDLE, verify new values used in next flight
+3. **RESET failure** - Make hal_calibrate() fail, verify RESET reply is FAIL, return to IDLE
+4. **ARM failure** - Make hal_arm() fail, verify ARM reply is FAIL, return to IDLE
+5. **Armed countdown** - Verify 60s countdown in ARMED state, then transition to FLYING
+6. **Abort during armed** - Send ABORT during countdown, verify DISARM request sent, return to IDLE
+7. **Abort in wrong state** - Send ABORT in IDLE or FLYING, verify ignored with warning
+8. **Emergency cutoff** - Trigger emergency cutoff mid-flight, verify return to IDLE
+9. **Log truncation** - Verify logs are fresh after each GO (no data from previous run)
+10. **Parameter tuning** - Change params in IDLE, verify new values used in next flight
+11. **Request timeout** - Simulate slow actor, verify flight_manager handles timeout gracefully
