@@ -6,6 +6,7 @@
 #define PILOT_BUSES_H
 
 #include "hive_bus.h"
+#include "tunable_params.h"
 
 // All buses used in the pilot control pipeline
 typedef struct {
@@ -16,6 +17,8 @@ typedef struct {
     hive_bus_id_t attitude_setpoint_bus;
     hive_bus_id_t rate_setpoint_bus;
     hive_bus_id_t torque_bus;
+    // Runtime-tunable parameters (shared across all actors)
+    tunable_params_t *params;
 } pilot_buses_t;
 
 #endif // PILOT_BUSES_H

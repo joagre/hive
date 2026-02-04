@@ -41,6 +41,9 @@ Usage:
   sudo ./ground_station.py --go                    # Start flight (60s countdown)
   sudo ./ground_station.py --download-log flight.log  # Download log file
   sudo ./ground_station.py --uri radio://0/80/2M   # Custom radio URI
+  sudo ./ground_station.py --list-params           # List all tunable parameters
+  sudo ./ground_station.py --get-param rate_kp     # Get a parameter value
+  sudo ./ground_station.py --set-param rate_kp 0.025  # Set a parameter
 
 Default radio URI: radio://0/80/2M (channel 80, 2Mbps)
 """
@@ -75,8 +78,69 @@ PACKET_LOG_DONE = 0x12
 # Packet type identifiers - flight go command (must match comms_actor.c)
 CMD_GO = 0x20
 
+# Packet type identifiers - parameter tuning (must match comms_actor.c)
+CMD_SET_PARAM = 0x30
+CMD_GET_PARAM = 0x31
+CMD_LIST_PARAMS = 0x32
+RESP_PARAM_ACK = 0x33
+RESP_PARAM_VALUE = 0x34
+RESP_PARAM_LIST = 0x35
+
 # Log chunk data size (31 - 4 byte header = 27 bytes)
 LOG_CHUNK_DATA_SIZE = 27
+
+# Parameter IDs (must match tunable_params.h enum)
+PARAM_NAMES = {
+    # Rate PID (0-6)
+    0: "rate_kp",
+    1: "rate_ki",
+    2: "rate_kd",
+    3: "rate_imax",
+    4: "rate_omax_roll",
+    5: "rate_omax_pitch",
+    6: "rate_omax_yaw",
+    # Attitude PID (7-11)
+    7: "att_kp",
+    8: "att_ki",
+    9: "att_kd",
+    10: "att_imax",
+    11: "att_omax",
+    # Altitude PID (12-18)
+    12: "alt_kp",
+    13: "alt_ki",
+    14: "alt_kd",
+    15: "alt_imax",
+    16: "alt_omax",
+    17: "hover_thrust",
+    18: "vvel_damping",
+    # Emergency limits (19-20)
+    19: "emergency_tilt_limit",
+    20: "emergency_alt_max",
+    # Landing (21-22)
+    21: "landing_descent_rate",
+    22: "landing_velocity_gain",
+    # Position control (23-25)
+    23: "pos_kp",
+    24: "pos_kd",
+    25: "max_tilt_angle",
+    # Complementary filter (26-30)
+    26: "cf_alpha",
+    27: "cf_mag_alpha",
+    28: "cf_use_mag",
+    29: "cf_accel_thresh_lo",
+    30: "cf_accel_thresh_hi",
+    # Waypoint navigation (31-35)
+    31: "wp_tolerance_xy",
+    32: "wp_tolerance_z",
+    33: "wp_tolerance_yaw",
+    34: "wp_tolerance_vel",
+    35: "wp_hover_time_s",
+    # Flight manager (36)
+    36: "thrust_ramp_ms",
+}
+
+# Reverse lookup: name to ID
+PARAM_IDS = {v: k for k, v in PARAM_NAMES.items()}
 
 # Scale factors (inverse of transmitter)
 SCALE_ANGLE = 1000.0   # millirad -> rad
@@ -393,6 +457,136 @@ class TelemetryReceiver:
             print("Error: No ACK for GO command", file=sys.stderr)
             return False
 
+    def set_param(self, name: str, value: float) -> bool:
+        """Set a parameter on the drone.
+
+        Args:
+            name: Parameter name (e.g., "rate_kp")
+            value: New value for the parameter
+
+        Returns True if the parameter was set successfully.
+        """
+        if name not in PARAM_IDS:
+            print(f"Error: Unknown parameter '{name}'", file=sys.stderr)
+            print(f"Available parameters: {', '.join(sorted(PARAM_IDS.keys()))}", file=sys.stderr)
+            return False
+
+        param_id = PARAM_IDS[name]
+        print(f"Setting {name} (id={param_id}) = {value}", file=sys.stderr)
+
+        # Send SET_PARAM command: CRTP + cmd + id + value(float)
+        value_bytes = struct.pack("<f", value)
+        response = self.radio.send_packet(
+            (CRTP_HEADER_TELEMETRY, CMD_SET_PARAM, param_id) + tuple(value_bytes)
+        )
+
+        if not response or not response.ack:
+            print("Error: No ACK for SET_PARAM command", file=sys.stderr)
+            return False
+
+        # Wait for response packet
+        for _ in range(10):
+            data = self.poll()
+            if data and len(data) >= 3:
+                if data[0] == CRTP_HEADER_TELEMETRY and data[1] == RESP_PARAM_ACK:
+                    status = data[2]
+                    if status == 0:
+                        print(f"Success: {name} = {value}", file=sys.stderr)
+                        return True
+                    else:
+                        print(f"Error: Parameter rejected (validation failed)", file=sys.stderr)
+                        return False
+
+        print("Error: No response for SET_PARAM", file=sys.stderr)
+        return False
+
+    def get_param(self, name: str) -> float:
+        """Get a parameter value from the drone.
+
+        Args:
+            name: Parameter name (e.g., "rate_kp")
+
+        Returns the parameter value, or None on error.
+        """
+        if name not in PARAM_IDS:
+            print(f"Error: Unknown parameter '{name}'", file=sys.stderr)
+            print(f"Available parameters: {', '.join(sorted(PARAM_IDS.keys()))}", file=sys.stderr)
+            return None
+
+        param_id = PARAM_IDS[name]
+
+        # Send GET_PARAM command: CRTP + cmd + id
+        response = self.radio.send_packet(
+            (CRTP_HEADER_TELEMETRY, CMD_GET_PARAM, param_id)
+        )
+
+        if not response or not response.ack:
+            print("Error: No ACK for GET_PARAM command", file=sys.stderr)
+            return None
+
+        # Wait for response packet
+        for _ in range(10):
+            data = self.poll()
+            if data and len(data) >= 7:
+                if data[0] == CRTP_HEADER_TELEMETRY and data[1] == RESP_PARAM_VALUE:
+                    resp_id = data[2]
+                    value = struct.unpack("<f", bytes(data[3:7]))[0]
+                    if resp_id == param_id:
+                        print(f"{name} = {value:.6f}", file=sys.stderr)
+                        return value
+
+        print("Error: No response for GET_PARAM", file=sys.stderr)
+        return None
+
+    def list_params(self) -> dict:
+        """List all parameters from the drone.
+
+        Returns a dict of {name: value} for all parameters.
+        """
+        # Send LIST_PARAMS command
+        response = self.radio.send_packet(
+            (CRTP_HEADER_TELEMETRY, CMD_LIST_PARAMS)
+        )
+
+        if not response or not response.ack:
+            print("Error: No ACK for LIST_PARAMS command", file=sys.stderr)
+            return {}
+
+        params = {}
+        received_ids = set()
+
+        # Receive param list packets (may come in multiple batches)
+        for _ in range(50):  # Enough polls to get all params
+            data = self.poll()
+            if not data or len(data) < 7:
+                continue
+
+            if data[0] == CRTP_HEADER_TELEMETRY and data[1] == RESP_PARAM_LIST:
+                # Parse param list: type(1) + offset(1) + [id(1) + value(4)] * 5
+                offset = data[2]
+                idx = 3
+                while idx + 5 <= len(data):
+                    param_id = data[idx]
+                    value = struct.unpack("<f", bytes(data[idx+1:idx+5]))[0]
+                    if param_id in PARAM_NAMES:
+                        params[PARAM_NAMES[param_id]] = value
+                        received_ids.add(param_id)
+                    idx += 5
+
+                # Check if we have all params
+                if len(received_ids) >= len(PARAM_NAMES):
+                    break
+
+        # Print all params
+        print("\nTunable Parameters:", file=sys.stderr)
+        print("-" * 40, file=sys.stderr)
+        for name in sorted(params.keys()):
+            print(f"  {name:25s} = {params[name]:.6f}", file=sys.stderr)
+        print("-" * 40, file=sys.stderr)
+        print(f"Total: {len(params)} parameters", file=sys.stderr)
+
+        return params
+
     def download_log(self, output_path: str) -> bool:
         """Download log file from drone.
 
@@ -504,6 +698,18 @@ def main():
         "--go", action="store_true",
         help="Send GO command to drone (starts 60-second countdown, then flight)"
     )
+    parser.add_argument(
+        "--set-param", nargs=2, metavar=("NAME", "VALUE"),
+        help="Set a parameter (e.g., --set-param rate_kp 0.025)"
+    )
+    parser.add_argument(
+        "--get-param", metavar="NAME",
+        help="Get a parameter value (e.g., --get-param rate_kp)"
+    )
+    parser.add_argument(
+        "--list-params", action="store_true",
+        help="List all tunable parameters with current values"
+    )
 
     args = parser.parse_args()
 
@@ -531,6 +737,28 @@ def main():
             # GO mode - send go command and exit
             success = receiver.send_go()
             sys.exit(0 if success else 1)
+        elif args.set_param:
+            # Set param mode
+            name, value_str = args.set_param
+            try:
+                value = float(value_str)
+            except ValueError:
+                print(f"Error: Invalid value '{value_str}'", file=sys.stderr)
+                sys.exit(1)
+            success = receiver.set_param(name, value)
+            sys.exit(0 if success else 1)
+        elif args.get_param:
+            # Get param mode
+            value = receiver.get_param(args.get_param)
+            if value is not None:
+                print(f"{args.get_param} = {value}")
+                sys.exit(0)
+            else:
+                sys.exit(1)
+        elif args.list_params:
+            # List params mode
+            params = receiver.list_params()
+            sys.exit(0 if params else 1)
         elif args.download_log:
             # Log download mode
             success = receiver.download_log(args.download_log)

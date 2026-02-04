@@ -65,3 +65,17 @@ float pid_update_angle(pid_state_t *pid, float setpoint, float measurement,
     float error = normalize_angle(setpoint - measurement);
     return pid_update_internal(pid, error, dt);
 }
+
+void pid_set_gains(pid_state_t *pid, float kp, float ki, float kd) {
+    pid->kp = kp;
+    pid->ki = ki;
+    pid->kd = kd;
+    // Note: Integrator state preserved for smooth transitions
+}
+
+void pid_set_limits(pid_state_t *pid, float imax, float omax) {
+    pid->integral_max = imax;
+    pid->output_max = omax;
+    // Re-clamp integrator if needed
+    pid->integral = CLAMPF(pid->integral, -imax, imax);
+}

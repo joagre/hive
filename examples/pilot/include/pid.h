@@ -37,4 +37,11 @@ float pid_update(pid_state_t *pid, float setpoint, float measurement, float dt);
 float pid_update_angle(pid_state_t *pid, float setpoint, float measurement,
                        float dt);
 
+// Update PID gains without resetting integrator state.
+// Allows smooth gain changes during flight.
+void pid_set_gains(pid_state_t *pid, float kp, float ki, float kd);
+
+// Update PID limits without resetting integrator state.
+void pid_set_limits(pid_state_t *pid, float imax, float omax);
+
 #endif // PID_H

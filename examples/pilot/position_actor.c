@@ -11,6 +11,7 @@
 
 #include "position_actor.h"
 #include "pilot_buses.h"
+#include "tunable_params.h"
 #include "types.h"
 #include "config.h"
 #include "math_utils.h"
@@ -24,6 +25,7 @@ typedef struct {
     hive_bus_id_t state_bus;
     hive_bus_id_t attitude_setpoint_bus;
     hive_bus_id_t position_target_bus;
+    tunable_params_t *params;
 } position_state_t;
 
 void *position_actor_init(void *init_args) {
@@ -32,6 +34,7 @@ void *position_actor_init(void *init_args) {
     state.state_bus = buses->state_bus;
     state.attitude_setpoint_bus = buses->attitude_setpoint_bus;
     state.position_target_bus = buses->position_target_bus;
+    state.params = buses->params;
     return &state;
 }
 
@@ -72,15 +75,16 @@ void position_actor(void *args, const hive_spawn_info_t *siblings,
             target = new_target;
         }
 
-        // Simple PD controller in world frame
+        // Simple PD controller in world frame (use tunable params)
         // Note: When GPS unavailable, state.x/y = 0 and waypoints at origin
         // result in zero error, naturally outputting roll=0, pitch=0
+        tunable_params_t *p = state->params;
         float x_error = target.x - est.x;
         float y_error = target.y - est.y;
 
         // Desired acceleration in world frame
-        float accel_x = POS_KP * x_error - POS_KD * est.x_velocity;
-        float accel_y = POS_KP * y_error - POS_KD * est.y_velocity;
+        float accel_x = p->pos_kp * x_error - p->pos_kd * est.x_velocity;
+        float accel_y = p->pos_kp * y_error - p->pos_kd * est.y_velocity;
 
         // Rotate from world frame to body frame based on current yaw
         // Body X (forward) = World X * cos(yaw) + World Y * sin(yaw)
@@ -91,9 +95,9 @@ void position_actor(void *args, const hive_spawn_info_t *siblings,
         float pitch_cmd = accel_x * cos_yaw + accel_y * sin_yaw;
         float roll_cmd = -accel_x * sin_yaw + accel_y * cos_yaw;
 
-        // Clamp to maximum tilt angle for safety
-        pitch_cmd = CLAMPF(pitch_cmd, -MAX_TILT_ANGLE, MAX_TILT_ANGLE);
-        roll_cmd = CLAMPF(roll_cmd, -MAX_TILT_ANGLE, MAX_TILT_ANGLE);
+        // Clamp to maximum tilt angle for safety (use tunable param)
+        pitch_cmd = CLAMPF(pitch_cmd, -p->max_tilt_angle, p->max_tilt_angle);
+        roll_cmd = CLAMPF(roll_cmd, -p->max_tilt_angle, p->max_tilt_angle);
 
         // Sign conversion to aerospace convention:
         // - Roll negated: positive body Y error -> negative roll -> +Y accel

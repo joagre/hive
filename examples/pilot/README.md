@@ -400,6 +400,47 @@ The log file is plain text and can be viewed directly with `cat`, `less`, etc.
 Log download operates at the same 100Hz rate as telemetry. A typical 8KB log file
 downloads in about 3 seconds (8192 bytes / 28 bytes per chunk / 100 chunks per second).
 
+## Runtime Parameter Tuning (Crazyflie 2.1+ only)
+
+Parameters can be tuned live via radio without reflashing. This eliminates the
+build-flash-wait-test cycle during PID tuning.
+
+```bash
+# List all tunable parameters with current values
+python3 tools/ground_station.py --list-params
+
+# Get a specific parameter
+python3 tools/ground_station.py --get-param rate_kp
+
+# Set a parameter (takes effect immediately)
+python3 tools/ground_station.py --set-param rate_kp 0.025
+python3 tools/ground_station.py --set-param att_kp 2.0
+python3 tools/ground_station.py --set-param hover_thrust 0.40
+```
+
+**Tunable parameters (37 parameters in 8 categories):**
+
+| Category | Parameters |
+|----------|------------|
+| Rate PID | `rate_kp`, `rate_ki`, `rate_kd`, `rate_imax`, `rate_omax_roll`, `rate_omax_pitch`, `rate_omax_yaw` |
+| Attitude PID | `att_kp`, `att_ki`, `att_kd`, `att_imax`, `att_omax` |
+| Altitude PID | `alt_kp`, `alt_ki`, `alt_kd`, `alt_imax`, `alt_omax`, `hover_thrust`, `vvel_damping` |
+| Emergency | `emergency_tilt_limit`, `emergency_alt_max` |
+| Landing | `landing_descent_rate`, `landing_velocity_gain` |
+| Position | `pos_kp`, `pos_kd`, `max_tilt_angle` |
+| Estimator | `cf_alpha`, `cf_mag_alpha`, `cf_use_mag`, `cf_accel_thresh_lo`, `cf_accel_thresh_hi` |
+| Waypoints | `wp_tolerance_xy`, `wp_tolerance_z`, `wp_tolerance_yaw`, `wp_tolerance_vel`, `wp_hover_time_s` |
+| Other | `thrust_ramp_ms` |
+
+**Safety:** All values are validated before application. Invalid values (out of range) are rejected.
+
+**Thread safety:** ARM Cortex-M4 guarantees atomic 32-bit aligned reads/writes. Actors read
+current values each control loop iteration.
+
+**Workflow:** Tune via radio until satisfied, then update `hal_config.h` with final values and
+reflash for persistent defaults. See [docs/tunable_radio_params.md](docs/tunable_radio_params.md)
+for full specification.
+
 ## CSV Telemetry Logging
 
 The telemetry logger actor writes flight data to CSV at 25Hz for PID tuning and
@@ -464,6 +505,7 @@ doesn't affect flight-critical control loops and won't trigger restarts if it fa
 | `comms_actor.c` | Radio telemetry (Crazyflie only) |
 | `telemetry_logger_actor.c` | CSV logging for PID tuning (to /sd or /tmp) |
 | `pid.c` | Reusable PID controller |
+| `tunable_params.c` | Runtime parameter tuning |
 | `stack_profile.c` | Stack usage profiling |
 | `fusion/complementary_filter.c` | Portable attitude estimation (accel+gyro fusion) |
 
@@ -476,6 +518,7 @@ doesn't affect flight-critical control loops and won't trigger restarts if it fa
 | `include/config.h` | Configuration constants (timing, thresholds, bus config) |
 | `include/pilot_buses.h` | Bus handle struct passed to actors |
 | `include/pid.h` | PID controller interface |
+| `include/tunable_params.h` | Runtime-tunable parameter definitions |
 | `include/math_utils.h` | Math utilities (CLAMPF, LPF macros, normalize_angle) |
 | `include/notifications.h` | IPC notification tags (NOTIFY_FLIGHT_START, etc.) |
 | `include/flight_profiles.h` | Waypoint definitions per flight profile |
@@ -500,6 +543,7 @@ doesn't affect flight-critical control loops and won't trigger restarts if it fa
 | `README.md` | This file |
 | `docs/spec/` | Detailed design specification (design, implementation, evolution) |
 | `docs/first_flight_checklist.md` | Hardware bring-up and first flight guide |
+| `docs/tunable_radio_params.md` | Runtime parameter tuning specification |
 
 ### Directories
 

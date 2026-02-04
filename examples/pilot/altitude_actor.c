@@ -8,11 +8,11 @@
 
 #include "altitude_actor.h"
 #include "pilot_buses.h"
+#include "tunable_params.h"
 #include "notifications.h"
 #include "types.h"
 #include "config.h"
 #include "math_utils.h"
-#include "hal_config.h"
 #include "pid.h"
 #include "hive_runtime.h"
 #include "hive_bus.h"
@@ -23,19 +23,13 @@
 #include <math.h>
 #include <string.h>
 
-// Thrust ramp duration for gentle takeoff (microseconds)
-#define THRUST_RAMP_DURATION_US (500000) // 0.5 seconds
-
-// Landing parameters
-#define LANDING_DESCENT_RATE (-0.15f) // m/s - gentle descent
-#define LANDING_VELOCITY_GAIN 0.5f // thrust adjustment per m/s velocity error
-
 // Actor state - initialized by altitude_actor_init
 typedef struct {
     hive_bus_id_t state_bus;
     hive_bus_id_t thrust_bus;
     hive_bus_id_t position_target_bus;
     hive_actor_id_t flight_manager;
+    tunable_params_t *params;
 } altitude_state_t;
 
 void *altitude_actor_init(void *init_args) {
@@ -45,6 +39,7 @@ void *altitude_actor_init(void *init_args) {
     state.thrust_bus = buses->thrust_bus;
     state.position_target_bus = buses->position_target_bus;
     state.flight_manager = HIVE_ACTOR_ID_INVALID; // Set from siblings in actor
+    state.params = buses->params;
     return &state;
 }
 
@@ -66,9 +61,11 @@ void altitude_actor(void *args, const hive_spawn_info_t *siblings,
         hive_exit(HIVE_EXIT_REASON_CRASH);
     }
 
+    // Use tunable params for initial values
+    tunable_params_t *p = state->params;
     pid_state_t alt_pid;
-    pid_init_full(&alt_pid, HAL_ALT_PID_KP, HAL_ALT_PID_KI, HAL_ALT_PID_KD,
-                  HAL_ALT_PID_IMAX, HAL_ALT_PID_OMAX);
+    pid_init_full(&alt_pid, p->alt_kp, p->alt_ki, p->alt_kd, p->alt_imax,
+                  p->alt_omax);
 
     // State
     float target_altitude = 0.0f;
@@ -147,10 +144,14 @@ void altitude_actor(void *args, const hive_spawn_info_t *siblings,
             target_altitude = target.z;
         }
 
-        // Emergency cutoff conditions
-        bool attitude_emergency = (fabsf(est.roll) > EMERGENCY_TILT_LIMIT) ||
-                                  (fabsf(est.pitch) > EMERGENCY_TILT_LIMIT);
-        bool altitude_emergency = (est.altitude > EMERGENCY_ALTITUDE_MAX);
+        // Update PID gains from tunable params (allows live tuning)
+        pid_set_gains(&alt_pid, p->alt_kp, p->alt_ki, p->alt_kd);
+        pid_set_limits(&alt_pid, p->alt_imax, p->alt_omax);
+
+        // Emergency cutoff conditions (use tunable limits)
+        bool attitude_emergency = (fabsf(est.roll) > p->emergency_tilt_limit) ||
+                                  (fabsf(est.pitch) > p->emergency_tilt_limit);
+        bool altitude_emergency = (est.altitude > p->emergency_alt_max);
 
         // Latch crash condition - once triggered, motors stay off until reboot
         if (attitude_emergency || altitude_emergency) {
@@ -198,21 +199,21 @@ void altitude_actor(void *args, const hive_spawn_info_t *siblings,
             }
         } else if (landing_mode) {
             // Landing mode: control descent rate, not altitude
-            // Target velocity = LANDING_DESCENT_RATE, adjust thrust to achieve
-            // it
+            // Target velocity = landing_descent_rate, adjust thrust to achieve it
             if (!isfinite(est.vertical_velocity)) {
                 HIVE_LOG_ERROR(
                     "[ALT] NaN velocity in landing - estimator failure!");
                 thrust = 0.0f;
             } else {
                 float velocity_error =
-                    LANDING_DESCENT_RATE - est.vertical_velocity;
+                    p->landing_descent_rate - est.vertical_velocity;
                 thrust =
-                    HAL_HOVER_THRUST + LANDING_VELOCITY_GAIN * velocity_error;
+                    p->hover_thrust + p->landing_velocity_gain * velocity_error;
                 thrust = CLAMPF(thrust, 0.0f, 1.0f);
             }
         } else {
             // Normal altitude hold mode
+            uint64_t thrust_ramp_us = (uint64_t)(p->thrust_ramp_ms * 1000.0f);
             if (ramp_start_time == 0) {
                 ramp_start_time = hive_get_time();
                 HIVE_LOG_INFO("[ALT] Takeoff ramp start: roll=%.1f pitch=%.1f "
@@ -225,17 +226,17 @@ void altitude_actor(void *args, const hive_spawn_info_t *siblings,
             float pos_correction =
                 pid_update(&alt_pid, target_altitude, est.altitude, dt);
 
-            // Velocity damping
-            float vel_damping = -HAL_VVEL_DAMPING_GAIN * est.vertical_velocity;
+            // Velocity damping (use tunable param)
+            float vel_damping = -p->vvel_damping * est.vertical_velocity;
 
-            // Thrust ramp for gentle takeoff
+            // Thrust ramp for gentle takeoff (use tunable ramp duration)
             uint64_t elapsed_us = hive_get_time() - ramp_start_time;
-            float ramp = (elapsed_us < THRUST_RAMP_DURATION_US)
-                             ? (float)elapsed_us / THRUST_RAMP_DURATION_US
+            float ramp = (elapsed_us < thrust_ramp_us)
+                             ? (float)elapsed_us / (float)thrust_ramp_us
                              : 1.0f;
 
             thrust =
-                ramp * CLAMPF(HAL_HOVER_THRUST + pos_correction + vel_damping,
+                ramp * CLAMPF(p->hover_thrust + pos_correction + vel_damping,
                               0.0f, 1.0f);
         }
 

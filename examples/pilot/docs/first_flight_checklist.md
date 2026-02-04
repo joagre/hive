@@ -243,7 +243,16 @@ HAL_HOVER_THRUST    0.38    // Calibrated with thrust test
 If drone is sluggish but stable, gradually increase toward Webots values.
 HAL_HOVER_THRUST may need calibration - start at 0.38 and adjust.
 
-Adjust in 10-20% increments. Reflash after each change.
+Adjust in 10-20% increments. Either reflash after each change, or use runtime
+parameter tuning (see below) for faster iteration.
+
+**Runtime tuning alternative** - Use the ground station to tune gains without reflashing:
+```bash
+python3 tools/ground_station.py --set-param rate_kp 0.022
+python3 tools/ground_station.py --set-param att_kp 1.8
+python3 tools/ground_station.py --set-param hover_thrust 0.40
+```
+Once satisfied, update `hal_config.h` with final values for persistent defaults.
 
 ---
 

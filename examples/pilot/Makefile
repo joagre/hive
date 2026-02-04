@@ -100,7 +100,7 @@ LDLIBS := -lhive -lController -lm
 # Sources
 # =============================================================================
 
-PILOT_SRCS := pilot.c pid.c stack_profile.c \
+PILOT_SRCS := pilot.c pid.c stack_profile.c tunable_params.c \
 	sensor_actor.c estimator_actor.c altitude_actor.c waypoint_actor.c \
 	position_actor.c attitude_actor.c rate_actor.c motor_actor.c \
 	flight_manager_actor.c telemetry_logger_actor.c \

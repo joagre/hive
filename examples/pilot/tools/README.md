@@ -177,7 +177,7 @@ python3 flight_debug.py /tmp/tlog.csv --interval 1.0
 
 ### ground_station.py
 
-Receive real-time telemetry and download flight logs from Crazyflie hardware via Crazyradio 2.0. Decodes telemetry packets (attitude/rates and position/altitude) and optionally logs to CSV.
+Receive real-time telemetry, tune parameters, and download flight logs from Crazyflie hardware via Crazyradio 2.0. Decodes telemetry packets (attitude/rates and position/altitude) and optionally logs to CSV.
 
 ```bash
 # Display real-time telemetry to stdout
@@ -194,6 +194,24 @@ python3 ground_station.py --download-log flight.log
 
 # Use custom radio URI (default: radio://0/80/2M)
 python3 ground_station.py --uri radio://0/80/2M
+
+# Start flight (sends GO command, 60s countdown then flight)
+python3 ground_station.py --go
+```
+
+**Runtime parameter tuning** - Tune PID gains and other parameters without reflashing:
+
+```bash
+# List all tunable parameters with current values
+python3 ground_station.py --list-params
+
+# Get a specific parameter value
+python3 ground_station.py --get-param rate_kp
+
+# Set a parameter (takes effect immediately)
+python3 ground_station.py --set-param rate_kp 0.025
+python3 ground_station.py --set-param att_kp 2.0
+python3 ground_station.py --set-param hover_thrust 0.40
 ```
 
 **Telemetry packet types**
@@ -201,6 +219,8 @@ python3 ground_station.py --uri radio://0/80/2M
 - Position (0x02): timestamp, altitude, vz, vx, vy, thrust, battery_mv
 
 **Log download** - Sends CMD_REQUEST_LOG command to drone, receives log chunks, and saves to file. The log file is plain text and can be viewed directly with `cat`, `less`, etc.
+
+**Parameter tuning** - See `docs/tunable_radio_params.md` for full list of parameters with validation ranges.
 
 ## PID Tuning Workflow
 
@@ -247,8 +267,27 @@ python3 ground_station.py --uri radio://0/80/2M
 
 5. Alternatively, download the onboard flash log after flight:
    ```bash
-   python3 tools/ground_station.py --download-log flight.bin
+   python3 tools/ground_station.py --download-log flight.log
    ```
+
+### Live Parameter Tuning (Crazyflie)
+
+Runtime parameter tuning eliminates the build-flash-wait-test cycle:
+
+1. Connect to the drone:
+   ```bash
+   python3 tools/ground_station.py --list-params  # Verify connection
+   ```
+
+2. Adjust parameters live during hover:
+   ```bash
+   python3 tools/ground_station.py --set-param rate_kp 0.025
+   python3 tools/ground_station.py --set-param att_kp 2.0
+   ```
+
+3. Once tuned, update `hal_config.h` with final values and reflash for persistent defaults.
+
+See `docs/tunable_radio_params.md` for full parameter list and validation ranges.
 
 ## Telemetry CSV Format
 

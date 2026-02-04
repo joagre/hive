@@ -35,6 +35,7 @@ Code is split into focused modules:
 | `comms_actor.c/h` | Radio telemetry (Crazyflie only) |
 | `telemetry_logger_actor.c/h` | CSV logging for PID tuning (to /sd or /tmp) |
 | `pid.c/h` | Reusable PID controller |
+| `tunable_params.c/h` | Runtime-tunable parameter definitions |
 | `types.h` | Portable data types |
 | `config.h` | Configuration constants (timing, thresholds) |
 | `math_utils.h` | Math utilities (CLAMPF, LPF macros, normalize_angle) |
@@ -225,11 +226,13 @@ examples/pilot/
     comms_actor.c        # Radio telemetry (Crazyflie only)
     telemetry_logger_actor.c # CSV logging (to /sd or /tmp)
     pid.c                # Reusable PID controller
+    tunable_params.c     # Runtime-tunable parameters
     stack_profile.c      # Stack usage profiling
     config.h             # Configuration constants (timing, thresholds)
     include/             # Header files
         *_actor.h        # Actor interfaces
         types.h          # Portable data types
+        tunable_params.h # Runtime-tunable parameter definitions
         math_utils.h     # Math macros
         notifications.h  # IPC notification tags
         flight_profiles.h # Waypoint definitions
@@ -257,6 +260,7 @@ examples/pilot/
             implementation.md # This file
             evolution.md     # Architecture evolution
         first_flight_checklist.md  # Hardware bring-up and flight checklist
+        tunable_radio_params.md    # Runtime parameter tuning specification
     worlds/
         hover_test.wbt   # Webots world file
     controllers/

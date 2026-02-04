@@ -122,7 +122,7 @@ typedef enum {
     PARAM_WP_HOVER_TIME_S,
 
     PARAM_COUNT  // Total number of parameters (40)
-} param_id_t;
+} tunable_param_id_t;
 
 // NOTE: New parameters must be added before PARAM_COUNT, at the end of
 // their category or in a new category. Do not insert in the middle of
@@ -200,11 +200,14 @@ typedef struct {
 // Initialize with defaults from hal_config.h
 void tunable_params_init(tunable_params_t *params);
 
-// Set parameter by ID (returns false if invalid ID or value)
-bool tunable_params_set(tunable_params_t *params, param_id_t id, float value);
+// Set parameter by ID (returns HIVE_OK on success, HIVE_ERR_INVALID if invalid)
+hive_status_t tunable_params_set(tunable_params_t *params, tunable_param_id_t id, float value);
 
-// Get parameter by ID (returns NaN if invalid ID)
-float tunable_params_get(const tunable_params_t *params, param_id_t id);
+// Get parameter by ID (returns 0.0f if invalid ID)
+float tunable_params_get(const tunable_params_t *params, tunable_param_id_t id);
+
+// Get parameter name string for debugging
+const char *tunable_params_name(tunable_param_id_t id);
 ```
 
 ### Usage in pilot.c
@@ -409,11 +412,14 @@ Parameters must be validated before applying. Reject values outside these ranges
 
 ### Commands
 
-| Command | Value | Description |
-|---------|-------|-------------|
-| `CMD_SET_PARAM` | 0x30 | Set a parameter value |
-| `CMD_GET_PARAM` | 0x31 | Request a parameter value |
-| `CMD_PARAM_VALUE` | 0x32 | Response with parameter value |
+| Command | Value | Direction | Description |
+|---------|-------|-----------|-------------|
+| `CMD_SET_PARAM` | 0x30 | Ground -> Drone | Set a parameter value |
+| `CMD_GET_PARAM` | 0x31 | Ground -> Drone | Request a parameter value |
+| `CMD_LIST_PARAMS` | 0x32 | Ground -> Drone | Request parameter list |
+| `RESP_PARAM_ACK` | 0x33 | Drone -> Ground | Acknowledge set (status byte) |
+| `RESP_PARAM_VALUE` | 0x34 | Drone -> Ground | Response with parameter value |
+| `RESP_PARAM_LIST` | 0x35 | Drone -> Ground | Response with parameter list chunk |
 
 **Note:** Values 0x10-0x12 are reserved for log download commands, 0x20 for GO command.
 
@@ -470,13 +476,21 @@ values and reflash. No runtime persistence needed.
 
 ---
 
-## Implementation Checklist
+## Implementation Status
 
-- [ ] Create `tunable_params.h` with struct and enum
-- [ ] Create `tunable_params.c` with init/set/get functions
-- [ ] Update `pilot.c` to allocate and pass params pointer
-- [ ] Update actors to read from shared params (not hal_config.h constants)
-- [ ] Add `CMD_SET_PARAM` / `CMD_GET_PARAM` handling to `comms_actor.c`
-- [ ] Update `ground_station.py` with set/get commands
-- [ ] Add validation ranges per parameter
-- [ ] Test with live tuning
+All core functionality is implemented:
+
+- [x] Create `tunable_params.h` with struct and enum
+- [x] Create `tunable_params.c` with init/set/get functions
+- [x] Update `pilot.c` to allocate and pass params pointer
+- [x] Update actors to read from shared params (not hal_config.h constants)
+- [x] Add `CMD_SET_PARAM` / `CMD_GET_PARAM` / `CMD_LIST_PARAMS` handling to `comms_actor.c`
+- [x] Update `ground_station.py` with set/get/list commands
+- [x] Add validation ranges per parameter
+- [ ] Test with live tuning on hardware
+
+**Implementation notes:**
+- Typedef is `tunable_param_id_t` (not `param_id_t`)
+- `tunable_params_set()` returns `hive_status_t` (not `bool`)
+- 40 parameter slots: 37 used (0-36) + 3 reserved (37-39)
+- Some parameters from the original spec were deferred (Kalman filter tuning, velocity filter)

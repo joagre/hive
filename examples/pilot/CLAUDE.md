@@ -73,7 +73,45 @@ python3 tools/ground_station.py --uri radio://0/80/2M -o flight.csv
 
 # Download flash log after flight
 python3 tools/ground_station.py --download-log flight.log
+
+# Start flight (sends GO command, 60s countdown then flight)
+python3 tools/ground_station.py --go
 ```
+
+## Runtime Parameter Tuning
+
+Parameters can be tuned live via radio without reflashing. This eliminates the build-flash-wait-test cycle during PID tuning.
+
+```bash
+# List all tunable parameters with current values
+python3 tools/ground_station.py --list-params
+
+# Get a specific parameter
+python3 tools/ground_station.py --get-param rate_kp
+
+# Set a parameter (takes effect immediately on next control loop)
+python3 tools/ground_station.py --set-param rate_kp 0.025
+python3 tools/ground_station.py --set-param att_kp 2.0
+python3 tools/ground_station.py --set-param hover_thrust 0.40
+```
+
+**Tunable Parameters (37 active + 3 reserved = 40 slots):**
+
+| Category | Parameters |
+|----------|------------|
+| Rate PID | `rate_kp`, `rate_ki`, `rate_kd`, `rate_imax`, `rate_omax_roll`, `rate_omax_pitch`, `rate_omax_yaw` |
+| Attitude PID | `att_kp`, `att_ki`, `att_kd`, `att_imax`, `att_omax` |
+| Altitude PID | `alt_kp`, `alt_ki`, `alt_kd`, `alt_imax`, `alt_omax`, `hover_thrust`, `vvel_damping` |
+| Emergency | `emergency_tilt_limit`, `emergency_alt_max` |
+| Landing | `landing_descent_rate`, `landing_velocity_gain` |
+| Position | `pos_kp`, `pos_kd`, `max_tilt_angle` |
+| Estimator | `cf_alpha`, `cf_mag_alpha`, `cf_use_mag`, `cf_accel_thresh_lo`, `cf_accel_thresh_hi` |
+| Waypoints | `wp_tolerance_xy`, `wp_tolerance_z`, `wp_tolerance_yaw`, `wp_tolerance_vel`, `wp_hover_time_s` |
+| Other | `thrust_ramp_ms` |
+
+**Safety:** All values are validated before application. Invalid values (out of range) are rejected.
+
+**Thread Safety:** ARM Cortex-M4 guarantees atomic 32-bit aligned reads/writes. Actors read current values each control loop iteration.
 
 ## Telemetry Analysis
 
@@ -133,9 +171,11 @@ Build-time selection via `FLIGHT_PROFILE=`:
 
 ### Configuration
 - `config.h` - Timing constants, thresholds
-- `hal/*/hal_config.h` - Platform-specific PID gains, thrust
+- `hal/*/hal_config.h` - Platform-specific PID gains, thrust (compile-time defaults)
 - `hive_config.mk` - Shared Hive memory config
 - `include/flight_profiles.h` - Waypoint definitions
+- `include/tunable_params.h` - Runtime-tunable parameter definitions
+- `tunable_params.c` - Parameter validation and initialization
 
 ### Tools
 - `tools/ground_station.py` - Radio telemetry receiver
@@ -191,10 +231,18 @@ The nRF51 is PRX (receiver), Crazyradio is PTX (transmitter):
 - Maximum application payload is 30 bytes
 - Protocol framing handled by HAL, not application code
 
+**Command IDs (in comms_actor.c):**
+- `0x01-0x02` - Telemetry packets (attitude, position)
+- `0x10-0x12` - Log download commands
+- `0x20` - GO command (start flight)
+- `0x30-0x32` - Parameter tuning (set, get, list)
+- `0x33-0x35` - Parameter responses (ack, value, list chunk)
+
 ## Documentation
 
 - `README.md` - Usage instructions
 - `docs/spec/` - Design specification (design.md, implementation.md, evolution.md)
+- `docs/tunable_radio_params.md` - Runtime parameter tuning specification
 - `docs/first_flight_checklist.md` - Hardware bring-up guide
 - `hal/*/README.md` - Platform-specific details
 - `tools/README.md` - Analysis tools documentation

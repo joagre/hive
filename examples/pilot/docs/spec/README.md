@@ -14,6 +14,7 @@ and fail-safe supervision. Supports Webots simulation (default) and STM32 hardwa
 | [design.md](design.md) | Goals, design decisions, architecture overview |
 | [implementation.md](implementation.md) | Implementation details, control algorithms, portability |
 | [evolution.md](evolution.md) | Production gaps, architecture evolution roadmap, future work |
+| [../tunable_radio_params.md](../tunable_radio_params.md) | Runtime parameter tuning specification |
 
 ## Quick Reference
 

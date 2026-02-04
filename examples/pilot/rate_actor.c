@@ -5,9 +5,9 @@
 
 #include "rate_actor.h"
 #include "pilot_buses.h"
+#include "tunable_params.h"
 #include "types.h"
 #include "config.h"
-#include "hal_config.h"
 #include "pid.h"
 #include "hive_runtime.h"
 #include "hive_bus.h"
@@ -20,6 +20,7 @@ typedef struct {
     hive_bus_id_t thrust_bus;
     hive_bus_id_t rate_setpoint_bus;
     hive_bus_id_t torque_bus;
+    tunable_params_t *params;
 } rate_state_t;
 
 void *rate_actor_init(void *init_args) {
@@ -29,6 +30,7 @@ void *rate_actor_init(void *init_args) {
     state.thrust_bus = buses->thrust_bus;
     state.rate_setpoint_bus = buses->rate_setpoint_bus;
     state.torque_bus = buses->torque_bus;
+    state.params = buses->params;
     return &state;
 }
 
@@ -48,12 +50,14 @@ void rate_actor(void *args, const hive_spawn_info_t *siblings,
 
     pid_state_t roll_pid, pitch_pid, yaw_pid;
     // Note: Different output limits per axis (yaw needs more authority)
-    pid_init_full(&roll_pid, HAL_RATE_PID_KP, HAL_RATE_PID_KI, HAL_RATE_PID_KD,
-                  HAL_RATE_PID_IMAX, HAL_RATE_PID_OMAX_ROLL);
-    pid_init_full(&pitch_pid, HAL_RATE_PID_KP, HAL_RATE_PID_KI, HAL_RATE_PID_KD,
-                  HAL_RATE_PID_IMAX, HAL_RATE_PID_OMAX_PITCH);
-    pid_init_full(&yaw_pid, HAL_RATE_PID_KP, HAL_RATE_PID_KI, HAL_RATE_PID_KD,
-                  HAL_RATE_PID_IMAX, HAL_RATE_PID_OMAX_YAW);
+    // Use tunable params for initial values
+    tunable_params_t *p = state->params;
+    pid_init_full(&roll_pid, p->rate_kp, p->rate_ki, p->rate_kd, p->rate_imax,
+                  p->rate_omax_roll);
+    pid_init_full(&pitch_pid, p->rate_kp, p->rate_ki, p->rate_kd, p->rate_imax,
+                  p->rate_omax_pitch);
+    pid_init_full(&yaw_pid, p->rate_kp, p->rate_ki, p->rate_kd, p->rate_imax,
+                  p->rate_omax_yaw);
 
     float thrust = 0.0f;
     rate_setpoint_t rate_sp = RATE_SETPOINT_ZERO;
@@ -99,6 +103,14 @@ void rate_actor(void *args, const hive_spawn_info_t *siblings,
                 .code == HIVE_OK) {
             rate_sp = new_rate_sp;
         }
+
+        // Update PID gains from tunable params (allows live tuning)
+        pid_set_gains(&roll_pid, p->rate_kp, p->rate_ki, p->rate_kd);
+        pid_set_gains(&pitch_pid, p->rate_kp, p->rate_ki, p->rate_kd);
+        pid_set_gains(&yaw_pid, p->rate_kp, p->rate_ki, p->rate_kd);
+        pid_set_limits(&roll_pid, p->rate_imax, p->rate_omax_roll);
+        pid_set_limits(&pitch_pid, p->rate_imax, p->rate_omax_pitch);
+        pid_set_limits(&yaw_pid, p->rate_imax, p->rate_omax_yaw);
 
         // Torque command uses standard conventions (HAL handles platform
         // differences)

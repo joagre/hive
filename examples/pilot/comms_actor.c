@@ -27,6 +27,7 @@
 
 #include "comms_actor.h"
 #include "pilot_buses.h"
+#include "tunable_params.h"
 #include "notifications.h"
 #include "config.h"
 #include "hal/hal.h"
@@ -51,6 +52,18 @@
 
 // Packet type identifiers - flight go command
 #define CMD_GO 0x20 // Ground -> drone: start flight sequence
+
+// Packet type identifiers - parameter tuning (0x30-0x32)
+#define CMD_SET_PARAM 0x30 // Ground -> drone: set parameter [id:u8][value:f32]
+#define CMD_GET_PARAM 0x31 // Ground -> drone: get parameter [id:u8]
+#define CMD_LIST_PARAMS 0x32 // Ground -> drone: list all parameters
+
+// Response packet types
+#define RESP_PARAM_ACK \
+    0x33 // Drone -> ground: param set acknowledged [status:u8]
+#define RESP_PARAM_VALUE 0x34 // Drone -> ground: param value [id:u8][value:f32]
+#define RESP_PARAM_LIST \
+    0x35 // Drone -> ground: param list [count:u8][id:u8][val:f32]...
 
 // Log chunk data size (30 - 3 byte header = 27 bytes)
 // HAL uses 1 byte for framing, leaving 30 bytes for payload
@@ -144,18 +157,45 @@ static inline uint16_t float_to_u16(float val) {
     return (uint16_t)(val * 65535.0f);
 }
 
+// Param response packets
+typedef struct __attribute__((packed)) {
+    uint8_t type;   // RESP_PARAM_ACK
+    uint8_t status; // 0 = success, 1 = error
+} param_ack_packet_t;
+
+typedef struct __attribute__((packed)) {
+    uint8_t type; // RESP_PARAM_VALUE
+    uint8_t id;   // Parameter ID
+    float value;  // Parameter value
+} param_value_packet_t;
+
+// Param list response (up to 5 params per packet to fit in 30 bytes)
+// 1 + 1 + 5*(1+4) = 27 bytes
+#define PARAM_LIST_MAX_PER_PACKET 5
+typedef struct __attribute__((packed)) {
+    uint8_t type;   // RESP_PARAM_LIST
+    uint8_t offset; // Starting parameter ID
+    struct __attribute__((packed)) {
+        uint8_t id;
+        float value;
+    } params[PARAM_LIST_MAX_PER_PACKET];
+} param_list_packet_t;
+
 // Actor state
 typedef struct {
     hive_bus_id_t state_bus;
     hive_bus_id_t sensor_bus;
     hive_bus_id_t thrust_bus;
     hive_actor_id_t flight_manager; // For ARM notification
+    tunable_params_t *params;       // Tunable parameters
     bool next_is_attitude;          // Alternate between packet types
     // Log download state
     comms_mode_t mode;
     int log_fd;
     uint32_t log_offset;
     uint16_t log_sequence;
+    // Param list state (for multi-packet responses)
+    uint8_t param_list_offset;
 } comms_state_t;
 
 // Handle incoming command from ground station
@@ -208,6 +248,66 @@ static void handle_rx_command(comms_state_t *state, const uint8_t *data,
         state->log_sequence = 0;
         state->mode = COMMS_MODE_LOG_DOWNLOAD;
         HIVE_LOG_INFO("[COMMS] Log download started: %s", log_path);
+        return;
+    }
+
+    if (cmd == CMD_SET_PARAM) {
+        // Set parameter: [id:u8][value:f32] - need 6 bytes total (header + id + value)
+        if (len < 7) {
+            HIVE_LOG_WARN("[COMMS] SET_PARAM too short: %zu", len);
+            return;
+        }
+        uint8_t param_id = data[2];
+        float value;
+        memcpy(&value, &data[3], sizeof(float));
+
+        hive_status_t s = tunable_params_set(
+            state->params, (tunable_param_id_t)param_id, value);
+        param_ack_packet_t ack = {
+            .type = RESP_PARAM_ACK,
+            .status = HIVE_SUCCEEDED(s) ? 0 : 1,
+        };
+        hal_esb_send(&ack, sizeof(ack));
+        return;
+    }
+
+    if (cmd == CMD_GET_PARAM) {
+        // Get parameter: [id:u8] - need 3 bytes total (header + id)
+        if (len < 3) {
+            HIVE_LOG_WARN("[COMMS] GET_PARAM too short: %zu", len);
+            return;
+        }
+        uint8_t param_id = data[2];
+        float value =
+            tunable_params_get(state->params, (tunable_param_id_t)param_id);
+        param_value_packet_t resp = {
+            .type = RESP_PARAM_VALUE,
+            .id = param_id,
+            .value = value,
+        };
+        hal_esb_send(&resp, sizeof(resp));
+        return;
+    }
+
+    if (cmd == CMD_LIST_PARAMS) {
+        // Start param list transmission from offset 0
+        state->param_list_offset = 0;
+        state->mode =
+            COMMS_MODE_FLIGHT; // Stay in flight mode, list is one-shot
+        // Send first batch immediately
+        param_list_packet_t pkt = {
+            .type = RESP_PARAM_LIST,
+            .offset = 0,
+        };
+        for (int i = 0;
+             i < PARAM_LIST_MAX_PER_PACKET && i < TUNABLE_PARAM_COUNT; i++) {
+            pkt.params[i].id = (uint8_t)i;
+            pkt.params[i].value =
+                tunable_params_get(state->params, (tunable_param_id_t)i);
+        }
+        hal_esb_send(&pkt, sizeof(pkt));
+        HIVE_LOG_INFO("[COMMS] Sent param list offset=%u", pkt.offset);
+        return;
     }
 }
 
@@ -217,12 +317,14 @@ void *comms_actor_init(void *init_args) {
     state.state_bus = buses->state_bus;
     state.sensor_bus = buses->sensor_bus;
     state.thrust_bus = buses->thrust_bus;
+    state.params = buses->params;
     state.flight_manager = HIVE_ACTOR_ID_INVALID; // Set from siblings in actor
     state.next_is_attitude = true;
     state.mode = COMMS_MODE_FLIGHT;
     state.log_fd = -1;
     state.log_offset = 0;
     state.log_sequence = 0;
+    state.param_list_offset = 0;
     return &state;
 }
 

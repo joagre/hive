@@ -5,6 +5,7 @@
 
 #include "estimator_actor.h"
 #include "pilot_buses.h"
+#include "tunable_params.h"
 #include "types.h"
 #include "config.h"
 #include "math_utils.h"
@@ -110,6 +111,7 @@ static bool validate_sensors(const sensor_data_t *s) {
 typedef struct {
     hive_bus_id_t sensor_bus;
     hive_bus_id_t state_bus;
+    tunable_params_t *params;
 } estimator_state_t;
 
 void *estimator_actor_init(void *init_args) {
@@ -117,6 +119,7 @@ void *estimator_actor_init(void *init_args) {
     static estimator_state_t state;
     state.sensor_bus = buses->sensor_bus;
     state.state_bus = buses->state_bus;
+    state.params = buses->params;
     return &state;
 }
 
@@ -133,10 +136,16 @@ void estimator_actor(void *args, const hive_spawn_info_t *siblings,
         hive_exit(HIVE_EXIT_REASON_CRASH);
     }
 
-    // Initialize complementary filter for attitude
+    // Initialize complementary filter for attitude using tunable params
+    tunable_params_t *p = state->params;
     cf_state_t filter;
-    cf_config_t cf_config = CF_CONFIG_DEFAULT;
-    cf_config.use_mag = true; // Use magnetometer for yaw if available
+    cf_config_t cf_config = {
+        .alpha = p->cf_alpha,
+        .mag_alpha = p->cf_mag_alpha,
+        .use_mag = (p->cf_use_mag > 0.5f),
+        .accel_threshold_lo = p->cf_accel_thresh_lo,
+        .accel_threshold_hi = p->cf_accel_thresh_hi,
+    };
     cf_init(&filter, &cf_config);
 
     // Initialize altitude Kalman filter
@@ -203,6 +212,13 @@ void estimator_actor(void *args, const hive_spawn_info_t *siblings,
             HIVE_LOG_WARN("[EST] bad dt=%.6f, skipping cycle", dt);
             continue;
         }
+
+        // Update complementary filter config from tunable params (live tuning)
+        filter.config.alpha = p->cf_alpha;
+        filter.config.mag_alpha = p->cf_mag_alpha;
+        filter.config.use_mag = (p->cf_use_mag > 0.5f);
+        filter.config.accel_threshold_lo = p->cf_accel_thresh_lo;
+        filter.config.accel_threshold_hi = p->cf_accel_thresh_hi;
 
         // Run complementary filter for attitude estimation
         cf_update(&filter, &sensors, dt);

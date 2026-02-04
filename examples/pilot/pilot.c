@@ -13,6 +13,7 @@
 #include "hive_supervisor.h"
 
 #include "pilot_buses.h"
+#include "tunable_params.h"
 #include "types.h"
 #include "config.h"
 #include "sensor_actor.h"
@@ -96,9 +97,14 @@ int main(void) {
         }
     }
 
+    // Initialize tunable parameters with platform defaults
+    static tunable_params_t g_tunable_params;
+    tunable_params_init(&g_tunable_params);
+
     // Create buses (single entry = latest value only)
     // All actors share these via pilot_buses_t struct passed through init_args
     static pilot_buses_t buses;
+    buses.params = &g_tunable_params;
     hive_bus_config_t cfg = PILOT_BUS_CONFIG;
     hive_status_t status;
 

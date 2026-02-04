@@ -5,9 +5,9 @@
 
 #include "attitude_actor.h"
 #include "pilot_buses.h"
+#include "tunable_params.h"
 #include "types.h"
 #include "config.h"
-#include "hal_config.h"
 #include "pid.h"
 #include "hive_runtime.h"
 #include "hive_bus.h"
@@ -19,6 +19,7 @@ typedef struct {
     hive_bus_id_t state_bus;
     hive_bus_id_t attitude_setpoint_bus;
     hive_bus_id_t rate_setpoint_bus;
+    tunable_params_t *params;
 } attitude_state_t;
 
 void *attitude_actor_init(void *init_args) {
@@ -27,6 +28,7 @@ void *attitude_actor_init(void *init_args) {
     state.state_bus = buses->state_bus;
     state.attitude_setpoint_bus = buses->attitude_setpoint_bus;
     state.rate_setpoint_bus = buses->rate_setpoint_bus;
+    state.params = buses->params;
     return &state;
 }
 
@@ -43,16 +45,15 @@ void attitude_actor(void *args, const hive_spawn_info_t *siblings,
         hive_exit(HIVE_EXIT_REASON_CRASH);
     }
 
+    // Use tunable params for initial values
+    tunable_params_t *p = state->params;
     pid_state_t roll_pid, pitch_pid, yaw_pid;
-    pid_init_full(&roll_pid, HAL_ATTITUDE_PID_KP, HAL_ATTITUDE_PID_KI,
-                  HAL_ATTITUDE_PID_KD, HAL_ATTITUDE_PID_IMAX,
-                  HAL_ATTITUDE_PID_OMAX);
-    pid_init_full(&pitch_pid, HAL_ATTITUDE_PID_KP, HAL_ATTITUDE_PID_KI,
-                  HAL_ATTITUDE_PID_KD, HAL_ATTITUDE_PID_IMAX,
-                  HAL_ATTITUDE_PID_OMAX);
-    pid_init_full(&yaw_pid, HAL_ATTITUDE_PID_KP, HAL_ATTITUDE_PID_KI,
-                  HAL_ATTITUDE_PID_KD, HAL_ATTITUDE_PID_IMAX,
-                  HAL_ATTITUDE_PID_OMAX);
+    pid_init_full(&roll_pid, p->att_kp, p->att_ki, p->att_kd, p->att_imax,
+                  p->att_omax);
+    pid_init_full(&pitch_pid, p->att_kp, p->att_ki, p->att_kd, p->att_imax,
+                  p->att_omax);
+    pid_init_full(&yaw_pid, p->att_kp, p->att_ki, p->att_kd, p->att_imax,
+                  p->att_omax);
 
     // Target attitudes (updated from attitude_setpoint_bus)
     attitude_setpoint_t attitude_sp = ATTITUDE_SETPOINT_ZERO;
@@ -93,6 +94,14 @@ void attitude_actor(void *args, const hive_spawn_info_t *siblings,
                 .code == HIVE_OK) {
             attitude_sp = new_attitude_sp;
         }
+
+        // Update PID gains from tunable params (allows live tuning)
+        pid_set_gains(&roll_pid, p->att_kp, p->att_ki, p->att_kd);
+        pid_set_gains(&pitch_pid, p->att_kp, p->att_ki, p->att_kd);
+        pid_set_gains(&yaw_pid, p->att_kp, p->att_ki, p->att_kd);
+        pid_set_limits(&roll_pid, p->att_imax, p->att_omax);
+        pid_set_limits(&pitch_pid, p->att_imax, p->att_omax);
+        pid_set_limits(&yaw_pid, p->att_imax, p->att_omax);
 
         rate_setpoint_t setpoint;
         setpoint.roll = pid_update(&roll_pid, attitude_sp.roll, est.roll, dt);

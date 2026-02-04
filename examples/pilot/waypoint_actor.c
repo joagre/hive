@@ -5,6 +5,7 @@
 
 #include "waypoint_actor.h"
 #include "pilot_buses.h"
+#include "tunable_params.h"
 #include "flight_profiles.h"
 #include "notifications.h"
 #include "types.h"
@@ -25,6 +26,7 @@ typedef struct {
     hive_bus_id_t state_bus;
     hive_bus_id_t position_target_bus;
     hive_actor_id_t flight_manager;
+    tunable_params_t *params;
 } waypoint_state_t;
 
 void *waypoint_actor_init(void *init_args) {
@@ -33,11 +35,13 @@ void *waypoint_actor_init(void *init_args) {
     state.state_bus = buses->state_bus;
     state.position_target_bus = buses->position_target_bus;
     state.flight_manager = HIVE_ACTOR_ID_INVALID; // Set from siblings in actor
+    state.params = buses->params;
     return &state;
 }
 
-// Check if drone has arrived at waypoint
-static bool check_arrival(const waypoint_t *wp, const state_estimate_t *est) {
+// Check if drone has arrived at waypoint (uses tunable params)
+static bool check_arrival(const waypoint_t *wp, const state_estimate_t *est,
+                          const tunable_params_t *p) {
     // Validate position - NaN means we don't know where we are
     if (!isfinite(est->x) || !isfinite(est->y) || !isfinite(est->altitude)) {
         return false; // Can't declare arrival with unknown position
@@ -51,9 +55,8 @@ static bool check_arrival(const waypoint_t *wp, const state_estimate_t *est) {
     float vel = sqrtf(est->x_velocity * est->x_velocity +
                       est->y_velocity * est->y_velocity);
 
-    return (dist_xy < WAYPOINT_TOLERANCE_XY) &&
-           (alt_err < WAYPOINT_TOLERANCE_Z) &&
-           (yaw_err < WAYPOINT_TOLERANCE_YAW) && (vel < WAYPOINT_TOLERANCE_VEL);
+    return (dist_xy < p->wp_tolerance_xy) && (alt_err < p->wp_tolerance_z) &&
+           (yaw_err < p->wp_tolerance_yaw) && (vel < p->wp_tolerance_vel);
 }
 
 void waypoint_actor(void *args, const hive_spawn_info_t *siblings,
@@ -159,12 +162,16 @@ void waypoint_actor(void *args, const hive_spawn_info_t *siblings,
         }
         memcpy(&est, result.bus.data, sizeof(est));
 
-        // Check arrival and start hover timer
-        if (!hovering && check_arrival(wp, &est)) {
+        // Check arrival and start hover timer (use tunable params)
+        tunable_params_t *p = state->params;
+        if (!hovering && check_arrival(wp, &est, p)) {
             HIVE_LOG_INFO("[WPT] Arrived at waypoint %d - hovering",
                           waypoint_index);
+            // Convert hover time from seconds to microseconds
+            uint64_t hover_time_us =
+                (uint64_t)(p->wp_hover_time_s * 1000000.0f);
             hive_status_t timer_status =
-                hive_timer_after(WAYPOINT_HOVER_TIME_US, &hover_timer);
+                hive_timer_after(hover_time_us, &hover_timer);
             if (HIVE_FAILED(timer_status)) {
                 HIVE_LOG_ERROR("[WPT] timer_after failed: %s - cannot hover",
                                HIVE_ERR_STR(timer_status));
