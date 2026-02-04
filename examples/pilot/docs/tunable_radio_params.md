@@ -121,7 +121,7 @@ typedef enum {
     PARAM_WP_TOLERANCE_VEL,
     PARAM_WP_HOVER_TIME_S,
 
-    PARAM_COUNT  // Total number of parameters (40)
+    PARAM_COUNT  // Total number of parameters (45)
 } tunable_param_id_t;
 
 // NOTE: New parameters must be added before PARAM_COUNT, at the end of
@@ -492,5 +492,5 @@ All core functionality is implemented:
 **Implementation notes:**
 - Typedef is `tunable_param_id_t` (not `param_id_t`)
 - `tunable_params_set()` returns `hive_status_t` (not `bool`)
-- 40 parameter slots: 37 used (0-36) + 3 reserved (37-39)
-- Some parameters from the original spec were deferred (Kalman filter tuning, velocity filter)
+- 45 parameter slots: all used (0-44)
+- Kalman filter Q/R and velocity filter alpha are now runtime-tunable

@@ -148,15 +148,15 @@ void estimator_actor(void *args, const hive_spawn_info_t *siblings,
     };
     cf_init(&filter, &cf_config);
 
-    // Initialize altitude Kalman filter
+    // Initialize altitude Kalman filter using tunable params
     altitude_kf_state_t alt_kf;
-    altitude_kf_config_t kf_config = {.q_altitude = ALT_KF_Q_ALTITUDE,
-                                      .q_velocity = ALT_KF_Q_VELOCITY,
-                                      .q_bias = ALT_KF_Q_BIAS,
-                                      .r_altitude = ALT_KF_R_ALTITUDE,
-                                      .p0_altitude = ALT_KF_P0_ALTITUDE,
-                                      .p0_velocity = ALT_KF_P0_VELOCITY,
-                                      .p0_bias = ALT_KF_P0_BIAS};
+    altitude_kf_config_t kf_config = {.q_altitude = p->kf_q_altitude,
+                                      .q_velocity = p->kf_q_velocity,
+                                      .q_bias = p->kf_q_bias,
+                                      .r_altitude = p->kf_r_altitude,
+                                      .p0_altitude = p->kf_p0_altitude,
+                                      .p0_velocity = p->kf_p0_velocity,
+                                      .p0_bias = p->kf_p0_bias};
     altitude_kf_init(&alt_kf, &kf_config);
 
     // Horizontal velocity (still using differentiation + LPF for now)
@@ -219,6 +219,13 @@ void estimator_actor(void *args, const hive_spawn_info_t *siblings,
         filter.config.use_mag = (p->cf_use_mag > 0.5f);
         filter.config.accel_threshold_lo = p->cf_accel_thresh_lo;
         filter.config.accel_threshold_hi = p->cf_accel_thresh_hi;
+
+        // Update altitude Kalman filter config from tunable params (live tuning)
+        // Note: P0 changes only affect future resets, Q/R affect every cycle
+        alt_kf.config.q_altitude = p->kf_q_altitude;
+        alt_kf.config.q_velocity = p->kf_q_velocity;
+        alt_kf.config.q_bias = p->kf_q_bias;
+        alt_kf.config.r_altitude = p->kf_r_altitude;
 
         // Run complementary filter for attitude estimation
         cf_update(&filter, &sensors, dt);
@@ -346,8 +353,8 @@ void estimator_actor(void *args, const hive_spawn_info_t *siblings,
             // Fallback: differentiate position + LPF
             float raw_vx = (est.x - prev_x) / dt;
             float raw_vy = (est.y - prev_y) / dt;
-            x_velocity = LPF(x_velocity, raw_vx, HVEL_FILTER_ALPHA);
-            y_velocity = LPF(y_velocity, raw_vy, HVEL_FILTER_ALPHA);
+            x_velocity = LPF(x_velocity, raw_vx, p->hvel_filter_alpha);
+            y_velocity = LPF(y_velocity, raw_vy, p->hvel_filter_alpha);
         }
         prev_x = est.x;
         prev_y = est.y;

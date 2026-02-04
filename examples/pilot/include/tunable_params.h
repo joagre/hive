@@ -13,7 +13,7 @@
 #include "hive_runtime.h"
 
 // Parameter count (must match enum)
-#define TUNABLE_PARAM_COUNT 40
+#define TUNABLE_PARAM_COUNT 45
 
 // Parameter identifiers
 // Grouped by subsystem for easier navigation
@@ -73,10 +73,17 @@ typedef enum {
     // Flight manager (36)
     PARAM_THRUST_RAMP_MS = 36,
 
-    // Reserved for future use (37-39)
-    PARAM_RESERVED_37 = 37,
-    PARAM_RESERVED_38 = 38,
-    PARAM_RESERVED_39 = 39,
+    // Altitude Kalman filter (37-43)
+    PARAM_KF_Q_ALTITUDE = 37,
+    PARAM_KF_Q_VELOCITY = 38,
+    PARAM_KF_Q_BIAS = 39,
+    PARAM_KF_R_ALTITUDE = 40,
+    PARAM_KF_P0_ALTITUDE = 41,
+    PARAM_KF_P0_VELOCITY = 42,
+    PARAM_KF_P0_BIAS = 43,
+
+    // Horizontal velocity filter (44)
+    PARAM_HVEL_FILTER_ALPHA = 44,
 } tunable_param_id_t;
 
 // All tunable parameters in a single struct
@@ -137,10 +144,17 @@ typedef struct {
     // Flight manager
     float thrust_ramp_ms;
 
-    // Reserved
-    float reserved_37;
-    float reserved_38;
-    float reserved_39;
+    // Altitude Kalman filter
+    float kf_q_altitude;
+    float kf_q_velocity;
+    float kf_q_bias;
+    float kf_r_altitude;
+    float kf_p0_altitude;
+    float kf_p0_velocity;
+    float kf_p0_bias;
+
+    // Horizontal velocity filter
+    float hvel_filter_alpha;
 } tunable_params_t;
 
 // Initialize parameters with platform defaults from HAL_* defines

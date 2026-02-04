@@ -95,7 +95,7 @@ python3 tools/ground_station.py --set-param att_kp 2.0
 python3 tools/ground_station.py --set-param hover_thrust 0.40
 ```
 
-**Tunable Parameters (37 active + 3 reserved = 40 slots):**
+**Tunable Parameters (45 total):**
 
 | Category | Parameters |
 |----------|------------|
@@ -105,7 +105,9 @@ python3 tools/ground_station.py --set-param hover_thrust 0.40
 | Emergency | `emergency_tilt_limit`, `emergency_alt_max` |
 | Landing | `landing_descent_rate`, `landing_velocity_gain` |
 | Position | `pos_kp`, `pos_kd`, `max_tilt_angle` |
-| Estimator | `cf_alpha`, `cf_mag_alpha`, `cf_use_mag`, `cf_accel_thresh_lo`, `cf_accel_thresh_hi` |
+| Complementary Filter | `cf_alpha`, `cf_mag_alpha`, `cf_use_mag`, `cf_accel_thresh_lo`, `cf_accel_thresh_hi` |
+| Altitude Kalman Filter | `kf_q_altitude`, `kf_q_velocity`, `kf_q_bias`, `kf_r_altitude`, `kf_p0_altitude`, `kf_p0_velocity`, `kf_p0_bias` |
+| Horizontal Velocity | `hvel_filter_alpha` |
 | Waypoints | `wp_tolerance_xy`, `wp_tolerance_z`, `wp_tolerance_yaw`, `wp_tolerance_vel`, `wp_hover_time_s` |
 | Other | `thrust_ramp_ms` |
 

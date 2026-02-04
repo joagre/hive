@@ -76,10 +76,20 @@ static const param_meta_t param_meta[TUNABLE_PARAM_COUNT] = {
     // Flight manager (36)
     [PARAM_THRUST_RAMP_MS] = {"thrust_ramp_ms", 0.0f, 5000.0f},
 
-    // Reserved (37-39)
-    [PARAM_RESERVED_37] = {"reserved_37", 0.0f, 0.0f},
-    [PARAM_RESERVED_38] = {"reserved_38", 0.0f, 0.0f},
-    [PARAM_RESERVED_39] = {"reserved_39", 0.0f, 0.0f},
+    // Altitude Kalman filter (37-43)
+    // Q (process noise) - how much we trust the model vs measurements
+    [PARAM_KF_Q_ALTITUDE] = {"kf_q_altitude", 0.00001f, 0.01f},
+    [PARAM_KF_Q_VELOCITY] = {"kf_q_velocity", 0.001f, 10.0f},
+    [PARAM_KF_Q_BIAS] = {"kf_q_bias", 0.000001f, 0.01f},
+    // R (measurement noise) - sensor noise variance
+    [PARAM_KF_R_ALTITUDE] = {"kf_r_altitude", 0.0001f, 0.1f},
+    // P0 (initial covariance) - initial uncertainty
+    [PARAM_KF_P0_ALTITUDE] = {"kf_p0_altitude", 0.01f, 10.0f},
+    [PARAM_KF_P0_VELOCITY] = {"kf_p0_velocity", 0.01f, 10.0f},
+    [PARAM_KF_P0_BIAS] = {"kf_p0_bias", 0.001f, 1.0f},
+
+    // Horizontal velocity filter (44)
+    [PARAM_HVEL_FILTER_ALPHA] = {"hvel_filter_alpha", 0.5f, 0.999f},
 };
 
 void tunable_params_init(tunable_params_t *params) {
@@ -139,10 +149,17 @@ void tunable_params_init(tunable_params_t *params) {
     // Flight manager
     params->thrust_ramp_ms = 500.0f; // 0.5 seconds
 
-    // Reserved
-    params->reserved_37 = 0.0f;
-    params->reserved_38 = 0.0f;
-    params->reserved_39 = 0.0f;
+    // Altitude Kalman filter - from config.h
+    params->kf_q_altitude = ALT_KF_Q_ALTITUDE;
+    params->kf_q_velocity = ALT_KF_Q_VELOCITY;
+    params->kf_q_bias = ALT_KF_Q_BIAS;
+    params->kf_r_altitude = ALT_KF_R_ALTITUDE;
+    params->kf_p0_altitude = ALT_KF_P0_ALTITUDE;
+    params->kf_p0_velocity = ALT_KF_P0_VELOCITY;
+    params->kf_p0_bias = ALT_KF_P0_BIAS;
+
+    // Horizontal velocity filter - from config.h
+    params->hvel_filter_alpha = HVEL_FILTER_ALPHA;
 }
 
 hive_status_t tunable_params_set(tunable_params_t *params,
@@ -152,11 +169,6 @@ hive_status_t tunable_params_set(tunable_params_t *params,
     }
 
     const param_meta_t *meta = &param_meta[id];
-
-    // Reserved parameters cannot be set
-    if (id >= PARAM_RESERVED_37) {
-        return HIVE_ERROR(HIVE_ERR_INVALID, "reserved param");
-    }
 
     // Validate range
     if (value < meta->min || value > meta->max) {
