@@ -31,13 +31,13 @@ Flight manager becomes a looping state machine. After landing, it returns to IDL
                           v
     ┌──────────────────────────────────────────────────────────────┐
     │                       PREFLIGHT                              │
-    │  1. Broadcast RESET to all siblings                          │
-    │     - sensor_actor: calibrate gyro, baro zero, etc.          │
+    │  1. Call hal_calibrate() (gyro bias, baro zero, etc.)        │
+    │  2. Broadcast RESET to all siblings                          │
     │     - estimator_actor: reset filters, set initial state      │
     │     - logger_actor: truncate logs                            │
     │     - others: reset state (PIDs, waypoints, etc.)            │
-    │  2. Run self-test (validate state data is sane)              │
-    │  3. Arm motors                                               │
+    │  3. Run self-test (validate state data is sane)              │
+    │  4. Arm motors                                               │
     └──────────────────────────────────────────────────────────────┘
                           │
                           │ Preflight complete
@@ -96,11 +96,31 @@ If ABORT is received:
 2. Log abort event
 3. Return to IDLE (no RESET needed - state is already clean)
 
-### Tunable Parameter
+### Tunable Parameters
 
 | Parameter | Default | Range | Description |
 |-----------|---------|-------|-------------|
 | `armed_countdown_s` | 60.0 | 5.0 - 300.0 | Seconds to wait in ARMED before flight |
+| `auto_go_delay_s` | 0.0 | 0.0 - 60.0 | Auto-GO after delay (0 = wait for command) |
+
+### Simulation Mode (Webots)
+
+Webots has no radio, so GO command cannot be sent. Instead, flight_manager auto-starts:
+
+- If `SIMULATED_TIME` is defined and `auto_go_delay_s > 0`: auto-transition IDLE -> PREFLIGHT after delay
+- Default: `auto_go_delay_s = 2.0` in Webots, `0.0` on hardware
+
+This enables automated testing without external tooling. The rest of the lifecycle (RESET, ARMED countdown, flight, landing) runs normally.
+
+```c
+// In flight_manager IDLE state:
+#ifdef SIMULATED_TIME
+if (params->auto_go_delay_s > 0) {
+    hive_sleep_ms((uint32_t)(params->auto_go_delay_s * 1000));
+    // Auto-transition to PREFLIGHT
+}
+#endif
+```
 
 ## Actor Responsibilities
 
@@ -122,8 +142,11 @@ Clear separation of concerns:
 
 ### Preparation vs Self-Test
 
+**Calibration** (flight_manager before RESET):
+- flight_manager calls `hal_calibrate()` (gyro bias, baro zero, etc.)
+- This is a system-level operation, not per-actor
+
 **Preparation** (each actor on RESET):
-- sensor_actor: gyro bias, baro zero, sensor-specific setup
 - estimator_actor: reset filters, establish initial attitude/position
 - PID actors: reset integrators
 - logger_actor: truncate logs
@@ -192,7 +215,7 @@ Each actor handles RESET according to its own needs. Actors that have no state t
 
 | Actor | Action on RESET |
 |-------|-----------------|
-| sensor_actor | Calibrate gyro bias, set baro zero; log errors internally |
+| sensor_actor | Ignore (calibration done by flight_manager via hal_calibrate) |
 | estimator_actor | Reset Kalman filter and complementary filter, set initial attitude/position |
 | altitude_actor | Reset PID integrator, clear landing state |
 | position_actor | Reset PID integrator (if any) |
@@ -264,7 +287,7 @@ On power-on, the system boots directly to IDLE state:
 2. Supervisor spawns all actors
 3. logger_actor init: opens hive log, flushes early buffer, opens telemetry CSV
 4. Flight manager enters IDLE
-5. System waits for GO command
+5. Wait for GO command (hardware) or auto-GO after delay (simulation)
 
 Calibration and self-test now happen per-flight in PREFLIGHT, not at boot. This means:
 - Faster boot to IDLE
@@ -337,8 +360,8 @@ typedef struct {
 
 ### Changes Required
 
-1. **flight_manager_actor.c** - Rewrite as state machine loop, add self-test
-2. **sensor_actor.c** - Handle RESET (calibrate gyro, set baro zero)
+1. **flight_manager_actor.c** - Rewrite as state machine loop, call hal_calibrate() in PREFLIGHT, add self-test, add auto-GO for simulation
+2. **sensor_actor.c** - No changes needed (calibration done by flight_manager)
 3. **motor_actor.c** - Handle RESET (clear started flag)
 4. **estimator_actor.c** - Handle RESET (reset filters)
 5. **altitude_actor.c** - Handle RESET (reset PID, landing state)
@@ -348,9 +371,11 @@ typedef struct {
 9. **telemetry_logger_actor.c** - Rename to logger_actor, handle RESET (truncate both hive log and telemetry CSV), move hive log open and early flush from pilot.c to init
 10. **pilot.c** - Remove hive log open/flush (now in logger_actor)
 11. **pid.c** - Add `pid_reset()` function if not present
+12. **tunable_params.h/c** - Add `armed_countdown_s` and `auto_go_delay_s` parameters
 
 ### Actors Unchanged
 
+- sensor_actor.c (calibration done by flight_manager)
 - position_actor.c (minimal state, or add RESET if needed)
 - comms_actor.c (stateless relay)
 
