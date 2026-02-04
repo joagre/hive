@@ -37,7 +37,7 @@ Flight manager becomes a looping state machine. After landing, it returns to IDL
     │     - logger_actor: truncate logs                            │
     │     - others: reset state (PIDs, waypoints, etc.)            │
     │  3. Run self-test (validate state data is sane)              │
-    │  4. Arm motors                                               │
+    │  4. Call hal_arm() to enable motor output                    │
     └──────────────────────────────────────────────────────────────┘
                           │
                           │ Preflight complete
@@ -69,7 +69,7 @@ Flight manager becomes a looping state machine. After landing, it returns to IDL
                           v
     ┌──────────────────────────────────────────────────────────────┐
     │                       LANDED                                 │
-    │  1. Disarm motors                                            │
+    │  1. Call hal_disarm() to disable motor output                │
     │  2. Transition to IDLE                                       │
     └──────────────────────────────────────────────────────────────┘
                           │
@@ -92,7 +92,7 @@ ARMED ──timeout──> FLYING
 ```
 
 If ABORT is received:
-1. Disarm motors
+1. Call hal_disarm() to disable motor output
 2. Log abort event
 3. Return to IDLE (no RESET needed - state is already clean)
 
@@ -128,13 +128,13 @@ Clear separation of concerns:
 
 | Actor | Owns | Responsibility |
 |-------|------|----------------|
-| **sensor_actor** | Hardware sensors | Read sensors, calibration (gyro bias) |
+| **sensor_actor** | Hardware sensors | Read sensors (calibration done by flight_manager) |
 | **estimator_actor** | State estimation | Fuse sensors into state estimate |
 | **altitude_actor** | Vertical control | Altitude PID, landing detection |
 | **position_actor** | Horizontal control | Position PID |
 | **attitude_actor** | Angle control | Attitude PIDs |
 | **rate_actor** | Angular rate control | Rate PIDs |
-| **motor_actor** | Motor output | Gate outputs, arm/disarm |
+| **motor_actor** | Motor output | Gate outputs (arm/disarm done by flight_manager via HAL) |
 | **waypoint_actor** | Mission | Track waypoint sequence |
 | **flight_manager** | Flight phases | Orchestrate state machine, self-tests |
 | **logger_actor** | Logs | Hive log + telemetry CSV lifecycle |
@@ -170,7 +170,7 @@ Ground Station
       │                   │                       │ for telemetry
       │                   ├──RESET──> [all siblings]
       │                   │
-      │                   ├──ARM/DISARM──> motor_actor
+      │                   ├──hal_arm()/hal_disarm()  (direct HAL calls)
       │                   │
       │              [state_bus] <─────────────────┘
       │
@@ -188,11 +188,11 @@ Ground Station
 | GO | comms_actor | flight_manager | notify |
 | ABORT | comms_actor | flight_manager | notify |
 | RESET | flight_manager | all siblings | notify (broadcast) |
-| ARM | flight_manager | motor_actor | notify |
-| DISARM | flight_manager | motor_actor | notify |
 | STATUS | comms_actor | flight_manager | request/reply |
 
 All command messages are fire-and-forget notifications. STATUS is the only request/reply (optional feature for ground station display).
+
+**Note:** Motor arming is done via direct HAL calls (`hal_arm()`/`hal_disarm()`), not IPC messages.
 
 ## RESET Notification
 
@@ -298,7 +298,7 @@ Calibration and self-test now happen per-flight in PREFLIGHT, not at boot. This 
 
 ### Preflight Failure
 
-If any actor's preparation fails (calibration, filter init, etc.), the state data will be invalid. flight_manager's self-test catches this:
+If calibration or any actor's preparation fails (filter init, etc.), the state data will be invalid. flight_manager's self-test catches this:
 
 - Self-test reads state_bus, checks for valid data (not NaN, within bounds)
 - If invalid: log error, return to IDLE without arming
