@@ -408,10 +408,10 @@ If any RESET or ARM request fails:
 ### Flight Abort
 
 If emergency cutoff triggers during FLYING (tilt > 45°, altitude > max):
-1. altitude_actor kills motors immediately (existing behavior)
+1. altitude_actor commands zero thrust (motors stop via control loop)
 2. altitude_actor sends LANDED notification to flight_manager
 3. flight_manager transitions to LANDED state
-4. Normal LANDED cleanup (DISARM request), return to IDLE
+4. Normal LANDED cleanup (DISARM request to motor_actor), return to IDLE
 5. System ready for another GO (after operator investigates)
 
 The same LANDED notification is used for both normal landing completion and emergency cutoff. flight_manager doesn't need to distinguish - in both cases it proceeds to LANDED state cleanup.
@@ -467,7 +467,7 @@ typedef struct {
 2. **sensor_actor.c** - Handle RESET request (call hal_calibrate, reply ok/fail)
 3. **motor_actor.c** - Handle RESET request (clear started flag, reply ok), handle ARM/DISARM requests (call hal_arm/hal_disarm, reply ok/fail)
 4. **estimator_actor.c** - Handle RESET request (reset filters, reply ok/fail)
-5. **altitude_actor.c** - Handle RESET request (reset PID, landing state, reply ok)
+5. **altitude_actor.c** - Handle RESET request (reset PID, landing state, reply ok), handle LANDING notification (start descent), send LANDED notification (landing complete or emergency cutoff)
 6. **attitude_actor.c** - Handle RESET request (reset PIDs, reply ok)
 7. **rate_actor.c** - Handle RESET request (reset PIDs, reply ok)
 8. **waypoint_actor.c** - Handle RESET request (reset index, reply ok)
