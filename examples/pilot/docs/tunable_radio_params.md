@@ -14,32 +14,51 @@ This eliminates the build-flash-wait-test cycle and enables live tuning during f
    `pilot.c`, pointer passed to all actors via `init_args`.
 
 3. **No notifications needed** - Actors read directly from shared struct each control
-   loop iteration. Since actors run cooperatively (no preemption), this is safe.
+   loop iteration. Single float reads/writes are atomic on ARM Cortex-M, so no
+   synchronization is needed even if comms_actor (LOW priority) is interrupted
+   mid-write by a control actor.
 
 4. **Individual parameter commands** - Parameters sent one at a time over radio (not
    bulk transfer). Fits easily in 30-byte ESB payload.
 
 5. **Enum for param_id** - Type-safe parameter identification, not byte offsets.
 
+6. **PID gain changes do not reset integrators** - Changing Ki mid-flight leaves
+   the existing I-term accumulator intact. This avoids thrust discontinuities but
+   means the I-term may be sized for the old gain. For large Ki changes, consider
+   landing first or accepting a brief transient.
+
+### Platform-Specific Defaults
+
+Default values in this spec are for **Crazyflie 2.1+ hardware**. Webots simulation
+uses different tuning due to different dynamics:
+
+| Parameter | Crazyflie | Webots |
+|-----------|-----------|--------|
+| `hover_thrust` | 0.38 | 0.553 |
+| `att_kp` | 1.8 | 2.5 |
+| `att_kd` | 0.10 | 0.15 |
+| `rate_kp` | 0.020 | 0.028 |
+| `rate_ki` | 0.001 | 0.002 |
+| `rate_kd` | 0.0015 | 0.003 |
+| `pos_kd` | 0.10 | 0.06 |
+| `max_tilt` | 0.25 | 0.20 |
+| `vvel_damping` | 0.25 | 0.35 |
+
 ### Header File Structure
 
 ```c
 // tunable_params.h
 
+#include <stdbool.h>
 #include <stdint.h>
 
 // Parameter IDs - explicit enum for type safety
 typedef enum {
-    // Rate PID
-    PARAM_RATE_KP_ROLL = 0,
-    PARAM_RATE_KI_ROLL,
-    PARAM_RATE_KD_ROLL,
-    PARAM_RATE_KP_PITCH,
-    PARAM_RATE_KI_PITCH,
-    PARAM_RATE_KD_PITCH,
-    PARAM_RATE_KP_YAW,
-    PARAM_RATE_KI_YAW,
-    PARAM_RATE_KD_YAW,
+    // Rate PID (same Kp/Ki/Kd for all axes, per-axis output limits)
+    PARAM_RATE_KP = 0,
+    PARAM_RATE_KI,
+    PARAM_RATE_KD,
     PARAM_RATE_IMAX,
     PARAM_RATE_OMAX_ROLL,
     PARAM_RATE_OMAX_PITCH,
@@ -72,58 +91,110 @@ typedef enum {
     PARAM_EMERGENCY_TILT,
     PARAM_EMERGENCY_ALT_MAX,
     PARAM_MOTOR_DEADMAN_MS,
+    PARAM_LANDED_ACTUAL_THRESH,
 
-    // ... more params ...
+    // Landing / Takeoff
+    PARAM_LANDING_DESCENT_RATE,
+    PARAM_LANDING_VELOCITY_GAIN,
+    PARAM_THRUST_RAMP_MS,
 
-    PARAM_COUNT  // Total number of parameters
+    // Altitude Kalman Filter
+    PARAM_KF_Q_ALTITUDE,
+    PARAM_KF_Q_VELOCITY,
+    PARAM_KF_Q_BIAS,
+    PARAM_KF_R_ALTITUDE,
+
+    // Velocity Filter
+    PARAM_HVEL_FILTER_ALPHA,
+
+    // Complementary Filter (attitude)
+    PARAM_CF_ALPHA,
+    PARAM_CF_MAG_ALPHA,
+    PARAM_CF_USE_MAG,
+    PARAM_CF_ACCEL_THRESH_LO,
+    PARAM_CF_ACCEL_THRESH_HI,
+
+    // Waypoint
+    PARAM_WP_TOLERANCE_XY,
+    PARAM_WP_TOLERANCE_Z,
+    PARAM_WP_TOLERANCE_YAW,
+    PARAM_WP_TOLERANCE_VEL,
+    PARAM_WP_HOVER_TIME_S,
+
+    PARAM_COUNT  // Total number of parameters (40)
 } param_id_t;
+
+// NOTE: New parameters must be added before PARAM_COUNT, at the end of
+// their category or in a new category. Do not insert in the middle of
+// existing groups - this would break any stored parameter IDs.
 
 // Shared tunable parameters - all floats for simplicity
 typedef struct {
-    // Rate PID
-    float rate_kp_roll;
-    float rate_ki_roll;
-    float rate_kd_roll;
-    float rate_kp_pitch;
-    float rate_ki_pitch;
-    float rate_kd_pitch;
-    float rate_kp_yaw;
-    float rate_ki_yaw;
-    float rate_kd_yaw;
-    float rate_imax;
-    float rate_omax_roll;
-    float rate_omax_pitch;
-    float rate_omax_yaw;
+    // Rate PID (same Kp/Ki/Kd for all axes, per-axis output limits)
+    float rate_kp;            // Proportional gain
+    float rate_ki;            // Integral gain
+    float rate_kd;            // Derivative gain
+    float rate_imax;          // Integral limit
+    float rate_omax_roll;     // Output limit roll
+    float rate_omax_pitch;    // Output limit pitch
+    float rate_omax_yaw;      // Output limit yaw
 
     // Attitude PID
-    float att_kp;
-    float att_ki;
-    float att_kd;
-    float att_imax;
-    float att_omax;
+    float att_kp;             // Proportional gain
+    float att_ki;             // Integral gain
+    float att_kd;             // Derivative gain
+    float att_imax;           // Integral limit
+    float att_omax;           // Max rate setpoint (rad/s)
 
     // Altitude PID
-    float alt_kp;
-    float alt_ki;
-    float alt_kd;
-    float alt_imax;
-    float alt_omax;
-    float vvel_damping;
+    float alt_kp;             // Proportional gain
+    float alt_ki;             // Integral gain
+    float alt_kd;             // Derivative gain
+    float alt_imax;           // Integral limit
+    float alt_omax;           // Output limit
+    float vvel_damping;       // Velocity damping gain
 
     // Position PD
-    float pos_kp;
-    float pos_kd;
-    float max_tilt;
+    float pos_kp;             // Proportional gain
+    float pos_kd;             // Derivative gain
+    float max_tilt;           // Max tilt angle (rad)
 
     // Thrust
-    float hover_thrust;
+    float hover_thrust;       // Base hover thrust (0-1)
 
     // Safety
-    float emergency_tilt;
-    float emergency_alt_max;
-    float motor_deadman_ms;
+    float emergency_tilt;     // Crash cutoff angle (rad)
+    float emergency_alt_max;  // Max altitude cutoff (m)
+    float motor_deadman_ms;   // Watchdog timeout (ms)
+    float landed_actual_thresh; // Landing detection alt (m)
 
-    // ... more params ...
+    // Landing / Takeoff
+    float landing_descent_rate;   // Descent velocity (m/s)
+    float landing_velocity_gain;  // Thrust per m/s error
+    float thrust_ramp_ms;         // Takeoff ramp duration (ms)
+
+    // Altitude Kalman Filter
+    float kf_q_altitude;      // Process noise position (m^2)
+    float kf_q_velocity;      // Process noise velocity (m^2/s^2)
+    float kf_q_bias;          // Process noise bias
+    float kf_r_altitude;      // Measurement noise (m^2)
+
+    // Velocity Filter
+    float hvel_filter_alpha;  // LPF coefficient (0-1)
+
+    // Complementary Filter (attitude)
+    float cf_alpha;           // Gyro trust (0-1)
+    float cf_mag_alpha;       // Magnetometer trust (0-1)
+    float cf_use_mag;         // Enable magnetometer (0 or 1)
+    float cf_accel_thresh_lo; // Min valid accel magnitude (g)
+    float cf_accel_thresh_hi; // Max valid accel magnitude (g)
+
+    // Waypoint
+    float wp_tolerance_xy;    // Horizontal arrival radius (m)
+    float wp_tolerance_z;     // Altitude tolerance (m)
+    float wp_tolerance_yaw;   // Yaw tolerance (rad)
+    float wp_tolerance_vel;   // Velocity tolerance (m/s)
+    float wp_hover_time_s;    // Hover duration at waypoint (s)
 } tunable_params_t;
 
 // Initialize with defaults from hal_config.h
@@ -187,17 +258,14 @@ void altitude_actor(void *args, ...) {
 ## Parameters
 
 ### Rate PID (innermost loop - controls rotation speed)
+
+Same Kp/Ki/Kd gains used for all axes; only output limits vary per-axis.
+
 | Parameter | Description | Default |
 |-----------|-------------|---------|
-| `rate_kp_roll` | Proportional gain for roll rate | 0.020 |
-| `rate_ki_roll` | Integral gain for roll rate | 0.001 |
-| `rate_kd_roll` | Derivative gain for roll rate | 0.0015 |
-| `rate_kp_pitch` | Proportional gain for pitch rate | 0.020 |
-| `rate_ki_pitch` | Integral gain for pitch rate | 0.001 |
-| `rate_kd_pitch` | Derivative gain for pitch rate | 0.0015 |
-| `rate_kp_yaw` | Proportional gain for yaw rate | 0.020 |
-| `rate_ki_yaw` | Integral gain for yaw rate | 0.001 |
-| `rate_kd_yaw` | Derivative gain for yaw rate | 0.0015 |
+| `rate_kp` | Proportional gain (all axes) | 0.020 |
+| `rate_ki` | Integral gain (all axes) | 0.001 |
+| `rate_kd` | Derivative gain (all axes) | 0.0015 |
 | `rate_imax` | Integral windup limit | 0.3 |
 | `rate_omax_roll` | Output limit for roll | 0.12 |
 | `rate_omax_pitch` | Output limit for pitch | 0.12 |
@@ -240,8 +308,18 @@ void altitude_actor(void *args, ...) {
 | `emergency_tilt` | Max tilt before crash cutoff (rad) | 0.78 (~45 deg) |
 | `emergency_alt_max` | Max altitude before cutoff (m) | 2.0 |
 | `motor_deadman_ms` | Timeout before motor shutoff (ms) | 50 |
-| `landed_target_thresh` | Target alt indicating land (m) | 0.05 |
 | `landed_actual_thresh` | Actual alt confirming landed (m) | 0.08 |
+
+### Landing
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `landing_descent_rate` | Target descent velocity (m/s, negative) | -0.15 |
+| `landing_velocity_gain` | Thrust adjustment per m/s velocity error | 0.5 |
+
+### Takeoff
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `thrust_ramp_ms` | Thrust ramp duration for gentle takeoff (ms) | 500 |
 
 ### Estimator / Filters
 
@@ -258,13 +336,14 @@ void altitude_actor(void *args, ...) {
 |-----------|-------------|---------|
 | `hvel_filter_alpha` | Horizontal velocity LPF (0-1) | 0.95 |
 
-#### Sensor Calibration (live adjustment)
+#### Complementary Filter (attitude estimation)
 | Parameter | Description | Default |
 |-----------|-------------|---------|
-| `gyro_bias_x` | Gyroscope X bias (rad/s) | auto |
-| `gyro_bias_y` | Gyroscope Y bias (rad/s) | auto |
-| `gyro_bias_z` | Gyroscope Z bias (rad/s) | auto |
-| `accel_bias_z` | Accelerometer Z bias (m/s^2) | auto |
+| `cf_alpha` | Gyro trust coefficient (0-1, higher = more gyro) | 0.995 |
+| `cf_mag_alpha` | Magnetometer trust for yaw (0-1) | 0.95 |
+| `cf_use_mag` | Enable magnetometer for yaw (0=off, 1=on) | 1.0 |
+| `cf_accel_thresh_lo` | Reject accel below this (g) | 0.8 |
+| `cf_accel_thresh_hi` | Reject accel above this (g) | 1.2 |
 
 ### Mission / Waypoint
 | Parameter | Description | Default |
@@ -273,28 +352,56 @@ void altitude_actor(void *args, ...) {
 | `wp_tolerance_z` | Altitude tolerance (m) | 0.08 |
 | `wp_tolerance_yaw` | Yaw tolerance (rad) | 0.1 |
 | `wp_tolerance_vel` | Velocity tolerance (m/s) | 0.05 |
+| `wp_hover_time_s` | Time to hover at each waypoint (s) | 3.0 |
 
-### Motor Mixing / Trim
-| Parameter | Description | Default |
-|-----------|-------------|---------|
-| `motor_trim_1` | M1 thrust offset (-0.1 to 0.1) | 0.0 |
-| `motor_trim_2` | M2 thrust offset | 0.0 |
-| `motor_trim_3` | M3 thrust offset | 0.0 |
-| `motor_trim_4` | M4 thrust offset | 0.0 |
+---
 
-### Timing
-| Parameter | Description | Default |
-|-----------|-------------|---------|
-| `control_rate_hz` | Control loop frequency | 250 |
-| `telemetry_rate_hz` | Telemetry transmit frequency | 50 |
+## Validation Ranges
 
-### Debug / Override
-| Parameter | Description | Default |
-|-----------|-------------|---------|
-| `log_level` | Log verbosity (0=TRACE, 4=ERROR) | 2 (INFO) |
-| `disable_position` | Disable position control | false (0.0) |
-| `disable_altitude` | Disable altitude control | false (0.0) |
-| `thrust_override` | Manual thrust (0=auto, >0=manual) | 0.0 |
+Parameters must be validated before applying. Reject values outside these ranges:
+
+| Parameter | Min | Max | Notes |
+|-----------|-----|-----|-------|
+| `rate_kp` | 0.0 | 0.1 | Higher causes oscillation |
+| `rate_ki` | 0.0 | 0.01 | Higher causes overshoot |
+| `rate_kd` | 0.0 | 0.01 | Higher amplifies noise |
+| `rate_imax` | 0.0 | 1.0 | |
+| `rate_omax_*` | 0.0 | 0.5 | |
+| `att_kp` | 0.0 | 5.0 | |
+| `att_ki` | 0.0 | 1.0 | |
+| `att_kd` | 0.0 | 0.5 | |
+| `att_imax` | 0.0 | 1.0 | |
+| `att_omax` | 0.0 | 10.0 | rad/s |
+| `alt_kp` | 0.0 | 1.0 | |
+| `alt_ki` | 0.0 | 0.1 | |
+| `alt_kd` | 0.0 | 0.5 | |
+| `alt_imax` | 0.0 | 0.5 | |
+| `alt_omax` | 0.0 | 0.5 | |
+| `vvel_damping` | 0.0 | 1.0 | |
+| `pos_kp` | 0.0 | 0.5 | |
+| `pos_kd` | 0.0 | 0.5 | |
+| `max_tilt` | 0.0 | 0.78 | ~45 deg max |
+| `hover_thrust` | 0.1 | 0.8 | Platform dependent |
+| `emergency_tilt` | 0.1 | 1.57 | Up to 90 deg |
+| `emergency_alt_max` | 0.5 | 10.0 | meters |
+| `motor_deadman_ms` | 10 | 500 | milliseconds |
+| `landed_actual_thresh` | 0.01 | 0.2 | meters |
+| `landing_descent_rate` | -0.5 | -0.05 | Must be negative |
+| `landing_velocity_gain` | 0.0 | 2.0 | |
+| `thrust_ramp_ms` | 0 | 2000 | milliseconds |
+| `kf_q_*` | 1e-6 | 10.0 | |
+| `kf_r_altitude` | 1e-6 | 1.0 | |
+| `hvel_filter_alpha` | 0.0 | 1.0 | 0=no filter, 1=no update |
+| `cf_alpha` | 0.9 | 0.999 | |
+| `cf_mag_alpha` | 0.0 | 1.0 | |
+| `cf_use_mag` | 0.0 | 1.0 | Treated as bool |
+| `cf_accel_thresh_lo` | 0.5 | 0.95 | g |
+| `cf_accel_thresh_hi` | 1.05 | 1.5 | g |
+| `wp_tolerance_xy` | 0.05 | 1.0 | meters |
+| `wp_tolerance_z` | 0.02 | 0.5 | meters |
+| `wp_tolerance_yaw` | 0.01 | 0.5 | radians |
+| `wp_tolerance_vel` | 0.01 | 0.5 | m/s |
+| `wp_hover_time_s` | 0.0 | 60.0 | seconds |
 
 ---
 
@@ -304,9 +411,11 @@ void altitude_actor(void *args, ...) {
 
 | Command | Value | Description |
 |---------|-------|-------------|
-| `CMD_SET_PARAM` | 0x10 | Set a parameter value |
-| `CMD_GET_PARAM` | 0x11 | Request a parameter value |
-| `CMD_PARAM_VALUE` | 0x12 | Response with parameter value |
+| `CMD_SET_PARAM` | 0x30 | Set a parameter value |
+| `CMD_GET_PARAM` | 0x31 | Request a parameter value |
+| `CMD_PARAM_VALUE` | 0x32 | Response with parameter value |
+
+**Note:** Values 0x10-0x12 are reserved for log download commands, 0x20 for GO command.
 
 ### Packet Format
 
@@ -351,22 +460,13 @@ att_kp = 2.0
 
 # List all parameters
 > list
-rate_kp_roll = 0.020
-rate_ki_roll = 0.001
+rate_kp = 0.020
+rate_ki = 0.001
 ...
 ```
 
 **Workflow:** Tune via radio until happy, then update `hal_config.h` with final
 values and reflash. No runtime persistence needed.
-
----
-
-## Validation
-
-Before applying any parameter:
-1. Check `param_id` is valid (< PARAM_COUNT)
-2. Check value is within valid range (defined per-parameter)
-3. Log all parameter changes
 
 ---
 
