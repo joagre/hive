@@ -29,7 +29,7 @@
 #ifdef HAL_HAS_RADIO
 #include "comms_actor.h"
 #endif
-#include "telemetry_logger_actor.h"
+#include "logger_actor.h"
 
 // Bus configuration from HAL (platform-specific)
 #define PILOT_BUS_CONFIG HAL_BUS_CONFIG
@@ -85,8 +85,8 @@ int main(void) {
     // Initialize actor runtime
     hive_init();
 
-    // Note: Log file lifecycle now managed by telemetry_logger_actor
-    // (opens on start, truncates on RESET, closes on exit)
+    // Note: Log file lifecycle now managed by logger_actor
+    // (opens hive log and CSV on start, syncs both, closes on exit)
 
     // Initialize tunable parameters with platform defaults
     static tunable_params_t g_tunable_params;
@@ -138,8 +138,8 @@ int main(void) {
         return 1;
     }
 
-    // Telemetry logger configuration
-    static telemetry_logger_config_t tlog_config = {
+    // Logger configuration (manages both hive log and telemetry CSV)
+    static logger_config_t logger_config = {
         .buses = &buses,
     };
 
@@ -262,15 +262,15 @@ int main(void) {
                        .name = "comms",
                        .pool_block = true}},
 #endif
-        {.start = telemetry_logger_actor,
-         .init = telemetry_logger_init,
-         .init_args = &tlog_config,
-         .init_args_size = sizeof(tlog_config),
-         .name = "tlog",
+        {.start = logger_actor,
+         .init = logger_actor_init,
+         .init_args = &logger_config,
+         .init_args_size = sizeof(logger_config),
+         .name = "logger",
          .auto_register = false,
          .restart = HIVE_CHILD_TEMPORARY, // Not flight-critical, don't restart
          .actor_cfg = {.priority = HIVE_PRIORITY_LOW,
-                       .name = "tlog",
+                       .name = "logger",
                        .pool_block = true}},
     };
 

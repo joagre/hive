@@ -29,9 +29,6 @@
 #define FLIGHT_DURATION_US (20 * 1000000) // Default: 20 seconds
 #endif
 
-// Log sync interval (4 seconds)
-#define LOG_SYNC_INTERVAL_US (4 * 1000000)
-
 // Landing timeout (10 seconds)
 #define LANDING_TIMEOUT_US (10 * 1000000)
 
@@ -102,7 +99,7 @@ void flight_manager_actor(void *args, const hive_spawn_info_t *siblings,
         .attitude = hive_find_sibling(siblings, sibling_count, "attitude"),
         .rate = hive_find_sibling(siblings, sibling_count, "rate"),
         .motor = hive_find_sibling(siblings, sibling_count, "motor"),
-        .tlog = hive_find_sibling(siblings, sibling_count, "tlog"),
+        .tlog = hive_find_sibling(siblings, sibling_count, "logger"),
         .comms = hive_find_sibling(siblings, sibling_count, "comms"),
     };
 
@@ -123,7 +120,7 @@ void flight_manager_actor(void *args, const hive_spawn_info_t *siblings,
         HIVE_LOG_INFO("[FLM] comms actor not found (expected in Webots)");
     }
     if (ids.tlog == HIVE_ACTOR_ID_INVALID) {
-        HIVE_LOG_INFO("[FLM] tlog actor not found");
+        HIVE_LOG_INFO("[FLM] logger actor not found");
     }
 
     // Log flight profile and battery for post-mortem verification
@@ -134,7 +131,6 @@ void flight_manager_actor(void *args, const hive_spawn_info_t *siblings,
     // State machine
     fm_state_t state = FM_STATE_IDLE;
     uint8_t countdown_s = 0;
-    hive_timer_id_t sync_timer = HIVE_TIMER_ID_INVALID;
     hive_timer_id_t countdown_timer = HIVE_TIMER_ID_INVALID;
     hive_timer_id_t flight_timer = HIVE_TIMER_ID_INVALID;
     hive_timer_id_t landing_timer = HIVE_TIMER_ID_INVALID;
@@ -214,9 +210,6 @@ void flight_manager_actor(void *args, const hive_spawn_info_t *siblings,
             HIVE_LOG_INFO("[FLM] Arming motors");
             hal_arm();
 
-            // Start sync timer for log syncing
-            hive_timer_every(LOG_SYNC_INTERVAL_US, &sync_timer);
-
             // Transition to ARMED
             countdown_s = (uint8_t)params->armed_countdown_s;
             HIVE_LOG_INFO("[FLM] Preflight complete - ARMED (countdown=%us)",
@@ -230,7 +223,7 @@ void flight_manager_actor(void *args, const hive_spawn_info_t *siblings,
 
         case FM_STATE_ARMED: {
             // Countdown with ABORT/STATUS handling
-            enum { SEL_COUNTDOWN, SEL_ABORT, SEL_STATUS_REQ, SEL_SYNC };
+            enum { SEL_COUNTDOWN, SEL_ABORT, SEL_STATUS_REQ };
             hive_select_source_t armed_sources[] = {
                 [SEL_COUNTDOWN] = {HIVE_SEL_IPC,
                                    .ipc = {HIVE_SENDER_ANY, HIVE_MSG_TIMER,
@@ -240,16 +233,12 @@ void flight_manager_actor(void *args, const hive_spawn_info_t *siblings,
                 [SEL_STATUS_REQ] = {HIVE_SEL_IPC,
                                     .ipc = {HIVE_SENDER_ANY, HIVE_MSG_REQUEST,
                                             HIVE_TAG_ANY}},
-                [SEL_SYNC] = {HIVE_SEL_IPC,
-                              .ipc = {HIVE_SENDER_ANY, HIVE_MSG_TIMER,
-                                      sync_timer}},
             };
             size_t num_armed_sources =
-                (ids.comms != HIVE_ACTOR_ID_INVALID) ? 4 : 3;
+                (ids.comms != HIVE_ACTOR_ID_INVALID) ? 3 : 2;
             // If no comms, skip ABORT source
             if (ids.comms == HIVE_ACTOR_ID_INVALID) {
                 armed_sources[SEL_ABORT] = armed_sources[SEL_STATUS_REQ];
-                armed_sources[SEL_STATUS_REQ] = armed_sources[SEL_SYNC];
             }
 
             hive_select_result_t result;
@@ -268,17 +257,10 @@ void flight_manager_actor(void *args, const hive_spawn_info_t *siblings,
                 continue;
             }
 
-            // Handle sync timer
-            if (result.ipc.tag == sync_timer) {
-                hive_log_file_sync();
-                continue;
-            }
-
             // Handle ABORT
             if (result.ipc.tag == NOTIFY_ABORT) {
                 HIVE_LOG_INFO("[FLM] ABORT received - returning to IDLE");
                 hive_timer_cancel(countdown_timer);
-                hive_timer_cancel(sync_timer);
                 hal_disarm();
                 HIVE_LOG_INFO("[FLM] Motors disarmed");
                 state = FM_STATE_IDLE;
@@ -310,22 +292,19 @@ void flight_manager_actor(void *args, const hive_spawn_info_t *siblings,
         }
 
         case FM_STATE_FLYING: {
-            // Wait for flight timer, sync timer, or STATUS request
-            enum { SEL_FLIGHT, SEL_SYNC, SEL_STATUS_REQ };
+            // Wait for flight timer or STATUS request
+            enum { SEL_FLIGHT, SEL_STATUS_REQ };
             hive_select_source_t flying_sources[] = {
                 [SEL_FLIGHT] = {HIVE_SEL_IPC,
                                 .ipc = {HIVE_SENDER_ANY, HIVE_MSG_TIMER,
                                         flight_timer}},
-                [SEL_SYNC] = {HIVE_SEL_IPC,
-                              .ipc = {HIVE_SENDER_ANY, HIVE_MSG_TIMER,
-                                      sync_timer}},
                 [SEL_STATUS_REQ] = {HIVE_SEL_IPC,
                                     .ipc = {HIVE_SENDER_ANY, HIVE_MSG_REQUEST,
                                             HIVE_TAG_ANY}},
             };
 
             hive_select_result_t result;
-            hive_status_t s = hive_select(flying_sources, 3, &result, -1);
+            hive_status_t s = hive_select(flying_sources, 2, &result, -1);
             if (HIVE_FAILED(s)) {
                 HIVE_LOG_ERROR("[FLM] select (flying) failed: %s",
                                HIVE_ERR_STR(s));
@@ -339,12 +318,6 @@ void flight_manager_actor(void *args, const hive_spawn_info_t *siblings,
                 continue;
             }
 
-            // Handle sync timer
-            if (result.ipc.tag == sync_timer) {
-                hive_log_file_sync();
-                continue;
-            }
-
             // Flight timer expired
             HIVE_LOG_INFO(
                 "[FLM] Flight duration complete - initiating LANDING");
@@ -355,8 +328,8 @@ void flight_manager_actor(void *args, const hive_spawn_info_t *siblings,
         }
 
         case FM_STATE_LANDING: {
-            // Wait for LANDED, landing timeout, sync timer, or STATUS request
-            enum { SEL_LANDED, SEL_TIMEOUT, SEL_SYNC, SEL_STATUS_REQ };
+            // Wait for LANDED, landing timeout, or STATUS request
+            enum { SEL_LANDED, SEL_TIMEOUT, SEL_STATUS_REQ };
             hive_select_source_t landing_sources[] = {
                 [SEL_LANDED] = {HIVE_SEL_IPC,
                                 .ipc = {ids.altitude, HIVE_MSG_NOTIFY,
@@ -364,16 +337,13 @@ void flight_manager_actor(void *args, const hive_spawn_info_t *siblings,
                 [SEL_TIMEOUT] = {HIVE_SEL_IPC,
                                  .ipc = {HIVE_SENDER_ANY, HIVE_MSG_TIMER,
                                          landing_timer}},
-                [SEL_SYNC] = {HIVE_SEL_IPC,
-                              .ipc = {HIVE_SENDER_ANY, HIVE_MSG_TIMER,
-                                      sync_timer}},
                 [SEL_STATUS_REQ] = {HIVE_SEL_IPC,
                                     .ipc = {HIVE_SENDER_ANY, HIVE_MSG_REQUEST,
                                             HIVE_TAG_ANY}},
             };
 
             hive_select_result_t result;
-            hive_status_t s = hive_select(landing_sources, 4, &result, -1);
+            hive_status_t s = hive_select(landing_sources, 3, &result, -1);
             if (HIVE_FAILED(s)) {
                 HIVE_LOG_ERROR("[FLM] select (landing) failed: %s",
                                HIVE_ERR_STR(s));
@@ -384,12 +354,6 @@ void flight_manager_actor(void *args, const hive_spawn_info_t *siblings,
             if (result.ipc.class == HIVE_MSG_REQUEST) {
                 uint8_t status_reply[2] = {(uint8_t)state, 0};
                 hive_ipc_reply(&result.ipc, status_reply, sizeof(status_reply));
-                continue;
-            }
-
-            // Handle sync timer
-            if (result.ipc.tag == sync_timer) {
-                hive_log_file_sync();
                 continue;
             }
 
@@ -409,12 +373,6 @@ void flight_manager_actor(void *args, const hive_spawn_info_t *siblings,
             // Stop motors, disarm, return to IDLE
             HIVE_LOG_INFO("[FLM] LANDED - stopping motors");
             hive_ipc_notify(ids.motor, NOTIFY_FLIGHT_STOP, NULL, 0);
-
-            // Cancel sync timer
-            if (sync_timer != HIVE_TIMER_ID_INVALID) {
-                hive_timer_cancel(sync_timer);
-                sync_timer = HIVE_TIMER_ID_INVALID;
-            }
 
             // Disarm motors
             hal_disarm();

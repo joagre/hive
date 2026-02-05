@@ -119,7 +119,7 @@ Ground Station
 | rate_actor | Reset PIDs | - |
 | motor_actor | Clear started flag, zero outputs | Handle START/STOP |
 | waypoint_actor | Reset index | Handle START |
-| logger_actor | Truncate logs | - |
+| logger_actor | Truncate CSV, sync hive log | - |
 | comms_actor | No-op | Relay GO/ABORT/STATUS |
 | flight_manager | hal_calibrate, hal_arm, hal_disarm | Orchestrate all |
 
@@ -158,7 +158,7 @@ Simulation mode: `auto_go_delay_s = 2.0` in Webots (no radio available).
 
 3. **HAL ownership** - Flight manager owns HAL lifecycle calls (hal_calibrate, hal_arm, hal_disarm) to keep hardware coordination in one place.
 
-4. **Log truncation** - logger_actor owns both hive log and telemetry CSV; truncates on RESET via close/reopen
+4. **Log ownership** - logger_actor owns both hive log and telemetry CSV; opens at startup, syncs periodically, truncates CSV on RESET
 
 5. **Emergency cutoff** - altitude_actor sends LANDED for both normal landing and emergency cutoff; flight_manager handles both the same way
 
@@ -175,7 +175,7 @@ All components implemented:
 7. **rate_actor.c** - RESET handler resets PIDs
 8. **position_actor.c** - RESET handler clears state
 9. **waypoint_actor.c** - RESET handler resets waypoint index
-10. **telemetry_logger_actor.c** - RESET handler truncates log file
+10. **logger_actor.c** - Owns hive log and CSV lifecycle, RESET truncates CSV
 11. **comms_actor.c** - CMD_GO, CMD_ABORT, CMD_STATUS handlers
 12. **tunable_params.h/c** - Added armed_countdown_s (45.0), auto_go_delay_s (0.0, 2.0 in Webots)
 13. **pilot.c** - Removed hal_calibrate/hal_arm calls, flight_manager is PERMANENT
