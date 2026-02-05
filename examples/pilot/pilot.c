@@ -84,6 +84,7 @@ int main(void) {
 
     // Initialize actor runtime
     if (HIVE_FAILED(hive_init())) {
+        hal_printf("[PILOT] hive_init() failed\n");
         hal_cleanup();
         return 1;
     }
