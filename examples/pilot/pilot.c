@@ -83,7 +83,10 @@ int main(void) {
     // (sensor_actor calls hal_calibrate() on RESET, motor_actor calls hal_arm())
 
     // Initialize actor runtime
-    hive_init();
+    if (HIVE_FAILED(hive_init())) {
+        hal_cleanup();
+        return 1;
+    }
 
     // Open hive log file early so all HIVE_LOG* calls go to disk
     // Logger actor will sync periodically; we close at exit
