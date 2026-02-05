@@ -132,11 +132,10 @@ static void controller(void *args, const hive_spawn_info_t *siblings,
         [SEL_HEARTBEAT] = {HIVE_SEL_IPC,
                            .ipc = {HIVE_SENDER_ANY, HIVE_MSG_TIMER, HIVE_ID_ANY,
                                    heartbeat}},
-        [SEL_STATUS] = {HIVE_SEL_IPC, .ipc = {HIVE_SENDER_ANY, HIVE_MSG_NOTIFY,
-                                              CMD_STATUS, HIVE_TAG_ANY}},
-        [SEL_SHUTDOWN] = {HIVE_SEL_IPC,
-                          .ipc = {HIVE_SENDER_ANY, HIVE_MSG_NOTIFY,
-                                  CMD_SHUTDOWN, HIVE_TAG_ANY}},
+        [SEL_STATUS] = {HIVE_SEL_IPC,
+                        .ipc = {HIVE_SENDER_ANY, HIVE_MSG_NOTIFY, CMD_STATUS}},
+        [SEL_SHUTDOWN] = {HIVE_SEL_IPC, .ipc = {HIVE_SENDER_ANY,
+                                                HIVE_MSG_NOTIFY, CMD_SHUTDOWN}},
     };
 
     int sensor_count = 0;

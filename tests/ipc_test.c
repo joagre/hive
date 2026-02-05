@@ -975,8 +975,8 @@ static void test19_multi_filter_basic(void *args,
 
     // Wait for either TAG_A or TAG_B (now matched by id, not tag)
     hive_recv_filter_t filters[] = {
-        {HIVE_SENDER_ANY, HIVE_MSG_NOTIFY, TEST19_TAG_A, HIVE_TAG_ANY},
-        {HIVE_SENDER_ANY, HIVE_MSG_NOTIFY, TEST19_TAG_B, HIVE_TAG_ANY},
+        {.class = HIVE_MSG_NOTIFY, .id = TEST19_TAG_A},
+        {.class = HIVE_MSG_NOTIFY, .id = TEST19_TAG_B},
     };
     hive_message_t msg;
     size_t matched;
@@ -1022,8 +1022,8 @@ static void test20_multi_filter_second(void *args,
 
     // Wait for either TAG_A or TAG_B (now matched by id, not tag)
     hive_recv_filter_t filters[] = {
-        {HIVE_SENDER_ANY, HIVE_MSG_NOTIFY, TEST19_TAG_A, HIVE_TAG_ANY},
-        {HIVE_SENDER_ANY, HIVE_MSG_NOTIFY, TEST19_TAG_B, HIVE_TAG_ANY},
+        {.class = HIVE_MSG_NOTIFY, .id = TEST19_TAG_A},
+        {.class = HIVE_MSG_NOTIFY, .id = TEST19_TAG_B},
     };
     hive_message_t msg;
     size_t matched;
