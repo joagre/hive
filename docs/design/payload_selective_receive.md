@@ -103,6 +103,30 @@ All `*_ANY` constants are 0. C's designated initializer behavior (unspecified fi
 
 You only specify what you care about. Everything else matches anything.
 
+### Simple Example: Two Notifications
+
+```c
+hive_select_source_t sources[] = {
+    {HIVE_SEL_IPC, .ipc = {.sender = actor_a,
+                           .class = HIVE_MSG_NOTIFY,
+                           .id = NOTIFY_START}},
+    {HIVE_SEL_IPC, .ipc = {.sender = actor_b,
+                           .class = HIVE_MSG_NOTIFY,
+                           .id = NOTIFY_LANDED}},
+};
+
+hive_select_result_t result;
+hive_select(sources, 2, &result, -1);
+
+if (result.index == 0) {
+    handle_start();
+} else {
+    handle_landed();
+}
+```
+
+Same class, different ids. Tag defaults to ANY (0).
+
 ### Complete Example
 
 ```c
