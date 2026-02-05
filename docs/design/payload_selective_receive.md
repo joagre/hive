@@ -85,34 +85,77 @@ typedef struct {
 } hive_ipc_filter_t;
 ```
 
-### Clean Usage
+### Wildcard Defaults
+
+All `*_ANY` constants are 0. C's designated initializer behavior (unspecified fields = 0) gives wildcards for free:
 
 ```c
+#define HIVE_SENDER_ANY  0
+#define HIVE_MSG_ANY     0
+#define HIVE_ID_ANY      0
+#define HIVE_TAG_ANY     0
+
+// Valid values start from 1
+#define HIVE_MSG_NOTIFY  1
+#define HIVE_MSG_REQUEST 2
+// etc.
+```
+
+You only specify what you care about. Everything else matches anything.
+
+### Complete Example
+
+```c
+enum { SEL_RESET, SEL_ARM, SEL_LANDED, SEL_TIMER };
+
 hive_select_source_t sources[] = {
-    // Filter requests by id
-    {HIVE_SEL_IPC, .ipc = {.sender = fm,
-                           .class = HIVE_MSG_REQUEST,
-                           .id = REQUEST_RESET}},
-    {HIVE_SEL_IPC, .ipc = {.sender = fm,
-                           .class = HIVE_MSG_REQUEST,
-                           .id = REQUEST_ARM}},
-    // Filter notifications by id
-    {HIVE_SEL_IPC, .ipc = {.sender = altitude,
-                           .class = HIVE_MSG_NOTIFY,
-                           .id = NOTIFY_LANDED}},
-    // Filter timers by tag (timer_id)
-    {HIVE_SEL_IPC, .ipc = {.sender = HIVE_SENDER_ANY,
-                           .class = HIVE_MSG_TIMER,
-                           .tag = my_timer}},
+    // Filter requests by id (tag defaults to ANY)
+    [SEL_RESET] = {HIVE_SEL_IPC, .ipc = {.sender = fm,
+                                          .class = HIVE_MSG_REQUEST,
+                                          .id = REQUEST_RESET}},
+    [SEL_ARM]   = {HIVE_SEL_IPC, .ipc = {.sender = fm,
+                                          .class = HIVE_MSG_REQUEST,
+                                          .id = REQUEST_ARM}},
+    // Filter notifications by id (tag defaults to ANY)
+    [SEL_LANDED] = {HIVE_SEL_IPC, .ipc = {.sender = altitude,
+                                           .class = HIVE_MSG_NOTIFY,
+                                           .id = NOTIFY_LANDED}},
+    // Filter timers by tag (id defaults to ANY)
+    [SEL_TIMER] = {HIVE_SEL_IPC, .ipc = {.class = HIVE_MSG_TIMER,
+                                          .tag = my_timer}},
 };
 
-// Handler - no payload inspection needed
-if (result.index == SEL_RESET) {
+hive_select_result_t result;
+hive_select(sources, 4, &result, -1);
+
+switch (result.index) {
+case SEL_RESET:
+    // Request - do work and reply
     do_reset();
-    uint8_t reply = REPLY_OK;
-    hive_ipc_reply(&result.ipc, &reply, sizeof(reply));
+    uint8_t status = REPLY_OK;
+    hive_ipc_reply(&result.ipc, &status, sizeof(status));
+    break;
+
+case SEL_ARM:
+    // Request - do work and reply
+    do_arm();
+    uint8_t status = REPLY_OK;
+    hive_ipc_reply(&result.ipc, &status, sizeof(status));
+    break;
+
+case SEL_LANDED:
+    // Notification - no reply needed
+    handle_landed();
+    break;
+
+case SEL_TIMER:
+    // Timer tick - no reply needed
+    handle_tick();
+    break;
 }
 ```
+
+Reply preserves tag for correlation. The id in replies is irrelevant - the requester matches by tag.
 
 ## Migration
 
