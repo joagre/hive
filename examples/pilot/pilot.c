@@ -87,8 +87,7 @@ int main(void) {
 
     // Open hive log file early so all HIVE_LOG* calls go to disk
     // Logger actor will sync periodically; we close at exit
-    hive_log_file_open(
-        "/tmp/hive.log");  // Webots: /tmp, Crazyflie: override via config
+    hive_log_file_open(HIVE_LOG_FILE_PATH);
     hal_flush_early_log(); // Replay early HAL messages to log file
 
     // Initialize tunable parameters with platform defaults
@@ -147,24 +146,13 @@ int main(void) {
     };
 
     // clang-format off
-    // Define child specs for supervisor (9 flight actors + optional comms)
+    // Define child specs for supervisor (9 flight actors + optional comms + logger)
     // Each actor's init function receives pilot_buses_t and extracts what it needs.
-    // Logger spawns first to open hive log before other actors start.
     // Control loop order: sensor -> estimator -> waypoint -> altitude ->
     //                     position -> attitude -> rate -> motor -> flight_manager
-    // Comms runs at LOW priority and uses TEMPORARY restart.
+    // Comms and logger run at LOW priority with TEMPORARY restart.
     // clang-format on
     hive_child_spec_t children[] = {
-        {.start = logger_actor,
-         .init = logger_actor_init,
-         .init_args = &logger_config,
-         .init_args_size = sizeof(logger_config),
-         .name = "logger",
-         .auto_register = false,
-         .restart = HIVE_CHILD_TEMPORARY, // Not flight-critical, don't restart
-         .actor_cfg = {.priority = HIVE_PRIORITY_LOW,
-                       .name = "logger",
-                       .pool_block = true}},
         {.start = sensor_actor,
          .init = sensor_actor_init,
          .init_args = &buses,
@@ -276,6 +264,16 @@ int main(void) {
                        .name = "comms",
                        .pool_block = true}},
 #endif
+        {.start = logger_actor,
+         .init = logger_actor_init,
+         .init_args = &logger_config,
+         .init_args_size = sizeof(logger_config),
+         .name = "logger",
+         .auto_register = false,
+         .restart = HIVE_CHILD_TEMPORARY, // Not flight-critical, don't restart
+         .actor_cfg = {.priority = HIVE_PRIORITY_LOW,
+                       .name = "logger",
+                       .pool_block = true}},
     };
 
     // Configure supervisor with ONE_FOR_ALL strategy:
