@@ -1,189 +1,127 @@
-# Payload-Based Selective Receive
+# Explicit Message ID Field
 
 ## Problem
 
-The current IPC API makes it awkward to dispatch on request types when using `hive_ipc_request()`. The receiver cannot filter by specific request type in `hive_select()` or `hive_ipc_recv_match()` - they must accept all requests and manually dispatch based on payload content.
-
-### Why This Happens
-
-`hive_ipc_request()` auto-generates a unique tag for request/reply correlation. This means the tag field is consumed for internal use and unavailable for application-level dispatch. Receivers must use `HIVE_TAG_ANY` to accept requests.
+The current IPC API makes it awkward to dispatch on request types. `hive_ipc_request()` auto-generates a tag for request/reply correlation, leaving no way to filter by request type. Receivers must use `HIVE_TAG_ANY` and manually inspect payloads.
 
 ### Current Pattern (Verbose)
 
 ```c
-// Receiver must accept ANY request, then manually dispatch
+// Can only filter sender + class, must use HIVE_TAG_ANY for requests
 hive_select_source_t sources[] = {
-    [SEL_REQUEST] = {HIVE_SEL_IPC,
-                     .ipc = {flight_manager, HIVE_MSG_REQUEST, HIVE_TAG_ANY}},
+    {HIVE_SEL_IPC, .ipc = {flight_manager, HIVE_MSG_REQUEST, HIVE_TAG_ANY}},
 };
 
-// ... after hive_select() ...
-
+// Manual payload inspection for dispatch
 if (result.index == SEL_REQUEST) {
-    // Manual payload inspection for dispatch
     uint8_t reply = REPLY_OK;
     if (result.ipc.len != 1 ||
         ((uint8_t *)result.ipc.data)[0] != REQUEST_RESET) {
         HIVE_LOG_WARN("[XXX] Unknown request ignored");
         reply = REPLY_FAIL;
     } else {
-        // Handle RESET
         do_reset();
     }
     hive_ipc_reply(&result.ipc, &reply, sizeof(reply));
 }
 ```
 
-This pattern repeats in every actor that handles requests, leading to boilerplate and potential bugs.
+This pattern repeats in every actor that handles requests.
 
-### Impact
+## Solution
 
-- Every actor handling requests needs the same boilerplate
-- Easy to forget payload validation
-- Cannot wait for specific request types - must accept all and filter
-- Multiple request types require nested if/else or switch on payload
+Add an explicit `id` field to the message header for dispatch. Separate concerns:
 
-## Proposed Solutions
+- `id` - Message type (user-provided, for dispatch)
+- `tag` - Correlation (auto-generated for request/reply, user-provided for notify/timer)
 
-### Option 1: Payload Prefix Filter
-
-Add optional payload prefix matching to selective receive.
+### Message Structure
 
 ```c
-// Filter by first N bytes of payload
 typedef struct {
     hive_actor_id_t sender;
-    hive_message_class_t class;
-    hive_tag_t tag;
-    const void *payload_prefix;  // NEW: Match if payload starts with this
-    size_t payload_prefix_len;   // NEW: Length of prefix to match
-} hive_ipc_filter_t;
-
-// Usage - only receive RESET requests
-hive_select_source_t sources[] = {
-    [SEL_RESET] = {HIVE_SEL_IPC,
-                   .ipc = {flight_manager, HIVE_MSG_REQUEST, HIVE_TAG_ANY},
-                   .payload_prefix = &REQUEST_RESET,
-                   .payload_prefix_len = 1},
-    [SEL_ARM] = {HIVE_SEL_IPC,
-                 .ipc = {flight_manager, HIVE_MSG_REQUEST, HIVE_TAG_ANY},
-                 .payload_prefix = &REQUEST_ARM,
-                 .payload_prefix_len = 1},
-};
+    hive_msg_class_t class;
+    uint16_t id;       // Message type - user provided
+    uint32_t tag;      // Correlation - auto for request, user for notify/timer
+    void *data;
+    size_t len;
+} hive_message_t;
 ```
 
-**Pros:**
-- Clean API extension
-- Backward compatible (prefix = NULL means no filtering)
-- Works with existing message format
+Header grows by 2 bytes. For 128-byte max messages, that's 1.5% overhead.
 
-**Cons:**
-- Adds complexity to mailbox scanning
-- Multiple sources may need to scan same messages
-
-### Option 2: Request Subtype Field
-
-Add a dedicated subtype field to the message header for application use.
+### API Changes
 
 ```c
-// In message header (alongside class, tag)
+// Notify - user controls both id and tag
+hive_ipc_notify(to, id, tag, data, len);
+// Common case: hive_ipc_notify(to, NOTIFY_START, HIVE_TAG_NONE, NULL, 0);
+
+// Request - user provides id, tag auto-generated for correlation
+hive_ipc_request(to, id, data, len, reply, timeout);
+
+// Receive - filter includes id
+hive_ipc_recv_match(from, class, id, tag, msg, timeout);
+```
+
+### Filter Structure
+
+```c
 typedef struct {
-    uint8_t class;
-    uint8_t subtype;  // NEW: Application-defined request type
-    uint16_t tag;
-    // ... payload follows
-} hive_message_header_t;
-
-// New API
-hive_ipc_request_typed(to, subtype, data, len, reply, timeout);
-
-// Usage
-hive_select_source_t sources[] = {
-    [SEL_RESET] = {HIVE_SEL_IPC,
-                   .ipc = {flight_manager, HIVE_MSG_REQUEST, HIVE_TAG_ANY,
-                           .subtype = REQUEST_RESET}},
-};
+    hive_actor_id_t sender;   // HIVE_SENDER_ANY for wildcard
+    hive_msg_class_t class;   // HIVE_MSG_ANY for wildcard
+    uint16_t id;              // HIVE_ID_ANY for wildcard
+    uint32_t tag;             // HIVE_TAG_ANY for wildcard
+} hive_ipc_filter_t;
 ```
 
-**Pros:**
-- Clean separation of correlation (tag) and dispatch (subtype)
-- No payload inspection needed
-- Efficient filtering in mailbox
-
-**Cons:**
-- Requires header format change (breaking change)
-- Uses more header space (may matter on constrained systems)
-
-### Option 3: User-Provided Tag for Request
-
-Allow callers to provide their own tag when correlation isn't needed.
+### Clean Usage
 
 ```c
-// Existing API - auto-generated tag
-hive_ipc_request(to, data, len, reply, timeout);
-
-// New API - user-provided tag
-hive_ipc_request_with_tag(to, tag, data, len, reply, timeout);
-
-// Sender uses known tag
-hive_ipc_request_with_tag(motor, REQUEST_RESET, &payload, len, &reply, timeout);
-
-// Receiver can filter by tag
 hive_select_source_t sources[] = {
-    [SEL_RESET] = {HIVE_SEL_IPC,
-                   .ipc = {HIVE_SENDER_ANY, HIVE_MSG_REQUEST, REQUEST_RESET}},
+    // Filter requests by type
+    {HIVE_SEL_IPC, .ipc = {.sender = fm,
+                           .class = HIVE_MSG_REQUEST,
+                           .id = REQUEST_RESET}},
+    {HIVE_SEL_IPC, .ipc = {.sender = fm,
+                           .class = HIVE_MSG_REQUEST,
+                           .id = REQUEST_ARM}},
+    // Filter timer by tag
+    {HIVE_SEL_IPC, .ipc = {.sender = HIVE_SENDER_ANY,
+                           .class = HIVE_MSG_TIMER,
+                           .tag = my_timer}},
+    // Filter notification by type
+    {HIVE_SEL_IPC, .ipc = {.sender = altitude,
+                           .class = HIVE_MSG_NOTIFY,
+                           .id = NOTIFY_LANDED}},
 };
-```
 
-**Pros:**
-- Minimal API change
-- Reuses existing tag field
-- No header format change
-
-**Cons:**
-- Tag serves dual purpose (correlation + dispatch) - confusing
-- Caller must ensure tags don't collide with auto-generated ones
-- Breaks request/reply correlation if same tag used for multiple requests
-
-## Recommendation
-
-**Option 1 (Payload Prefix Filter)** is the cleanest solution:
-- No breaking changes to message format
-- Backward compatible
-- Matches how applications already use payloads
-- Can be implemented incrementally
-
-Implementation would add two fields to `hive_ipc_filter_t` and modify `hive_mailbox_scan()` to compare payload prefix when specified.
-
-## Workaround (Current)
-
-Until this is implemented, use a helper macro to reduce boilerplate:
-
-```c
-// Helper macro for request dispatch
-#define HANDLE_REQUEST(result, expected_type, handler, fail_handler) \
-    do { \
-        uint8_t _reply = REPLY_OK; \
-        if ((result).ipc.len != 1 || \
-            ((uint8_t *)(result).ipc.data)[0] != (expected_type)) { \
-            _reply = REPLY_FAIL; \
-            fail_handler; \
-        } else { \
-            handler; \
-        } \
-        hive_ipc_reply(&(result).ipc, &_reply, sizeof(_reply)); \
-    } while (0)
-
-// Usage
-if (result.index == SEL_REQUEST) {
-    HANDLE_REQUEST(result, REQUEST_RESET,
-        { do_reset(); },
-        { HIVE_LOG_WARN("[XXX] Unknown request"); });
+// Handler - no payload inspection needed
+if (result.index == SEL_RESET) {
+    do_reset();
+    uint8_t reply = REPLY_OK;
+    hive_ipc_reply(&result.ipc, &reply, sizeof(reply));
 }
 ```
 
-## References
+## Migration
 
-- `examples/pilot/` - Multiple actors demonstrate the verbose pattern
-- `docs/spec/api.md` - IPC API specification
-- `man/man3/hive_ipc.3` - IPC man page
+This is a breaking API change affecting:
+
+- `hive_ipc_notify()` - adds `id` parameter
+- `hive_ipc_request()` - adds `id` parameter
+- `hive_ipc_recv_match()` - adds `id` parameter
+- `hive_select_source_t` - filter struct gains `id` field
+- Message header format - gains `id` field
+
+All existing code using IPC will need updates.
+
+## Benefits
+
+- No hidden bit packing or magic
+- No manual payload inspection
+- Self-documenting: `.id = REQUEST_RESET` is explicit
+- Filter by `id` for dispatch, `tag` for correlation
+- Clean separation of concerns
+
+The 2-byte overhead buys a beautiful, honest API.
