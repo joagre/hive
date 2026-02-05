@@ -161,27 +161,73 @@ Reply preserves tag for correlation. The id in replies is irrelevant - the reque
 
 This is a breaking API change affecting:
 
-- `hive_ipc_notify()` - `tag` parameter becomes `id` (semantic change)
+**Send side:**
+- `hive_ipc_notify()` - `tag` parameter becomes `id`
+- `hive_ipc_notify_ex()` - `tag` parameter becomes `id`
 - `hive_ipc_request()` - adds `id` parameter
+- `hive_ipc_named_notify()` - `tag` parameter becomes `id`
+- `hive_ipc_named_request()` - adds `id` parameter
+
+**Receive side:**
 - `hive_ipc_recv_match()` - adds `id` parameter
-- `hive_select_source_t` - filter struct gains `id` field
-- Message header format - gains `id` field
+- `hive_ipc_recv_matches()` - filter struct gains `id` field
+- `hive_select()` - source filter struct gains `id` field
+
+**Internal:**
+- Message header format - gains `id` field (2 bytes)
+- `hive_ipc_filter_t` struct - gains `id` field
 
 All existing code using IPC will need updates.
 
 ## API Summary
 
+### Send Functions
+
 | Function | Old | New | Change |
 |----------|-----|-----|--------|
 | `hive_ipc_notify` | `(to, tag, data, len)` | `(to, id, data, len)` | Semantic (tag to id) |
+| `hive_ipc_notify_ex` | `(to, class, tag, data, len)` | `(to, class, id, data, len)` | Semantic (tag to id) |
 | `hive_ipc_request` | `(to, data, len, reply, timeout)` | `(to, id, data, len, reply, timeout)` | Adds id |
 | `hive_ipc_reply` | `(msg, data, len)` | `(msg, data, len)` | Unchanged |
-| `hive_ipc_recv_match` | `(from, class, tag, msg, timeout)` | `(from, class, id, tag, msg, timeout)` | Adds id |
-| `hive_ipc_recv` | `(msg, timeout)` | `(msg, timeout)` | Unchanged |
-| `hive_ipc_notify_ex` | `(to, class, tag, data, len)` | `(to, class, id, data, len)` | Semantic (tag to id) |
 | `hive_ipc_named_notify` | `(name, tag, data, len)` | `(name, id, data, len)` | Semantic (tag to id) |
 | `hive_ipc_named_request` | `(name, data, len, reply, timeout)` | `(name, id, data, len, reply, timeout)` | Adds id |
-| Filter struct | `{sender, class, tag}` | `{sender, class, id, tag}` | Adds id |
+
+### Receive Functions
+
+| Function | Old | New | Change |
+|----------|-----|-----|--------|
+| `hive_ipc_recv` | `(msg, timeout)` | `(msg, timeout)` | Unchanged |
+| `hive_ipc_recv_match` | `(from, class, tag, msg, timeout)` | `(from, class, id, tag, msg, timeout)` | Adds id |
+| `hive_ipc_recv_matches` | `(filters, n, msg, timeout, idx)` | `(filters, n, msg, timeout, idx)` | Filter struct gains id |
+
+### Select Functions
+
+| Function | Old | New | Change |
+|----------|-----|-----|--------|
+| `hive_select` | `(sources, n, result, timeout)` | `(sources, n, result, timeout)` | Source filter gains id |
+| `hive_bus_read` | - | - | Unchanged (bus, not IPC) |
+| `hive_event_wait` | - | - | Unchanged (HAL events) |
+
+### Filter Struct
+
+```c
+// Old
+typedef struct {
+    hive_actor_id_t sender;
+    hive_msg_class_t class;
+    uint32_t tag;
+} hive_ipc_filter_t;
+
+// New
+typedef struct {
+    hive_actor_id_t sender;   // HIVE_SENDER_ANY = 0
+    hive_msg_class_t class;   // HIVE_MSG_ANY = 0
+    uint16_t id;              // HIVE_ID_ANY = 0 (NEW)
+    uint32_t tag;             // HIVE_TAG_ANY = 0
+} hive_ipc_filter_t;
+```
+
+Used by: `hive_ipc_recv_match`, `hive_ipc_recv_matches`, `hive_select` (inside `hive_select_source_t`)
 
 ## Use Case Verification
 
