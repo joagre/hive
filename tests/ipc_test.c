@@ -1055,8 +1055,8 @@ static void test21_multi_filter_timeout(void *args,
 
     // Wait for messages that won't arrive
     hive_recv_filter_t filters[] = {
-        {HIVE_SENDER_ANY, HIVE_MSG_NOTIFY, HIVE_ID_ANY, 9999},
-        {HIVE_SENDER_ANY, HIVE_MSG_NOTIFY, HIVE_ID_ANY, 8888},
+        {.class = HIVE_MSG_NOTIFY, .tag = 9999},
+        {.class = HIVE_MSG_NOTIFY, .tag = 8888},
     };
     hive_message_t msg;
     hive_status_t status = hive_ipc_recv_matches(filters, 2, &msg, 100, NULL);
@@ -1084,7 +1084,7 @@ static void test22_multi_filter_nonblocking(void *args,
     printf("\nTest 22: Multi-filter non-blocking returns WOULDBLOCK\n");
 
     hive_recv_filter_t filters[] = {
-        {HIVE_SENDER_ANY, HIVE_MSG_NOTIFY, HIVE_ID_ANY, 1234},
+        {.class = HIVE_MSG_NOTIFY, .tag = 1234},
     };
     hive_message_t msg;
     hive_status_t status = hive_ipc_recv_matches(filters, 1, &msg, 0, NULL);

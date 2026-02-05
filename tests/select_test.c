@@ -55,9 +55,7 @@ static void test1_ipc_wildcard(void *args, const hive_spawn_info_t *siblings,
     hive_ipc_notify(self, 123, &data, sizeof(data));
 
     // Use hive_select with wildcard IPC filter
-    hive_select_source_t source = {
-        .type = HIVE_SEL_IPC,
-        .ipc = {HIVE_SENDER_ANY, HIVE_MSG_ANY, HIVE_ID_ANY}};
+    hive_select_source_t source = {.type = HIVE_SEL_IPC, .ipc = {0}};
     hive_select_result_t result;
     hive_status_t status = hive_select(&source, 1, &result, 100);
 
@@ -105,7 +103,7 @@ static void test2_ipc_filtered(void *args, const hive_spawn_info_t *siblings,
 
     // Select only messages with TAG_B (id field)
     hive_select_source_t source = {
-        .type = HIVE_SEL_IPC, .ipc = {HIVE_SENDER_ANY, HIVE_MSG_NOTIFY, TAG_B}};
+        .type = HIVE_SEL_IPC, .ipc = {.class = HIVE_MSG_NOTIFY, .id = TAG_B}};
     hive_select_result_t result;
     hive_status_t status = hive_select(&source, 1, &result, 100);
 
@@ -245,10 +243,8 @@ static void test4_ipc_multi_first(void *args, const hive_spawn_info_t *siblings,
 
     // Wait for either TAG_A or TAG_B (filtering by id)
     hive_select_source_t sources[] = {
-        {.type = HIVE_SEL_IPC,
-         .ipc = {HIVE_SENDER_ANY, HIVE_MSG_NOTIFY, TAG_A}},
-        {.type = HIVE_SEL_IPC,
-         .ipc = {HIVE_SENDER_ANY, HIVE_MSG_NOTIFY, TAG_B}},
+        {.type = HIVE_SEL_IPC, .ipc = {.class = HIVE_MSG_NOTIFY, .id = TAG_A}},
+        {.type = HIVE_SEL_IPC, .ipc = {.class = HIVE_MSG_NOTIFY, .id = TAG_B}},
     };
     hive_select_result_t result;
     hive_status_t status = hive_select(sources, 2, &result, 100);
@@ -289,10 +285,8 @@ static void test5_ipc_multi_second(void *args,
 
     // Wait for either TAG_A or TAG_B (filtering by id)
     hive_select_source_t sources[] = {
-        {.type = HIVE_SEL_IPC,
-         .ipc = {HIVE_SENDER_ANY, HIVE_MSG_NOTIFY, TAG_A}},
-        {.type = HIVE_SEL_IPC,
-         .ipc = {HIVE_SENDER_ANY, HIVE_MSG_NOTIFY, TAG_B}},
+        {.type = HIVE_SEL_IPC, .ipc = {.class = HIVE_MSG_NOTIFY, .id = TAG_A}},
+        {.type = HIVE_SEL_IPC, .ipc = {.class = HIVE_MSG_NOTIFY, .id = TAG_B}},
     };
     hive_select_result_t result;
     hive_status_t status = hive_select(sources, 2, &result, 100);
@@ -430,8 +424,7 @@ static void test7_mixed_sources(void *args, const hive_spawn_info_t *siblings,
     // Wait for either bus data or IPC message (filtering by id)
     hive_select_source_t sources[] = {
         {.type = HIVE_SEL_BUS, .bus = bus},
-        {.type = HIVE_SEL_IPC,
-         .ipc = {HIVE_SENDER_ANY, HIVE_MSG_NOTIFY, TAG_A}},
+        {.type = HIVE_SEL_IPC, .ipc = {.class = HIVE_MSG_NOTIFY, .id = TAG_A}},
     };
     hive_select_result_t result;
     hive_status_t status = hive_select(sources, 2, &result, 500);
@@ -486,8 +479,7 @@ static void test8_priority_order(void *args, const hive_spawn_info_t *siblings,
 
     // Select - first source in array wins (array order priority)
     hive_select_source_t sources[] = {
-        {.type = HIVE_SEL_IPC,
-         .ipc = {HIVE_SENDER_ANY, HIVE_MSG_NOTIFY, TAG_A}},
+        {.type = HIVE_SEL_IPC, .ipc = {.class = HIVE_MSG_NOTIFY, .id = TAG_A}},
         {.type = HIVE_SEL_BUS, .bus = bus},
     };
     hive_select_result_t result;
@@ -536,7 +528,7 @@ static void test9_timeout(void *args, const hive_spawn_info_t *siblings,
 
     // Select on nothing with timeout (filtering by non-existent id)
     hive_select_source_t source = {
-        .type = HIVE_SEL_IPC, .ipc = {HIVE_SENDER_ANY, HIVE_MSG_NOTIFY, 9999}};
+        .type = HIVE_SEL_IPC, .ipc = {.class = HIVE_MSG_NOTIFY, .id = 9999}};
     hive_select_result_t result;
 
     // Non-blocking (timeout=0)
@@ -644,9 +636,7 @@ static void test11_immediate_return(void *args,
     hive_ipc_notify(self, TAG_A, &data, sizeof(data));
 
     // Select should return immediately
-    hive_select_source_t source = {
-        .type = HIVE_SEL_IPC,
-        .ipc = {HIVE_SENDER_ANY, HIVE_MSG_ANY, HIVE_ID_ANY}};
+    hive_select_source_t source = {.type = HIVE_SEL_IPC, .ipc = {0}};
     hive_select_result_t result;
     uint64_t start = time_ms();
     hive_status_t status =

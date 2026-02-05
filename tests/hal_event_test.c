@@ -312,8 +312,7 @@ static void run_hal_event_tests(void *args, const hive_spawn_info_t *siblings,
             // Don't signal the event - timer should fire first
             hive_select_source_t sources[] = {
                 {HIVE_SEL_HAL_EVENT, .event = event},
-                {HIVE_SEL_IPC,
-                 .ipc = {HIVE_SENDER_ANY, HIVE_MSG_TIMER, HIVE_ID_ANY, timer}},
+                {HIVE_SEL_IPC, .ipc = {.class = HIVE_MSG_TIMER, .tag = timer}},
             };
             hive_select_result_t result;
 

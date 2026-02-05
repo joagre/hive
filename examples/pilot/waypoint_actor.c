@@ -148,11 +148,8 @@ void waypoint_actor(void *args, const hive_spawn_info_t *siblings,
         // Wait for state update OR hover timer OR RESET
         hive_select_source_t sources[] = {
             [SEL_STATE] = {HIVE_SEL_BUS, .bus = state->state_bus},
-            [SEL_HOVER_TIMER] = {HIVE_SEL_IPC,
-                                 .ipc = {.sender = HIVE_SENDER_ANY,
-                                         .class = HIVE_MSG_TIMER,
-                                         .id = HIVE_ID_ANY,
-                                         .tag = hover_timer}},
+            [SEL_HOVER_TIMER] = {HIVE_SEL_IPC, .ipc = {.class = HIVE_MSG_TIMER,
+                                                       .tag = hover_timer}},
             [SEL_RESET] = {HIVE_SEL_IPC,
                            .ipc = {.sender = state->flight_manager,
                                    .class = HIVE_MSG_NOTIFY,

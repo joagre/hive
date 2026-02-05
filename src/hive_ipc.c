@@ -399,9 +399,7 @@ hive_status_t hive_ipc_notify_ex(hive_actor_id_t to, hive_msg_class_t class,
 hive_status_t hive_ipc_recv(hive_message_t *msg, int32_t timeout_ms) {
     // Wrapper around hive_select with wildcard IPC filter
     hive_select_source_t source = {.type = HIVE_SEL_IPC,
-                                   .ipc = {.sender = HIVE_SENDER_ANY,
-                                           .class = HIVE_MSG_ANY,
-                                           .id = HIVE_ID_ANY}};
+                                   .ipc = {.class = HIVE_MSG_ANY}};
     hive_select_result_t result;
     hive_status_t s = hive_select(&source, 1, &result, timeout_ms);
     if (HIVE_SUCCEEDED(s)) {
@@ -494,11 +492,8 @@ hive_status_t hive_ipc_request(hive_actor_id_t to, uint16_t id,
     // Wait for REPLY or EXIT from target
     // Match by tag for correlation (id doesn't matter for reply matching)
     hive_recv_filter_t filters[] = {
-        {.sender = to,
-         .class = HIVE_MSG_REPLY,
-         .id = HIVE_ID_ANY,
-         .tag = call_tag},
-        {.sender = to, .class = HIVE_MSG_EXIT, .id = HIVE_ID_ANY},
+        {.sender = to, .class = HIVE_MSG_REPLY, .tag = call_tag},
+        {.sender = to, .class = HIVE_MSG_EXIT},
     };
 
     hive_message_t msg;
