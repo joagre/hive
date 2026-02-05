@@ -169,12 +169,60 @@ This is a breaking API change affecting:
 
 All existing code using IPC will need updates.
 
-## Benefits
+## API Summary
 
-- No hidden bit packing or magic
-- No manual payload inspection
-- Self-documenting: `.id = REQUEST_RESET` is explicit
-- Simple mental model: "id is what I care about, tag is plumbing"
-- Clean separation of concerns
+| Function | Old | New | Change |
+|----------|-----|-----|--------|
+| `hive_ipc_notify` | `(to, tag, data, len)` | `(to, id, data, len)` | Semantic (tag to id) |
+| `hive_ipc_request` | `(to, data, len, reply, timeout)` | `(to, id, data, len, reply, timeout)` | Adds id |
+| `hive_ipc_reply` | `(msg, data, len)` | `(msg, data, len)` | Unchanged |
+| `hive_ipc_recv_match` | `(from, class, tag, msg, timeout)` | `(from, class, id, tag, msg, timeout)` | Adds id |
+| `hive_ipc_recv` | `(msg, timeout)` | `(msg, timeout)` | Unchanged |
+| `hive_ipc_notify_ex` | `(to, class, tag, data, len)` | `(to, class, id, data, len)` | Semantic (tag to id) |
+| `hive_ipc_named_notify` | `(name, tag, data, len)` | `(name, id, data, len)` | Semantic (tag to id) |
+| `hive_ipc_named_request` | `(name, data, len, reply, timeout)` | `(name, id, data, len, reply, timeout)` | Adds id |
+| Filter struct | `{sender, class, tag}` | `{sender, class, id, tag}` | Adds id |
 
-The 2-byte overhead buys a beautiful, honest API.
+## Use Case Verification
+
+| Use Case | Status | Example |
+|----------|--------|---------|
+| Send notification by type | OK | `notify(to, NOTIFY_START, data, len)` |
+| Send request by type | OK | `request(to, REQUEST_RESET, data, len, &reply, timeout)` |
+| Reply to request | OK | `reply(&msg, data, len)` - unchanged |
+| Filter notification by type | OK | `.class = NOTIFY, .id = NOTIFY_START` |
+| Filter request by type | OK | `.class = REQUEST, .id = REQUEST_RESET` |
+| Filter timer by timer_id | OK | `.class = TIMER, .tag = my_timer` |
+| Filter any from sender | OK | `.sender = actor` (id, tag default to ANY) |
+| Exit messages | OK | `.class = EXIT` (id unused) |
+| Multiple filters in select | OK | Each source with own id |
+
+## Implementation Notes
+
+**Enum reordering required** - wildcards must be 0:
+
+```c
+typedef enum {
+    HIVE_MSG_ANY = 0,      // Wildcard (verify current value)
+    HIVE_MSG_NOTIFY = 1,
+    HIVE_MSG_REQUEST = 2,
+    HIVE_MSG_REPLY = 3,
+    HIVE_MSG_TIMER = 4,
+    HIVE_MSG_EXIT = 5,
+} hive_msg_class_t;
+```
+
+## Review Verdict
+
+| Criterion | Status | Notes |
+|-----------|--------|-------|
+| Clean | YES | One concept per field: id = dispatch, tag = correlation |
+| Solid | YES | All use cases work, problem case solved elegantly |
+| KISS | YES | "id is what I care about, tag is plumbing" |
+| Beautiful | YES | Self-documenting, no payload inspection, no boilerplate |
+
+**Cost:**
+- 2 bytes per message header
+- Breaking API change
+
+**Conclusion:** The 2-byte overhead buys a beautiful, honest API. Ship it.
