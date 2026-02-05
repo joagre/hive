@@ -203,6 +203,44 @@ This is a breaking API change affecting:
 
 All existing code using IPC will need updates.
 
+### Migration Impact
+
+**Core files to modify:**
+
+| File | Lines | Change |
+|------|-------|--------|
+| `src/hive_ipc.c` | 655 | Add id to message header, update functions |
+| `src/hive_select.c` | 193 | Add id matching logic |
+| `include/hive_ipc.h` | 97 | Update function signatures, filter struct |
+| `include/hive_select.h` | 83 | Update source struct |
+
+**Call sites (excluding pilot example):**
+
+| Category | Count | Change |
+|----------|-------|--------|
+| `hive_ipc_notify()` | ~70 | Semantic: tag to id (same position) |
+| `hive_ipc_request()` | ~6 | Add id parameter |
+| `hive_ipc_recv_match()` | ~76 | Add id parameter |
+| `HIVE_SEL_IPC` sources | ~20 | Add .id field |
+
+**Pilot example:**
+
+| Category | Count | Change |
+|----------|-------|--------|
+| `hive_ipc_notify()` | 8 | Semantic: tag to id |
+| `hive_ipc_request()` | 5 | Add id parameter |
+| `HIVE_SEL_IPC` sources | 32 | Add .id field |
+| `hive_ipc_reply()` | 17 | Unchanged |
+
+**Total: ~215 call sites**
+
+Most changes are mechanical:
+- `HIVE_TAG_NONE` becomes `HIVE_ID_NONE`
+- Add `.id = REQUEST_RESET` or `.id = HIVE_ID_ANY` to select sources
+- Add id parameter to request calls
+
+**Net effect:** Delete boilerplate payload validation, replace with clean filters. You delete more code than you add.
+
 ## API Summary
 
 ### Send Functions
