@@ -122,13 +122,11 @@ int main(void) {
         .buses = &buses,
     };
 
-    // clang-format off
     // Define child specs for supervisor (9 flight actors + optional comms + logger)
     // Each actor's init function receives pilot_buses_t and extracts what it needs.
     // Control loop order: sensor -> estimator -> waypoint -> altitude ->
     //                     position -> attitude -> rate -> motor -> flight_manager
     // Comms and logger run at LOW priority with TEMPORARY restart.
-    // clang-format on
     hive_child_spec_t children[] = {
         {.start = sensor_actor,
          .init = sensor_actor_init,
