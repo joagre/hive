@@ -33,7 +33,18 @@ This pattern repeats in every actor that handles requests.
 Add an explicit `id` field to the message header for dispatch. Separate concerns:
 
 - `id` - Message type (user-provided, for dispatch)
-- `tag` - Correlation (auto-generated for request/reply, user-provided for notify/timer)
+- `tag` - Correlation (internal - auto-generated for request/reply, runtime-set for timers)
+
+### Mental Model
+
+User only thinks about `id`. Tag is plumbing:
+
+| Message Type | id | tag |
+|--------------|-----|-----|
+| Notify | User-provided | Unused (0) |
+| Request | User-provided | Auto-generated |
+| Reply | Preserved | Preserved |
+| Timer | Unused | timer_id (runtime-set) |
 
 ### Message Structure
 
@@ -42,7 +53,7 @@ typedef struct {
     hive_actor_id_t sender;
     hive_msg_class_t class;
     uint16_t id;       // Message type - user provided
-    uint32_t tag;      // Correlation - auto for request, user for notify/timer
+    uint32_t tag;      // Correlation - internal use
     void *data;
     size_t len;
 } hive_message_t;
@@ -53,9 +64,8 @@ Header grows by 2 bytes. For 128-byte max messages, that's 1.5% overhead.
 ### API Changes
 
 ```c
-// Notify - user controls both id and tag
-hive_ipc_notify(to, id, tag, data, len);
-// Common case: hive_ipc_notify(to, NOTIFY_START, HIVE_TAG_NONE, NULL, 0);
+// Notify - user provides id only
+hive_ipc_notify(to, id, data, len);
 
 // Request - user provides id, tag auto-generated for correlation
 hive_ipc_request(to, id, data, len, reply, timeout);
@@ -79,21 +89,21 @@ typedef struct {
 
 ```c
 hive_select_source_t sources[] = {
-    // Filter requests by type
+    // Filter requests by id
     {HIVE_SEL_IPC, .ipc = {.sender = fm,
                            .class = HIVE_MSG_REQUEST,
                            .id = REQUEST_RESET}},
     {HIVE_SEL_IPC, .ipc = {.sender = fm,
                            .class = HIVE_MSG_REQUEST,
                            .id = REQUEST_ARM}},
-    // Filter timer by tag
-    {HIVE_SEL_IPC, .ipc = {.sender = HIVE_SENDER_ANY,
-                           .class = HIVE_MSG_TIMER,
-                           .tag = my_timer}},
-    // Filter notification by type
+    // Filter notifications by id
     {HIVE_SEL_IPC, .ipc = {.sender = altitude,
                            .class = HIVE_MSG_NOTIFY,
                            .id = NOTIFY_LANDED}},
+    // Filter timers by tag (timer_id)
+    {HIVE_SEL_IPC, .ipc = {.sender = HIVE_SENDER_ANY,
+                           .class = HIVE_MSG_TIMER,
+                           .tag = my_timer}},
 };
 
 // Handler - no payload inspection needed
@@ -108,7 +118,7 @@ if (result.index == SEL_RESET) {
 
 This is a breaking API change affecting:
 
-- `hive_ipc_notify()` - adds `id` parameter
+- `hive_ipc_notify()` - `tag` parameter becomes `id` (semantic change)
 - `hive_ipc_request()` - adds `id` parameter
 - `hive_ipc_recv_match()` - adds `id` parameter
 - `hive_select_source_t` - filter struct gains `id` field
@@ -121,7 +131,7 @@ All existing code using IPC will need updates.
 - No hidden bit packing or magic
 - No manual payload inspection
 - Self-documenting: `.id = REQUEST_RESET` is explicit
-- Filter by `id` for dispatch, `tag` for correlation
+- Simple mental model: "id is what I care about, tag is plumbing"
 - Clean separation of concerns
 
 The 2-byte overhead buys a beautiful, honest API.
