@@ -302,7 +302,7 @@ if (msg.class == HIVE_MSG_REQUEST) { ... }
 - `hive_ipc_recv_match()` scans mailbox for messages matching filter criteria
 - `hive_ipc_recv_matches()` waits for any message matching one of several filters (useful for waiting on timer OR notification, REPLY OR EXIT)
 - Non-matching messages are **skipped but not dropped** - they remain in mailbox
-- Filter on sender (`HIVE_SENDER_ANY`), class (`HIVE_MSG_ANY`), id (`HIVE_ID_ANY`), tag (`HIVE_TAG_ANY`) - all wildcards are 0
+- Filter on sender (`HIVE_SENDER_ANY`), class (`HIVE_MSG_ANY`), id (`HIVE_ID_ANY`), tag (`HIVE_TAG_ANY`) - all wildcards are 0, so omitted fields in designated initializers default to "match any"
 - Use id for message type dispatch, tag for request/reply correlation
 - Enables request/reply pattern: issue REQUEST with generated tag, wait for REPLY with matching tag
 

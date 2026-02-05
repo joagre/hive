@@ -164,6 +164,15 @@ Wildcard for filtering in
 Wildcard for filtering in
 .BR hive_ipc_recv_match ()
 (0).
+.SS Wildcards and Designated Initializers
+All wildcard constants (HIVE_SENDER_ANY, HIVE_MSG_ANY, HIVE_ID_ANY, HIVE_TAG_ANY)
+are 0. With C designated initializers, omitted fields default to 0, so you can
+write terse filters:
+.PP
+.nf
+// Match NOTIFY messages with id=CMD_START from any sender, any tag
+hive_recv_filter_t filter = {.class = HIVE_MSG_NOTIFY, .id = CMD_START};
+.fi
 .PP
 .B Note:
 Timer messages have the owning actor as sender. Exit notifications have the

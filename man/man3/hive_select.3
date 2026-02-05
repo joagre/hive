@@ -55,7 +55,9 @@ same semantics as
 wildcards
 .BR HIVE_SENDER_ANY ", " HIVE_MSG_ANY ", " HIVE_ID_ANY ", and " HIVE_TAG_ANY
 (all are 0) can be used to match any value. The filter fields are: sender,
-class, id (message type), and tag (correlation).
+class, id (message type), and tag (correlation). With C designated initializers,
+omitted fields default to 0 (wildcard), enabling terse filters like
+.I "{.class = HIVE_MSG_NOTIFY, .id = CMD_START}".
 .TP
 .B HIVE_SEL_BUS
 Wait for unread data on the specified bus. "Unread" means an entry the calling
