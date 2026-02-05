@@ -105,42 +105,15 @@ int main(void) {
     hive_bus_config_t cfg = PILOT_BUS_CONFIG;
     hive_status_t status;
 
-    status = hive_bus_create(&cfg, &buses.sensor_bus);
-    if (HIVE_FAILED(status)) {
-        HIVE_LOG_ERROR("Failed to create sensor_bus: %s", HIVE_ERR_STR(status));
-        return 1;
-    }
-    status = hive_bus_create(&cfg, &buses.state_bus);
-    if (HIVE_FAILED(status)) {
-        HIVE_LOG_ERROR("Failed to create state_bus: %s", HIVE_ERR_STR(status));
-        return 1;
-    }
-    status = hive_bus_create(&cfg, &buses.thrust_bus);
-    if (HIVE_FAILED(status)) {
-        HIVE_LOG_ERROR("Failed to create thrust_bus: %s", HIVE_ERR_STR(status));
-        return 1;
-    }
-    status = hive_bus_create(&cfg, &buses.position_target_bus);
-    if (HIVE_FAILED(status)) {
-        HIVE_LOG_ERROR("Failed to create position_target_bus: %s",
-                       HIVE_ERR_STR(status));
-        return 1;
-    }
-    status = hive_bus_create(&cfg, &buses.attitude_setpoint_bus);
-    if (HIVE_FAILED(status)) {
-        HIVE_LOG_ERROR("Failed to create attitude_setpoint_bus: %s",
-                       HIVE_ERR_STR(status));
-        return 1;
-    }
-    status = hive_bus_create(&cfg, &buses.rate_setpoint_bus);
-    if (HIVE_FAILED(status)) {
-        HIVE_LOG_ERROR("Failed to create rate_setpoint_bus: %s",
-                       HIVE_ERR_STR(status));
-        return 1;
-    }
-    status = hive_bus_create(&cfg, &buses.torque_bus);
-    if (HIVE_FAILED(status)) {
-        HIVE_LOG_ERROR("Failed to create torque_bus: %s", HIVE_ERR_STR(status));
+    // Create all buses - fail fast on any error
+    if (HIVE_FAILED(hive_bus_create(&cfg, &buses.sensor_bus)) ||
+        HIVE_FAILED(hive_bus_create(&cfg, &buses.state_bus)) ||
+        HIVE_FAILED(hive_bus_create(&cfg, &buses.thrust_bus)) ||
+        HIVE_FAILED(hive_bus_create(&cfg, &buses.position_target_bus)) ||
+        HIVE_FAILED(hive_bus_create(&cfg, &buses.attitude_setpoint_bus)) ||
+        HIVE_FAILED(hive_bus_create(&cfg, &buses.rate_setpoint_bus)) ||
+        HIVE_FAILED(hive_bus_create(&cfg, &buses.torque_bus))) {
+        HIVE_LOG_ERROR("Failed to create buses");
         return 1;
     }
 
