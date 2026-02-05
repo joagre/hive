@@ -176,8 +176,7 @@ void logger_actor(void *args, const hive_spawn_info_t *siblings,
                                              .tag = timer}},
         [SEL_RESET] = {HIVE_SEL_IPC, .ipc = {.sender = state->flight_manager,
                                              .class = HIVE_MSG_NOTIFY,
-                                             .id = NOTIFY_RESET,
-                                             .tag = HIVE_TAG_ANY}},
+                                             .id = NOTIFY_RESET}},
     };
     // Only include RESET source if flight_manager is valid
     size_t num_sources =

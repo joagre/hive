@@ -401,8 +401,7 @@ hive_status_t hive_ipc_recv(hive_message_t *msg, int32_t timeout_ms) {
     hive_select_source_t source = {.type = HIVE_SEL_IPC,
                                    .ipc = {.sender = HIVE_SENDER_ANY,
                                            .class = HIVE_MSG_ANY,
-                                           .id = HIVE_ID_ANY,
-                                           .tag = HIVE_TAG_ANY}};
+                                           .id = HIVE_ID_ANY}};
     hive_select_result_t result;
     hive_status_t s = hive_select(&source, 1, &result, timeout_ms);
     if (HIVE_SUCCEEDED(s)) {
@@ -499,10 +498,7 @@ hive_status_t hive_ipc_request(hive_actor_id_t to, uint16_t id,
          .class = HIVE_MSG_REPLY,
          .id = HIVE_ID_ANY,
          .tag = call_tag},
-        {.sender = to,
-         .class = HIVE_MSG_EXIT,
-         .id = HIVE_ID_ANY,
-         .tag = HIVE_TAG_ANY},
+        {.sender = to, .class = HIVE_MSG_EXIT, .id = HIVE_ID_ANY},
     };
 
     hive_message_t msg;
