@@ -104,19 +104,9 @@ void logger_actor(void *args, const hive_spawn_info_t *siblings,
         return;
     }
 
-    // Open hive runtime log
-    // Use storage-specific path: /sd/hive.log or /tmp/hive.log
-    char hive_log_path[64];
-    snprintf_(hive_log_path, sizeof(hive_log_path), "%s/hive.log",
-              storage_base);
-    if (HIVE_SUCCEEDED(hive_log_file_open(hive_log_path))) {
-        state->hive_log_open = true;
-        // Flush early log buffer (Crazyflie only, no-op on Webots)
-        hal_flush_early_log();
-        HIVE_LOG_INFO("[LOG] Hive log open: %s", hive_log_path);
-    } else {
-        HIVE_LOG_WARN("[LOG] Cannot open hive log: %s", hive_log_path);
-    }
+    // Hive log is opened by pilot.c before actors start
+    // We just sync it periodically
+    state->hive_log_open = true;
 
     // Build CSV path
     snprintf_(state->csv_path, sizeof(state->csv_path), "%s/%s", storage_base,
@@ -325,8 +315,8 @@ void logger_actor(void *args, const hive_spawn_info_t *siblings,
         HIVE_LOG_INFO("[LOG] Closed CSV file (%u samples)",
                       (unsigned)log_count);
     }
+    // Note: hive log is closed by pilot.c, we just sync on exit
     if (state->hive_log_open) {
         hive_log_file_sync();
-        hive_log_file_close();
     }
 }
