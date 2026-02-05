@@ -56,7 +56,7 @@ ARM_CFLAGS += -ffreestanding -nostdlib
 ARM_CFLAGS += -MMD -MP
 
 # Include paths and defines for local sources
-ARM_CPPFLAGS := -I../../include -I../../lib -I../../lib/printf -DPRINTF_INCLUDE_CONFIG_H -I.
+ARM_CPPFLAGS := -I../../include -I../../src -I../../lib -I../../lib/printf -DPRINTF_INCLUDE_CONFIG_H -I.
 ARM_CPPFLAGS += -I../../src/hal/stm32
 ARM_CPPFLAGS += -DHIVE_PLATFORM_STM32 -DHIVE_ENABLE_TCP=0 -DHIVE_ENABLE_FILE=0
 ARM_CPPFLAGS += $(HIVE_CFLAGS)

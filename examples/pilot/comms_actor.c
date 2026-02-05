@@ -249,10 +249,11 @@ static void handle_rx_command(comms_state_t *state, const uint8_t *data,
                                  &reply, 500); // 500ms timeout
             if (HIVE_SUCCEEDED(s) && reply.len >= 2) {
                 // Flight manager returns [state:u8, countdown_s:u8]
+                const uint8_t *data = (const uint8_t *)reply.data;
                 status_response_packet_t pkt = {
                     .type = RESP_STATUS,
-                    .state = reply.data[0],
-                    .countdown_s = reply.data[1],
+                    .state = data[0],
+                    .countdown_s = data[1],
                 };
                 hal_esb_send(&pkt, sizeof(pkt));
             } else {

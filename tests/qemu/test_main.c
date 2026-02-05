@@ -12,7 +12,6 @@
 
 #include "semihosting.h"
 #include "hive_runtime.h"
-#include "hive_actor.h"
 #include "hive_ipc.h"
 #include "hive_timer.h"
 #include "hive_scheduler.h"
