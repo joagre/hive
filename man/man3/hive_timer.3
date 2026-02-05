@@ -96,13 +96,15 @@ other messages:
 hive_timer_id_t my_timer;
 hive_timer_after(500000, &my_timer);
 
-/* Wait specifically for this timer */
+/* Wait specifically for this timer (id=HIVE_ID_ANY, tag=timer_id) */
 hive_message_t msg;
-hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, my_timer, &msg, -1);
+hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, HIVE_ID_ANY, my_timer, &msg, -1);
 .fi
 .PP
 Do NOT use HIVE_TAG_ANY when waiting for timer messages, as this could
-consume timer messages from other timers. Always use the specific hive_timer_id_t
+consume timer messages from other timers. Timers use the
+.I tag
+field for the timer ID. Always use the specific hive_timer_id_t
 returned by
 .BR hive_timer_after ()
 or

@@ -80,8 +80,10 @@ void rate_actor(void *args, const hive_spawn_info_t *siblings,
     enum { SEL_STATE, SEL_RESET };
     hive_select_source_t sources[] = {
         [SEL_STATE] = {HIVE_SEL_BUS, .bus = state->state_bus},
-        [SEL_RESET] = {HIVE_SEL_IPC, .ipc = {state->flight_manager,
-                                             HIVE_MSG_NOTIFY, NOTIFY_RESET}},
+        [SEL_RESET] = {HIVE_SEL_IPC, .ipc = {.sender = state->flight_manager,
+                                             .class = HIVE_MSG_NOTIFY,
+                                             .id = NOTIFY_RESET,
+                                             .tag = HIVE_TAG_ANY}},
     };
 
     while (1) {

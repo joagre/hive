@@ -170,10 +170,14 @@ void logger_actor(void *args, const hive_spawn_info_t *siblings,
     // Set up hive_select() sources: timer + RESET notification
     enum { SEL_TIMER, SEL_RESET };
     hive_select_source_t sources[] = {
-        [SEL_TIMER] = {HIVE_SEL_IPC,
-                       .ipc = {HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer}},
-        [SEL_RESET] = {HIVE_SEL_IPC, .ipc = {state->flight_manager,
-                                             HIVE_MSG_NOTIFY, NOTIFY_RESET}},
+        [SEL_TIMER] = {HIVE_SEL_IPC, .ipc = {.sender = HIVE_SENDER_ANY,
+                                             .class = HIVE_MSG_TIMER,
+                                             .id = HIVE_ID_ANY,
+                                             .tag = timer}},
+        [SEL_RESET] = {HIVE_SEL_IPC, .ipc = {.sender = state->flight_manager,
+                                             .class = HIVE_MSG_NOTIFY,
+                                             .id = NOTIFY_RESET,
+                                             .tag = HIVE_TAG_ANY}},
     };
     // Only include RESET source if flight_manager is valid
     size_t num_sources =

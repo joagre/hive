@@ -244,8 +244,9 @@ static void handle_rx_command(comms_state_t *state, const uint8_t *data,
         if (state->flight_manager != HIVE_ACTOR_ID_INVALID) {
             // Request status from flight manager
             hive_message_t reply;
-            hive_status_t s = hive_ipc_request(state->flight_manager, NULL, 0,
-                                               &reply, 500); // 500ms timeout
+            hive_status_t s =
+                hive_ipc_request(state->flight_manager, HIVE_ID_ANY, NULL, 0,
+                                 &reply, 500); // 500ms timeout
             if (HIVE_SUCCEEDED(s) && reply.len >= 2) {
                 // Flight manager returns [state:u8, countdown_s:u8]
                 status_response_packet_t pkt = {

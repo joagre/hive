@@ -12,25 +12,29 @@ typedef uint32_t hive_timer_id_t;
 
 #define HIVE_ACTOR_ID_INVALID ((hive_actor_id_t)0)
 
-// Wildcard sender for filtering (use with hive_ipc_recv_match)
-#define HIVE_SENDER_ANY ((hive_actor_id_t)0xFFFFFFFF)
+// Wildcard constants for filtering (all wildcards = 0 for designated initializer)
+#define HIVE_SENDER_ANY ((hive_actor_id_t)0)
+#define HIVE_ID_ANY 0
+#define HIVE_TAG_ANY 0
+
+// Explicit "no value" constants (same as wildcards, different semantic intent)
+#define HIVE_ID_NONE 0
+#define HIVE_TAG_NONE 0
 
 // Message header size (prepended to all messages)
-#define HIVE_MSG_HEADER_SIZE 4
+// Layout: [class:4][gen:1][tag:27] [id:16] = 6 bytes
+#define HIVE_MSG_HEADER_SIZE 6
 
 // Message classes (4 bits, stored in header bits 31-28)
+// HIVE_MSG_ANY = 0 enables wildcard via C designated initializer defaults
 typedef enum {
-    HIVE_MSG_NOTIFY = 0,  // Fire-and-forget notification
-    HIVE_MSG_REQUEST = 1, // Request expecting reply
-    HIVE_MSG_REPLY = 2,   // Reply to request
-    HIVE_MSG_TIMER = 3,   // Timer tick
-    HIVE_MSG_EXIT = 4,    // Exit notification (actor died)
-    HIVE_MSG_ANY = 15,    // Wildcard for filtering
+    HIVE_MSG_ANY = 0,     // Wildcard for filtering
+    HIVE_MSG_NOTIFY = 1,  // Fire-and-forget notification
+    HIVE_MSG_REQUEST = 2, // Request expecting reply
+    HIVE_MSG_REPLY = 3,   // Reply to request
+    HIVE_MSG_TIMER = 4,   // Timer tick
+    HIVE_MSG_EXIT = 5,    // Exit notification (actor died)
 } hive_msg_class_t;
-
-// Tag constants
-#define HIVE_TAG_NONE 0         // No tag
-#define HIVE_TAG_ANY 0x0FFFFFFF // Wildcard for filtering
 
 // Timeout constants for blocking operations
 #define HIVE_TIMEOUT_INFINITE ((int32_t) - 1) // Block forever
@@ -112,17 +116,20 @@ typedef struct {
 typedef struct {
     hive_actor_id_t sender; // Sender actor ID
     hive_msg_class_t class; // Message class
-    uint32_t tag;           // Message tag
-    size_t len;             // Payload length (excludes 4-byte header)
+    uint16_t id;            // Message type (user-provided for dispatch)
+    uint32_t tag;           // Correlation tag (internal for request/reply)
+    size_t len;             // Payload length (excludes 6-byte header)
     const void *data; // Payload pointer (past header), valid until next recv
 } hive_message_t;
 
-// Filter for selective receive (used by hive_ipc_recv_matches)
-// Use HIVE_SENDER_ANY, HIVE_MSG_ANY, HIVE_TAG_ANY for wildcards
+// Filter for selective receive (used by hive_ipc_recv_matches, hive_select)
+// All wildcards = 0, so unspecified fields in designated initializers match any.
+// Example: {.sender = actor, .class = HIVE_MSG_NOTIFY} matches any id/tag from actor.
 typedef struct {
-    hive_actor_id_t sender; // HIVE_SENDER_ANY for any sender
-    hive_msg_class_t class; // HIVE_MSG_ANY for any class
-    uint32_t tag;           // HIVE_TAG_ANY for any tag
+    hive_actor_id_t sender; // HIVE_SENDER_ANY (0) for any sender
+    hive_msg_class_t class; // HIVE_MSG_ANY (0) for any class
+    uint16_t id;            // HIVE_ID_ANY (0) for any id
+    uint32_t tag;           // HIVE_TAG_ANY (0) for any tag
 } hive_recv_filter_t;
 
 // Exit reason codes

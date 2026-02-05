@@ -127,7 +127,7 @@ hive_status_t hive_hal_timer_create(uint32_t interval_us, bool periodic,
     //   - Store expiry time/ticks
     //   - Check expiry in periodic tick handler or advance_time()
     //   - When expired, call hive_ipc_notify_internal(owner, owner,
-    //       HIVE_MSG_TIMER, entry->id, NULL, 0)
+    //       HIVE_MSG_TIMER, HIVE_ID_NONE, entry->id, NULL, 0)
 
     s_hal_timer.timers = entry;
     *out = entry->id;
@@ -191,8 +191,8 @@ void hive_hal_timer_advance_time(uint64_t delta_us) {
                 actor_t *a = hive_actor_get(entry->owner);
                 if (a) {
                     hive_ipc_notify_internal(entry->owner, entry->owner,
-                                             HIVE_MSG_TIMER, entry->id, NULL,
-                                             0);
+                                             HIVE_MSG_TIMER, HIVE_ID_NONE,
+                                             entry->id, NULL, 0);
                 }
 
                 fired_any = true;

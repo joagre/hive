@@ -207,14 +207,6 @@ hive_status_t hive_demonitor(uint32_t monitor_id) {
     return HIVE_ERROR(HIVE_ERR_INVALID, "Monitor ID not found");
 }
 
-// Check if message is an exit notification
-bool hive_msg_is_exit(const hive_message_t *msg) {
-    if (!msg) {
-        return false;
-    }
-    return msg->class == HIVE_MSG_EXIT;
-}
-
 // Decode exit message
 hive_status_t hive_decode_exit(const hive_message_t *msg,
                                hive_exit_msg_t *out) {
@@ -247,9 +239,9 @@ static bool deliver_exit_notification(actor_t *recipient,
 
     // Deliver using hive_ipc_notify_internal with HIVE_MSG_EXIT class
     // Sender is the dying actor_t so recipient knows who died
-    hive_status_t status =
-        hive_ipc_notify_internal(recipient->id, dying_id, HIVE_MSG_EXIT,
-                                 HIVE_TAG_NONE, &exit_data, sizeof(exit_data));
+    hive_status_t status = hive_ipc_notify_internal(
+        recipient->id, dying_id, HIVE_MSG_EXIT, HIVE_ID_NONE, HIVE_TAG_NONE,
+        &exit_data, sizeof(exit_data));
     if (HIVE_FAILED(status)) {
         HIVE_LOG_ERROR("Failed to deliver exit notification: %s", status.msg);
         return false;

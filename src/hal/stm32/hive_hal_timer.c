@@ -87,7 +87,8 @@ void hive_timer_process_pending(void) {
             actor_t *a = hive_actor_get(entry->owner);
             if (a) {
                 hive_ipc_notify_internal(entry->owner, entry->owner,
-                                         HIVE_MSG_TIMER, entry->id, NULL, 0);
+                                         HIVE_MSG_TIMER, HIVE_ID_NONE,
+                                         entry->id, NULL, 0);
             }
 
             if (entry->periodic && a) {

@@ -42,7 +42,7 @@ static void pong_actor(void *args, const hive_spawn_info_t *siblings,
 
         // Notify ping back
         pm_copy.count++;
-        status = hive_ipc_notify(ping_id, HIVE_TAG_NONE, &pm_copy,
+        status = hive_ipc_notify(ping_id, HIVE_ID_NONE, &pm_copy,
                                  sizeof(ping_msg_t));
 
         if (HIVE_FAILED(status)) {
@@ -69,7 +69,7 @@ static void ping_actor(void *args, const hive_spawn_info_t *siblings,
     // Notify first ping
     ping_msg_t pm = {.count = 0};
     hive_status_t status =
-        hive_ipc_notify(pong_id, HIVE_TAG_NONE, &pm, sizeof(ping_msg_t));
+        hive_ipc_notify(pong_id, HIVE_ID_NONE, &pm, sizeof(ping_msg_t));
 
     if (HIVE_FAILED(status)) {
         printf("Ping: Failed to notify initial message: %s\n",
@@ -96,7 +96,7 @@ static void ping_actor(void *args, const hive_spawn_info_t *siblings,
 
         // Notify ping back
         recv_pm.count++;
-        status = hive_ipc_notify(pong_id, HIVE_TAG_NONE, &recv_pm,
+        status = hive_ipc_notify(pong_id, HIVE_ID_NONE, &recv_pm,
                                  sizeof(ping_msg_t));
 
         if (HIVE_FAILED(status)) {

@@ -23,7 +23,8 @@ static void worker_actor(void *args, const hive_spawn_info_t *siblings,
     hive_timer_after(work_time, &work_timer);
 
     hive_message_t msg;
-    hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, work_timer, &msg, -1);
+    hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, HIVE_ID_ANY,
+                        work_timer, &msg, -1);
 
     printf("Worker %d: Completed work, exiting normally\n", worker_id);
     return;

@@ -56,7 +56,7 @@ static void test1_async_basic(void *args, const hive_spawn_info_t *siblings,
     const char *msg_data = "Hello ASYNC";
 
     hive_status_t status =
-        hive_ipc_notify(self, HIVE_TAG_NONE, msg_data, strlen(msg_data) + 1);
+        hive_ipc_notify(self, HIVE_ID_NONE, msg_data, strlen(msg_data) + 1);
     if (HIVE_FAILED(status)) {
         TEST_FAIL("hive_ipc_notify ASYNC failed");
         return;
@@ -99,7 +99,7 @@ static void test2_async_invalid_receiver(void *args,
 
     int data = 42;
 
-    hive_status_t status = hive_ipc_notify(HIVE_ACTOR_ID_INVALID, HIVE_TAG_NONE,
+    hive_status_t status = hive_ipc_notify(HIVE_ACTOR_ID_INVALID, HIVE_ID_NONE,
                                            &data, sizeof(data));
     if (HIVE_FAILED(status)) {
         TEST_PASS("notify to HIVE_ACTOR_ID_INVALID fails");
@@ -107,7 +107,7 @@ static void test2_async_invalid_receiver(void *args,
         TEST_FAIL("notify to HIVE_ACTOR_ID_INVALID should fail");
     }
 
-    status = hive_ipc_notify(9999, HIVE_TAG_NONE, &data, sizeof(data));
+    status = hive_ipc_notify(9999, HIVE_ID_NONE, &data, sizeof(data));
     if (HIVE_FAILED(status)) {
         TEST_PASS("notify to non-existent actor fails");
     } else {
@@ -133,7 +133,7 @@ static void test3_message_ordering(void *args,
 
     // Notify 5 messages
     for (int i = 1; i <= 5; i++) {
-        hive_ipc_notify(self, HIVE_TAG_NONE, &i, sizeof(i));
+        hive_ipc_notify(self, HIVE_ID_NONE, &i, sizeof(i));
     }
 
     // Receive and verify order
@@ -173,7 +173,7 @@ static void sender_actor(void *args, const hive_spawn_info_t *siblings,
     (void)siblings;
     (void)sibling_count;
     int id = *(int *)args;
-    hive_ipc_notify(g_receiver_id, HIVE_TAG_NONE, &id, sizeof(id));
+    hive_ipc_notify(g_receiver_id, HIVE_ID_NONE, &id, sizeof(id));
     return;
 }
 
@@ -239,7 +239,7 @@ static void test5_notify_to_self(void *args, const hive_spawn_info_t *siblings,
     int data = 42;
 
     hive_status_t status =
-        hive_ipc_notify(self, HIVE_TAG_NONE, &data, sizeof(data));
+        hive_ipc_notify(self, HIVE_ID_NONE, &data, sizeof(data));
     if (HIVE_SUCCEEDED(status)) {
         // Receive the message we notified to ourselves
         hive_message_t msg;
@@ -305,8 +305,8 @@ static void test6_request_reply(void *args, const hive_spawn_info_t *siblings,
     int request = 21;
     hive_message_t reply;
     uint64_t start = time_ms();
-    hive_status_t status =
-        hive_ipc_request(server, &request, sizeof(request), &reply, 1000);
+    hive_status_t status = hive_ipc_request(server, HIVE_ID_NONE, &request,
+                                            sizeof(request), &reply, 1000);
     uint64_t elapsed = time_ms() - start;
 
     if (HIVE_FAILED(status)) {
@@ -359,9 +359,9 @@ static void test7_pending_count(void *args, const hive_spawn_info_t *siblings,
 
     // Notify 3 messages
     int data = 42;
-    hive_ipc_notify(self, HIVE_TAG_NONE, &data, sizeof(data));
-    hive_ipc_notify(self, HIVE_TAG_NONE, &data, sizeof(data));
-    hive_ipc_notify(self, HIVE_TAG_NONE, &data, sizeof(data));
+    hive_ipc_notify(self, HIVE_ID_NONE, &data, sizeof(data));
+    hive_ipc_notify(self, HIVE_ID_NONE, &data, sizeof(data));
+    hive_ipc_notify(self, HIVE_ID_NONE, &data, sizeof(data));
 
     if (hive_ipc_pending()) {
         TEST_PASS("hive_ipc_pending returns true with messages");
@@ -425,7 +425,7 @@ static void test8_nonblocking_recv(void *args,
     // With a message in queue
     hive_actor_id_t self = hive_self();
     int data = 42;
-    hive_ipc_notify(self, HIVE_TAG_NONE, &data, sizeof(data));
+    hive_ipc_notify(self, HIVE_ID_NONE, &data, sizeof(data));
 
     status = hive_ipc_recv(&msg, 0);
     if (HIVE_SUCCEEDED(status)) {
@@ -487,10 +487,11 @@ static void delayed_sender_actor(void *args, const hive_spawn_info_t *siblings,
     hive_timer_id_t timer;
     hive_timer_after(50000, &timer);
     hive_message_t msg;
-    hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
+    hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, HIVE_ID_ANY, timer,
+                        &msg, -1);
 
     int data = 123;
-    hive_ipc_notify(target, HIVE_TAG_NONE, &data, sizeof(data));
+    hive_ipc_notify(target, HIVE_ID_NONE, &data, sizeof(data));
 
     return;
 }
@@ -553,7 +554,7 @@ static void test11_message_size_limits(void *args,
     memset(max_msg, 'A', sizeof(max_msg));
 
     hive_status_t status =
-        hive_ipc_notify(self, HIVE_TAG_NONE, max_msg, max_payload_size);
+        hive_ipc_notify(self, HIVE_ID_NONE, max_msg, max_payload_size);
     if (HIVE_SUCCEEDED(status)) {
         TEST_PASS("can notify message at max payload size");
     } else {
@@ -573,8 +574,7 @@ static void test11_message_size_limits(void *args,
     }
 
     // Notify message exceeding max size (payload larger than max_payload_size)
-    status =
-        hive_ipc_notify(self, HIVE_TAG_NONE, max_msg, max_payload_size + 1);
+    status = hive_ipc_notify(self, HIVE_ID_NONE, max_msg, max_payload_size + 1);
     if (HIVE_FAILED(status)) {
         TEST_PASS("oversized message is rejected");
     } else {
@@ -599,9 +599,9 @@ static void selective_sender_actor(void *args,
 
     // Notify three messages with different data
     int a = 1, b = 2, c = 3;
-    hive_ipc_notify(target, HIVE_TAG_NONE, &a, sizeof(a));
-    hive_ipc_notify(target, HIVE_TAG_NONE, &b, sizeof(b));
-    hive_ipc_notify(target, HIVE_TAG_NONE, &c, sizeof(c));
+    hive_ipc_notify(target, HIVE_ID_NONE, &a, sizeof(a));
+    hive_ipc_notify(target, HIVE_ID_NONE, &b, sizeof(b));
+    hive_ipc_notify(target, HIVE_ID_NONE, &c, sizeof(c));
 
     return;
 }
@@ -623,12 +623,13 @@ static void test12_selective_receive(void *args,
     hive_timer_id_t timer;
     hive_timer_after(50000, &timer);
     hive_message_t timer_msg;
-    hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &timer_msg, -1);
+    hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, HIVE_ID_ANY, timer,
+                        &timer_msg, -1);
 
     // Use selective receive to filter by sender
     hive_message_t msg;
-    hive_status_t status =
-        hive_ipc_recv_match(sender, HIVE_MSG_ANY, HIVE_TAG_ANY, &msg, 100);
+    hive_status_t status = hive_ipc_recv_match(
+        sender, HIVE_MSG_ANY, HIVE_ID_ANY, HIVE_TAG_ANY, &msg, 100);
 
     if (HIVE_SUCCEEDED(status)) {
         if (msg.sender == sender) {
@@ -665,7 +666,7 @@ static void test13_zero_length_message(void *args,
 
     hive_actor_id_t self = hive_self();
 
-    hive_status_t status = hive_ipc_notify(self, HIVE_TAG_NONE, NULL, 0);
+    hive_status_t status = hive_ipc_notify(self, HIVE_ID_NONE, NULL, 0);
     if (HIVE_SUCCEEDED(status)) {
         TEST_PASS("can notify zero-length payload");
 
@@ -715,7 +716,7 @@ static void test14_notify_to_dead_actor(void *args,
     // Now try to notify dead actor
     int data = 42;
     hive_status_t status =
-        hive_ipc_notify(target, HIVE_TAG_NONE, &data, sizeof(data));
+        hive_ipc_notify(target, HIVE_ID_NONE, &data, sizeof(data));
 
     if (HIVE_FAILED(status)) {
         TEST_PASS("notify to dead actor fails");
@@ -756,7 +757,7 @@ static void test15_message_pool_info(void *args,
     for (int i = 0; i < POOL_TEST_MSG_COUNT; i++) {
         int data = i;
         hive_status_t status =
-            hive_ipc_notify(self, HIVE_TAG_NONE, &data, sizeof(data));
+            hive_ipc_notify(self, HIVE_ID_NONE, &data, sizeof(data));
         if (HIVE_FAILED(status)) {
             printf("    Notify failed at %d: %s\n", i,
                    status.msg ? status.msg : "unknown");
@@ -801,7 +802,7 @@ static void test16_null_data_notify(void *args,
     hive_actor_id_t self = hive_self();
 
     // Notifying NULL data with len > 0 should fail or be handled safely
-    hive_status_t status = hive_ipc_notify(self, HIVE_TAG_NONE, NULL, 10);
+    hive_status_t status = hive_ipc_notify(self, HIVE_ID_NONE, NULL, 10);
     if (HIVE_FAILED(status)) {
         TEST_PASS("hive_ipc_notify rejects NULL data with non-zero length");
     } else {
@@ -825,7 +826,7 @@ static void short_lived_actor(void *args, const hive_spawn_info_t *siblings,
     hive_actor_id_t parent = *(hive_actor_id_t *)args;
     // Notify a message then die
     int data = 42;
-    hive_ipc_notify(parent, HIVE_TAG_NONE, &data, sizeof(data));
+    hive_ipc_notify(parent, HIVE_ID_NONE, &data, sizeof(data));
     return;
 }
 
@@ -911,8 +912,8 @@ static void test18_request_to_dying_actor(void *args,
     int request = 42;
     hive_message_t reply;
     uint64_t start = time_ms();
-    hive_status_t status =
-        hive_ipc_request(target, &request, sizeof(request), &reply, 5000);
+    hive_status_t status = hive_ipc_request(target, HIVE_ID_NONE, &request,
+                                            sizeof(request), &reply, 5000);
     uint64_t elapsed = time_ms() - start;
 
     if (status.code == HIVE_ERR_CLOSED) {
@@ -972,21 +973,21 @@ static void test19_multi_filter_basic(void *args,
     hive_actor_id_t sender;
     hive_spawn(test19_sender, NULL, &self, NULL, &sender);
 
-    // Wait for either TAG_A or TAG_B
+    // Wait for either TAG_A or TAG_B (now matched by id, not tag)
     hive_recv_filter_t filters[] = {
-        {HIVE_SENDER_ANY, HIVE_MSG_NOTIFY, TEST19_TAG_A},
-        {HIVE_SENDER_ANY, HIVE_MSG_NOTIFY, TEST19_TAG_B},
+        {HIVE_SENDER_ANY, HIVE_MSG_NOTIFY, TEST19_TAG_A, HIVE_TAG_ANY},
+        {HIVE_SENDER_ANY, HIVE_MSG_NOTIFY, TEST19_TAG_B, HIVE_TAG_ANY},
     };
     hive_message_t msg;
     size_t matched;
     hive_status_t status =
         hive_ipc_recv_matches(filters, 2, &msg, 1000, &matched);
 
-    if (HIVE_SUCCEEDED(status) && matched == 0 && msg.tag == TEST19_TAG_A) {
+    if (HIVE_SUCCEEDED(status) && matched == 0 && msg.id == TEST19_TAG_A) {
         TEST_PASS("multi-filter matched first filter correctly");
     } else {
-        printf("    status=%d, matched=%zu, tag=%u\n", status.code, matched,
-               msg.tag);
+        printf("    status=%d, matched=%zu, id=%u\n", status.code, matched,
+               msg.id);
         TEST_FAIL("expected match on first filter");
     }
 
@@ -1019,21 +1020,21 @@ static void test20_multi_filter_second(void *args,
     hive_actor_id_t sender;
     hive_spawn(test20_sender, NULL, &self, NULL, &sender);
 
-    // Wait for either TAG_A or TAG_B
+    // Wait for either TAG_A or TAG_B (now matched by id, not tag)
     hive_recv_filter_t filters[] = {
-        {HIVE_SENDER_ANY, HIVE_MSG_NOTIFY, TEST19_TAG_A},
-        {HIVE_SENDER_ANY, HIVE_MSG_NOTIFY, TEST19_TAG_B},
+        {HIVE_SENDER_ANY, HIVE_MSG_NOTIFY, TEST19_TAG_A, HIVE_TAG_ANY},
+        {HIVE_SENDER_ANY, HIVE_MSG_NOTIFY, TEST19_TAG_B, HIVE_TAG_ANY},
     };
     hive_message_t msg;
     size_t matched;
     hive_status_t status =
         hive_ipc_recv_matches(filters, 2, &msg, 1000, &matched);
 
-    if (HIVE_SUCCEEDED(status) && matched == 1 && msg.tag == TEST19_TAG_B) {
+    if (HIVE_SUCCEEDED(status) && matched == 1 && msg.id == TEST19_TAG_B) {
         TEST_PASS("multi-filter matched second filter correctly");
     } else {
-        printf("    status=%d, matched=%zu, tag=%u\n", status.code, matched,
-               msg.tag);
+        printf("    status=%d, matched=%zu, id=%u\n", status.code, matched,
+               msg.id);
         TEST_FAIL("expected match on second filter");
     }
 
@@ -1054,8 +1055,8 @@ static void test21_multi_filter_timeout(void *args,
 
     // Wait for messages that won't arrive
     hive_recv_filter_t filters[] = {
-        {HIVE_SENDER_ANY, HIVE_MSG_NOTIFY, 9999},
-        {HIVE_SENDER_ANY, HIVE_MSG_NOTIFY, 8888},
+        {HIVE_SENDER_ANY, HIVE_MSG_NOTIFY, HIVE_ID_ANY, 9999},
+        {HIVE_SENDER_ANY, HIVE_MSG_NOTIFY, HIVE_ID_ANY, 8888},
     };
     hive_message_t msg;
     hive_status_t status = hive_ipc_recv_matches(filters, 2, &msg, 100, NULL);
@@ -1083,7 +1084,7 @@ static void test22_multi_filter_nonblocking(void *args,
     printf("\nTest 22: Multi-filter non-blocking returns WOULDBLOCK\n");
 
     hive_recv_filter_t filters[] = {
-        {HIVE_SENDER_ANY, HIVE_MSG_NOTIFY, 1234},
+        {HIVE_SENDER_ANY, HIVE_MSG_NOTIFY, HIVE_ID_ANY, 1234},
     };
     hive_message_t msg;
     hive_status_t status = hive_ipc_recv_matches(filters, 1, &msg, 0, NULL);

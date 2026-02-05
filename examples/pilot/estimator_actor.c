@@ -198,8 +198,10 @@ void estimator_actor(void *args, const hive_spawn_info_t *siblings,
     enum { SEL_SENSOR, SEL_RESET };
     hive_select_source_t sources[] = {
         [SEL_SENSOR] = {HIVE_SEL_BUS, .bus = state->sensor_bus},
-        [SEL_RESET] = {HIVE_SEL_IPC, .ipc = {state->flight_manager,
-                                             HIVE_MSG_NOTIFY, NOTIFY_RESET}},
+        [SEL_RESET] = {HIVE_SEL_IPC, .ipc = {.sender = state->flight_manager,
+                                             .class = HIVE_MSG_NOTIFY,
+                                             .id = NOTIFY_RESET,
+                                             .tag = HIVE_TAG_ANY}},
     };
 
     while (1) {

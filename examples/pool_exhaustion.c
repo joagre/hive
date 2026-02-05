@@ -74,7 +74,7 @@ static void nonblocking_sender(void *args, const hive_spawn_info_t *siblings,
     for (int i = 0; i < 300; i++) {
         int data = i;
         hive_status_t s =
-            hive_ipc_notify(receiver, HIVE_TAG_NONE, &data, sizeof(data));
+            hive_ipc_notify(receiver, HIVE_ID_NONE, &data, sizeof(data));
         if (HIVE_FAILED(s)) {
             if (s.code == HIVE_ERR_NOMEM) {
                 printf("  [%d] Pool exhausted! Implementing backoff-retry...\n",
@@ -92,7 +92,7 @@ static void nonblocking_sender(void *args, const hive_spawn_info_t *siblings,
                     }
 
                     // Retry notify
-                    s = hive_ipc_notify(receiver, HIVE_TAG_NONE, &data,
+                    s = hive_ipc_notify(receiver, HIVE_ID_NONE, &data,
                                         sizeof(data));
                     if (HIVE_SUCCEEDED(s)) {
                         messages_sent_nonblocking++;
@@ -171,7 +171,7 @@ static void blocking_sender(void *args, const hive_spawn_info_t *siblings,
     for (int i = 0; i < target; i++) {
         int data = i;
         hive_status_t s =
-            hive_ipc_notify(receiver, HIVE_TAG_NONE, &data, sizeof(data));
+            hive_ipc_notify(receiver, HIVE_ID_NONE, &data, sizeof(data));
         if (HIVE_FAILED(s)) {
             // Should not happen with pool_block=true (unless other error)
             printf("  Unexpected error: %s\n", HIVE_ERR_STR(s));

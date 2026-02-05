@@ -25,7 +25,8 @@
 //   enum { SEL_STATE, SEL_TIMER, SEL_UART };
 //   hive_select_source_t sources[] = {
 //       [SEL_STATE] = {HIVE_SEL_BUS, .bus = state_bus},
-//       [SEL_TIMER] = {HIVE_SEL_IPC, .ipc = {HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer_id}},
+//       [SEL_TIMER] = {HIVE_SEL_IPC, .ipc = {HIVE_SENDER_ANY, HIVE_MSG_TIMER,
+//                                           HIVE_ID_ANY, timer_id}},
 //       [SEL_UART]  = {HIVE_SEL_HAL_EVENT, .event = uart_rx_event},
 //   };
 //   hive_select_result_t result;

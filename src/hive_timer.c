@@ -81,8 +81,8 @@ hive_status_t hive_sleep(uint32_t delay_us) {
     // Wait specifically for THIS timer message
     // Other messages remain in mailbox_t (selective receive)
     hive_message_t msg;
-    return hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg,
-                               -1);
+    return hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, HIVE_ID_ANY,
+                               timer, &msg, -1);
 }
 
 uint64_t hive_get_time(void) {

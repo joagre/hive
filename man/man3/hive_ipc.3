@@ -6,20 +6,20 @@ hive_ipc_notify, hive_ipc_notify_ex, hive_ipc_recv, hive_ipc_recv_match, hive_ip
 .nf
 .B #include <hive_ipc.h>
 .PP
-.BI "hive_status_t hive_ipc_notify(hive_actor_id_t " to ", uint32_t " tag ", const void *" data ", size_t " len ");"
-.BI "hive_status_t hive_ipc_notify_ex(hive_actor_id_t " to ", hive_msg_class_t " class ", uint32_t " tag ","
+.BI "hive_status_t hive_ipc_notify(hive_actor_id_t " to ", uint16_t " id ", const void *" data ", size_t " len ");"
+.BI "hive_status_t hive_ipc_notify_ex(hive_actor_id_t " to ", hive_msg_class_t " class ", uint16_t " id ","
 .BI "                               const void *" data ", size_t " len ");"
 .BI "hive_status_t hive_ipc_recv(hive_message_t *" msg ", int32_t " timeout_ms ");"
 .BI "hive_status_t hive_ipc_recv_match(hive_actor_id_t " from ", hive_msg_class_t " class ","
-.BI "                            uint32_t " tag ", hive_message_t *" msg ", int32_t " timeout_ms ");"
+.BI "                            uint16_t " id ", uint32_t " tag ", hive_message_t *" msg ", int32_t " timeout_ms ");"
 .BI "hive_status_t hive_ipc_recv_matches(const hive_recv_filter_t *" filters ", size_t " num_filters ","
 .BI "                            hive_message_t *" msg ", int32_t " timeout_ms ", size_t *" matched_index ");"
-.BI "hive_status_t hive_ipc_request(hive_actor_id_t " to ", const void *" request ", size_t " req_len ","
+.BI "hive_status_t hive_ipc_request(hive_actor_id_t " to ", uint16_t " id ", const void *" request ", size_t " req_len ","
 .BI "                         hive_message_t *" reply ", int32_t " timeout_ms ");"
 .BI "hive_status_t hive_ipc_reply(const hive_message_t *" request ", const void *" data ", size_t " len ");"
-.BI "hive_status_t hive_ipc_named_notify(const char *" name ", uint32_t " tag ","
+.BI "hive_status_t hive_ipc_named_notify(const char *" name ", uint16_t " id ","
 .BI "                               const void *" data ", size_t " len ");"
-.BI "hive_status_t hive_ipc_named_request(const char *" name ", const void *" request ","
+.BI "hive_status_t hive_ipc_named_request(const char *" name ", uint16_t " id ", const void *" request ","
 .BI "                               size_t " req_len ", hive_message_t *" reply ", int32_t " timeout_ms ");"
 .BI "bool hive_msg_is_timer(const hive_message_t *" msg ");"
 .BI "bool hive_ipc_pending(void);"
@@ -42,14 +42,21 @@ structure:
 .PP
 .nf
 typedef struct {
-    hive_actor_id_t       sender;  /* Sender actor ID */
+    hive_actor_id_t  sender;  /* Sender actor ID */
     hive_msg_class_t class;   /* Message class */
-    uint32_t       tag;     /* Message tag */
-    size_t         len;     /* Payload length in bytes */
-    const void    *data;    /* Payload pointer */
+    uint16_t         id;      /* Message type (user-defined) */
+    uint32_t         tag;     /* Correlation tag (for request/reply) */
+    size_t           len;     /* Payload length in bytes */
+    const void      *data;    /* Payload pointer */
 } hive_message_t;
 .fi
 .PP
+The
+.I id
+field is the message type for dispatch (user-defined application values).
+The
+.I tag
+field is for request/reply correlation (runtime-generated or user-provided).
 Access payload directly via cast:
 .I my_type *p = (my_type *)msg.data;
 .SS Receive Filter Structure
@@ -59,13 +66,16 @@ structure specifies matching criteria:
 .PP
 .nf
 typedef struct {
-    hive_actor_id_t       sender;  /* HIVE_SENDER_ANY for any sender */
-    hive_msg_class_t class;   /* HIVE_MSG_ANY for any class */
-    uint32_t       tag;     /* HIVE_TAG_ANY for any tag */
+    hive_actor_id_t  sender;  /* HIVE_SENDER_ANY (0) for any sender */
+    hive_msg_class_t class;   /* HIVE_MSG_ANY (0) for any class */
+    uint16_t         id;      /* HIVE_ID_ANY (0) for any id */
+    uint32_t         tag;     /* HIVE_TAG_ANY (0) for any tag */
 } hive_recv_filter_t;
 .fi
 .PP
-Use wildcard constants to match any value in that field.
+All wildcard constants are 0, allowing C designated initializers to default
+unspecified fields to "match any". Use wildcard constants to match any value in
+that field.
 .SS Message Classes
 .TP
 .B HIVE_MSG_NOTIFY
@@ -91,11 +101,12 @@ Actor death notification (see
 .BR hive_ipc_notify ()
 delivers an asynchronous message to actor
 .IR to
-with the specified
-.IR tag .
+with the specified message type
+.IR id .
 The
-.I tag
-parameter enables selective receive filtering on the receiver side (see
+.I id
+parameter is a user-defined value for message type dispatch on the receiver
+side (see
 .BR hive_ipc_recv_match ()).
 The payload
 .I data
@@ -103,8 +114,8 @@ of length
 .I len
 is copied to the receiver's mailbox. The sender continues immediately without
 waiting. Maximum payload size is
-.B HIVE_MAX_MESSAGE_SIZE - 4
-(252 bytes by default).
+.B HIVE_MAX_MESSAGE_SIZE - 6
+(250 bytes by default).
 .PP
 .BR hive_ipc_notify_ex ()
 is like
@@ -112,10 +123,10 @@ is like
 but allows specifying the message
 .I class
 and
-.IR tag .
-This is useful for implementing custom protocols or tagged notifications where
-the receiver needs to distinguish between different message types or correlate
-messages. The sender is automatically set to the current actor.
+.IR id .
+This is useful for implementing custom protocols where the receiver needs to
+distinguish between different message types. The sender is automatically set to
+the current actor.
 .SS Receiving Messages
 .BR hive_ipc_recv ()
 receives the next message from the mailbox in FIFO order. The
@@ -137,13 +148,17 @@ if exceeded.
 .PP
 .BR hive_ipc_recv_match ()
 performs selective receive, scanning the mailbox for a message matching all
-specified filter criteria. Use the wildcard constants to match any value:
+specified filter criteria. Use the wildcard constants (all are 0) to match any
+value:
 .IP \(bu 2
 .B HIVE_SENDER_ANY
 \- match any sender
 .IP \(bu 2
 .B HIVE_MSG_ANY
 \- match any message class
+.IP \(bu 2
+.B HIVE_ID_ANY
+\- match any message id
 .IP \(bu 2
 .B HIVE_TAG_ANY
 \- match any tag
@@ -170,10 +185,13 @@ same timeout semantics apply as for
 Example usage:
 .PP
 .nf
+/* Filter format: {sender, class, id, tag} - unspecified fields default to 0 (wildcard) */
 enum { FILTER_SYNC_TIMER, FILTER_LANDED };
 hive_recv_filter_t filters[] = {
-    [FILTER_SYNC_TIMER] = {HIVE_SENDER_ANY, HIVE_MSG_TIMER, sync_timer},
-    [FILTER_LANDED] = {HIVE_SENDER_ANY, HIVE_MSG_NOTIFY, NOTIFY_LANDED},
+    /* Timer: filter by tag (timer id) */
+    [FILTER_SYNC_TIMER] = {.class = HIVE_MSG_TIMER, .tag = sync_timer},
+    /* Notification: filter by id (message type) */
+    [FILTER_LANDED] = {.class = HIVE_MSG_NOTIFY, .id = NOTIFY_LANDED},
 };
 hive_message_t msg;
 size_t matched;
@@ -351,7 +369,8 @@ immediately. They do
 block or drop messages. Implement backoff-retry:
 .PP
 .nf
-hive_status_t s = hive_ipc_notify(target, HIVE_TAG_NONE, data, len);
+#define MSG_DATA 1  /* Application-defined message type */
+hive_status_t s = hive_ipc_notify(target, MSG_DATA, data, len);
 if (s.code == HIVE_ERR_NOMEM) {
     hive_message_t msg;
     hive_ipc_recv(&msg, 10);  /* Backoff 10ms */
@@ -431,7 +450,7 @@ which provides natural backpressure
 Avoiding patterns that queue many messages
 .SS Embedded Considerations
 .IP \(bu 2
-Maximum message payload: 252 bytes (configurable via HIVE_MAX_MESSAGE_SIZE)
+Maximum message payload: 250 bytes (configurable via HIVE_MAX_MESSAGE_SIZE - 6 byte header)
 .IP \(bu 2
 Zero heap allocation in IPC operations
 .IP \(bu 2
@@ -460,6 +479,8 @@ void server(void *arg, const hive_spawn_info_t *siblings,
     }
 }
 
+#define MSG_ADD_POINTS 1  /* Application-defined message type */
+
 void client(void *arg, const hive_spawn_info_t *siblings,
             size_t sibling_count) {
     hive_actor_id_t server_id = *(hive_actor_id_t *)arg;
@@ -467,8 +488,8 @@ void client(void *arg, const hive_spawn_info_t *siblings,
     point_t req = {10, 20};
     hive_message_t reply;
 
-    hive_status_t s = hive_ipc_request(server_id, &req, sizeof(req),
-                                     &reply, 5000);
+    hive_status_t s = hive_ipc_request(server_id, MSG_ADD_POINTS,
+                                       &req, sizeof(req), &reply, 5000);
     if (HIVE_FAILED(s)) {
         printf("Request failed: %s\\n", HIVE_ERR_STR(s));
     } else {

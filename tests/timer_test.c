@@ -140,7 +140,7 @@ static void run_timer_tests(void *args, const hive_spawn_info_t *siblings,
         // Now test that regular messages are NOT detected as timer ticks
         hive_actor_id_t self = hive_self();
         const char *data = "not a timer";
-        hive_ipc_notify(self, HIVE_TAG_NONE, data, 12);
+        hive_ipc_notify(self, HIVE_ID_NONE, data, 12);
 
         status = hive_ipc_recv(&msg, 100);
         if (HIVE_SUCCEEDED(status) && !hive_msg_is_timer(&msg)) {
@@ -520,7 +520,7 @@ static void run_timer_tests(void *args, const hive_spawn_info_t *siblings,
         hive_actor_id_t self = hive_self();
         int test_data = 12345;
         hive_status_t status =
-            hive_ipc_notify(self, HIVE_TAG_NONE, &test_data, sizeof(test_data));
+            hive_ipc_notify(self, HIVE_ID_NONE, &test_data, sizeof(test_data));
         if (HIVE_FAILED(status)) {
             TEST_FAIL("failed to notify message to self");
         } else {

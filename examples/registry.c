@@ -89,7 +89,8 @@ static void client_actor(void *args, const hive_spawn_info_t *siblings,
     hive_timer_id_t timer;
     hive_timer_after(100000, &timer); // 100ms
     hive_message_t msg;
-    hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
+    hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, HIVE_ID_ANY, timer,
+                        &msg, -1);
 
     // Look up service by name
     hive_actor_id_t service;
@@ -112,8 +113,8 @@ static void client_actor(void *args, const hive_spawn_info_t *siblings,
         printf("[CLIENT] Requesting %d + %d...\n", operands[0], operands[1]);
         fflush(stdout);
 
-        status =
-            hive_ipc_request(service, operands, sizeof(operands), &reply, 1000);
+        status = hive_ipc_request(service, 0, operands, sizeof(operands),
+                                  &reply, 1000);
         if (HIVE_SUCCEEDED(status)) {
             int result = *(int *)reply.data;
             printf("[CLIENT] Got result: %d\n", result);
@@ -127,7 +128,8 @@ static void client_actor(void *args, const hive_spawn_info_t *siblings,
     printf("[CLIENT] Waiting for service to exit...\n");
     fflush(stdout);
     hive_timer_after(3000000, &timer); // Wait for service to timeout and exit
-    hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
+    hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, HIVE_ID_ANY, timer,
+                        &msg, -1);
 
     status = hive_whereis(SERVICE_NAME, &service);
     if (HIVE_FAILED(status)) {

@@ -50,13 +50,13 @@ void receiver_actor(void *args, const hive_spawn_info_t *siblings,
             break;
         }
         if (HIVE_SUCCEEDED(status)) {
-            if (scanned < 5 || msg.tag == TAG_START || msg.tag == TAG_DONE) {
-                printf("  Message %d: tag=%u\n", scanned, msg.tag);
+            if (scanned < 5 || msg.id == TAG_START || msg.id == TAG_DONE) {
+                printf("  Message %d: id=%u\n", scanned, msg.id);
             }
-            if (msg.tag == TAG_START) {
+            if (msg.id == TAG_START) {
                 found_start = 1;
             }
-            if (msg.tag == TAG_DONE) {
+            if (msg.id == TAG_DONE) {
                 found_done = 1;
             }
             scanned++;
@@ -82,7 +82,7 @@ void receiver_actor(void *args, const hive_spawn_info_t *siblings,
         fflush(stdout);
 
         hive_status_t status = hive_ipc_recv_match(
-            HIVE_SENDER_ANY, HIVE_MSG_ANY, TAG_DONE, &msg, 5000);
+            HIVE_SENDER_ANY, HIVE_MSG_ANY, HIVE_ID_ANY, TAG_DONE, &msg, 5000);
 
         if (HIVE_SUCCEEDED(status)) {
             printf("Receiver: Got DONE signal\n");

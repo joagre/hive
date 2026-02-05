@@ -88,12 +88,15 @@ void waypoint_actor(void *args, const hive_spawn_info_t *siblings,
     // Wait for START or RESET using hive_select
     enum { SEL_START, SEL_RESET_WAIT };
     hive_select_source_t wait_sources[] = {
-        [SEL_START] = {HIVE_SEL_IPC,
-                       .ipc = {state->flight_manager, HIVE_MSG_NOTIFY,
-                               NOTIFY_FLIGHT_START}},
+        [SEL_START] = {HIVE_SEL_IPC, .ipc = {.sender = state->flight_manager,
+                                             .class = HIVE_MSG_NOTIFY,
+                                             .id = NOTIFY_FLIGHT_START,
+                                             .tag = HIVE_TAG_ANY}},
         [SEL_RESET_WAIT] = {HIVE_SEL_IPC,
-                            .ipc = {state->flight_manager, HIVE_MSG_NOTIFY,
-                                    NOTIFY_RESET}},
+                            .ipc = {.sender = state->flight_manager,
+                                    .class = HIVE_MSG_NOTIFY,
+                                    .id = NOTIFY_RESET,
+                                    .tag = HIVE_TAG_ANY}},
     };
 
     while (1) {
@@ -148,11 +151,15 @@ void waypoint_actor(void *args, const hive_spawn_info_t *siblings,
         hive_select_source_t sources[] = {
             [SEL_STATE] = {HIVE_SEL_BUS, .bus = state->state_bus},
             [SEL_HOVER_TIMER] = {HIVE_SEL_IPC,
-                                 .ipc = {HIVE_SENDER_ANY, HIVE_MSG_TIMER,
-                                         hover_timer}},
+                                 .ipc = {.sender = HIVE_SENDER_ANY,
+                                         .class = HIVE_MSG_TIMER,
+                                         .id = HIVE_ID_ANY,
+                                         .tag = hover_timer}},
             [SEL_RESET] = {HIVE_SEL_IPC,
-                           .ipc = {state->flight_manager, HIVE_MSG_NOTIFY,
-                                   NOTIFY_RESET}},
+                           .ipc = {.sender = state->flight_manager,
+                                   .class = HIVE_MSG_NOTIFY,
+                                   .id = NOTIFY_RESET,
+                                   .tag = HIVE_TAG_ANY}},
         };
 
         hive_select_result_t result;
@@ -161,8 +168,10 @@ void waypoint_actor(void *args, const hive_spawn_info_t *siblings,
             // Reorder sources to [SEL_STATE, SEL_RESET]
             hive_select_source_t sources_no_timer[] = {
                 [0] = {HIVE_SEL_BUS, .bus = state->state_bus},
-                [1] = {HIVE_SEL_IPC, .ipc = {state->flight_manager,
-                                             HIVE_MSG_NOTIFY, NOTIFY_RESET}},
+                [1] = {HIVE_SEL_IPC, .ipc = {.sender = state->flight_manager,
+                                             .class = HIVE_MSG_NOTIFY,
+                                             .id = NOTIFY_RESET,
+                                             .tag = HIVE_TAG_ANY}},
             };
             status = hive_select(sources_no_timer, 2, &result, -1);
             if (HIVE_FAILED(status)) {

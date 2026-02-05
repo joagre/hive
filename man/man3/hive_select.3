@@ -53,8 +53,9 @@ Wait for an IPC message matching the specified filter. The filter uses the
 same semantics as
 .BR hive_ipc_recv_match (3):
 wildcards
-.BR HIVE_SENDER_ANY ", " HIVE_MSG_ANY ", and " HIVE_TAG_ANY
-can be used to match any value.
+.BR HIVE_SENDER_ANY ", " HIVE_MSG_ANY ", " HIVE_ID_ANY ", and " HIVE_TAG_ANY
+(all are 0) can be used to match any value. The filter fields are: sender,
+class, id (message type), and tag (correlation).
 .TP
 .B HIVE_SEL_BUS
 Wait for unread data on the specified bus. "Unread" means an entry the calling
@@ -236,11 +237,15 @@ void controller(void *arg, const hive_spawn_info_t *siblings,
     hive_timer_id_t tick;
     hive_timer_every(100000, &tick);  /* 100ms */
 
+    /* Filter format: {sender, class, id, tag} - use 0 for wildcards */
+    #define CMD_ID 1  /* Application-defined command type */
     enum { SEL_SENSOR, SEL_TIMER, SEL_COMMAND };
     hive_select_source_t sources[] = {
         [SEL_SENSOR] = {HIVE_SEL_BUS, .bus = sensor_bus},
-        [SEL_TIMER] = {HIVE_SEL_IPC, .ipc = {HIVE_SENDER_ANY, HIVE_MSG_TIMER, tick}},
-        [SEL_COMMAND] = {HIVE_SEL_IPC, .ipc = {HIVE_SENDER_ANY, HIVE_MSG_NOTIFY, CMD_TAG}},
+        /* Timer: filter by tag (timer id) */
+        [SEL_TIMER] = {HIVE_SEL_IPC, .ipc = {.class = HIVE_MSG_TIMER, .tag = tick}},
+        /* Command: filter by id (message type) */
+        [SEL_COMMAND] = {HIVE_SEL_IPC, .ipc = {.class = HIVE_MSG_NOTIFY, .id = CMD_ID}},
     };
 
     while (1) {

@@ -119,7 +119,7 @@ static void producer_actor(void *args, const hive_spawn_info_t *siblings,
         // Call consumer - this BLOCKS until consumer calls hive_ipc_reply()
         hive_message_t reply;
         hive_status_t status =
-            hive_ipc_request(consumer_id, &req, sizeof(req), &reply, 10000);
+            hive_ipc_request(consumer_id, 0, &req, sizeof(req), &reply, 10000);
 
         if (HIVE_FAILED(status)) {
             if (status.code == HIVE_ERR_TIMEOUT) {

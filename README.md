@@ -75,6 +75,7 @@ See [docs/spec/](docs/spec/) for design details.
 - Actor lifecycle management (spawn, exit)
 - IPC with selective receive and request/reply
 - Message classes: NOTIFY (async), REQUEST/REPLY, TIMER, EXIT
+- Message `id` field for type dispatch, separate from correlation `tag`
 - Actor linking and monitoring (bidirectional links, unidirectional monitors)
 - Supervision (restart strategies, intensity limiting, child specs)
 - Exit notifications with exit reasons (normal, crash, killed)
@@ -166,7 +167,7 @@ All resource limits are defined at compile time. Edit and recompile to change:
 #define HIVE_STACK_ARENA_SIZE (1*1024*1024) // Stack arena size (1 MB default)
 #define HIVE_MAILBOX_ENTRY_POOL_SIZE 256  // Mailbox pool size
 #define HIVE_MESSAGE_DATA_POOL_SIZE 256   // Message pool size
-#define HIVE_MAX_MESSAGE_SIZE 256         // Max message size (4-byte header + 252 payload)
+#define HIVE_MAX_MESSAGE_SIZE 256         // Max message size (6-byte header + 250 payload)
 #define HIVE_MAX_BUSES 32                 // Maximum concurrent buses
 // ... see include/hive_static_config.h for full list
 ```
@@ -280,8 +281,10 @@ if (HIVE_FAILED(status)) {
 }
 
 // Notify (fire-and-forget)
+// hive_ipc_notify(to, id, data, len) - id is the message type for dispatch
 int data = 42;
-status = hive_ipc_notify(worker, HIVE_TAG_NONE, &data, sizeof(data));
+#define MSG_WORK 1  // Application-defined message type
+status = hive_ipc_notify(worker, MSG_WORK, &data, sizeof(data));
 if (HIVE_FAILED(status)) {
     // HIVE_ERR_NOMEM if pool exhausted (when pool_block=false)
     // Notify does NOT block or drop - caller must handle error
@@ -289,15 +292,16 @@ if (HIVE_FAILED(status)) {
     // Backoff and retry pattern:
     hive_message_t msg;
     hive_ipc_recv(&msg, 10);  // Backoff 10ms
-    status = hive_ipc_notify(worker, HIVE_TAG_NONE, &data, sizeof(data));  // Retry
+    status = hive_ipc_notify(worker, MSG_WORK, &data, sizeof(data));  // Retry
 }
 
 // Alternative: Use pool_block=true to yield on pool exhaustion
 // (notify/request always succeeds eventually, but can deadlock if no one consumes)
 
 // Request/reply pattern (blocks until reply or timeout)
+// hive_ipc_request(to, id, request, len, reply, timeout)
 hive_message_t reply;
-status = hive_ipc_request(worker, &data, sizeof(data), &reply, 5000);  // 5s timeout
+status = hive_ipc_request(worker, MSG_WORK, &data, sizeof(data), &reply, 5000);  // 5s timeout
 if (status.code == HIVE_ERR_CLOSED) {
     // Target died before replying (detected via internal monitor)
 } else if (status.code == HIVE_ERR_TIMEOUT) {
@@ -322,9 +326,10 @@ hive_ipc_recv(&msg, 0);    // Non-blocking: HIVE_ERR_WOULDBLOCK if empty
 hive_ipc_recv(&msg, 100);  // Wait up to 100ms: HIVE_ERR_TIMEOUT if no message
 
 // Access message fields directly
-if (msg.class == HIVE_MSG_NOTIFY) {
+// msg.id = message type, msg.tag = correlation (for request/reply)
+if (msg.class == HIVE_MSG_NOTIFY && msg.id == MSG_WORK) {
     int *value = (int *)msg.data;
-    printf("Received %d from actor %u\n", *value, msg.sender);
+    printf("Received work %d from actor %u\n", *value, msg.sender);
 }
 ```
 
@@ -342,8 +347,10 @@ if (HIVE_FAILED(status)) {
 }
 
 // Wait for specific timer using selective receive (recommended)
+// hive_ipc_recv_match(from, class, id, tag, msg, timeout)
+// For timers: id=HIVE_ID_ANY, tag=timer_id (timers use tag for correlation)
 hive_message_t msg;
-status = hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
+status = hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, HIVE_ID_ANY, timer, &msg, -1);
 if (HIVE_FAILED(status)) {
     // HIVE_ERR_TIMEOUT if timeout expires (not possible with -1)
 }
@@ -622,15 +629,17 @@ See [examples/pilot/README.md](examples/pilot/README.md) for build instructions 
 
 ### IPC
 
-- `hive_ipc_notify(to, tag, data, len)` - Fire-and-forget notification with tag
-- `hive_ipc_notify_ex(to, class, tag, data, len)` - Notify with explicit class and tag
-- `hive_ipc_recv(msg, timeout)` - Receive any message (`msg.class`, `msg.tag`, `msg.data`)
-- `hive_ipc_recv_match(from, class, tag, msg, timeout)` - Selective receive with filtering
+Messages have two identifiers: `id` (message type for dispatch) and `tag` (correlation for request/reply).
+
+- `hive_ipc_notify(to, id, data, len)` - Fire-and-forget notification with message type
+- `hive_ipc_notify_ex(to, class, id, data, len)` - Notify with explicit class and id
+- `hive_ipc_recv(msg, timeout)` - Receive any message (`msg.class`, `msg.id`, `msg.tag`, `msg.data`)
+- `hive_ipc_recv_match(from, class, id, tag, msg, timeout)` - Selective receive with filtering
 - `hive_ipc_recv_matches(filters, n, msg, timeout, matched_idx)` - Multi-pattern selective receive
-- `hive_ipc_request(to, req, len, reply, timeout)` - Blocking request/reply
+- `hive_ipc_request(to, id, req, len, reply, timeout)` - Blocking request/reply
 - `hive_ipc_reply(request, data, len)` - Reply to a REQUEST message
-- `hive_ipc_named_notify(name, tag, data, len)` - Notify by actor name
-- `hive_ipc_named_request(name, req, len, reply, timeout)` - Request/reply by actor name
+- `hive_ipc_named_notify(name, id, data, len)` - Notify by actor name
+- `hive_ipc_named_request(name, id, req, len, reply, timeout)` - Request/reply by actor name
 - `hive_msg_is_timer(msg)` - Check if message is a timer tick
 - `hive_ipc_pending()` - Check if messages are available
 - `hive_ipc_count()` - Get number of pending messages
@@ -753,9 +762,10 @@ Omits SSL/TLS, UDP, socket options by design. See `man hive_tcp` for rationale.
 Embedded code often needs to wait for multiple things: a hardware interrupt, a timer, and a command from another actor. Without unified waiting, you poll in a loop or build a state machine. `hive_select()` handles all sources in one blocking call - the actor sleeps until something is ready.
 
 ```c
+// IPC filter: {sender, class, id, tag} - use 0 (wildcard) for any field
 hive_select_source_t sources[] = {
     {HIVE_SEL_HAL_EVENT, .event = uart_rx_event},  // UART RX interrupt
-    {HIVE_SEL_IPC, .ipc = {HIVE_SENDER_ANY, HIVE_MSG_TIMER, timeout}},
+    {HIVE_SEL_IPC, .ipc = {HIVE_SENDER_ANY, HIVE_MSG_TIMER, HIVE_ID_ANY, timeout}},
     {HIVE_SEL_BUS, .bus = sensor_bus},
 };
 hive_select_result_t result;

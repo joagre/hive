@@ -232,23 +232,27 @@ if (hive_msg_is_exit(&msg)) {
 - `exit_info.monitor_id`: 0 = from link, non-zero = from monitor (matches `hive_monitor()` return value)
 
 ### IPC Message Format
-All messages have a 4-byte header prepended to payload:
-- **class** (4 bits): Message type (NOTIFY, REQUEST, REPLY, TIMER, EXIT)
+All messages have a 6-byte header prepended to payload:
+- **class** (4 bits): Message class (NOTIFY, REQUEST, REPLY, TIMER, EXIT)
 - **gen** (1 bit): Generated tag flag (1 = runtime-generated, 0 = user-provided)
 - **tag** (27 bits): Correlation identifier for request/reply
+- **id** (16 bits): User-defined message type for dispatch
 
 ### IPC API
-- **`hive_ipc_notify(to, tag, data, len)`**: Fire-and-forget notification (class=NOTIFY). Use `HIVE_TAG_NONE` when no correlation needed
-- **`hive_ipc_notify_ex(to, class, tag, data, len)`**: Notify with explicit class and tag
+
+Messages have two identifiers: `id` (message type for dispatch) and `tag` (correlation for request/reply).
+
+- **`hive_ipc_notify(to, id, data, len)`**: Fire-and-forget notification (class=NOTIFY). id is message type for dispatch
+- **`hive_ipc_notify_ex(to, class, id, data, len)`**: Notify with explicit class and id
 - **`hive_ipc_recv(msg, timeout)`**: Receive any message
-- **`hive_ipc_recv_match(from, class, tag, msg, timeout)`**: Selective receive with filtering
+- **`hive_ipc_recv_match(from, class, id, tag, msg, timeout)`**: Selective receive with filtering
 - **`hive_ipc_recv_matches(filters, num_filters, msg, timeout, matched_index)`**: Multi-pattern selective receive (wait for any of several message types)
-- **`hive_ipc_request(to, req, len, reply, timeout)`**: Blocking request/reply (monitors target, waits for REPLY or death)
+- **`hive_ipc_request(to, id, req, len, reply, timeout)`**: Blocking request/reply (monitors target, waits for REPLY or death)
 - **`hive_ipc_reply(request, data, len)`**: Reply to a REQUEST message
 
 **Named IPC** - Convenience functions that resolve actor names automatically:
-- **`hive_ipc_named_notify(name, tag, data, len)`**: Resolve name via `hive_whereis()`, then notify
-- **`hive_ipc_named_request(name, req, len, reply, timeout)`**: Resolve name via `hive_whereis()`, then request
+- **`hive_ipc_named_notify(name, id, data, len)`**: Resolve name via `hive_whereis()`, then notify
+- **`hive_ipc_named_request(name, id, req, len, reply, timeout)`**: Resolve name via `hive_whereis()`, then request
 
 Named IPC is useful for communicating with supervised actors that may restart (and get new actor IDs). Returns `HIVE_ERR_NOT_FOUND` if name not registered.
 
@@ -261,15 +265,15 @@ hive_message_t msg;
 hive_ipc_recv(&msg, -1);
 my_data *data = (my_data *)msg.data;  // Direct payload access
 if (msg.class == HIVE_MSG_REQUEST) { ... }
-// msg.tag also available directly
+// msg.id = message type, msg.tag = correlation
 ```
 
 ### Selective Receive
 - `hive_ipc_recv_match()` scans mailbox for messages matching filter criteria
 - `hive_ipc_recv_matches()` waits for any message matching one of several filters (useful for waiting on timer OR notification, REPLY OR EXIT)
 - Non-matching messages are **skipped but not dropped** - they remain in mailbox
-- Filter on sender (`HIVE_SENDER_ANY` = wildcard), class (`HIVE_MSG_ANY`), tag (`HIVE_TAG_ANY`)
-- Use `HIVE_TAG_NONE` for notifications that don't need correlation
+- Filter on sender (`HIVE_SENDER_ANY`), class (`HIVE_MSG_ANY`), id (`HIVE_ID_ANY`), tag (`HIVE_TAG_ANY`) - all wildcards are 0
+- Use id for message type dispatch, tag for request/reply correlation
 - Enables request/reply pattern: issue REQUEST with generated tag, wait for REPLY with matching tag
 
 ### IPC Pool Exhaustion
@@ -515,23 +519,23 @@ Build commands:
 - `make ENABLE_TCP=0 ENABLE_FILE=0` - Disable optional subsystems
 
 ### Message Classes
-Messages are identified by class (accessible directly via `msg.class`):
-- `HIVE_MSG_NOTIFY`: Fire-and-forget notification
-- `HIVE_MSG_REQUEST`: Request expecting a reply
-- `HIVE_MSG_REPLY`: Response to a REQUEST
-- `HIVE_MSG_TIMER`: Timer tick (`msg.tag` contains hive_timer_id_t)
-- `HIVE_MSG_EXIT`: System notification (e.g., actor death)
-- `HIVE_MSG_ANY`: Wildcard for selective receive filtering
+Messages are identified by class (accessible directly via `msg.class`). All wildcards are 0:
+- `HIVE_MSG_ANY`: Wildcard for selective receive filtering (0)
+- `HIVE_MSG_NOTIFY`: Fire-and-forget notification (1)
+- `HIVE_MSG_REQUEST`: Request expecting a reply (2)
+- `HIVE_MSG_REPLY`: Response to a REQUEST (3)
+- `HIVE_MSG_TIMER`: Timer tick (`msg.tag` contains hive_timer_id_t) (4)
+- `HIVE_MSG_EXIT`: System notification (e.g., actor death) (5)
 
 Check message type directly: `if (msg.class == HIVE_MSG_TIMER) { ... }` or use `hive_msg_is_timer(&msg)`.
 
 ### Waiting for Timer Messages
-When waiting for a timer, use selective receive with the specific hive_timer_id_t:
+When waiting for a timer, use selective receive with the specific hive_timer_id_t (timers use the tag field):
 ```c
 hive_timer_id_t my_timer;
 hive_timer_after(500000, &my_timer);
 hive_message_t msg;
-hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, my_timer, &msg, -1);
+hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, HIVE_ID_ANY, my_timer, &msg, -1);
 ```
 Do NOT use `HIVE_TAG_ANY` for timer messages - always use the hive_timer_id_t to avoid consuming the wrong timer's message.
 

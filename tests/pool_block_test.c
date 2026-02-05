@@ -48,7 +48,7 @@ static void sender_no_block(void *args, const hive_spawn_info_t *siblings,
 
     while (true) {
         hive_status_t s =
-            hive_ipc_notify(receiver, HIVE_TAG_NONE, &data, sizeof(data));
+            hive_ipc_notify(receiver, HIVE_ID_NONE, &data, sizeof(data));
         if (HIVE_FAILED(s)) {
             if (s.code == HIVE_ERR_NOMEM) {
                 printf(
@@ -128,7 +128,7 @@ static void sender_blocking(void *args, const hive_spawn_info_t *siblings,
     // Consumer will free space, allowing more notifies
     for (int i = 0; i < HIVE_MESSAGE_DATA_POOL_SIZE + 20; i++) {
         hive_status_t s =
-            hive_ipc_notify(receiver, HIVE_TAG_NONE, &data, sizeof(data));
+            hive_ipc_notify(receiver, HIVE_ID_NONE, &data, sizeof(data));
         if (HIVE_FAILED(s)) {
             // Should not get NOMEM with blocking enabled!
             printf("    FAIL: got error %d with pool_block=true\n", s.code);
@@ -205,7 +205,7 @@ static void timer_under_exhaustion_sender(void *args,
     int data = 0;
     while (true) {
         hive_status_t s =
-            hive_ipc_notify(receiver, HIVE_TAG_NONE, &data, sizeof(data));
+            hive_ipc_notify(receiver, HIVE_ID_NONE, &data, sizeof(data));
         if (HIVE_FAILED(s)) {
             break; // Pool exhausted for user messages
         }
@@ -232,7 +232,8 @@ static void timer_under_exhaustion_sender(void *args,
 
     // Wait for timer with timeout
     hive_message_t msg;
-    s = hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, 1000);
+    s = hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, HIVE_ID_ANY, timer,
+                            &msg, 1000);
     if (HIVE_SUCCEEDED(s)) {
         printf("    Timer fired successfully!\n");
         test_passed = true;

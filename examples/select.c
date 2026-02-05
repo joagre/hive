@@ -48,7 +48,8 @@ static void sensor_publisher(void *args, const hive_spawn_info_t *siblings,
     for (int i = 0; i < 10; i++) {
         // Wait for timer
         hive_message_t msg;
-        hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, tick, &msg, -1);
+        hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, HIVE_ID_ANY, tick,
+                            &msg, -1);
 
         // Simulate changing sensor readings
         data.temperature += 0.5f;
@@ -129,11 +130,13 @@ static void controller(void *args, const hive_spawn_info_t *siblings,
     hive_select_source_t sources[] = {
         [SEL_SENSOR] = {HIVE_SEL_BUS, .bus = s_sensor_bus},
         [SEL_HEARTBEAT] = {HIVE_SEL_IPC,
-                           .ipc = {HIVE_SENDER_ANY, HIVE_MSG_TIMER, heartbeat}},
-        [SEL_STATUS] = {HIVE_SEL_IPC,
-                        .ipc = {HIVE_SENDER_ANY, HIVE_MSG_NOTIFY, CMD_STATUS}},
-        [SEL_SHUTDOWN] = {HIVE_SEL_IPC, .ipc = {HIVE_SENDER_ANY,
-                                                HIVE_MSG_NOTIFY, CMD_SHUTDOWN}},
+                           .ipc = {HIVE_SENDER_ANY, HIVE_MSG_TIMER, HIVE_ID_ANY,
+                                   heartbeat}},
+        [SEL_STATUS] = {HIVE_SEL_IPC, .ipc = {HIVE_SENDER_ANY, HIVE_MSG_NOTIFY,
+                                              CMD_STATUS, HIVE_TAG_ANY}},
+        [SEL_SHUTDOWN] = {HIVE_SEL_IPC,
+                          .ipc = {HIVE_SENDER_ANY, HIVE_MSG_NOTIFY,
+                                  CMD_SHUTDOWN, HIVE_TAG_ANY}},
     };
 
     int sensor_count = 0;
@@ -184,7 +187,8 @@ static void controller(void *args, const hive_spawn_info_t *siblings,
         // Check for exit messages (publisher finished)
         hive_message_t msg;
         if (HIVE_SUCCEEDED(hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_EXIT,
-                                               HIVE_TAG_ANY, &msg, 0))) {
+                                               HIVE_ID_ANY, HIVE_TAG_ANY, &msg,
+                                               0))) {
             if (hive_msg_is_exit(&msg)) {
                 hive_exit_msg_t exit_info;
                 hive_decode_exit(&msg, &exit_info);

@@ -337,25 +337,34 @@ typedef enum {
     HIVE_MSG_REPLY,      // Response to a REQUEST
     HIVE_MSG_TIMER,      // Timer tick
     HIVE_MSG_EXIT,     // System notifications (actor death)
-    // 5-14 reserved for future use
-    HIVE_MSG_ANY = 15,   // Wildcard for selective receive filtering
+    HIVE_MSG_EXIT = 5,   // Actor death notification
 } hive_msg_class_t;
 ```
 
-### Tag System
+### Message ID and Tag System
+
+Messages have two identifiers: `id` (message type for dispatch) and `tag` (correlation for request/reply).
 
 ```c
+// All wildcards are 0 for C designated initializer convenience
+#define HIVE_ID_NONE         0            // No id (when message type not needed)
+#define HIVE_ID_ANY          0            // Wildcard for selective receive filtering
 #define HIVE_TAG_NONE        0            // No tag (for simple NOTIFY messages)
-#define HIVE_TAG_ANY         0x0FFFFFFF   // Wildcard for selective receive filtering
-
-// Note: HIVE_TAG_GEN_BIT and HIVE_TAG_VALUE_MASK are internal implementation
-// details and not part of the public API
+#define HIVE_TAG_ANY         0            // Wildcard for selective receive filtering
+#define HIVE_SENDER_ANY      0            // Wildcard for any sender
+#define HIVE_MSG_ANY         0            // Wildcard for any class
 ```
 
-**Tag semantics**
+**ID semantics** (message type for dispatch)
+- **HIVE_ID_NONE**: Used when message type is not needed
+- User-defined values: Application defines message type constants (e.g., `#define MSG_SENSOR_DATA 1`)
+- Used for dispatching to different handlers based on message type
+
+**Tag semantics** (correlation for request/reply)
 - **HIVE_TAG_NONE**: Used for simple NOTIFY messages where no correlation is needed
 - **HIVE_TAG_ANY**: Used in `hive_ipc_recv_match()` to match any tag
 - **Generated tags**: Created automatically by `hive_ipc_request()` for request/reply correlation
+- **Timer IDs**: Timers use the tag field for the timer ID
 
 **Tag generation** - Internal to `hive_ipc_request()`. Global counter increments on each call. Generated tags have `HIVE_TAG_GEN_BIT` set. Wraps at 2^27 (134M values).
 
@@ -365,11 +374,12 @@ typedef enum {
 
 ```c
 typedef struct {
-    hive_actor_id_t       sender;       // Sender actor ID
-    hive_msg_class_t class;        // Message class
-    uint32_t       tag;          // Message tag
-    size_t         len;          // Payload length (excludes 4-byte header)
-    const void    *data;         // Payload pointer (past header)
+    hive_actor_id_t  sender;   // Sender actor ID
+    hive_msg_class_t class;    // Message class
+    uint16_t         id;       // Message type (user-defined)
+    uint32_t         tag;      // Correlation tag
+    size_t           len;      // Payload length (excludes 6-byte header)
+    const void      *data;     // Payload pointer (past header)
 } hive_message_t;
 ```
 
@@ -384,6 +394,8 @@ my_data *payload = (my_data *)msg.data;
 if (msg.class == HIVE_MSG_REQUEST) {
     hive_ipc_reply(&msg, &response, sizeof(response));
 }
+// Use msg.id for message type dispatch
+// Use msg.tag for request/reply correlation
 ```
 
 **Lifetime rule** - Data is valid until the next successful `hive_ipc_recv()`, `hive_ipc_recv_match()`, or `hive_ipc_recv_matches()` call. Copy immediately if needed beyond current iteration.
@@ -394,12 +406,12 @@ if (msg.class == HIVE_MSG_REQUEST) {
 
 ```c
 // Fire-and-forget message (class=NOTIFY)
-// Tag enables selective receive filtering on the receiver side
-hive_status_t hive_ipc_notify(hive_actor_id_t to, uint32_t tag, const void *data, size_t len);
+// id enables message type dispatch on the receiver side
+hive_status_t hive_ipc_notify(hive_actor_id_t to, uint16_t id, const void *data, size_t len);
 
-// Notify with explicit class and tag (sender is current actor)
+// Notify with explicit class and id (sender is current actor)
 hive_status_t hive_ipc_notify_ex(hive_actor_id_t to, hive_msg_class_t class,
-                               uint32_t tag, const void *data, size_t len);
+                               uint16_t id, const void *data, size_t len);
 
 // Receive any message (no filtering)
 // timeout_ms == 0:  non-blocking, returns HIVE_ERR_WOULDBLOCK if empty
@@ -411,42 +423,49 @@ hive_status_t hive_ipc_recv(hive_message_t *msg, int32_t timeout_ms);
 #### Selective Receive
 
 ```c
-// Receive with filtering on sender, class, and/or tag
+// Receive with filtering on sender, class, id, and/or tag
 // Blocks until message matches ALL non-wildcard criteria, or timeout
-// Use HIVE_SENDER_ANY, HIVE_MSG_ANY, HIVE_TAG_ANY as wildcards
+// All wildcards are 0: HIVE_SENDER_ANY, HIVE_MSG_ANY, HIVE_ID_ANY, HIVE_TAG_ANY
 hive_status_t hive_ipc_recv_match(hive_actor_id_t from, hive_msg_class_t class,
-                            uint32_t tag, hive_message_t *msg, int32_t timeout_ms);
+                            uint16_t id, uint32_t tag, hive_message_t *msg, int32_t timeout_ms);
 ```
 
-**Filter semantics**
-- `from == HIVE_SENDER_ANY` -> match any sender
-- `class == HIVE_MSG_ANY` -> match any class
-- `tag == HIVE_TAG_ANY` -> match any tag
+**Filter semantics** (all wildcards are 0)
+- `from == HIVE_SENDER_ANY (0)` -> match any sender
+- `class == HIVE_MSG_ANY (0)` -> match any class
+- `id == HIVE_ID_ANY (0)` -> match any id
+- `tag == HIVE_TAG_ANY (0)` -> match any tag
 - Non-wildcard values must match exactly
 
 **Usage examples**
 ```c
 // Match any message (equivalent to hive_ipc_recv)
-hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_ANY, HIVE_TAG_ANY, &msg, -1);
+hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_ANY, HIVE_ID_ANY, HIVE_TAG_ANY, &msg, -1);
 
 // Match only from specific sender
-hive_ipc_recv_match(some_actor, HIVE_MSG_ANY, HIVE_TAG_ANY, &msg, -1);
+hive_ipc_recv_match(some_actor, HIVE_MSG_ANY, HIVE_ID_ANY, HIVE_TAG_ANY, &msg, -1);
 
 // Match REQUEST messages from any sender
-hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_REQUEST, HIVE_TAG_ANY, &msg, -1);
+hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_REQUEST, HIVE_ID_ANY, HIVE_TAG_ANY, &msg, -1);
 
 // Match REPLY with specific tag (used internally by hive_ipc_request)
-hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_REPLY, expected_tag, &msg, 5000);
+hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_REPLY, HIVE_ID_ANY, expected_tag, &msg, 5000);
+
+// Match NOTIFY with specific message type
+#define MSG_SENSOR_DATA 1
+hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_NOTIFY, MSG_SENSOR_DATA, HIVE_TAG_ANY, &msg, -1);
 ```
 
 #### Multi-Pattern Selective Receive
 
 ```c
 // Filter structure for multi-pattern matching
+// All wildcards are 0, so unspecified fields default to "match any"
 typedef struct {
-    hive_actor_id_t sender;      // HIVE_SENDER_ANY for any sender
-    hive_msg_class_t class; // HIVE_MSG_ANY for any class
-    uint32_t tag;         // HIVE_TAG_ANY for any tag
+    hive_actor_id_t  sender;   // HIVE_SENDER_ANY (0) for any sender
+    hive_msg_class_t class;    // HIVE_MSG_ANY (0) for any class
+    uint16_t         id;       // HIVE_ID_ANY (0) for any id
+    uint32_t         tag;      // HIVE_TAG_ANY (0) for any tag
 } hive_recv_filter_t;
 
 // Receive message matching ANY of the provided filters
@@ -464,10 +483,13 @@ hive_status_t hive_ipc_recv_matches(const hive_recv_filter_t *filters,
 **Usage example**
 ```c
 // Wait for either a sync timer or a landed notification
+// Unspecified fields default to 0 (wildcard) via C designated initializers
 enum { FILTER_SYNC_TIMER, FILTER_LANDED };
 hive_recv_filter_t filters[] = {
-    [FILTER_SYNC_TIMER] = {HIVE_SENDER_ANY, HIVE_MSG_TIMER, sync_timer},
-    [FILTER_LANDED] = {HIVE_SENDER_ANY, HIVE_MSG_NOTIFY, NOTIFY_LANDED},
+    // Timer: filter by tag (timer id)
+    [FILTER_SYNC_TIMER] = {.class = HIVE_MSG_TIMER, .tag = sync_timer},
+    // Notification: filter by id (message type)
+    [FILTER_LANDED] = {.class = HIVE_MSG_NOTIFY, .id = NOTIFY_LANDED},
 };
 hive_message_t msg;
 size_t matched;
@@ -482,8 +504,8 @@ if (matched == FILTER_SYNC_TIMER) {
 #### Request/Reply
 
 ```c
-// Issue REQUEST, block until REPLY with matching tag, or timeout
-hive_status_t hive_ipc_request(hive_actor_id_t to, const void *request, size_t req_len,
+// Issue REQUEST with message type, block until REPLY with matching tag, or timeout
+hive_status_t hive_ipc_request(hive_actor_id_t to, uint16_t id, const void *request, size_t req_len,
                       hive_message_t *reply, int32_t timeout_ms);
 
 // Reply to a received REQUEST (extracts sender and tag from request automatically)
@@ -513,8 +535,9 @@ hive_status_t hive_ipc_reply(const hive_message_t *request, const void *data, si
 **Target death detection** - `hive_ipc_request()` internally monitors the target actor for the duration of the request. If the target dies before replying, the function returns `HIVE_ERR_CLOSED` immediately without waiting for timeout:
 
 ```c
+#define MSG_GET_CONFIG 1
 hive_message_t reply;
-hive_status_t status = hive_ipc_request(target, &req, sizeof(req), &reply, 5000);
+hive_status_t status = hive_ipc_request(target, MSG_GET_CONFIG, &req, sizeof(req), &reply, 5000);
 if (status.code == HIVE_ERR_CLOSED) {
     // Target died during request - no ambiguity with timeout
     printf("Target actor died\n");
@@ -533,14 +556,14 @@ This eliminates the "timeout but actually dead" ambiguity from previous versions
 Named IPC functions resolve actor names to IDs automatically, providing a convenient way to notify or request named actors without manual `hive_whereis()` calls.
 
 ```c
-// Notify named actor
-hive_status_t hive_ipc_named_notify(const char *name, uint32_t tag,
+// Notify named actor with message type
+hive_status_t hive_ipc_named_notify(const char *name, uint16_t id,
                                     const void *data, size_t len);
 
-// Request named actor and wait for reply
-hive_status_t hive_ipc_named_request(const char *name, const void *request,
-                                     size_t req_len, hive_message_t *reply,
-                                     int32_t timeout_ms);
+// Request named actor with message type and wait for reply
+hive_status_t hive_ipc_named_request(const char *name, uint16_t id,
+                                     const void *request, size_t req_len,
+                                     hive_message_t *reply, int32_t timeout_ms);
 ```
 
 **Behavior**
@@ -551,12 +574,13 @@ hive_status_t hive_ipc_named_request(const char *name, const void *request,
 **Use case** - Supervised actors that may restart get new actor IDs on each restart. Caching actor IDs is unsafe across yield points. Named IPC re-resolves the name on each call, ensuring messages reach the current incarnation:
 
 ```c
+#define MSG_LOG 1
 // Safe: Re-resolves name on each call
-hive_ipc_named_notify("logger", LOG_MSG, &entry, sizeof(entry));
+hive_ipc_named_notify("logger", MSG_LOG, &entry, sizeof(entry));
 
 // Unsafe: Cached ID may be stale after restart
 hive_actor_id_t logger = cached_logger_id;  // May point to dead actor
-hive_ipc_notify(logger, LOG_MSG, &entry, sizeof(entry));  // May fail silently
+hive_ipc_notify(logger, MSG_LOG, &entry, sizeof(entry));  // May fail silently
 ```
 
 **Error handling**

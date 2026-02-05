@@ -100,37 +100,55 @@ Data was truncated to fit buffer (bus read operations).
 .PP
 .nf
 typedef struct {
-    hive_actor_id_t       sender;  /* Sender actor ID */
+    hive_actor_id_t  sender;  /* Sender actor ID */
     hive_msg_class_t class;   /* Message class */
-    uint32_t       tag;     /* Message tag */
-    size_t         len;     /* Payload length in bytes */
-    const void    *data;    /* Payload pointer */
+    uint16_t         id;      /* Message type (user-defined) */
+    uint32_t         tag;     /* Correlation tag */
+    size_t           len;     /* Payload length in bytes */
+    const void      *data;    /* Payload pointer */
 } hive_message_t;
 .fi
 .PP
+The
+.I id
+field is the message type for dispatch (user-defined application values).
+The
+.I tag
+field is for request/reply correlation (runtime-generated or user-provided).
 The
 .I data
 pointer is valid until the next successful
 .BR hive_ipc_recv ().
 .SS Message Classes
-.TP
-.B HIVE_MSG_NOTIFY
-Fire-and-forget notification (0).
-.TP
-.B HIVE_MSG_REQUEST
-Request expecting reply (1).
-.TP
-.B HIVE_MSG_REPLY
-Reply to a request (2).
-.TP
-.B HIVE_MSG_TIMER
-Timer tick from runtime (3).
-.TP
-.B HIVE_MSG_EXIT
-Actor death notification (4).
+All wildcard constants are 0, allowing C designated initializers to default
+unspecified fields to "match any".
 .TP
 .B HIVE_MSG_ANY
-Wildcard for filtering (15).
+Wildcard for filtering (0).
+.TP
+.B HIVE_MSG_NOTIFY
+Fire-and-forget notification (1).
+.TP
+.B HIVE_MSG_REQUEST
+Request expecting reply (2).
+.TP
+.B HIVE_MSG_REPLY
+Reply to a request (3).
+.TP
+.B HIVE_MSG_TIMER
+Timer tick from runtime (4).
+.TP
+.B HIVE_MSG_EXIT
+Actor death notification (5).
+.SS Message ID Constants
+.TP
+.B HIVE_ID_NONE
+No id needed (0). Use when message type is not needed.
+.TP
+.B HIVE_ID_ANY
+Wildcard for filtering in
+.BR hive_ipc_recv_match ()
+(0).
 .SS Message Tag Constants
 .TP
 .B HIVE_TAG_NONE
@@ -138,13 +156,14 @@ No tag needed (0). Use for notifications that don't require correlation.
 .TP
 .B HIVE_TAG_ANY
 Wildcard for filtering in
-.BR hive_ipc_recv_match ().
+.BR hive_ipc_recv_match ()
+(0).
 .SS Special Sender IDs
 .TP
 .B HIVE_SENDER_ANY
 Wildcard for filtering in
 .BR hive_ipc_recv_match ()
-(0xFFFFFFFF).
+(0).
 .PP
 .B Note:
 Timer messages have the owning actor as sender. Exit notifications have the
@@ -286,13 +305,15 @@ Defined in
 .PP
 .nf
 typedef struct {
-    hive_actor_id_t       sender;  /* HIVE_SENDER_ANY for any sender */
-    hive_msg_class_t class;   /* HIVE_MSG_ANY for any class */
-    uint32_t       tag;     /* HIVE_TAG_ANY for any tag */
+    hive_actor_id_t  sender;  /* HIVE_SENDER_ANY (0) for any sender */
+    hive_msg_class_t class;   /* HIVE_MSG_ANY (0) for any class */
+    uint16_t         id;      /* HIVE_ID_ANY (0) for any id */
+    uint32_t         tag;     /* HIVE_TAG_ANY (0) for any tag */
 } hive_recv_filter_t;
 .fi
 .PP
-Used by
+All wildcards are 0, so C designated initializers default unspecified fields
+to "match any". Used by
 .BR hive_ipc_recv_match (3)
 and
 .BR hive_select (3)
@@ -387,7 +408,7 @@ Global pool of mailbox entries. Each pending message consumes one entry.
 Global pool of message data buffers.
 .TP
 .B HIVE_MAX_MESSAGE_SIZE (256)
-Maximum message size in bytes (includes 4-byte header, so 252 bytes payload).
+Maximum message size in bytes (includes 6-byte header, so 250 bytes payload).
 .TP
 .B HIVE_RESERVED_SYSTEM_ENTRIES (16)
 Pool entries reserved for system messages (TIMER and EXIT). User messages

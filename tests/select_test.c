@@ -57,7 +57,7 @@ static void test1_ipc_wildcard(void *args, const hive_spawn_info_t *siblings,
     // Use hive_select with wildcard IPC filter
     hive_select_source_t source = {
         .type = HIVE_SEL_IPC,
-        .ipc = {HIVE_SENDER_ANY, HIVE_MSG_ANY, HIVE_TAG_ANY}};
+        .ipc = {HIVE_SENDER_ANY, HIVE_MSG_ANY, HIVE_ID_ANY, HIVE_TAG_ANY}};
     hive_select_result_t result;
     hive_status_t status = hive_select(&source, 1, &result, 100);
 
@@ -73,10 +73,10 @@ static void test1_ipc_wildcard(void *args, const hive_spawn_info_t *siblings,
         TEST_FAIL("result type or index incorrect");
     }
 
-    if (*(int *)result.ipc.data == 42 && result.ipc.tag == 123) {
-        TEST_PASS("received correct data and tag");
+    if (*(int *)result.ipc.data == 42 && result.ipc.id == 123) {
+        TEST_PASS("received correct data and id");
     } else {
-        TEST_FAIL("data or tag mismatch");
+        TEST_FAIL("data or id mismatch");
     }
 
     return;
@@ -103,13 +103,14 @@ static void test2_ipc_filtered(void *args, const hive_spawn_info_t *siblings,
     hive_ipc_notify(self, TAG_A, &a, sizeof(a));
     hive_ipc_notify(self, TAG_B, &b, sizeof(b));
 
-    // Select only messages with TAG_B
+    // Select only messages with TAG_B (id field)
     hive_select_source_t source = {
-        .type = HIVE_SEL_IPC, .ipc = {HIVE_SENDER_ANY, HIVE_MSG_NOTIFY, TAG_B}};
+        .type = HIVE_SEL_IPC,
+        .ipc = {HIVE_SENDER_ANY, HIVE_MSG_NOTIFY, TAG_B, HIVE_TAG_ANY}};
     hive_select_result_t result;
     hive_status_t status = hive_select(&source, 1, &result, 100);
 
-    if (HIVE_SUCCEEDED(status) && result.ipc.tag == TAG_B) {
+    if (HIVE_SUCCEEDED(status) && result.ipc.id == TAG_B) {
         TEST_PASS("filtered select returns TAG_B message");
     } else {
         TEST_FAIL("expected TAG_B message");
@@ -122,10 +123,10 @@ static void test2_ipc_filtered(void *args, const hive_spawn_info_t *siblings,
     }
 
     // Now get TAG_A which should still be in mailbox
-    source.ipc.tag = TAG_A;
+    source.ipc.id = TAG_A;
     status = hive_select(&source, 1, &result, 100);
 
-    if (HIVE_SUCCEEDED(status) && result.ipc.tag == TAG_A) {
+    if (HIVE_SUCCEEDED(status) && result.ipc.id == TAG_A) {
         TEST_PASS("TAG_A still available after filtered select");
     } else {
         TEST_FAIL("TAG_A should still be in mailbox");
@@ -149,7 +150,8 @@ static void test3_publisher(void *args, const hive_spawn_info_t *siblings,
     hive_timer_id_t timer;
     hive_timer_after(50000, &timer);
     hive_message_t msg;
-    hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
+    hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, HIVE_ID_ANY, timer,
+                        &msg, -1);
 
     int data = 99;
     hive_bus_publish(s_test_bus, &data, sizeof(data));
@@ -242,12 +244,12 @@ static void test4_ipc_multi_first(void *args, const hive_spawn_info_t *siblings,
     int data = 111;
     hive_ipc_notify(self, TAG_A, &data, sizeof(data));
 
-    // Wait for either TAG_A or TAG_B
+    // Wait for either TAG_A or TAG_B (filtering by id)
     hive_select_source_t sources[] = {
         {.type = HIVE_SEL_IPC,
-         .ipc = {HIVE_SENDER_ANY, HIVE_MSG_NOTIFY, TAG_A}},
+         .ipc = {HIVE_SENDER_ANY, HIVE_MSG_NOTIFY, TAG_A, HIVE_TAG_ANY}},
         {.type = HIVE_SEL_IPC,
-         .ipc = {HIVE_SENDER_ANY, HIVE_MSG_NOTIFY, TAG_B}},
+         .ipc = {HIVE_SENDER_ANY, HIVE_MSG_NOTIFY, TAG_B, HIVE_TAG_ANY}},
     };
     hive_select_result_t result;
     hive_status_t status = hive_select(sources, 2, &result, 100);
@@ -259,10 +261,10 @@ static void test4_ipc_multi_first(void *args, const hive_spawn_info_t *siblings,
         TEST_FAIL("expected first filter to match");
     }
 
-    if (result.ipc.tag == TAG_A) {
+    if (result.ipc.id == TAG_A) {
         TEST_PASS("received TAG_A message");
     } else {
-        TEST_FAIL("wrong tag");
+        TEST_FAIL("wrong id");
     }
 
     return;
@@ -286,12 +288,12 @@ static void test5_ipc_multi_second(void *args,
     int data = 222;
     hive_ipc_notify(self, TAG_B, &data, sizeof(data));
 
-    // Wait for either TAG_A or TAG_B
+    // Wait for either TAG_A or TAG_B (filtering by id)
     hive_select_source_t sources[] = {
         {.type = HIVE_SEL_IPC,
-         .ipc = {HIVE_SENDER_ANY, HIVE_MSG_NOTIFY, TAG_A}},
+         .ipc = {HIVE_SENDER_ANY, HIVE_MSG_NOTIFY, TAG_A, HIVE_TAG_ANY}},
         {.type = HIVE_SEL_IPC,
-         .ipc = {HIVE_SENDER_ANY, HIVE_MSG_NOTIFY, TAG_B}},
+         .ipc = {HIVE_SENDER_ANY, HIVE_MSG_NOTIFY, TAG_B, HIVE_TAG_ANY}},
     };
     hive_select_result_t result;
     hive_status_t status = hive_select(sources, 2, &result, 100);
@@ -303,10 +305,10 @@ static void test5_ipc_multi_second(void *args,
         TEST_FAIL("expected second filter to match");
     }
 
-    if (result.ipc.tag == TAG_B) {
+    if (result.ipc.id == TAG_B) {
         TEST_PASS("received TAG_B message");
     } else {
-        TEST_FAIL("wrong tag");
+        TEST_FAIL("wrong id");
     }
 
     return;
@@ -328,7 +330,8 @@ static void test6_bus_publisher(void *args, const hive_spawn_info_t *siblings,
     hive_timer_id_t timer;
     hive_timer_after(50000, &timer);
     hive_message_t msg;
-    hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
+    hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, HIVE_ID_ANY, timer,
+                        &msg, -1);
 
     int data = which_bus == 1 ? 111 : 222;
     hive_bus_publish(which_bus == 1 ? s_bus1 : s_bus2, &data, sizeof(data));
@@ -398,7 +401,8 @@ static void test7_mixed_sender(void *args, const hive_spawn_info_t *siblings,
     hive_timer_id_t timer;
     hive_timer_after(50000, &timer);
     hive_message_t msg;
-    hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
+    hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, HIVE_ID_ANY, timer,
+                        &msg, -1);
 
     int data = 777;
     hive_ipc_notify(target, TAG_A, &data, sizeof(data));
@@ -424,11 +428,11 @@ static void test7_mixed_sources(void *args, const hive_spawn_info_t *siblings,
     hive_actor_id_t sender;
     hive_spawn(test7_mixed_sender, NULL, &self, NULL, &sender);
 
-    // Wait for either bus data or IPC message
+    // Wait for either bus data or IPC message (filtering by id)
     hive_select_source_t sources[] = {
         {.type = HIVE_SEL_BUS, .bus = bus},
         {.type = HIVE_SEL_IPC,
-         .ipc = {HIVE_SENDER_ANY, HIVE_MSG_NOTIFY, TAG_A}},
+         .ipc = {HIVE_SENDER_ANY, HIVE_MSG_NOTIFY, TAG_A, HIVE_TAG_ANY}},
     };
     hive_select_result_t result;
     hive_status_t status = hive_select(sources, 2, &result, 500);
@@ -440,11 +444,11 @@ static void test7_mixed_sources(void *args, const hive_spawn_info_t *siblings,
         TEST_FAIL("expected IPC result");
     }
 
-    if (result.index == 1 && result.ipc.tag == TAG_A) {
-        TEST_PASS("correct index and tag for IPC");
+    if (result.index == 1 && result.ipc.id == TAG_A) {
+        TEST_PASS("correct index and id for IPC");
     } else {
-        printf("    index=%zu, tag=%u\n", result.index, result.ipc.tag);
-        TEST_FAIL("index or tag mismatch");
+        printf("    index=%zu, id=%u\n", result.index, result.ipc.id);
+        TEST_FAIL("index or id mismatch");
     }
 
     // Cleanup
@@ -484,7 +488,7 @@ static void test8_priority_order(void *args, const hive_spawn_info_t *siblings,
     // Select - first source in array wins (array order priority)
     hive_select_source_t sources[] = {
         {.type = HIVE_SEL_IPC,
-         .ipc = {HIVE_SENDER_ANY, HIVE_MSG_NOTIFY, TAG_A}},
+         .ipc = {HIVE_SENDER_ANY, HIVE_MSG_NOTIFY, TAG_A, HIVE_TAG_ANY}},
         {.type = HIVE_SEL_BUS, .bus = bus},
     };
     hive_select_result_t result;
@@ -531,9 +535,10 @@ static void test9_timeout(void *args, const hive_spawn_info_t *siblings,
     (void)sibling_count;
     printf("\nTest 9: Timeout behavior\n");
 
-    // Select on nothing with timeout
+    // Select on nothing with timeout (filtering by non-existent id)
     hive_select_source_t source = {
-        .type = HIVE_SEL_IPC, .ipc = {HIVE_SENDER_ANY, HIVE_MSG_NOTIFY, 9999}};
+        .type = HIVE_SEL_IPC,
+        .ipc = {HIVE_SENDER_ANY, HIVE_MSG_NOTIFY, 9999, HIVE_TAG_ANY}};
     hive_select_result_t result;
 
     // Non-blocking (timeout=0)
@@ -643,7 +648,7 @@ static void test11_immediate_return(void *args,
     // Select should return immediately
     hive_select_source_t source = {
         .type = HIVE_SEL_IPC,
-        .ipc = {HIVE_SENDER_ANY, HIVE_MSG_ANY, HIVE_TAG_ANY}};
+        .ipc = {HIVE_SENDER_ANY, HIVE_MSG_ANY, HIVE_ID_ANY, HIVE_TAG_ANY}};
     hive_select_result_t result;
     uint64_t start = time_ms();
     hive_status_t status =

@@ -176,12 +176,13 @@ void hive_ipc_mailbox_clear(mailbox_t *mailbox);
 // Free active message entry (used during actor cleanup)
 void hive_ipc_free_active_msg(mailbox_entry_t *entry);
 
-// Internal notify with explicit sender, class and tag (used by timer, link,
+// Internal notify with explicit sender, class, id and tag (used by timer, link,
 // etc.) Not part of public API - use hive_ipc_notify_ex() for user code
 hive_status_t hive_ipc_notify_internal(hive_actor_id_t to,
                                        hive_actor_id_t sender,
-                                       hive_msg_class_t class, uint32_t tag,
-                                       const void *data, size_t len);
+                                       hive_msg_class_t class, uint16_t id,
+                                       uint32_t tag, const void *data,
+                                       size_t len);
 
 // -----------------------------------------------------------------------------
 // hive_select internal helpers (implemented in hive_ipc.c and hive_bus.c)

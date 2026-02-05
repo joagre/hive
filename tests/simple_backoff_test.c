@@ -62,7 +62,7 @@ void aggressive_sender_actor(void *args, const hive_spawn_info_t *siblings,
     for (int i = 0; i < 300; i++) {
         int data = i;
         hive_status_t status =
-            hive_ipc_notify(processor, HIVE_TAG_NONE, &data, sizeof(data));
+            hive_ipc_notify(processor, HIVE_ID_NONE, &data, sizeof(data));
 
         if (HIVE_SUCCEEDED(status)) {
             sent++;
@@ -91,7 +91,7 @@ void aggressive_sender_actor(void *args, const hive_spawn_info_t *siblings,
 
             // Retry the notify
             status =
-                hive_ipc_notify(processor, HIVE_TAG_NONE, &data, sizeof(data));
+                hive_ipc_notify(processor, HIVE_ID_NONE, &data, sizeof(data));
             if (HIVE_SUCCEEDED(status)) {
                 succeeded_after_retry++;
                 if (succeeded_after_retry == 1) {

@@ -11,8 +11,8 @@
 // Internal Types
 // =============================================================================
 
-// Message tags for supervisor control (max 27 bits = 0x07FFFFFF)
-#define SUP_TAG_STOP 0x05550000 // Stop request
+// Message ids for supervisor control
+#define SUP_ID_STOP 1 // Stop request
 
 // Child runtime state
 typedef struct {
@@ -483,7 +483,7 @@ static void supervisor_actor_fn(void *args, const hive_spawn_info_t *siblings,
                 HIVE_LOG_ERROR("[SUP] Max restarts exceeded - shutting down");
                 shutdown_requested = true;
             }
-        } else if (msg.class == HIVE_MSG_NOTIFY && msg.tag == SUP_TAG_STOP) {
+        } else if (msg.class == HIVE_MSG_NOTIFY && msg.id == SUP_ID_STOP) {
             // Stop request
             HIVE_LOG_INFO("[SUP] Stop requested");
             shutdown_requested = true;
@@ -594,7 +594,7 @@ hive_status_t hive_supervisor_stop(hive_actor_id_t supervisor) {
     }
 
     // Deliver stop message
-    return hive_ipc_notify(supervisor, SUP_TAG_STOP, NULL, 0);
+    return hive_ipc_notify(supervisor, SUP_ID_STOP, NULL, 0);
 }
 
 const char *hive_restart_strategy_str(hive_restart_strategy_t strategy) {
