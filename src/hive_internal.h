@@ -32,8 +32,7 @@ void hive_tcp_cleanup(void);
 #endif
 
 // Internal tag constants (not exposed in public API)
-#define HIVE_TAG_GEN_BIT 0x08000000    // Bit 27: distinguishes generated tags
-#define HIVE_TAG_VALUE_MASK 0x07FFFFFF // Lower 27 bits: tag value
+#define HIVE_TAG_VALUE_MASK 0x0FFFFFFF // 28-bit tag value
 
 // Message data entry type (shared by IPC, bus, link, timer subsystems)
 typedef struct {

@@ -643,8 +643,8 @@ The following limits are **hardcoded** and cannot be changed without modifying t
 |-------|-------|--------|----------|
 | Bus subscribers | 32 max | `uint32_t` bitmask tracks which subscribers read each entry | `hive_bus.c` |
 | Priority levels | 4 (0-3) | Enum: CRITICAL=0, HIGH=1, NORMAL=2, LOW=3 | `hive_types.h` |
-| Message header | 4 bytes | Wire format: class (4 bits) + gen (1 bit) + tag (27 bits) | `hive_ipc.c` |
-| Tag values | 27 bits | 134M unique values before wrap; bit 27 marks generated tags | `hive_ipc.c` |
+| Message header | 6 bytes | Wire format: class (4 bits) + tag (28 bits) + id (16 bits) | `hive_ipc.c` |
+| Tag values | 28 bits | 268M unique values before wrap | `hive_ipc.c` |
 | Message classes | 6 | NOTIFY, REQUEST, REPLY, TIMER, EXIT, ANY (4-bit field) | `hive_types.h` |
 
 **Bus subscriber limit (32)** - Each bus entry has a `uint32_t readers_mask` bitmask where bit N indicates subscriber N has read the entry. This enables O(1) read tracking per entry. Enforced by `_Static_assert` in `hive_bus.c`.

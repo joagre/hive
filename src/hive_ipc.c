@@ -33,7 +33,7 @@ static uint32_t s_next_tag = 1;
 // -----------------------------------------------------------------------------
 // Header Encoding/Decoding
 // -----------------------------------------------------------------------------
-// Header layout: [class:4][gen:1][tag:27] [id:16] = 6 bytes
+// Header layout: [class:4][tag:28] [id:16] = 6 bytes
 // First 4 bytes: class and tag (for request/reply correlation)
 // Last 2 bytes: id (for message type dispatch)
 
@@ -58,9 +58,9 @@ static inline void decode_header(const uint8_t *buf, hive_msg_class_t *class,
 }
 
 static uint32_t generate_tag(void) {
-    uint32_t tag = (s_next_tag++ & HIVE_TAG_VALUE_MASK) | HIVE_TAG_GEN_BIT;
-    if ((s_next_tag & HIVE_TAG_VALUE_MASK) == 0) {
-        s_next_tag = 1; // Skip 0 on wrap
+    uint32_t tag = s_next_tag++ & HIVE_TAG_VALUE_MASK;
+    if (tag == 0) {
+        tag = s_next_tag++ & HIVE_TAG_VALUE_MASK; // Skip 0
     }
     return tag;
 }

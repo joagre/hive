@@ -234,13 +234,43 @@ if (hive_msg_is_exit(&msg)) {
 ### IPC Message Format
 All messages have a 6-byte header prepended to payload:
 - **class** (4 bits): Message class (NOTIFY, REQUEST, REPLY, TIMER, EXIT)
-- **gen** (1 bit): Generated tag flag (1 = runtime-generated, 0 = user-provided)
-- **tag** (27 bits): Correlation identifier for request/reply
+- **tag** (28 bits): Correlation identifier for request/reply
 - **id** (16 bits): User-defined message type for dispatch
 
-### IPC API
+### Message ID vs Tag
 
-Messages have two identifiers: `id` (message type for dispatch) and `tag` (correlation for request/reply).
+Messages have two separate identifiers serving different purposes:
+
+| Field | Bits | Who provides | Purpose |
+|-------|------|--------------|---------|
+| `id` | 16 | User | Message type for dispatch (what kind of message) |
+| `tag` | 28 | Runtime | Correlation identifier (which instance/conversation) |
+
+**`id` - Message Type (user-provided)**
+- Identifies the type of message for dispatch logic
+- Set by the caller in `hive_ipc_notify()` and `hive_ipc_request()`
+- Use for application-level message routing (e.g., `CMD_START`, `CMD_STOP`, `SENSOR_DATA`)
+- Filter with `hive_ipc_recv_match(..., id, HIVE_TAG_ANY, ...)`
+
+**`tag` - Correlation (runtime-generated)**
+- Links requests to their replies
+- Runtime generates unique tags for `hive_ipc_request()` calls
+- Also used for timer_id in TIMER messages (runtime allocates timer IDs)
+- Filter with `hive_ipc_recv_match(..., HIVE_ID_ANY, tag, ...)`
+
+**Why timers use `tag`** - Timer IDs are runtime-generated (allocated from a pool), not user-provided. This follows the same pattern as request/reply correlation tags. When you call `hive_timer_after()`, you don't choose the timer_id - the runtime assigns it.
+
+```c
+// User message: filter by id (message type)
+hive_ipc_notify(target, CMD_START, data, len);
+hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_NOTIFY, CMD_START, HIVE_TAG_ANY, &msg, -1);
+
+// Timer message: filter by tag (timer_id is runtime-generated)
+hive_timer_after(500000, &my_timer);
+hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, HIVE_ID_ANY, my_timer, &msg, -1);
+```
+
+### IPC API
 
 - **`hive_ipc_notify(to, id, data, len)`**: Fire-and-forget notification (class=NOTIFY). id is message type for dispatch
 - **`hive_ipc_notify_ex(to, class, id, data, len)`**: Notify with explicit class and id

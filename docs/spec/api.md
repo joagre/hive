@@ -313,31 +313,31 @@ Inter-process communication via mailboxes. Each actor has one mailbox. All messa
 
 ### Message Header Format
 
-All messages have a 4-byte header prepended to the payload:
+All messages have a 6-byte header prepended to the payload:
 
 ```
-┌──────────────────────────────────────────────────────────────┐
-│ class (4 bits) │ gen (1 bit) │ tag (27 bits) │ payload (len) │
-└──────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────┐
+│ class (4 bits) │ tag (28 bits) │ id (16 bits) │ payload (len)           │
+└─────────────────────────────────────────────────────────────────────────┘
 ```
 
-- **class**: Message type (4 bits, 16 possible values)
-- **gen**: Generated flag (1 = runtime-generated tag, 0 = user-provided tag)
-- **tag**: Correlation identifier (27 bits, 134M unique values)
-- **payload**: Application data (up to `HIVE_MAX_MESSAGE_SIZE - 4` = 252 bytes)
+- **class**: Message class (4 bits, 16 possible values)
+- **tag**: Correlation identifier (28 bits, 268M unique values)
+- **id**: Message type for dispatch (16 bits, user-provided)
+- **payload**: Application data (up to `HIVE_MAX_MESSAGE_SIZE - 6` = 250 bytes)
 
-**Header overhead** - 4 bytes per message.
+**Header overhead** - 6 bytes per message.
 
 ### Message Classes
 
 ```c
 typedef enum {
-    HIVE_MSG_NOTIFY = 0,   // Fire-and-forget message
-    HIVE_MSG_REQUEST,       // Request expecting a reply
-    HIVE_MSG_REPLY,      // Response to a REQUEST
-    HIVE_MSG_TIMER,      // Timer tick
-    HIVE_MSG_EXIT,     // System notifications (actor death)
-    HIVE_MSG_EXIT = 5,   // Actor death notification
+    HIVE_MSG_ANY = 0,      // Wildcard for filtering
+    HIVE_MSG_NOTIFY,       // Fire-and-forget message
+    HIVE_MSG_REQUEST,      // Request expecting a reply
+    HIVE_MSG_REPLY,        // Response to a REQUEST
+    HIVE_MSG_TIMER,        // Timer tick
+    HIVE_MSG_EXIT,         // Actor death notification
 } hive_msg_class_t;
 ```
 
@@ -366,9 +366,7 @@ Messages have two identifiers: `id` (message type for dispatch) and `tag` (corre
 - **Generated tags**: Created automatically by `hive_ipc_request()` for request/reply correlation
 - **Timer IDs**: Timers use the tag field for the timer ID
 
-**Tag generation** - Internal to `hive_ipc_request()`. Global counter increments on each call. Generated tags have `HIVE_TAG_GEN_BIT` set. Wraps at 2^27 (134M values).
-
-**Namespace separation** - Generated tags (gen=1) and user tags (gen=0) can never collide.
+**Tag generation** - Internal to `hive_ipc_request()`. Global counter increments on each call, skipping 0. Wraps at 2^28 (268M values).
 
 ### Message Structure
 
