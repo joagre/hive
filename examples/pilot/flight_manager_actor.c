@@ -59,83 +59,20 @@ typedef struct {
     hive_actor_id_t comms;
 } sibling_ids_t;
 
-// Reset all siblings, returns true if all succeeded
-static bool reset_all_siblings(const sibling_ids_t *ids) {
-    hive_message_t reply;
-    uint8_t response;
-
-    // List of siblings to reset (in order)
-    struct {
-        hive_actor_id_t id;
-        const char *name;
-    } siblings[] = {
-        {ids->sensor, "sensor"},     {ids->estimator, "estimator"},
-        {ids->waypoint, "waypoint"}, {ids->altitude, "altitude"},
-        {ids->position, "position"}, {ids->attitude, "attitude"},
-        {ids->rate, "rate"},         {ids->motor, "motor"},
-        {ids->tlog, "tlog"},
+// Notify all siblings to reset their internal state (fire-and-forget)
+static void notify_reset_all(const sibling_ids_t *ids) {
+    hive_actor_id_t actors[] = {
+        ids->sensor,   ids->estimator, ids->waypoint,
+        ids->altitude, ids->position,  ids->attitude,
+        ids->rate,     ids->motor,     ids->tlog,
     };
 
-    for (size_t i = 0; i < sizeof(siblings) / sizeof(siblings[0]); i++) {
-        if (siblings[i].id == HIVE_ACTOR_ID_INVALID) {
-            continue; // Skip optional actors (like tlog)
+    for (size_t i = 0; i < sizeof(actors) / sizeof(actors[0]); i++) {
+        if (actors[i] != HIVE_ACTOR_ID_INVALID) {
+            hive_ipc_notify(actors[i], NOTIFY_RESET, NULL, 0);
         }
-
-        uint8_t request = REQUEST_RESET;
-        hive_status_t s = hive_ipc_request(siblings[i].id, &request,
-                                           sizeof(request), &reply, 5000);
-        if (HIVE_FAILED(s)) {
-            HIVE_LOG_ERROR("[FLM] RESET %s failed: %s", siblings[i].name,
-                           HIVE_ERR_STR(s));
-            return false;
-        }
-
-        if (reply.len < 1) {
-            HIVE_LOG_ERROR("[FLM] RESET %s: no response", siblings[i].name);
-            return false;
-        }
-
-        response = ((uint8_t *)reply.data)[0];
-        if (response != REPLY_OK) {
-            HIVE_LOG_ERROR("[FLM] RESET %s: failed (reply=%u)",
-                           siblings[i].name, response);
-            return false;
-        }
-
-        HIVE_LOG_INFO("[FLM] RESET %s: OK", siblings[i].name);
     }
-
-    return true;
-}
-
-// ARM motor, returns true if succeeded
-static bool arm_motor(hive_actor_id_t motor) {
-    hive_message_t reply;
-    uint8_t request = REQUEST_ARM;
-    hive_status_t s =
-        hive_ipc_request(motor, &request, sizeof(request), &reply, 5000);
-    if (HIVE_FAILED(s) || reply.len < 1 ||
-        ((uint8_t *)reply.data)[0] != REPLY_OK) {
-        HIVE_LOG_ERROR("[FLM] ARM motor failed");
-        return false;
-    }
-    HIVE_LOG_INFO("[FLM] Motor armed");
-    return true;
-}
-
-// DISARM motor, returns true if succeeded
-static bool disarm_motor(hive_actor_id_t motor) {
-    hive_message_t reply;
-    uint8_t request = REQUEST_DISARM;
-    hive_status_t s =
-        hive_ipc_request(motor, &request, sizeof(request), &reply, 5000);
-    if (HIVE_FAILED(s) || reply.len < 1 ||
-        ((uint8_t *)reply.data)[0] != REPLY_OK) {
-        HIVE_LOG_ERROR("[FLM] DISARM motor failed");
-        return false;
-    }
-    HIVE_LOG_INFO("[FLM] Motor disarmed");
-    return true;
+    HIVE_LOG_INFO("[FLM] RESET notifications sent");
 }
 
 // Actor state
@@ -266,20 +203,16 @@ void flight_manager_actor(void *args, const hive_spawn_info_t *siblings,
         }
 
         case FM_STATE_PREFLIGHT: {
-            // Reset all siblings
-            HIVE_LOG_INFO("[FLM] PREFLIGHT - resetting siblings");
-            if (!reset_all_siblings(&ids)) {
-                HIVE_LOG_ERROR("[FLM] Preflight failed - returning to IDLE");
-                state = FM_STATE_IDLE;
-                continue;
-            }
+            // Calibrate sensors
+            HIVE_LOG_INFO("[FLM] PREFLIGHT - calibrating sensors");
+            hal_calibrate();
 
-            // ARM motor
-            if (!arm_motor(ids.motor)) {
-                HIVE_LOG_ERROR("[FLM] ARM failed - returning to IDLE");
-                state = FM_STATE_IDLE;
-                continue;
-            }
+            // Notify all actors to reset their internal state
+            notify_reset_all(&ids);
+
+            // ARM motors
+            HIVE_LOG_INFO("[FLM] Arming motors");
+            hal_arm();
 
             // Start sync timer for log syncing
             hive_timer_every(LOG_SYNC_INTERVAL_US, &sync_timer);
@@ -346,7 +279,8 @@ void flight_manager_actor(void *args, const hive_spawn_info_t *siblings,
                 HIVE_LOG_INFO("[FLM] ABORT received - returning to IDLE");
                 hive_timer_cancel(countdown_timer);
                 hive_timer_cancel(sync_timer);
-                disarm_motor(ids.motor);
+                hal_disarm();
+                HIVE_LOG_INFO("[FLM] Motors disarmed");
                 state = FM_STATE_IDLE;
                 continue;
             }
@@ -482,8 +416,9 @@ void flight_manager_actor(void *args, const hive_spawn_info_t *siblings,
                 sync_timer = HIVE_TIMER_ID_INVALID;
             }
 
-            // Disarm motor
-            disarm_motor(ids.motor);
+            // Disarm motors
+            hal_disarm();
+            HIVE_LOG_INFO("[FLM] Motors disarmed");
 
             // Capture stack profile
             stack_profile_capture("flight_mgr");

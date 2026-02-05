@@ -51,13 +51,13 @@ void sensor_actor(void *args, const hive_spawn_info_t *siblings,
         hive_exit(HIVE_EXIT_REASON_CRASH);
     }
 
-    // Set up hive_select() sources: timer + RESET request
+    // Set up hive_select() sources: timer + RESET notification
     enum { SEL_TIMER, SEL_RESET };
     hive_select_source_t sources[] = {
         [SEL_TIMER] = {HIVE_SEL_IPC,
                        .ipc = {HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer}},
         [SEL_RESET] = {HIVE_SEL_IPC, .ipc = {state->flight_manager,
-                                             HIVE_MSG_REQUEST, HIVE_TAG_ANY}},
+                                             HIVE_MSG_NOTIFY, NOTIFY_RESET}},
     };
 
     while (1) {
@@ -69,17 +69,8 @@ void sensor_actor(void *args, const hive_spawn_info_t *siblings,
         }
 
         if (result.index == SEL_RESET) {
-            // Verify it's a RESET request
-            uint8_t reply = REPLY_OK;
-            if (result.ipc.len != 1 ||
-                ((uint8_t *)result.ipc.data)[0] != REQUEST_RESET) {
-                HIVE_LOG_WARN("[SENSOR] Unknown request ignored");
-                reply = REPLY_FAIL;
-            } else {
-                HIVE_LOG_INFO("[SENSOR] RESET - calibrating sensors");
-                hal_calibrate();
-            }
-            hive_ipc_reply(&result.ipc, &reply, sizeof(reply));
+            // No internal state to reset - just acknowledge
+            HIVE_LOG_INFO("[SENSOR] RESET received");
             continue;
         }
 

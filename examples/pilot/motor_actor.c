@@ -87,16 +87,14 @@ void motor_actor(void *args, const hive_spawn_info_t *siblings,
     }
 
     // Motor state
-    bool armed = false;
     bool started = false;
     bool stopped = false;
     bool first_thrust_logged = false;
 
-    HIVE_LOG_INFO("[MOTOR] Waiting for ARM command");
+    HIVE_LOG_INFO("[MOTOR] Waiting for START command");
 
     // Set up hive_select() sources
-    // Note: REQUEST uses HIVE_TAG_ANY since hive_ipc_request() generates tags
-    enum { SEL_TORQUE, SEL_START, SEL_STOP, SEL_REQUEST };
+    enum { SEL_TORQUE, SEL_START, SEL_STOP, SEL_RESET };
     hive_select_source_t sources[] = {
         [SEL_TORQUE] = {HIVE_SEL_BUS, .bus = state->torque_bus},
         [SEL_START] = {HIVE_SEL_IPC,
@@ -105,8 +103,8 @@ void motor_actor(void *args, const hive_spawn_info_t *siblings,
         [SEL_STOP] = {HIVE_SEL_IPC,
                       .ipc = {state->flight_manager, HIVE_MSG_NOTIFY,
                               NOTIFY_FLIGHT_STOP}},
-        [SEL_REQUEST] = {HIVE_SEL_IPC, .ipc = {state->flight_manager,
-                                               HIVE_MSG_REQUEST, HIVE_TAG_ANY}},
+        [SEL_RESET] = {HIVE_SEL_IPC, .ipc = {state->flight_manager,
+                                             HIVE_MSG_NOTIFY, NOTIFY_RESET}},
     };
 
     while (1) {
@@ -131,51 +129,21 @@ void motor_actor(void *args, const hive_spawn_info_t *siblings,
         }
 
         switch (result.index) {
-        case SEL_REQUEST: {
-            // Handle REQUEST from flight_manager
-            // Dispatch based on payload byte: RESET, ARM, or DISARM
-            uint8_t reply = REPLY_OK;
-            uint8_t req_type =
-                (result.ipc.len == 1) ? ((uint8_t *)result.ipc.data)[0] : 0xFF;
-
-            if (req_type == REQUEST_RESET) {
-                // RESET request - clear state for new flight
-                HIVE_LOG_INFO("[MOTOR] RESET - clearing state");
-                started = false;
-                stopped = false;
-                first_thrust_logged = false;
-                hal_write_torque(&torque); // Zero motors
-            } else if (req_type == REQUEST_ARM) {
-                // ARM request - enable motor output
-                HIVE_LOG_INFO("[MOTOR] ARM - enabling motors");
-                hal_arm();
-                armed = true;
-            } else if (req_type == REQUEST_DISARM) {
-                // DISARM request - disable motor output
-                HIVE_LOG_INFO("[MOTOR] DISARM - disabling motors");
-                hal_write_torque(&torque); // Zero motors first
-                hal_disarm();
-                armed = false;
-                started = false;
-                stopped = false;
-            } else {
-                HIVE_LOG_WARN("[MOTOR] Unknown request (len=%zu)",
-                              result.ipc.len);
-                reply = REPLY_FAIL;
-            }
-            hive_ipc_reply(&result.ipc, &reply, sizeof(reply));
+        case SEL_RESET: {
+            // RESET notification - clear state for new flight
+            HIVE_LOG_INFO("[MOTOR] RESET - clearing state");
+            started = false;
+            stopped = false;
+            first_thrust_logged = false;
+            hal_write_torque(&torque); // Zero motors
             continue;
         }
 
         case SEL_START: {
             // START notification - begin flight
-            if (!armed) {
-                HIVE_LOG_WARN("[MOTOR] START received but not armed");
-            } else {
-                HIVE_LOG_INFO("[MOTOR] START - flight authorized");
-                started = true;
-                stopped = false;
-            }
+            HIVE_LOG_INFO("[MOTOR] START - flight authorized");
+            started = true;
+            stopped = false;
             continue;
         }
 
@@ -208,8 +176,8 @@ void motor_actor(void *args, const hive_spawn_info_t *siblings,
                 torque = (torque_cmd_t)TORQUE_CMD_ZERO;
             }
 
-            // Only apply torque if armed, started, and not stopped
-            if (!armed || !started || stopped) {
+            // Only apply torque if started and not stopped
+            if (!started || stopped) {
                 torque = (torque_cmd_t)TORQUE_CMD_ZERO;
             }
 

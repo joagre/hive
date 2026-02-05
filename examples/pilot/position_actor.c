@@ -65,12 +65,12 @@ void position_actor(void *args, const hive_spawn_info_t *siblings,
     // Current target (updated from waypoint actor)
     position_target_t target = POSITION_TARGET_DEFAULT;
 
-    // Set up hive_select() sources: state bus + RESET request
+    // Set up hive_select() sources: state bus + RESET notification
     enum { SEL_STATE, SEL_RESET };
     hive_select_source_t sources[] = {
         [SEL_STATE] = {HIVE_SEL_BUS, .bus = state->state_bus},
         [SEL_RESET] = {HIVE_SEL_IPC, .ipc = {state->flight_manager,
-                                             HIVE_MSG_REQUEST, HIVE_TAG_ANY}},
+                                             HIVE_MSG_NOTIFY, NOTIFY_RESET}},
     };
 
     while (1) {
@@ -88,17 +88,8 @@ void position_actor(void *args, const hive_spawn_info_t *siblings,
         }
 
         if (result.index == SEL_RESET) {
-            // Verify it's a RESET request
-            uint8_t reply = REPLY_OK;
-            if (result.ipc.len != 1 ||
-                ((uint8_t *)result.ipc.data)[0] != REQUEST_RESET) {
-                HIVE_LOG_WARN("[POS] Unknown request ignored");
-                reply = REPLY_FAIL;
-            } else {
-                HIVE_LOG_INFO("[POS] RESET - clearing state");
-                target = (position_target_t)POSITION_TARGET_DEFAULT;
-            }
-            hive_ipc_reply(&result.ipc, &reply, sizeof(reply));
+            HIVE_LOG_INFO("[POS] RESET - clearing state");
+            target = (position_target_t)POSITION_TARGET_DEFAULT;
             continue;
         }
 

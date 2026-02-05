@@ -92,8 +92,8 @@ void waypoint_actor(void *args, const hive_spawn_info_t *siblings,
                        .ipc = {state->flight_manager, HIVE_MSG_NOTIFY,
                                NOTIFY_FLIGHT_START}},
         [SEL_RESET_WAIT] = {HIVE_SEL_IPC,
-                            .ipc = {state->flight_manager, HIVE_MSG_REQUEST,
-                                    HIVE_TAG_ANY}},
+                            .ipc = {state->flight_manager, HIVE_MSG_NOTIFY,
+                                    NOTIFY_RESET}},
     };
 
     while (1) {
@@ -105,16 +105,7 @@ void waypoint_actor(void *args, const hive_spawn_info_t *siblings,
         }
 
         if (wait_result.index == SEL_RESET_WAIT) {
-            // Handle RESET request while waiting for START
-            uint8_t reply = REPLY_OK;
-            if (wait_result.ipc.len != 1 ||
-                ((uint8_t *)wait_result.ipc.data)[0] != REQUEST_RESET) {
-                HIVE_LOG_WARN("[WPT] Unknown request ignored");
-                reply = REPLY_FAIL;
-            } else {
-                HIVE_LOG_INFO("[WPT] RESET (while waiting for START)");
-            }
-            hive_ipc_reply(&wait_result.ipc, &reply, sizeof(reply));
+            HIVE_LOG_INFO("[WPT] RESET (while waiting for START)");
             continue; // Keep waiting for START
         }
 
@@ -160,8 +151,8 @@ void waypoint_actor(void *args, const hive_spawn_info_t *siblings,
                                  .ipc = {HIVE_SENDER_ANY, HIVE_MSG_TIMER,
                                          hover_timer}},
             [SEL_RESET] = {HIVE_SEL_IPC,
-                           .ipc = {state->flight_manager, HIVE_MSG_REQUEST,
-                                   HIVE_TAG_ANY}},
+                           .ipc = {state->flight_manager, HIVE_MSG_NOTIFY,
+                                   NOTIFY_RESET}},
         };
 
         hive_select_result_t result;
@@ -171,7 +162,7 @@ void waypoint_actor(void *args, const hive_spawn_info_t *siblings,
             hive_select_source_t sources_no_timer[] = {
                 [0] = {HIVE_SEL_BUS, .bus = state->state_bus},
                 [1] = {HIVE_SEL_IPC, .ipc = {state->flight_manager,
-                                             HIVE_MSG_REQUEST, HIVE_TAG_ANY}},
+                                             HIVE_MSG_NOTIFY, NOTIFY_RESET}},
             };
             status = hive_select(sources_no_timer, 2, &result, -1);
             if (HIVE_FAILED(status)) {
@@ -191,23 +182,14 @@ void waypoint_actor(void *args, const hive_spawn_info_t *siblings,
         }
 
         if (result.index == SEL_RESET) {
-            // Verify it's a RESET request
-            uint8_t reply = REPLY_OK;
-            if (result.ipc.len != 1 ||
-                ((uint8_t *)result.ipc.data)[0] != REQUEST_RESET) {
-                HIVE_LOG_WARN("[WPT] Unknown request ignored");
-                reply = REPLY_FAIL;
-            } else {
-                HIVE_LOG_INFO("[WPT] RESET - resetting to waypoint 0");
-                waypoint_index = 0;
-                if (hover_timer != HIVE_TIMER_ID_INVALID) {
-                    hive_timer_cancel(hover_timer);
-                    hover_timer = HIVE_TIMER_ID_INVALID;
-                }
-                hovering = false;
-                first_publish = true;
+            HIVE_LOG_INFO("[WPT] RESET - resetting to waypoint 0");
+            waypoint_index = 0;
+            if (hover_timer != HIVE_TIMER_ID_INVALID) {
+                hive_timer_cancel(hover_timer);
+                hover_timer = HIVE_TIMER_ID_INVALID;
             }
-            hive_ipc_reply(&result.ipc, &reply, sizeof(reply));
+            hovering = false;
+            first_publish = true;
             continue;
         }
 

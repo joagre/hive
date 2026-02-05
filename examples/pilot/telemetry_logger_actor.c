@@ -139,13 +139,13 @@ void telemetry_logger_actor(void *args, const hive_spawn_info_t *siblings,
     uint32_t start_time = hive_get_time();
     uint32_t log_count = 0;
 
-    // Set up hive_select() sources: timer + RESET request
+    // Set up hive_select() sources: timer + RESET notification
     enum { SEL_TIMER, SEL_RESET };
     hive_select_source_t sources[] = {
         [SEL_TIMER] = {HIVE_SEL_IPC,
                        .ipc = {HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer}},
         [SEL_RESET] = {HIVE_SEL_IPC, .ipc = {state->flight_manager,
-                                             HIVE_MSG_REQUEST, HIVE_TAG_ANY}},
+                                             HIVE_MSG_NOTIFY, NOTIFY_RESET}},
     };
     // Only include RESET source if flight_manager is valid
     size_t num_sources =
@@ -160,16 +160,7 @@ void telemetry_logger_actor(void *args, const hive_spawn_info_t *siblings,
         }
 
         if (result.index == SEL_RESET) {
-            // Verify it's a RESET request
-            if (result.ipc.len != 1 ||
-                ((uint8_t *)result.ipc.data)[0] != REQUEST_RESET) {
-                HIVE_LOG_WARN("[TLOG] Unknown request ignored");
-                uint8_t reply = REPLY_FAIL;
-                hive_ipc_reply(&result.ipc, &reply, sizeof(reply));
-                continue;
-            }
-
-            // RESET request - truncate log file for new flight
+            // RESET notification - truncate log file for new flight
             HIVE_LOG_INFO("[TLOG] RESET - truncating log file");
             hive_file_close(state->log_fd);
 
@@ -180,8 +171,6 @@ void telemetry_logger_actor(void *args, const hive_spawn_info_t *siblings,
             if (HIVE_FAILED(status)) {
                 HIVE_LOG_ERROR("[TLOG] Cannot reopen %s: %s", state->log_path,
                                HIVE_ERR_STR(status));
-                uint8_t reply = REPLY_FAIL;
-                hive_ipc_reply(&result.ipc, &reply, sizeof(reply));
                 break;
             }
 
@@ -195,9 +184,6 @@ void telemetry_logger_actor(void *args, const hive_spawn_info_t *siblings,
             latest_sensors = (sensor_data_t)SENSOR_DATA_ZERO;
             latest_thrust = (thrust_cmd_t)THRUST_CMD_ZERO;
             latest_target = (position_target_t)POSITION_TARGET_ZERO;
-
-            uint8_t reply = REPLY_OK;
-            hive_ipc_reply(&result.ipc, &reply, sizeof(reply));
             continue;
         }
 

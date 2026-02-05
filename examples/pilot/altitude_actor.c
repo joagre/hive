@@ -90,7 +90,7 @@ void altitude_actor(void *args, const hive_spawn_info_t *siblings,
                          .ipc = {state->flight_manager, HIVE_MSG_NOTIFY,
                                  NOTIFY_LANDING}},
         [SEL_RESET] = {HIVE_SEL_IPC, .ipc = {state->flight_manager,
-                                             HIVE_MSG_REQUEST, HIVE_TAG_ANY}},
+                                             HIVE_MSG_NOTIFY, NOTIFY_RESET}},
     };
 
     while (1) {
@@ -108,25 +108,16 @@ void altitude_actor(void *args, const hive_spawn_info_t *siblings,
         }
 
         if (result.index == SEL_RESET) {
-            // Verify it's a RESET request
-            uint8_t reply = REPLY_OK;
-            if (result.ipc.len != 1 ||
-                ((uint8_t *)result.ipc.data)[0] != REQUEST_RESET) {
-                HIVE_LOG_WARN("[ALT] Unknown request ignored");
-                reply = REPLY_FAIL;
-            } else {
-                HIVE_LOG_INFO("[ALT] RESET - clearing PID and landing state");
-                pid_reset(&alt_pid);
-                target_altitude = 0.0f;
-                ramp_start_time = 0;
-                landing_mode = false;
-                landed = false;
-                crash_detected = false;
-                logged_crash = false;
-                count = 0;
-                prev_time = hive_get_time();
-            }
-            hive_ipc_reply(&result.ipc, &reply, sizeof(reply));
+            HIVE_LOG_INFO("[ALT] RESET - clearing PID and landing state");
+            pid_reset(&alt_pid);
+            target_altitude = 0.0f;
+            ramp_start_time = 0;
+            landing_mode = false;
+            landed = false;
+            crash_detected = false;
+            logged_crash = false;
+            count = 0;
+            prev_time = hive_get_time();
             continue;
         }
 

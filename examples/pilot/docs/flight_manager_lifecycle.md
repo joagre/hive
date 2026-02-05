@@ -8,7 +8,7 @@ Currently, flight manager exits after completing a flight. To run another test r
 
 ## Solution
 
-Flight manager becomes a looping state machine. After landing, it returns to IDLE and waits for the next GO. Before each flight, it requests RESET from all siblings so actors start with clean state.
+Flight manager becomes a looping state machine. After landing, it returns to IDLE and waits for the next GO. Before each flight, it notifies all siblings to RESET so actors start with clean state.
 
 ## State Machine
 
@@ -26,10 +26,9 @@ Flight manager becomes a looping state machine. After landing, it returns to IDL
                           v
     ┌──────────────────────────────────────────────────────────────┐
     │                       PREFLIGHT                              │
-    │  1. Request RESET from all siblings (calibrate, reset PIDs)  │
-    │  2. If any RESET failed: return to IDLE                      │
-    │  3. Request ARM from motor_actor                             │
-    │  4. If ARM failed: return to IDLE                            │
+    │  1. Call hal_calibrate() (sensor calibration)                │
+    │  2. Notify RESET to all siblings (reset PIDs, clear state)   │
+    │  3. Call hal_arm() (enable motors)                           │
     └──────────────────────────────────────────────────────────────┘
                           │
                           │ Preflight complete
@@ -60,7 +59,7 @@ Flight manager becomes a looping state machine. After landing, it returns to IDL
                           v
     ┌──────────────────────────────────────────────────────────────┐
     │                       LANDED                                 │
-    │  - Request DISARM from motor_actor                           │
+    │  - Call hal_disarm() (disable motors)                        │
     │  - Transition to IDLE                                        │
     └──────────────────────────────────────────────────────────────┘
                           │
@@ -71,16 +70,16 @@ Flight manager becomes a looping state machine. After landing, it returns to IDL
 
 | Message | From | To | Pattern | Tag |
 |---------|------|----|---------|-----|
-| GO | comms_actor | flight_manager | notify | 0x474F |
-| ABORT | comms_actor | flight_manager | notify | 0x4142 |
-| RESET | flight_manager | all siblings | request/reply | - |
-| ARM | flight_manager | motor_actor | request/reply | - |
-| DISARM | flight_manager | motor_actor | request/reply | - |
-| LANDING | flight_manager | altitude_actor | notify | 0x4C44 |
-| LANDED | altitude_actor | flight_manager | notify | 0x444E |
+| GO | comms_actor | flight_manager | notify | NOTIFY_GO |
+| ABORT | comms_actor | flight_manager | notify | NOTIFY_ABORT |
+| RESET | flight_manager | all siblings | notify | NOTIFY_RESET |
+| START | flight_manager | motor, waypoint | notify | NOTIFY_FLIGHT_START |
+| STOP | flight_manager | motor | notify | NOTIFY_FLIGHT_STOP |
+| LANDING | flight_manager | altitude_actor | notify | NOTIFY_LANDING |
+| LANDED | altitude_actor | flight_manager | notify | NOTIFY_FLIGHT_LANDED |
 | STATUS | comms_actor | flight_manager | request/reply | - |
 
-Request/reply messages use auto-generated tags. Actors dispatch by context (flight phase), not by tag.
+HAL calls (hal_calibrate, hal_arm, hal_disarm) are made directly by flight_manager.
 
 ## Message Flow
 
@@ -95,11 +94,10 @@ Ground Station
       ├──STATUS──> flight_manager ──reply──┐      │
       │<───────────────────────────────────┘      │
       │                   │                       │
-      │                   ├──RESET──> [all siblings] ──reply──┐
-      │                   │<────────────────────────────────────┘
+      │                   ├──RESET──> [all siblings] (fire-and-forget)
       │                   │
-      │                   ├──ARM/DISARM──> motor_actor ──reply──┐
-      │                   │<────────────────────────────────────┘
+      │                   ├──START──> motor_actor, waypoint_actor
+      │                   ├──STOP───> motor_actor
       │                   │
       │                   ├──LANDING──> altitude_actor
       │                   │<──LANDED───
@@ -113,19 +111,19 @@ Ground Station
 
 | Actor | RESET Action | Other Messages |
 |-------|--------------|----------------|
-| sensor_actor | hal_calibrate() | - |
+| sensor_actor | Log only (calibration done by flight_manager) | - |
 | estimator_actor | Reset filters | - |
 | altitude_actor | Reset PID, clear landing state | Handle LANDING, send LANDED |
-| position_actor | Reset PID | - |
+| position_actor | Reset state | - |
 | attitude_actor | Reset PIDs | - |
 | rate_actor | Reset PIDs | - |
-| motor_actor | Clear started flag, zero outputs | ARM (hal_arm), DISARM (hal_disarm) |
-| waypoint_actor | Reset index | - |
+| motor_actor | Clear started flag, zero outputs | Handle START/STOP |
+| waypoint_actor | Reset index | Handle START |
 | logger_actor | Truncate logs | - |
 | comms_actor | No-op | Relay GO/ABORT/STATUS |
-| flight_manager | - | Orchestrate all |
+| flight_manager | hal_calibrate, hal_arm, hal_disarm | Orchestrate all |
 
-RESET replies: REPLY_OK (0x00) or REPLY_FAIL (0x01). If any fails, abort preflight.
+RESET is fire-and-forget. HAL calls (calibrate, arm, disarm) are made directly by flight_manager.
 
 ## Ground Station Commands
 
@@ -156,21 +154,23 @@ Simulation mode: `auto_go_delay_s = 2.0` in Webots (no radio available).
 
 1. **Sibling lookup** - Use `hive_find_sibling(siblings, sibling_count, "name")` to get actor IDs before main loop
 
-2. **Request dispatch** - `hive_ipc_request()` auto-generates tags, so receivers use `HIVE_TAG_ANY` and dispatch by context (flight phase determines expected request type)
+2. **Fire-and-forget RESET** - RESET uses notify (not request/reply) for simplicity. Actors reset their internal state without acknowledgment.
 
-3. **Log truncation** - logger_actor owns both hive log and telemetry CSV; truncates on RESET via close/reopen
+3. **HAL ownership** - Flight manager owns HAL lifecycle calls (hal_calibrate, hal_arm, hal_disarm) to keep hardware coordination in one place.
 
-4. **Emergency cutoff** - altitude_actor sends LANDED for both normal landing and emergency cutoff; flight_manager handles both the same way
+4. **Log truncation** - logger_actor owns both hive log and telemetry CSV; truncates on RESET via close/reopen
+
+5. **Emergency cutoff** - altitude_actor sends LANDED for both normal landing and emergency cutoff; flight_manager handles both the same way
 
 ## Implementation (Complete)
 
 All components implemented:
 
-1. **flight_manager_actor.c** - State machine with IDLE → PREFLIGHT → ARMED → FLYING → LANDING → LANDED loop
-2. **sensor_actor.c** - RESET handler calls hal_calibrate()
-3. **motor_actor.c** - Handles RESET, ARM, DISARM requests and START/STOP notifications
+1. **flight_manager_actor.c** - State machine with IDLE → PREFLIGHT → ARMED → FLYING → LANDING → LANDED loop. Calls hal_calibrate/hal_arm/hal_disarm directly.
+2. **sensor_actor.c** - RESET handler logs acknowledgment
+3. **motor_actor.c** - Handles RESET notification and START/STOP notifications
 4. **estimator_actor.c** - RESET handler reinitializes filters
-5. **altitude_actor.c** - Handles RESET, LANDING; sends LANDED
+5. **altitude_actor.c** - Handles RESET notification, LANDING; sends LANDED
 6. **attitude_actor.c** - RESET handler resets PIDs
 7. **rate_actor.c** - RESET handler resets PIDs
 8. **position_actor.c** - RESET handler clears state
@@ -184,9 +184,7 @@ All components implemented:
 
 1. Single flight - IDLE → PREFLIGHT → ARMED → FLYING → LANDING → LANDED → IDLE
 2. Multiple flights - GO, complete, GO again
-3. RESET failure - hal_calibrate() fails, return to IDLE
-4. ARM failure - hal_arm() fails, return to IDLE
-5. Abort during armed - DISARM, return to IDLE
-6. Emergency cutoff - Return to IDLE via LANDED
-7. Log truncation - Fresh logs after each GO
-8. STATUS polling - Correct state and countdown in each state
+3. Abort during armed - DISARM, return to IDLE
+4. Emergency cutoff - Return to IDLE via LANDED
+5. Log truncation - Fresh logs after each GO
+6. STATUS polling - Correct state and countdown in each state

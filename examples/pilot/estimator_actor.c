@@ -194,19 +194,19 @@ void estimator_actor(void *args, const hive_spawn_info_t *siblings,
     // For measuring dt
     uint64_t prev_time = hive_get_time();
 
-    // Set up hive_select() sources: sensor bus + RESET request
+    // Set up hive_select() sources: sensor bus + RESET notification
     enum { SEL_SENSOR, SEL_RESET };
     hive_select_source_t sources[] = {
         [SEL_SENSOR] = {HIVE_SEL_BUS, .bus = state->sensor_bus},
         [SEL_RESET] = {HIVE_SEL_IPC, .ipc = {state->flight_manager,
-                                             HIVE_MSG_REQUEST, HIVE_TAG_ANY}},
+                                             HIVE_MSG_NOTIFY, NOTIFY_RESET}},
     };
 
     while (1) {
         sensor_data_t sensors;
         state_estimate_t est;
 
-        // Wait for sensor data OR RESET request
+        // Wait for sensor data OR RESET notification
         hive_select_result_t result;
         status = hive_select(sources, 2, &result, -1);
         if (HIVE_FAILED(status)) {
@@ -215,16 +215,7 @@ void estimator_actor(void *args, const hive_spawn_info_t *siblings,
         }
 
         if (result.index == SEL_RESET) {
-            // Verify it's a RESET request
-            uint8_t reply = REPLY_OK;
-            if (result.ipc.len != 1 ||
-                ((uint8_t *)result.ipc.data)[0] != REQUEST_RESET) {
-                HIVE_LOG_WARN("[EST] Unknown request ignored");
-                reply = REPLY_FAIL;
-                hive_ipc_reply(&result.ipc, &reply, sizeof(reply));
-                continue;
-            }
-            // RESET request - reinitialize filters
+            // Reinitialize filters
             HIVE_LOG_INFO("[EST] RESET - reinitializing filters");
             cf_init(&filter, &cf_config);
             altitude_kf_init(&alt_kf, &kf_config);
@@ -240,7 +231,6 @@ void estimator_actor(void *args, const hive_spawn_info_t *siblings,
             prev_gps_valid = false;
             prev_velocity_valid = false;
             prev_time = hive_get_time();
-            hive_ipc_reply(&result.ipc, &reply, sizeof(reply));
             continue;
         }
 
