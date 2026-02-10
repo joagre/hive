@@ -232,17 +232,16 @@ parameter must be the message received via
 Example:
 .PP
 .nf
-/* Server side - receive request and reply */
+/* Server side - wait for CMD_ADD request and reply */
+#define CMD_ADD 1
 hive_message_t msg;
-hive_ipc_recv(&msg, -1);
-if (msg.class == HIVE_MSG_REQUEST) {
-    point_t *p = (point_t *)msg.data;
-    int result = p->x + p->y;
-    hive_ipc_reply(&msg, &result, sizeof(result));
-}
+hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_REQUEST,
+                    CMD_ADD, HIVE_TAG_ANY, &msg, -1);
+point_t *p = (point_t *)msg.data;
+int result = p->x + p->y;
+hive_ipc_reply(&msg, &result, sizeof(result));
 
 /* Client side - issue request and wait for reply */
-#define CMD_ADD 1
 point_t req = {.x = 10, .y = 20};
 hive_message_t reply;
 hive_status_t s = hive_ipc_request(server_id, CMD_ADD,
@@ -489,22 +488,19 @@ Deterministic memory usage suitable for certification
 #include <stdio.h>
 
 typedef struct { int x, y; } point_t;
+#define MSG_ADD_POINTS 1  /* Application-defined message type */
 
 void server(void *arg, const hive_spawn_info_t *siblings,
             size_t sibling_count) {
     while (true) {
         hive_message_t msg;
-        hive_ipc_recv(&msg, -1);
-
-        if (msg.class == HIVE_MSG_REQUEST) {
-            point_t *p = (point_t *)msg.data;
-            int result = p->x + p->y;
-            hive_ipc_reply(&msg, &result, sizeof(result));
-        }
+        hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_REQUEST,
+                            MSG_ADD_POINTS, HIVE_TAG_ANY, &msg, -1);
+        point_t *p = (point_t *)msg.data;
+        int result = p->x + p->y;
+        hive_ipc_reply(&msg, &result, sizeof(result));
     }
 }
-
-#define MSG_ADD_POINTS 1  /* Application-defined message type */
 
 void client(void *arg, const hive_spawn_info_t *siblings,
             size_t sibling_count) {
