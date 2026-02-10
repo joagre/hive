@@ -725,7 +725,7 @@ no JSON - just compile-time filtered levels with dual output (console + file).
 - `HIVE_LOG_ERROR(fmt, ...)` - Errors
 
 **Logging lifecycle** (managed by application):
-- `hive_log_init()` - Initialize logging subsystem (called by `hive_init()`)
+- `hive_log_init()` - Initialize logging subsystem (called automatically on first use)
 - `hive_log_file_open(path)` - Open log file (on STM32, erases flash sector)
 - `hive_log_file_sync()` - Flush to storage (call periodically)
 - `hive_log_file_close()` - Close log file

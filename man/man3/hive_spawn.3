@@ -1,7 +1,7 @@
-.\" Man page for hive_spawn, hive_exit, hive_self, hive_yield, hive_actor_alive, hive_register, hive_whereis, hive_unregister, hive_find_sibling
+.\" Man page for hive_spawn, hive_exit, hive_self, hive_yield, hive_actor_alive, hive_actor_kill, hive_register, hive_whereis, hive_unregister, hive_find_sibling
 .TH HIVE_SPAWN 3 "January 2026" "Hive 1.0" "Actor Runtime Manual"
 .SH NAME
-hive_spawn, hive_exit, hive_self, hive_yield, hive_actor_alive, hive_find_sibling, hive_register, hive_whereis, hive_unregister \- actor lifecycle management
+hive_spawn, hive_exit, hive_self, hive_yield, hive_actor_alive, hive_actor_kill, hive_find_sibling, hive_register, hive_whereis, hive_unregister \- actor lifecycle management
 .SH SYNOPSIS
 .nf
 .B #include <hive_runtime.h>
@@ -13,9 +13,10 @@ hive_spawn, hive_exit, hive_self, hive_yield, hive_actor_alive, hive_find_siblin
 .BI "hive_actor_id_t hive_self(void);"
 .BI "void hive_yield(void);"
 .BI "bool hive_actor_alive(hive_actor_id_t " id ");"
+.BI "hive_status_t hive_actor_kill(hive_actor_id_t " target ");"
 .PP
-.BI "const hive_spawn_info_t *hive_find_sibling(const hive_spawn_info_t *" siblings ","
-.BI "                                         size_t " count ", const char *" name ");"
+.BI "hive_actor_id_t hive_find_sibling(const hive_spawn_info_t *" siblings ","
+.BI "                                 size_t " count ", const char *" name ");"
 .PP
 .BI "hive_status_t hive_register(const char *" name ");"
 .BI "hive_status_t hive_whereis(const char *" name ", hive_actor_id_t *" out ");"
@@ -80,6 +81,7 @@ typedef struct {
     bool        malloc_stack;  /* false = arena, true = malloc */
     bool        auto_register; /* auto-register name in registry */
     bool        pool_block;    /* block on pool exhaustion */
+    hive_actor_id_t reuse_actor_id; /* 0 = new slot (internal use) */
 } hive_actor_config_t;
 
 #define HIVE_ACTOR_CONFIG_DEFAULT { \\
@@ -138,14 +140,29 @@ Actors receive an array of spawn info describing themselves and their siblings.
 This is useful for supervised actors to discover sibling actor IDs.
 .SS Finding Siblings
 .BR hive_find_sibling ()
-searches the sibling array for an actor with the given name. Returns a pointer
-to the matching entry, or NULL if not found. This is a convenience function
+searches the sibling array for an actor with the given name. Returns the
+actor ID if found, or
+.B HIVE_ACTOR_ID_INVALID
+if not found. This is a convenience function
 for supervised actors to discover sibling IDs without using the name registry.
 .SS Terminating Actors
 .BR hive_exit ()
 terminates the calling actor with the specified exit
 .IR reason .
-This function does not return. When an actor exits:
+This function does not return.
+.PP
+.BR hive_actor_kill ()
+terminates a target actor immediately. The target cannot resist or defer
+termination. The target's exit reason is set to
+.BR HIVE_EXIT_REASON_KILLED .
+Linked and monitoring actors receive exit notifications. An actor cannot kill
+itself; use
+.BR hive_exit ()
+instead. Returns
+.B HIVE_ERR_INVALID
+if the target is invalid or dead.
+.PP
+When an actor exits:
 .IP \(bu 2
 Its mailbox is cleared
 .IP \(bu 2
@@ -249,7 +266,9 @@ outside actor context.
 returns true if the actor is alive, false otherwise.
 .PP
 .BR hive_find_sibling ()
-returns a pointer to the matching spawn info, or NULL if not found.
+returns the actor ID if found, or
+.B HIVE_ACTOR_ID_INVALID
+if not found.
 .PP
 .BR hive_register (),
 .BR hive_whereis (),
@@ -281,11 +300,17 @@ auto_register is true and the name is already registered.
 name is NULL, name already registered, or not called from actor context.
 .br
 .BR hive_whereis ():
-name is NULL, name not found, or out is NULL.
+name is NULL or out is NULL.
 .br
 .BR hive_unregister ():
-name is NULL, name not found, name not owned by caller, or not called from
-actor context.
+name is NULL, name not owned by caller, or not called from actor context.
+.TP
+.B HIVE_ERR_NOT_FOUND
+.BR hive_whereis ():
+name not registered.
+.br
+.BR hive_unregister ():
+name not registered.
 .TP
 .B HIVE_ERR_NOMEM
 Registry full (HIVE_MAX_REGISTERED_NAMES reached).
@@ -300,7 +325,7 @@ to use heap allocation instead (not recommended for embedded systems).
 Default stack size is 64 KB (HIVE_DEFAULT_STACK_SIZE). Embedded applications
 should carefully size stacks based on worst-case call depth. Stack overflow
 results in undefined behavior. The
-.B HIVE_EXIT_REASON_CRASH_STACK
+.B HIVE_EXIT_REASON_STACK_OVERFLOW
 exit reason is reserved for future hardware-based detection (MPU/mprotect).
 .SS Spawn from Main vs Actor
 Actors can be spawned from main() before
@@ -454,7 +479,7 @@ void client(void *args, const hive_spawn_info_t *siblings,
 
     /* Notify database */
     char query[] = "SELECT * FROM users";
-    hive_ipc_notify(db, HIVE_TAG_NONE, query, sizeof(query));
+    hive_ipc_notify(db, HIVE_ID_NONE, query, sizeof(query));
 
     return;
 }

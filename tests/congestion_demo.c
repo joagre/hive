@@ -86,7 +86,7 @@ void coordinator_actor(void *args, const hive_spawn_info_t *siblings,
                 } else {
                     // Even retry failed - aggressive backoff
                     hive_ipc_recv(&msg, 20);
-                    status = hive_ipc_notify(cargs->workers[w], HIVE_TAG_NONE,
+                    status = hive_ipc_notify(cargs->workers[w], HIVE_ID_NONE,
                                              &data, sizeof(data));
                     if (HIVE_SUCCEEDED(status)) {
                         retry_success++;

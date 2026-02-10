@@ -18,9 +18,6 @@
 #include "hive_types.h"
 #include <stdint.h>
 
-// Timer ID type (also defined in hive_timer.h)
-typedef uint32_t hive_timer_id_t;
-
 // Initialize timer subsystem.
 // Linux: Initialize timer pool
 // STM32: Initialize timer pool and wheel

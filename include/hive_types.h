@@ -22,7 +22,7 @@ typedef uint32_t hive_timer_id_t;
 #define HIVE_TAG_NONE 0
 
 // Message header size (prepended to all messages)
-// Layout: [class:4][gen:1][tag:27] [id:16] = 6 bytes
+// Layout: [class:4][tag:28] [id:16] = 6 bytes
 #define HIVE_MSG_HEADER_SIZE 6
 
 // Message classes (4 bits, stored in header bits 31-28)
@@ -61,6 +61,7 @@ typedef enum {
     HIVE_ERR_IO,
     HIVE_ERR_EXISTS,    // Name already registered (for auto_register failure)
     HIVE_ERR_TRUNCATED, // Data truncated to fit buffer (bus read)
+    HIVE_ERR_NOT_FOUND, // Name not registered in name registry
 } hive_error_code_t;
 
 // Status with optional message
@@ -154,9 +155,6 @@ typedef enum {
 // -----------------------------------------------------------------------------
 // Select Types (for hive_select unified event API)
 // -----------------------------------------------------------------------------
-
-// Forward declaration for hive_bus_id_t (defined in hive_bus.h)
-typedef uint32_t hive_bus_id_t;
 
 // Select source types
 typedef enum {

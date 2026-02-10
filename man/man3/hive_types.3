@@ -96,6 +96,10 @@ Name already registered (for auto_register or
 .TP
 .B HIVE_ERR_TRUNCATED
 Data was truncated to fit buffer (bus read operations).
+.TP
+.B HIVE_ERR_NOT_FOUND
+Actor name not registered in name registry (named IPC functions and
+.BR hive_whereis ()).
 .SS Message Structure
 .PP
 .nf
@@ -246,6 +250,7 @@ typedef struct {
     bool        malloc_stack; /* false = arena (default), true = malloc */
     bool        auto_register;/* auto-register name in registry */
     bool        pool_block;   /* block on pool exhaustion (default: false) */
+    hive_actor_id_t reuse_actor_id; /* 0 = new slot (supervisor internal) */
 } hive_actor_config_t;
 
 #define HIVE_ACTOR_CONFIG_DEFAULT { \\
@@ -299,10 +304,18 @@ Defined in
 .PP
 .nf
 typedef struct {
-    hive_actor_id_t       actor;   /* ID of the actor that died */
-    hive_exit_reason_t reason;  /* Why the actor exited */
+    hive_actor_id_t    actor;      /* ID of the actor that died */
+    hive_exit_reason_t reason;     /* Why the actor exited */
+    uint32_t           monitor_id; /* 0 = link, non-zero = monitor ID */
 } hive_exit_msg_t;
 .fi
+.PP
+The
+.I monitor_id
+field distinguishes exit notifications from links vs monitors:
+0 means the notification came from a bidirectional link, non-zero means it
+came from a monitor (value matches the ID returned by
+.BR hive_monitor ()).
 .PP
 Use helper functions from
 .BR hive_link (3):
@@ -335,27 +348,30 @@ Defined in
 .PP
 .nf
 typedef enum {
-    HIVE_SEL_IPC,  /* Wait for IPC message */
-    HIVE_SEL_BUS,  /* Wait for bus data */
+    HIVE_SEL_IPC,       /* Wait for IPC message */
+    HIVE_SEL_BUS,       /* Wait for bus data */
+    HIVE_SEL_HAL_EVENT, /* Wait for HAL event (from ISR) */
 } hive_select_type_t;
 
 typedef struct {
     hive_select_type_t type;
     union {
         hive_recv_filter_t ipc;  /* For HIVE_SEL_IPC */
-        hive_bus_id_t bus;            /* For HIVE_SEL_BUS */
+        hive_bus_id_t bus;       /* For HIVE_SEL_BUS */
+        uint8_t event;           /* For HIVE_SEL_HAL_EVENT */
     };
 } hive_select_source_t;
 
 typedef struct {
-    size_t index;           /* Which source triggered (0-based) */
-    hive_select_type_t type;  /* Type of triggered source */
+    size_t index;            /* Which source triggered (0-based) */
+    hive_select_type_t type; /* Type of triggered source */
     union {
-        hive_message_t ipc;   /* For HIVE_SEL_IPC */
+        hive_message_t ipc;  /* For HIVE_SEL_IPC */
         struct {
-            void *data;     /* For HIVE_SEL_BUS */
+            void *data;      /* For HIVE_SEL_BUS */
             size_t len;
         } bus;
+        /* For HIVE_SEL_HAL_EVENT: no data payload */
     };
 } hive_select_result_t;
 .fi

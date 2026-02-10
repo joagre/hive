@@ -219,8 +219,9 @@ hive_ipc_named_notify("logger", LOG_MSG, &log_entry, sizeof(log_entry));
 
 /* Request/reply with named actor */
 hive_message_t reply;
-hive_status_t s = hive_ipc_named_request("config_server", &req,
-                                        sizeof(req), &reply, 5000);
+#define MSG_GET_CONFIG 1  /* Application-defined message type */
+hive_status_t s = hive_ipc_named_request("config_server", MSG_GET_CONFIG,
+                                         &req, sizeof(req), &reply, 5000);
 if (s.code == HIVE_ERR_NOT_FOUND) {
     /* Actor not registered (not started or crashed) */
 }
@@ -381,7 +382,9 @@ target dies before replying, the function returns
 immediately (no need to wait for timeout). This allows clean error handling:
 .PP
 .nf
-hive_status_t s = hive_ipc_request(target, &req, sizeof(req), &reply, 5000);
+#define MSG_GET_CONFIG 1  /* Application-defined message type */
+hive_status_t s = hive_ipc_request(target, MSG_GET_CONFIG,
+                                   &req, sizeof(req), &reply, 5000);
 if (s.code == HIVE_ERR_CLOSED) {
     /* Target died before replying */
 } else if (s.code == HIVE_ERR_TIMEOUT) {

@@ -69,7 +69,7 @@ Tests sibling info array passed to actors at spawn time.
 - Standalone spawn gets sibling_count = 1 (self only)
 - Supervised children see all siblings
 - hive_find_sibling helper finds sibling by name
-- hive_find_sibling returns NULL for unknown name
+- hive_find_sibling returns HIVE_ACTOR_ID_INVALID for unknown name
 
 ---
 

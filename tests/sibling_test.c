@@ -314,7 +314,7 @@ static void test3_find_sibling(void *args, const hive_spawn_info_t *siblings,
 }
 
 // ============================================================================
-// Test 4: hive_find_sibling returns NULL for unknown name
+// Test 4: hive_find_sibling returns HIVE_ACTOR_ID_INVALID for unknown name
 // ============================================================================
 
 static bool s_not_found_returned_null = false;
@@ -336,7 +336,7 @@ static void test4_find_sibling_not_found(void *args,
     (void)args;
     (void)siblings;
     (void)sibling_count;
-    printf("\nTest 4: hive_find_sibling returns NULL for unknown name\n");
+    printf("\nTest 4: hive_find_sibling returns INVALID for unknown name\n");
 
     s_not_found_returned_null = false;
 
@@ -355,9 +355,9 @@ static void test4_find_sibling_not_found(void *args,
     hive_ipc_recv(&msg, 1000);
 
     if (s_not_found_returned_null) {
-        TEST_PASS("hive_find_sibling returns NULL for unknown name");
+        TEST_PASS("hive_find_sibling returns INVALID for unknown name");
     } else {
-        TEST_FAIL("hive_find_sibling did not return NULL");
+        TEST_FAIL("hive_find_sibling did not return INVALID");
     }
 
     return;

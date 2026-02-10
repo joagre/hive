@@ -354,11 +354,10 @@ void worker(void *args, const hive_spawn_info_t *siblings,
     printf("Worker %d started (actor %u)\\n", id, hive_self());
 
     /* Find sibling by name */
-    const hive_spawn_info_t *peer = hive_find_sibling(siblings,
-                                                    sibling_count,
-                                                    "worker-1");
-    if (peer != NULL) {
-        printf("Found sibling worker-1 at actor %u\\n", peer->id);
+    hive_actor_id_t peer = hive_find_sibling(siblings, sibling_count,
+                                             "worker-1");
+    if (peer != HIVE_ACTOR_ID_INVALID) {
+        printf("Found sibling worker-1 at actor %u\\n", peer);
     }
 
     /* Do work... */

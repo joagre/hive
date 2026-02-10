@@ -347,7 +347,7 @@ hive_status_t hive_whereis(const char *name, hive_actor_id_t *out) {
         }
     }
 
-    return HIVE_ERROR(HIVE_ERR_INVALID, "Name not found");
+    return HIVE_ERROR(HIVE_ERR_NOT_FOUND, "Name not found");
 }
 
 hive_status_t hive_unregister(const char *name) {
@@ -378,7 +378,7 @@ hive_status_t hive_unregister(const char *name) {
         }
     }
 
-    return HIVE_ERROR(HIVE_ERR_INVALID, "Name not found");
+    return HIVE_ERROR(HIVE_ERR_NOT_FOUND, "Name not found");
 }
 
 // Called by hive_actor_free() to clean up registry entries for dying actor_t

@@ -550,7 +550,7 @@ void socket_reader_actor(void *arg) {
     while (true) {
         size_t received;
         hive_tcp_recv(sock, buf, len, &received, -1);  // Blocks in event loop
-        hive_ipc_notify(worker, HIVE_TAG_NONE, buf, received);  // Forward to actors
+        hive_ipc_notify(worker, HIVE_ID_NONE, buf, received);  // Forward to actors
     }
 }
 ```

@@ -17,7 +17,7 @@ typedef uint32_t hive_timer_id_t;
 #define TIMER_ID_INVALID  ((hive_timer_id_t)0)
 
 // Wildcard for selective receive filtering
-#define HIVE_SENDER_ANY     ((hive_actor_id_t)0xFFFFFFFF)
+#define HIVE_SENDER_ANY     ((hive_actor_id_t)0)
 
 // Actor entry point (see Actor API section for full signature)
 typedef void (*hive_actor_fn_t)(void *args, const hive_spawn_info_t *siblings, size_t sibling_count);
@@ -79,8 +79,8 @@ hive_status_t hive_spawn(hive_actor_fn_t fn, hive_actor_init_fn_t init, void *in
 _Noreturn void hive_exit(hive_exit_reason_t reason);
 
 // Find sibling by name in spawn info array
-const hive_spawn_info_t *hive_find_sibling(const hive_spawn_info_t *siblings,
-                                          size_t count, const char *name);
+hive_actor_id_t hive_find_sibling(const hive_spawn_info_t *siblings,
+                                  size_t count, const char *name);
 ```
 
 **Spawn behavior**
@@ -275,7 +275,7 @@ void database_service(void *arg) {
 void send_query(const char *query) {
     hive_actor_id_t db;
     if (HIVE_SUCCEEDED(hive_whereis("database", &db))) {
-        hive_ipc_notify(db, HIVE_TAG_NONE, query, strlen(query) + 1);
+        hive_ipc_notify(db, HIVE_ID_NONE, query, strlen(query) + 1);
     }
 }
 ```
@@ -538,8 +538,9 @@ hive_ipc_notify(logger, MSG_LOG, &entry, sizeof(entry));  // May fail silently
 **Error handling**
 
 ```c
-hive_status_t status = hive_ipc_named_request("config_server", &req,
-                                              sizeof(req), &reply, 5000);
+#define MSG_GET_CONFIG 1
+hive_status_t status = hive_ipc_named_request("config_server", MSG_GET_CONFIG,
+                                              &req, sizeof(req), &reply, 5000);
 if (status.code == HIVE_ERR_NOT_FOUND) {
     // Actor not registered (not started yet, or crashed and not restarted)
 } else if (status.code == HIVE_ERR_CLOSED) {
@@ -580,16 +581,16 @@ if (status.code == HIVE_ERR_NOT_FOUND) {
 
 ```c
 // Bad: Ignoring return value
-hive_ipc_notify(target, HIVE_TAG_NONE, &data, sizeof(data));  // WRONG - message may be lost
+hive_ipc_notify(target, HIVE_ID_NONE, &data, sizeof(data));  // WRONG - message may be lost
 
 // Good: Check and handle with backoff-retry
-hive_status_t status = hive_ipc_notify(target, HIVE_TAG_NONE, &data, sizeof(data));
+hive_status_t status = hive_ipc_notify(target, HIVE_ID_NONE, &data, sizeof(data));
 if (status.code == HIVE_ERR_NOMEM) {
     // Pool exhausted - backoff and retry
     hive_message_t msg;
     hive_ipc_recv(&msg, 10);  // Wait 10ms, process any incoming messages
     // Retry the notify
-    status = hive_ipc_notify(target, HIVE_TAG_NONE, &data, sizeof(data));
+    status = hive_ipc_notify(target, HIVE_ID_NONE, &data, sizeof(data));
     if (HIVE_FAILED(status)) {
         // Still failing - drop message or take other action
     }
@@ -663,8 +664,9 @@ Global pool limits: **Yes** - all actors share:
 
 ```c
 // Using hive_ipc_request() for request/reply (recommended - handles tag generation internally)
+#define MSG_QUERY 1
 hive_message_t reply;
-hive_ipc_request(server, &request, sizeof(request), &reply, 5000);
+hive_ipc_request(server, MSG_QUERY, &request, sizeof(request), &reply, 5000);
 
 // Or manually using selective receive:
 hive_ipc_recv_match(server, HIVE_MSG_REPLY, HIVE_ID_ANY, &reply, 5000);
@@ -717,17 +719,17 @@ hive_ipc_recv(&msg, 0);  // Gets first skipped message
 ```c
 // Single sender - FIFO guaranteed
 void sender_actor(void *arg) {
-    hive_ipc_notify(receiver, HIVE_TAG_NONE, &msg1, sizeof(msg1));  // Sent first
-    hive_ipc_notify(receiver, HIVE_TAG_NONE, &msg2, sizeof(msg2));  // Sent second
+    hive_ipc_notify(receiver, HIVE_ID_NONE, &msg1, sizeof(msg1));  // Sent first
+    hive_ipc_notify(receiver, HIVE_ID_NONE, &msg2, sizeof(msg2));  // Sent second
     // Receiver will see: msg1, then msg2 (guaranteed)
 }
 
 // Multiple senders - order depends on scheduling
 void sender_A(void *arg) {
-    hive_ipc_notify(receiver, HIVE_TAG_NONE, &msgA, sizeof(msgA));
+    hive_ipc_notify(receiver, HIVE_ID_NONE, &msgA, sizeof(msgA));
 }
 void sender_B(void *arg) {
-    hive_ipc_notify(receiver, HIVE_TAG_NONE, &msgB, sizeof(msgB));
+    hive_ipc_notify(receiver, HIVE_ID_NONE, &msgB, sizeof(msgB));
 }
 // Receiver may see: msgA then msgB, OR msgB then msgA
 
@@ -739,7 +741,7 @@ void request_reply_actor(void *arg) {
 
     // Do request/reply
     hive_message_t reply;
-    hive_ipc_request(server, &req, sizeof(req), &reply, 5000);
+    hive_ipc_request(server, HIVE_ID_NONE, &req, sizeof(req), &reply, 5000);
     // Timer tick arrived during request/reply wait - it's in mailbox
 
     // Now process timer using hive_timer_recv
@@ -859,7 +861,7 @@ bool blocking = hive_pool_get_block();
 
 **Backoff-retry example (when pool_block = false)**
 ```c
-hive_status_t status = hive_ipc_notify(target, HIVE_TAG_NONE, data, len);
+hive_status_t status = hive_ipc_notify(target, HIVE_ID_NONE, data, len);
 if (status.code == HIVE_ERR_NOMEM) {
     // Pool exhausted - backoff before retry
     hive_message_t msg;
@@ -1905,9 +1907,9 @@ void worker(void *args, const hive_spawn_info_t *siblings, size_t sibling_count)
     printf("Worker %d started\n", id);
 
     // Can find siblings by name
-    const hive_spawn_info_t *peer = hive_find_sibling(siblings, sibling_count, "worker-1");
-    if (peer != NULL) {
-        printf("Found sibling worker-1 at actor %u\n", peer->id);
+    hive_actor_id_t peer = hive_find_sibling(siblings, sibling_count, "worker-1");
+    if (peer != HIVE_ACTOR_ID_INVALID) {
+        printf("Found sibling worker-1 at actor %u\n", peer);
     }
 
     // Do work, may crash...
