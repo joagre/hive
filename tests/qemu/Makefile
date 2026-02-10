@@ -151,11 +151,14 @@ $(BUILD_DIR)/test_%.elf: $(BUILD_DIR)/qemu_%.o $(BUILD_DIR)/test_runner.o $(BUIL
 # Preserve test ELF files
 .PRECIOUS: $(BUILD_DIR)/test_%.elf $(BUILD_DIR)/qemu_%.o
 
+# Timeout for QEMU runs (seconds) - prevents hangs from blocking examples/tests
+QEMU_TIMEOUT ?= 30
+
 # Run a single test: make run-actor_test
 .PHONY: run-%
 run-%: $(BUILD_DIR)/test_%.elf
 	@echo "=== Running $* on QEMU ==="
-	@qemu-system-arm -M lm3s6965evb -nographic \
+	@timeout $(QEMU_TIMEOUT) qemu-system-arm -M lm3s6965evb -nographic \
 		-semihosting-config enable=on,target=native \
 		-kernel $< 2>&1 | grep -v "Timer with period zero" || true
 	@echo "=== $* completed ==="
@@ -200,7 +203,7 @@ $(BUILD_DIR)/example_%.elf: $(BUILD_DIR)/qemu_example_%.o $(BUILD_DIR)/test_runn
 .PHONY: example-%
 example-%: $(BUILD_DIR)/example_%.elf
 	@echo "=== Running $* example on QEMU ==="
-	@qemu-system-arm -M lm3s6965evb -nographic \
+	@timeout $(QEMU_TIMEOUT) qemu-system-arm -M lm3s6965evb -nographic \
 		-semihosting-config enable=on,target=native \
 		-kernel $< 2>&1 | grep -v "Timer with period zero" || true
 	@echo "=== $* example completed ==="
@@ -245,7 +248,7 @@ test: $(QEMU_ELF)
 .PHONY: test-ci
 test-ci: $(QEMU_ELF)
 	@echo "Running QEMU test with timeout..."
-	@timeout 10 qemu-system-arm -M lm3s6965evb -nographic \
+	@timeout $(QEMU_TIMEOUT) qemu-system-arm -M lm3s6965evb -nographic \
 		-semihosting-config enable=on,target=native \
 		-kernel $(QEMU_ELF) 2>&1 | grep -v "Timer with period zero" \
 		|| ([ $$? -eq 124 ] && echo "Test timed out" && exit 1)
