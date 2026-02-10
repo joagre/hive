@@ -15,17 +15,17 @@
 
 // Crazyflie 2.1+ X-configuration mixer
 //
-// Motor layout (viewed from above, Bitcraze standard):
-//
-//          Front
-//      M4(CW)   M1(CCW)
-//          \   /
-//           \ /
-//           / \
-//          /   \
-//      M3(CCW)  M2(CW)
-//          Back
-//
+/*
+ * Motor layout (viewed from above, Bitcraze standard):
+ *
+ *          Front
+ *      M4(CW)     M1(CCW)
+ *           \   /
+ *            x
+ *           /   \
+ *      M3(CCW)   M2(CW)
+ *          Back
+ */
 // Channel mapping:
 //   M1 (front-right, CCW): TIM2_CH2 (PA1)
 //   M2 (back-right, CW):   TIM2_CH4 (PB11)

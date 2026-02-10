@@ -62,6 +62,7 @@ static const hive_mount_t g_mounts[] = {
 // Path Matching
 // ----------------------------------------------------------------------------
 
+#if MOUNT_COUNT > 0
 // Check if path matches prefix with proper boundary handling.
 // "/log" matches "/log", "/log/" but NOT "/logger".
 static bool prefix_matches(const char *path, const char *prefix,
@@ -86,6 +87,7 @@ static bool prefix_matches(const char *path, const char *prefix,
 
     return false;
 }
+#endif // MOUNT_COUNT > 0
 
 // ----------------------------------------------------------------------------
 // Mount Table API
@@ -95,6 +97,7 @@ const hive_mount_t *hive_mount_find(const char *path, size_t *prefix_len) {
     const hive_mount_t *best = NULL;
     size_t best_len = 0;
 
+#if MOUNT_COUNT > 0
     for (size_t i = 0; i < MOUNT_COUNT; i++) {
         size_t len;
         if (prefix_matches(path, g_mounts[i].prefix, &len)) {
@@ -104,6 +107,9 @@ const hive_mount_t *hive_mount_find(const char *path, size_t *prefix_len) {
             }
         }
     }
+#else
+    (void)path;
+#endif
 
     if (prefix_len != NULL) {
         *prefix_len = best_len;

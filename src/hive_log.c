@@ -41,8 +41,10 @@ static uint16_t s_seq = 0; // Monotonic sequence number
 // -----------------------------------------------------------------------------
 
 // Level names for output
+#if HIVE_LOG_TO_STDOUT || HIVE_LOG_TO_FILE
 static const char *s_level_names[] = {"TRACE", "DEBUG", "INFO", "WARN",
                                       "ERROR"};
+#endif
 
 // -----------------------------------------------------------------------------
 // Console output helpers
@@ -214,5 +216,10 @@ void hive_log_write(hive_log_level_t level, const char *file, int line,
     if (s_log_fd >= 0) {
         log_to_file(level, buf, (size_t)len);
     }
+#endif
+
+#if !HIVE_LOG_TO_STDOUT && !HIVE_LOG_TO_FILE
+    (void)level;
+    (void)len;
 #endif
 }

@@ -66,6 +66,9 @@ static inline int qemu_fflush(void *stream) {
  */
 #include "hive_timer.h"
 
+// Declared in hal/stm32/hive_hal_timer.c (not in any public header)
+extern uint32_t hive_timer_get_ticks(void);
+
 static inline int qemu_clock_gettime(clockid_t clk_id, struct timespec *tp) {
     (void)clk_id;
     uint32_t ticks = hive_timer_get_ticks();
