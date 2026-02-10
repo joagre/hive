@@ -101,12 +101,14 @@ $(BUILD_DIR):
 	mkdir -p $@
 
 # Build hive library (delegate to src/Makefile)
-$(HIVE_LIB):
+$(HIVE_LIB): FORCE
 	@$(MAKE) -C $(SRC_DIR) PLATFORM=stm32 \
 		BUILD_DIR=$(abspath $(BUILD_DIR)) \
 		CC=$(ARM_CC) AR=$(ARM_AR) \
 		ENABLE_TCP=0 ENABLE_FILE=0 \
 		CFLAGS="$(HIVE_CFLAGS_EXPORT)"
+
+FORCE:
 
 # Compile QEMU local sources
 $(BUILD_DIR)/startup.o: startup.S | $(BUILD_DIR)
