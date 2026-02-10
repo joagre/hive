@@ -589,6 +589,9 @@ hive_supervisor_stop(supervisor);
 
 # Name registry example (service discovery pattern)
 ./build/registry
+
+# Pool exhaustion handling (backpressure demo)
+./build/pool_exhaustion
 ```
 
 ### Pilot Example (Quadcopter Flight Controller)
@@ -858,7 +861,7 @@ valgrind --leak-check=full ./build/ipc_test
 
 ```
 
-The test suite includes 23 test programs covering actors, IPC, timers, bus, TCP, file I/O, linking, monitoring, supervision, logging, name registry, and edge cases like pool exhaustion.
+The test suite includes 24 test programs covering actors, IPC, timers, bus, TCP, file I/O, linking, monitoring, supervision, logging, name registry, and edge cases like pool exhaustion.
 
 ## Code Style
 
