@@ -106,11 +106,9 @@ void sender_actor(void *args, const hive_spawn_info_t *siblings,
     }
 
     if (!notify_succeeded) {
-        printf("Sender: [FAIL] Failed to notify after %d retries (pool still "
-               "exhausted)\n",
+        printf("Sender: [OK] Pool still exhausted after %d retries "
+               "(expected - receiver hasn't processed messages)\n",
                retry_count);
-        printf("Sender: This is expected - pool won't free until receiver "
-               "processes messages\n");
     }
 
     printf("\nSender: Signaling receiver to start processing messages...\n");
