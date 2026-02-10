@@ -28,7 +28,7 @@ Goals, design decisions, and architecture overview for the pilot autopilot.
 - Step 7: Waypoint actor (waypoint navigation)
 - Step 8: Flight manager actor (startup coordination, safety cutoff)
 - Step 9: Comms actor (radio telemetry, Crazyflie only)
-- Step 10: Logger actor (CSV logging, Webots only)
+- Step 10: Logger actor (hive log sync, CSV telemetry)
 - Mixer moved to HAL (platform-specific, X-configuration)
 
 ## Goals
@@ -289,7 +289,7 @@ graph TB
     ThrustBus -.-> Comms
     Comms -.-> RadioTx
 
-    SensorBus -.-> Logger[Logger<br/>CSV logging]
+    SensorBus -.-> Logger[Logger<br/>log sync + CSV]
     StateBus -.-> Logger
     ThrustBus -.-> Logger
     PositionTargetBus -.-> Logger
@@ -336,7 +336,7 @@ This table documents the scheduling design for audit and latency analysis.
 | **Motor** | Torque Bus + STOP notification | Hardware | CRITICAL | PERMANENT | Output to hardware via HAL |
 | **Flight Manager** | LANDED notification | START/LANDING/STOP notifications | CRITICAL | TRANSIENT | Startup delay, landing coordination (normal exit = mission complete) |
 | **Comms** | Sensor + State + Thrust Bus + HAL event | Radio (HAL) | LOW | TEMPORARY | Radio telemetry (Crazyflie only, event-driven RX, not flight-critical) |
-| **Logger** | Sensor + State + Thrust + Position Target Bus | CSV file | LOW | TEMPORARY | CSV logging for PID tuning (to /sd or /tmp, not flight-critical) |
+| **Logger** | Sensor + State + Thrust + Position Target Bus | CSV file | LOW | TEMPORARY | Hive log sync + CSV telemetry (to /sd or /tmp, not flight-critical) |
 
 **Why CRITICAL for flight actors?** Flight-critical actors share the same priority so execution
 order follows spawn order (round-robin within priority level). This ensures the data pipeline

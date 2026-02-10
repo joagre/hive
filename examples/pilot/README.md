@@ -54,7 +54,7 @@ Demonstrates waypoint navigation with a quadcopter using 11-12 actors (8 flight-
 8. **Motor actor** reads torque bus, writes to hardware via HAL (checks for STOP signal)
 9. **Flight manager actor** handles startup delay (60s), landing coordination, log file management
 10. **Comms actor** (Crazyflie only) sends flight data over radio at 100Hz for ground station logging
-11. **Logger actor** writes CSV at 25Hz for PID tuning analysis (to /sd or /tmp)
+11. **Logger actor** syncs hive runtime log periodically, writes CSV telemetry at 25Hz (to /sd or /tmp)
 12. **Supervisor actor** monitors all workers, restarts flight-critical actors on crash (ONE_FOR_ALL)
 
 Workers use `hive_find_sibling()` for IPC coordination via sibling info passed
@@ -175,7 +175,7 @@ Spawn order determines execution order (round-robin within priority level):
 | 8     | motor     | CRITICAL | PERMANENT | Needs torque + STOP signal, writes hardware last |
 | 9     | flight_mgr| CRITICAL | TRANSIENT | Normal exit = mission complete |
 | 10    | comms     | LOW      | TEMPORARY | Crazyflie only, not flight-critical |
-| 11    | logger    | LOW      | TEMPORARY | CSV logging (to /sd or /tmp, exits if no storage) |
+| 11    | logger    | LOW      | TEMPORARY | Hive log sync + CSV telemetry (to /sd or /tmp) |
 
 Workers use `hive_find_sibling()` to look up sibling actor IDs for IPC coordination.
 
@@ -503,7 +503,7 @@ doesn't affect flight-critical control loops and won't trigger restarts if it fa
 | `motor_actor.c` | Output: torque -> HAL -> motors |
 | `flight_manager_actor.c` | Startup delay, flight window cutoff, log file (flm.log) |
 | `comms_actor.c` | Radio telemetry (Crazyflie only) |
-| `logger_actor.c` | CSV logging for PID tuning (to /sd or /tmp) |
+| `logger_actor.c` | Hive log sync + CSV telemetry (to /sd or /tmp) |
 | `pid.c` | Reusable PID controller |
 | `tunable_params.c` | Runtime parameter tuning |
 | `stack_profile.c` | Stack usage profiling |

@@ -33,7 +33,7 @@ Code is split into focused modules:
 | `motor_actor.c/h` | Output: torque -> HAL -> motors |
 | `flight_manager_actor.c/h` | Startup delay, flight window cutoff |
 | `comms_actor.c/h` | Radio telemetry (Crazyflie only) |
-| `logger_actor.c/h` | CSV logging for PID tuning (to /sd or /tmp) |
+| `logger_actor.c/h` | Hive log sync + CSV telemetry (to /sd or /tmp) |
 | `pid.c/h` | Reusable PID controller |
 | `tunable_params.c/h` | Runtime-tunable parameter definitions |
 | `types.h` | Portable data types |
@@ -224,7 +224,7 @@ examples/pilot/
     motor_actor.c        # Output: torque -> HAL -> motors
     flight_manager_actor.c # Startup delay, flight window cutoff
     comms_actor.c        # Radio telemetry (Crazyflie only)
-    logger_actor.c           # CSV logging (to /sd or /tmp)
+    logger_actor.c           # Hive log sync + CSV telemetry
     pid.c                # Reusable PID controller
     tunable_params.c     # Runtime-tunable parameters
     stack_profile.c      # Stack usage profiling

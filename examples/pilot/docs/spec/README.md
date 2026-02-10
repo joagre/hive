@@ -24,7 +24,7 @@ and fail-safe supervision. Supports Webots simulation (default) and STM32 hardwa
 |----------|-------|-------|
 | Flight-critical workers | 8 | sensor, estimator, waypoint, altitude, position, attitude, rate, motor |
 | Flight manager | 1 | Coordinates startup/shutdown, TRANSIENT restart |
-| Logger | 1 | CSV logging (to /sd or /tmp) |
+| Logger | 1 | Hive log sync + CSV telemetry (to /sd or /tmp) |
 | Supervisor | 1 | Monitors all children |
 | Optional (Crazyflie) | +1 | comms_actor for radio telemetry |
 | **Total** | 11-12 | 10-11 children + 1 supervisor |
