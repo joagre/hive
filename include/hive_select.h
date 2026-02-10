@@ -2,7 +2,6 @@
 #define HIVE_SELECT_H
 
 #include "hive_types.h"
-#include "hal/hive_hal_event.h"
 
 // -----------------------------------------------------------------------------
 // hive_select - Unified Event Waiting API

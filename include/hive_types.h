@@ -9,8 +9,11 @@
 typedef uint32_t hive_actor_id_t;
 typedef uint32_t hive_bus_id_t;
 typedef uint32_t hive_timer_id_t;
+typedef uint8_t hive_hal_event_id_t;
 
 #define HIVE_ACTOR_ID_INVALID ((hive_actor_id_t)0)
+#define HIVE_HAL_EVENT_INVALID 0xFF
+#define HIVE_HAL_EVENT_MAX 32
 
 // Wildcard constants for filtering (all wildcards = 0 for designated initializer)
 #define HIVE_SENDER_ANY ((hive_actor_id_t)0)

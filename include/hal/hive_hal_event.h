@@ -65,10 +65,6 @@ void hive_hal_event_unregister(int fd);
 // Generic mechanism for hardware interrupts to wake actors waiting in
 // hive_select(). Use for UART IDLE, DMA complete, GPIO interrupts, etc.
 
-typedef uint8_t hive_hal_event_id_t;
-#define HIVE_HAL_EVENT_INVALID 0xFF
-#define HIVE_HAL_EVENT_MAX 32
-
 // Create a new HAL event. Returns HIVE_HAL_EVENT_INVALID if none available.
 hive_hal_event_id_t hive_hal_event_create(void);
 
