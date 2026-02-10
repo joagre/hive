@@ -42,7 +42,7 @@ hive_status_t hive_log_file_close(void);
 // Cleanup logging subsystem (call at shutdown)
 void hive_log_cleanup(void);
 
-// Default compile-time log level (can override with -DRT_LOG_LEVEL=...)
+// Default compile-time log level (can override with -DHIVE_LOG_LEVEL=...)
 #ifndef HIVE_LOG_LEVEL
 #define HIVE_LOG_LEVEL HIVE_LOG_LEVEL_INFO
 #endif

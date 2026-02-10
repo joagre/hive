@@ -545,7 +545,7 @@ static void test11_message_size_limits(void *args,
 
     hive_actor_id_t self = hive_self();
 
-    // Max payload size is HIVE_MAX_MESSAGE_SIZE - HIVE_MSG_HEADER_SIZE (4 bytes for header)
+    // Max payload size is HIVE_MAX_MESSAGE_SIZE - HIVE_MSG_HEADER_SIZE (6 bytes for header)
     size_t max_payload_size = HIVE_MAX_MESSAGE_SIZE - HIVE_MSG_HEADER_SIZE;
 
     // Notify message at max payload size
@@ -564,7 +564,7 @@ static void test11_message_size_limits(void *args,
     // Receive it
     hive_message_t msg;
     status = hive_ipc_recv(&msg, 100);
-    // msg.len is payload length (excludes 4-byte header)
+    // msg.len is payload length (excludes 6-byte header)
     if (HIVE_SUCCEEDED(status) && msg.len == max_payload_size) {
         TEST_PASS("received max size message");
     } else {

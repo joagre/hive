@@ -313,7 +313,7 @@ hive_status_t hive_register(const char *name) {
     // Check for duplicate name
     for (size_t i = 0; i < s_registry_count; i++) {
         if (strcmp(s_registry[i].name, name) == 0) {
-            return HIVE_ERROR(HIVE_ERR_INVALID, "Name already registered");
+            return HIVE_ERROR(HIVE_ERR_EXISTS, "Name already registered");
         }
     }
 

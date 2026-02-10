@@ -433,7 +433,7 @@ The runtime uses **compile-time configuration** for bounded, predictable memory 
 - `HIVE_LINK_ENTRY_POOL_SIZE`: Link entry pool (128)
 - `HIVE_MONITOR_ENTRY_POOL_SIZE`: Monitor entry pool (128)
 - `HIVE_TIMER_ENTRY_POOL_SIZE`: Timer entry pool (64)
-- `HIVE_MAX_MESSAGE_SIZE`: Maximum message size in bytes (256, with 4-byte header = 252 payload)
+- `HIVE_MAX_MESSAGE_SIZE`: Maximum message size in bytes (256, with 6-byte header = 250 payload)
 - `HIVE_STACK_ARENA_SIZE`: Stack arena size (1*1024*1024) // 1 MB default
 - `HIVE_DEFAULT_STACK_SIZE`: Default actor stack size (65536)
 - `HIVE_MAX_SUPERVISORS`: Maximum concurrent supervisors (8)

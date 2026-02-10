@@ -241,12 +241,12 @@ static void bench_ipc(void) {
     printf("IPC Performance\n");
     printf("---------------\n");
     printf(
-        "  (Max payload: %d bytes = HIVE_MAX_MESSAGE_SIZE - 4 byte header)\n\n",
-        HIVE_MAX_MESSAGE_SIZE - 4);
+        "  (Max payload: %d bytes = HIVE_MAX_MESSAGE_SIZE - 6 byte header)\n\n",
+        HIVE_MAX_MESSAGE_SIZE - HIVE_MSG_HEADER_SIZE);
 
     bench_ipc_copy(8, "8 bytes:");
     bench_ipc_copy(64, "64 bytes:");
-    bench_ipc_copy(252, "252 bytes (max):");
+    bench_ipc_copy(250, "250 bytes (max):");
 
     printf("\n");
 }

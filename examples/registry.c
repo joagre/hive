@@ -112,8 +112,8 @@ static void client_actor(void *args, const hive_spawn_info_t *siblings,
         printf("[CLIENT] Requesting %d + %d...\n", operands[0], operands[1]);
         fflush(stdout);
 
-        status = hive_ipc_request(service, 0, operands, sizeof(operands),
-                                  &reply, 1000);
+        status = hive_ipc_request(service, HIVE_ID_NONE, operands,
+                                  sizeof(operands), &reply, 1000);
         if (HIVE_SUCCEEDED(status)) {
             int result = *(int *)reply.data;
             printf("[CLIENT] Got result: %d\n", result);

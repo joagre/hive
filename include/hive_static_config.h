@@ -72,7 +72,7 @@
 #define HIVE_MESSAGE_DATA_POOL_SIZE 256
 #endif
 
-// Maximum message size (bytes, includes 4-byte header)
+// Maximum message size (bytes, includes 6-byte header)
 #ifndef HIVE_MAX_MESSAGE_SIZE
 #define HIVE_MAX_MESSAGE_SIZE 256
 #endif

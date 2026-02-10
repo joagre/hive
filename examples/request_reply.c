@@ -53,7 +53,7 @@ static void consumer_actor(void *args, const hive_spawn_info_t *siblings,
         }
 
         if (HIVE_FAILED(status)) {
-            printf("Consumer: Receive failed: %s\n", status.msg);
+            printf("Consumer: Receive failed: %s\n", HIVE_ERR_STR(status));
             break;
         }
 
@@ -88,7 +88,7 @@ static void consumer_actor(void *args, const hive_spawn_info_t *siblings,
         // Reply to unblock the caller
         status = hive_ipc_reply(&msg, &result, sizeof(result));
         if (HIVE_FAILED(status)) {
-            printf("Consumer: Failed to reply: %s\n", status.msg);
+            printf("Consumer: Failed to reply: %s\n", HIVE_ERR_STR(status));
         }
 
         printf("Consumer: Producer is now unblocked\n\n");
@@ -118,14 +118,14 @@ static void producer_actor(void *args, const hive_spawn_info_t *siblings,
 
         // Call consumer - this BLOCKS until consumer calls hive_ipc_reply()
         hive_message_t reply;
-        hive_status_t status =
-            hive_ipc_request(consumer_id, 0, &req, sizeof(req), &reply, 10000);
+        hive_status_t status = hive_ipc_request(consumer_id, HIVE_ID_NONE, &req,
+                                                sizeof(req), &reply, 10000);
 
         if (HIVE_FAILED(status)) {
             if (status.code == HIVE_ERR_TIMEOUT) {
                 printf("Producer: Timeout waiting for reply on job #%d\n", i);
             } else {
-                printf("Producer: Call failed: %s\n", status.msg);
+                printf("Producer: Call failed: %s\n", HIVE_ERR_STR(status));
             }
             break;
         }
