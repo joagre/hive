@@ -5,6 +5,7 @@
 
 #include "altitude_kf.h"
 #include <math.h>
+#include <stddef.h>
 
 // ----------------------------------------------------------------------------
 // Initialization
@@ -13,7 +14,7 @@
 void altitude_kf_init(altitude_kf_state_t *state,
                       const altitude_kf_config_t *config) {
     // Use provided config or defaults
-    if (config) {
+    if (config != NULL) {
         state->config = *config;
     } else {
         state->config = (altitude_kf_config_t)ALTITUDE_KF_CONFIG_DEFAULT;
@@ -247,13 +248,13 @@ void altitude_kf_update(altitude_kf_state_t *state, float accel_z,
 
 void altitude_kf_get_state(const altitude_kf_state_t *state, float *altitude,
                            float *velocity, float *accel_bias) {
-    if (altitude) {
+    if (altitude != NULL) {
         *altitude = state->altitude;
     }
-    if (velocity) {
+    if (velocity != NULL) {
         *velocity = state->velocity;
     }
-    if (accel_bias) {
+    if (accel_bias != NULL) {
         *accel_bias = state->accel_bias;
     }
 }
@@ -261,13 +262,13 @@ void altitude_kf_get_state(const altitude_kf_state_t *state, float *altitude,
 void altitude_kf_get_uncertainty(const altitude_kf_state_t *state,
                                  float *altitude_std, float *velocity_std,
                                  float *bias_std) {
-    if (altitude_std) {
+    if (altitude_std != NULL) {
         *altitude_std = sqrtf(state->p00);
     }
-    if (velocity_std) {
+    if (velocity_std != NULL) {
         *velocity_std = sqrtf(state->p11);
     }
-    if (bias_std) {
+    if (bias_std != NULL) {
         *bias_std = sqrtf(state->p22);
     }
 }

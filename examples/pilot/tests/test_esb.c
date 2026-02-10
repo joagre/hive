@@ -251,7 +251,7 @@ static void esb_test_actor(void *args, const hive_spawn_info_t *siblings,
     HIVE_LOG_INFO("[ESB] TEST PASSED");
     hal_led_on();
 
-    while (1) {
+    while (true) {
         hal_delay_ms(1000);
     }
 }
@@ -273,7 +273,7 @@ int test_esb_run(bool standalone) {
         HIVE_LOG_INFO("[ESB] Initializing radio...");
         if (hal_esb_init() != 0) {
             HIVE_LOG_ERROR("[ESB] hal_esb_init failed!");
-            while (1) {
+            while (true) {
                 hal_led_toggle();
                 hal_delay_ms(100);
             }

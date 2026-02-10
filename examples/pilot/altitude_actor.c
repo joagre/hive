@@ -22,6 +22,7 @@
 #include "hive_log.h"
 #include <math.h>
 #include <string.h>
+#include <stdbool.h>
 
 // Actor state - initialized by altitude_actor_init
 typedef struct {
@@ -85,16 +86,18 @@ void altitude_actor(void *args, const hive_spawn_info_t *siblings,
     // Set up hive_select() sources: state bus + landing command + RESET
     enum { SEL_STATE, SEL_LANDING, SEL_RESET };
     hive_select_source_t sources[] = {
-        [SEL_STATE] = {HIVE_SEL_BUS, .bus = state->state_bus},
-        [SEL_LANDING] = {HIVE_SEL_IPC, .ipc = {.sender = state->flight_manager,
-                                               .class = HIVE_MSG_NOTIFY,
-                                               .id = NOTIFY_LANDING}},
-        [SEL_RESET] = {HIVE_SEL_IPC, .ipc = {.sender = state->flight_manager,
-                                             .class = HIVE_MSG_NOTIFY,
-                                             .id = NOTIFY_RESET}},
+        [SEL_STATE] = {.type = HIVE_SEL_BUS, .bus = state->state_bus},
+        [SEL_LANDING] = {.type = HIVE_SEL_IPC,
+                         .ipc = {.sender = state->flight_manager,
+                                 .class = HIVE_MSG_NOTIFY,
+                                 .id = NOTIFY_LANDING}},
+        [SEL_RESET] = {.type = HIVE_SEL_IPC,
+                       .ipc = {.sender = state->flight_manager,
+                               .class = HIVE_MSG_NOTIFY,
+                               .id = NOTIFY_RESET}},
     };
 
-    while (1) {
+    while (true) {
         state_estimate_t est;
         position_target_t target;
         size_t len;

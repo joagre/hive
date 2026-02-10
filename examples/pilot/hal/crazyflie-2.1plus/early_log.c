@@ -5,6 +5,7 @@
 
 #include "early_log.h"
 #include "hive_log.h"
+#include <stdbool.h>
 #include <string.h>
 
 // 2KB buffer - enough for HAL init, self-test, and calibration messages
@@ -12,7 +13,7 @@
 
 static char s_buffer[EARLY_LOG_BUFFER_SIZE];
 static size_t s_write_pos = 0;
-static int s_active = 1; // Disabled after flush
+static bool s_active = true; // Disabled after flush
 
 void early_log_write(const char *msg, size_t len) {
     if (!s_active || len == 0) {
@@ -41,7 +42,7 @@ void early_log_write(const char *msg, size_t len) {
 
 void early_log_flush(void) {
     if (!s_active || s_write_pos == 0) {
-        s_active = 0;
+        s_active = false;
         return;
     }
 
@@ -71,6 +72,6 @@ void early_log_flush(void) {
     }
 
     // Disable buffering - all future messages go directly to HIVE_LOG_*
-    s_active = 0;
+    s_active = false;
     s_write_pos = 0;
 }

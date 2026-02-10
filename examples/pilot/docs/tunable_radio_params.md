@@ -244,7 +244,7 @@ void altitude_actor(void *args, ...) {
     altitude_actor_args_t *a = args;
     tunable_params_t *params = a->params;
 
-    while (1) {
+    while (true) {
         // Read current values each iteration (no caching)
         float kp = params->alt_kp;
         float ki = params->alt_ki;

@@ -460,7 +460,7 @@ bool hal_esb_recv(void *buf, size_t max_len, size_t *out_len) {
         size_t copy_len =
             (s_radio_packet_len < max_len) ? s_radio_packet_len : max_len;
         memcpy(buf, s_radio_packet, copy_len);
-        if (out_len) {
+        if (out_len != NULL) {
             *out_len = copy_len;
         }
         s_radio_packet_ready = false;
@@ -484,7 +484,7 @@ bool hal_esb_recv(void *buf, size_t max_len, size_t *out_len) {
             size_t copy_len =
                 (s_radio_packet_len < max_len) ? s_radio_packet_len : max_len;
             memcpy(buf, s_radio_packet, copy_len);
-            if (out_len) {
+            if (out_len != NULL) {
                 *out_len = copy_len;
             }
             s_radio_packet_ready = false;

@@ -493,13 +493,13 @@ static const vl53l1x_platform_t s_vl53l1x_platform = {
 
 static int pmw3901_spi_transfer(uint8_t tx_data, uint8_t *rx_data) {
     uint8_t rx = spi1_transfer(tx_data);
-    if (rx_data)
+    if (rx_data != NULL)
         *rx_data = rx;
     return 0;
 }
 
 static void pmw3901_cs_set(int level) {
-    if (level)
+    if (level != 0)
         GPIOB->ODR |= (1 << FLOW_SPI_CS_PIN);
     else
         GPIOB->ODR &= ~(1 << FLOW_SPI_CS_PIN);
@@ -601,13 +601,13 @@ static bool flow_deck_init(void) {
     // Wait for sensor to boot (firmware ready)
     debug_swo_printf("[FLOW] VL53L1x waiting for boot...\n");
     uint8_t boot_state = 0;
-    for (int i = 0; i < 150 && !boot_state; i++) {
+    for (int i = 0; i < 150 && boot_state == 0; i++) {
         if (vl53l1x_boot_state(&s_vl53l1x_dev, &boot_state) != 0) {
             debug_swo_printf("[FLOW] VL53L1x boot_state read error\n");
         }
         platform_delay_ms(10);
     }
-    if (!boot_state) {
+    if (boot_state == 0) {
         debug_swo_printf("[FLOW] VL53L1x boot timeout\n");
         return false;
     }
@@ -1418,7 +1418,7 @@ bool platform_read_height(uint16_t *height_mm) {
 
     uint8_t ready = 0;
     vl53l1x_check_data_ready(&s_vl53l1x_dev, &ready);
-    if (!ready)
+    if (ready == 0)
         return false;
 
     uint16_t distance;

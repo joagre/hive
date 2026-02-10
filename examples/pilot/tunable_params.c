@@ -17,83 +17,128 @@ typedef struct {
 } param_meta_t;
 
 // Validation ranges - conservative for safety
-// Format: { name, min, max }
 static const param_meta_t param_meta[TUNABLE_PARAM_COUNT] = {
     // Rate PID (0-6)
-    [PARAM_RATE_KP] = {"rate_kp", 0.0f, 0.5f},
-    [PARAM_RATE_KI] = {"rate_ki", 0.0f, 0.1f},
-    [PARAM_RATE_KD] = {"rate_kd", 0.0f, 0.05f},
-    [PARAM_RATE_IMAX] = {"rate_imax", 0.0f, 1.0f},
-    [PARAM_RATE_OMAX_ROLL] = {"rate_omax_roll", 0.0f, 0.5f},
-    [PARAM_RATE_OMAX_PITCH] = {"rate_omax_pitch", 0.0f, 0.5f},
-    [PARAM_RATE_OMAX_YAW] = {"rate_omax_yaw", 0.0f, 0.5f},
+    [PARAM_RATE_KP] = {.name = "rate_kp", .min = 0.0f, .max = 0.5f},
+    [PARAM_RATE_KI] = {.name = "rate_ki", .min = 0.0f, .max = 0.1f},
+    [PARAM_RATE_KD] = {.name = "rate_kd", .min = 0.0f, .max = 0.05f},
+    [PARAM_RATE_IMAX] = {.name = "rate_imax", .min = 0.0f, .max = 1.0f},
+    [PARAM_RATE_OMAX_ROLL] = {.name = "rate_omax_roll",
+                              .min = 0.0f,
+                              .max = 0.5f},
+    [PARAM_RATE_OMAX_PITCH] = {.name = "rate_omax_pitch",
+                               .min = 0.0f,
+                               .max = 0.5f},
+    [PARAM_RATE_OMAX_YAW] = {.name = "rate_omax_yaw", .min = 0.0f, .max = 0.5f},
 
     // Attitude PID (7-11)
-    [PARAM_ATT_KP] = {"att_kp", 0.0f, 10.0f},
-    [PARAM_ATT_KI] = {"att_ki", 0.0f, 1.0f},
-    [PARAM_ATT_KD] = {"att_kd", 0.0f, 1.0f},
-    [PARAM_ATT_IMAX] = {"att_imax", 0.0f, 2.0f},
-    [PARAM_ATT_OMAX] = {"att_omax", 0.0f, 5.0f},
+    [PARAM_ATT_KP] = {.name = "att_kp", .min = 0.0f, .max = 10.0f},
+    [PARAM_ATT_KI] = {.name = "att_ki", .min = 0.0f, .max = 1.0f},
+    [PARAM_ATT_KD] = {.name = "att_kd", .min = 0.0f, .max = 1.0f},
+    [PARAM_ATT_IMAX] = {.name = "att_imax", .min = 0.0f, .max = 2.0f},
+    [PARAM_ATT_OMAX] = {.name = "att_omax", .min = 0.0f, .max = 5.0f},
 
     // Altitude PID (12-18)
-    [PARAM_ALT_KP] = {"alt_kp", 0.0f, 1.0f},
-    [PARAM_ALT_KI] = {"alt_ki", 0.0f, 0.5f},
-    [PARAM_ALT_KD] = {"alt_kd", 0.0f, 0.5f},
-    [PARAM_ALT_IMAX] = {"alt_imax", 0.0f, 1.0f},
-    [PARAM_ALT_OMAX] = {"alt_omax", 0.0f, 0.5f},
-    [PARAM_HOVER_THRUST] = {"hover_thrust", 0.1f, 0.9f},
-    [PARAM_VVEL_DAMPING] = {"vvel_damping", 0.0f, 1.0f},
+    [PARAM_ALT_KP] = {.name = "alt_kp", .min = 0.0f, .max = 1.0f},
+    [PARAM_ALT_KI] = {.name = "alt_ki", .min = 0.0f, .max = 0.5f},
+    [PARAM_ALT_KD] = {.name = "alt_kd", .min = 0.0f, .max = 0.5f},
+    [PARAM_ALT_IMAX] = {.name = "alt_imax", .min = 0.0f, .max = 1.0f},
+    [PARAM_ALT_OMAX] = {.name = "alt_omax", .min = 0.0f, .max = 0.5f},
+    [PARAM_HOVER_THRUST] = {.name = "hover_thrust", .min = 0.1f, .max = 0.9f},
+    [PARAM_VVEL_DAMPING] = {.name = "vvel_damping", .min = 0.0f, .max = 1.0f},
 
     // Emergency limits (19-20)
-    [PARAM_EMERGENCY_TILT_LIMIT] = {"emergency_tilt_limit", 0.17f,
-                                    1.57f}, // 10-90 deg
-    [PARAM_EMERGENCY_ALT_MAX] = {"emergency_alt_max", 0.5f, 10.0f},
+    [PARAM_EMERGENCY_TILT_LIMIT] = {.name = "emergency_tilt_limit",
+                                    .min = 0.17f,
+                                    .max = 1.57f}, // 10-90 deg
+    [PARAM_EMERGENCY_ALT_MAX] = {.name = "emergency_alt_max",
+                                 .min = 0.5f,
+                                 .max = 10.0f},
 
     // Landing (21-22)
-    [PARAM_LANDING_DESCENT_RATE] = {"landing_descent_rate", -1.0f,
-                                    0.0f}, // negative = down
-    [PARAM_LANDING_VELOCITY_GAIN] = {"landing_velocity_gain", 0.0f, 2.0f},
+    [PARAM_LANDING_DESCENT_RATE] = {.name = "landing_descent_rate",
+                                    .min = -1.0f,
+                                    .max = 0.0f}, // negative = down
+    [PARAM_LANDING_VELOCITY_GAIN] = {.name = "landing_velocity_gain",
+                                     .min = 0.0f,
+                                     .max = 2.0f},
 
     // Position control (23-25)
-    [PARAM_POS_KP] = {"pos_kp", 0.0f, 1.0f},
-    [PARAM_POS_KD] = {"pos_kd", 0.0f, 1.0f},
-    [PARAM_MAX_TILT_ANGLE] = {"max_tilt_angle", 0.0f, 0.78f}, // 0-45 deg
+    [PARAM_POS_KP] = {.name = "pos_kp", .min = 0.0f, .max = 1.0f},
+    [PARAM_POS_KD] = {.name = "pos_kd", .min = 0.0f, .max = 1.0f},
+    [PARAM_MAX_TILT_ANGLE] = {.name = "max_tilt_angle",
+                              .min = 0.0f,
+                              .max = 0.78f}, // 0-45 deg
 
     // Complementary filter (26-30)
-    [PARAM_CF_ALPHA] = {"cf_alpha", 0.5f, 1.0f},
-    [PARAM_CF_MAG_ALPHA] = {"cf_mag_alpha", 0.5f, 1.0f},
-    [PARAM_CF_USE_MAG] = {"cf_use_mag", 0.0f, 1.0f}, // boolean as float
-    [PARAM_CF_ACCEL_THRESH_LO] = {"cf_accel_thresh_lo", 0.5f, 1.0f},
-    [PARAM_CF_ACCEL_THRESH_HI] = {"cf_accel_thresh_hi", 1.0f, 1.5f},
+    [PARAM_CF_ALPHA] = {.name = "cf_alpha", .min = 0.5f, .max = 1.0f},
+    [PARAM_CF_MAG_ALPHA] = {.name = "cf_mag_alpha", .min = 0.5f, .max = 1.0f},
+    [PARAM_CF_USE_MAG] = {.name = "cf_use_mag",
+                          .min = 0.0f,
+                          .max = 1.0f}, // boolean as float
+    [PARAM_CF_ACCEL_THRESH_LO] = {.name = "cf_accel_thresh_lo",
+                                  .min = 0.5f,
+                                  .max = 1.0f},
+    [PARAM_CF_ACCEL_THRESH_HI] = {.name = "cf_accel_thresh_hi",
+                                  .min = 1.0f,
+                                  .max = 1.5f},
 
     // Waypoint navigation (31-35)
-    [PARAM_WP_TOLERANCE_XY] = {"wp_tolerance_xy", 0.01f, 1.0f},
-    [PARAM_WP_TOLERANCE_Z] = {"wp_tolerance_z", 0.01f, 0.5f},
-    [PARAM_WP_TOLERANCE_YAW] = {"wp_tolerance_yaw", 0.01f, 0.5f},
-    [PARAM_WP_TOLERANCE_VEL] = {"wp_tolerance_vel", 0.01f, 0.5f},
-    [PARAM_WP_HOVER_TIME_S] = {"wp_hover_time_s", 0.0f, 60.0f},
+    [PARAM_WP_TOLERANCE_XY] = {.name = "wp_tolerance_xy",
+                               .min = 0.01f,
+                               .max = 1.0f},
+    [PARAM_WP_TOLERANCE_Z] = {.name = "wp_tolerance_z",
+                              .min = 0.01f,
+                              .max = 0.5f},
+    [PARAM_WP_TOLERANCE_YAW] = {.name = "wp_tolerance_yaw",
+                                .min = 0.01f,
+                                .max = 0.5f},
+    [PARAM_WP_TOLERANCE_VEL] = {.name = "wp_tolerance_vel",
+                                .min = 0.01f,
+                                .max = 0.5f},
+    [PARAM_WP_HOVER_TIME_S] = {.name = "wp_hover_time_s",
+                               .min = 0.0f,
+                               .max = 60.0f},
 
     // Flight manager (36)
-    [PARAM_THRUST_RAMP_MS] = {"thrust_ramp_ms", 0.0f, 5000.0f},
+    [PARAM_THRUST_RAMP_MS] = {.name = "thrust_ramp_ms",
+                              .min = 0.0f,
+                              .max = 5000.0f},
 
     // Altitude Kalman filter (37-43)
     // Q (process noise) - how much we trust the model vs measurements
-    [PARAM_KF_Q_ALTITUDE] = {"kf_q_altitude", 0.00001f, 0.01f},
-    [PARAM_KF_Q_VELOCITY] = {"kf_q_velocity", 0.001f, 10.0f},
-    [PARAM_KF_Q_BIAS] = {"kf_q_bias", 0.000001f, 0.01f},
+    [PARAM_KF_Q_ALTITUDE] = {.name = "kf_q_altitude",
+                             .min = 0.00001f,
+                             .max = 0.01f},
+    [PARAM_KF_Q_VELOCITY] = {.name = "kf_q_velocity",
+                             .min = 0.001f,
+                             .max = 10.0f},
+    [PARAM_KF_Q_BIAS] = {.name = "kf_q_bias", .min = 0.000001f, .max = 0.01f},
     // R (measurement noise) - sensor noise variance
-    [PARAM_KF_R_ALTITUDE] = {"kf_r_altitude", 0.0001f, 0.1f},
+    [PARAM_KF_R_ALTITUDE] = {.name = "kf_r_altitude",
+                             .min = 0.0001f,
+                             .max = 0.1f},
     // P0 (initial covariance) - initial uncertainty
-    [PARAM_KF_P0_ALTITUDE] = {"kf_p0_altitude", 0.01f, 10.0f},
-    [PARAM_KF_P0_VELOCITY] = {"kf_p0_velocity", 0.01f, 10.0f},
-    [PARAM_KF_P0_BIAS] = {"kf_p0_bias", 0.001f, 1.0f},
+    [PARAM_KF_P0_ALTITUDE] = {.name = "kf_p0_altitude",
+                              .min = 0.01f,
+                              .max = 10.0f},
+    [PARAM_KF_P0_VELOCITY] = {.name = "kf_p0_velocity",
+                              .min = 0.01f,
+                              .max = 10.0f},
+    [PARAM_KF_P0_BIAS] = {.name = "kf_p0_bias", .min = 0.001f, .max = 1.0f},
 
     // Horizontal velocity filter (44)
-    [PARAM_HVEL_FILTER_ALPHA] = {"hvel_filter_alpha", 0.5f, 0.999f},
+    [PARAM_HVEL_FILTER_ALPHA] = {.name = "hvel_filter_alpha",
+                                 .min = 0.5f,
+                                 .max = 0.999f},
 
     // Flight manager lifecycle (45-46)
-    [PARAM_ARMED_COUNTDOWN_S] = {"armed_countdown_s", 5.0f, 300.0f},
-    [PARAM_AUTO_GO_DELAY_S] = {"auto_go_delay_s", 0.0f, 60.0f},
+    [PARAM_ARMED_COUNTDOWN_S] = {.name = "armed_countdown_s",
+                                 .min = 5.0f,
+                                 .max = 300.0f},
+    [PARAM_AUTO_GO_DELAY_S] = {.name = "auto_go_delay_s",
+                               .min = 0.0f,
+                               .max = 60.0f},
 };
 
 void tunable_params_init(tunable_params_t *params) {

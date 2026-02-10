@@ -17,6 +17,7 @@
 #include "hive_log.h"
 #include "hive_timer.h"
 #include <string.h>
+#include <stdbool.h>
 
 // Actor state - initialized by attitude_actor_init
 typedef struct {
@@ -75,13 +76,14 @@ void attitude_actor(void *args, const hive_spawn_info_t *siblings,
     // Set up hive_select() sources: state bus + RESET notification
     enum { SEL_STATE, SEL_RESET };
     hive_select_source_t sources[] = {
-        [SEL_STATE] = {HIVE_SEL_BUS, .bus = state->state_bus},
-        [SEL_RESET] = {HIVE_SEL_IPC, .ipc = {.sender = state->flight_manager,
-                                             .class = HIVE_MSG_NOTIFY,
-                                             .id = NOTIFY_RESET}},
+        [SEL_STATE] = {.type = HIVE_SEL_BUS, .bus = state->state_bus},
+        [SEL_RESET] = {.type = HIVE_SEL_IPC,
+                       .ipc = {.sender = state->flight_manager,
+                               .class = HIVE_MSG_NOTIFY,
+                               .id = NOTIFY_RESET}},
     };
 
-    while (1) {
+    while (true) {
         state_estimate_t est;
         attitude_setpoint_t new_attitude_sp;
         size_t len;

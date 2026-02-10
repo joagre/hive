@@ -22,6 +22,7 @@
 #include "printf.h"
 
 #include <string.h>
+#include <stdbool.h>
 
 // Logging interval in microseconds (25Hz = 40ms)
 #define LOG_INTERVAL_US (1000000 / TELEMETRY_LOG_RATE_HZ)
@@ -170,17 +171,18 @@ void logger_actor(void *args, const hive_spawn_info_t *siblings,
     // Set up hive_select() sources: timer + RESET notification
     enum { SEL_TIMER, SEL_RESET };
     hive_select_source_t sources[] = {
-        [SEL_TIMER] = {HIVE_SEL_IPC,
+        [SEL_TIMER] = {.type = HIVE_SEL_IPC,
                        .ipc = {.class = HIVE_MSG_TIMER, .tag = timer}},
-        [SEL_RESET] = {HIVE_SEL_IPC, .ipc = {.sender = state->flight_manager,
-                                             .class = HIVE_MSG_NOTIFY,
-                                             .id = NOTIFY_RESET}},
+        [SEL_RESET] = {.type = HIVE_SEL_IPC,
+                       .ipc = {.sender = state->flight_manager,
+                               .class = HIVE_MSG_NOTIFY,
+                               .id = NOTIFY_RESET}},
     };
     // Only include RESET source if flight_manager is valid
     size_t num_sources =
         (state->flight_manager != HIVE_ACTOR_ID_INVALID) ? 2 : 1;
 
-    while (1) {
+    while (true) {
         hive_select_result_t result;
         status = hive_select(sources, num_sources, &result, -1);
         if (HIVE_FAILED(status)) {

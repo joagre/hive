@@ -23,6 +23,7 @@
 #include "hive_log.h"
 #include <string.h>
 #include <math.h>
+#include <stdbool.h>
 
 // Actor state - initialized by position_actor_init
 typedef struct {
@@ -68,13 +69,14 @@ void position_actor(void *args, const hive_spawn_info_t *siblings,
     // Set up hive_select() sources: state bus + RESET notification
     enum { SEL_STATE, SEL_RESET };
     hive_select_source_t sources[] = {
-        [SEL_STATE] = {HIVE_SEL_BUS, .bus = state->state_bus},
-        [SEL_RESET] = {HIVE_SEL_IPC, .ipc = {.sender = state->flight_manager,
-                                             .class = HIVE_MSG_NOTIFY,
-                                             .id = NOTIFY_RESET}},
+        [SEL_STATE] = {.type = HIVE_SEL_BUS, .bus = state->state_bus},
+        [SEL_RESET] = {.type = HIVE_SEL_IPC,
+                       .ipc = {.sender = state->flight_manager,
+                               .class = HIVE_MSG_NOTIFY,
+                               .id = NOTIFY_RESET}},
     };
 
-    while (1) {
+    while (true) {
         state_estimate_t est;
         position_target_t new_target;
         size_t len;

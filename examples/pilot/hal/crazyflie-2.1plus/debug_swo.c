@@ -14,7 +14,7 @@
 #include <stdint.h>
 
 // SWO configuration
-static uint32_t s_swo_initialized = 0;
+static bool s_swo_initialized = false;
 
 void debug_swo_init(uint32_t cpu_freq_hz, uint32_t swo_baud) {
     // Enable DBGMCU clock and trace output
@@ -52,17 +52,17 @@ void debug_swo_init(uint32_t cpu_freq_hz, uint32_t swo_baud) {
     // Enable stimulus port 0
     ITM->TER = 0x1;
 
-    s_swo_initialized = 1;
+    s_swo_initialized = true;
 }
 
-int debug_swo_enabled(void) {
+bool debug_swo_enabled(void) {
     // Check if debugger is actually connected (C_DEBUGEN bit in DHCSR)
     // Without debugger, SWO output has nowhere to go - skip it entirely
-    if (!(CoreDebug->DHCSR & CoreDebug_DHCSR_C_DEBUGEN_Msk)) {
-        return 0;
+    if ((CoreDebug->DHCSR & CoreDebug_DHCSR_C_DEBUGEN_Msk) == 0) {
+        return false;
     }
-    return s_swo_initialized && (ITM->TCR & ITM_TCR_ITMENA_Msk) &&
-           (ITM->TER & 1);
+    return s_swo_initialized && (ITM->TCR & ITM_TCR_ITMENA_Msk) != 0 &&
+           (ITM->TER & 1) != 0;
 }
 
 void debug_swo_putc(char c) {
@@ -157,7 +157,7 @@ static void debug_swo_print_string(const char *s, int width, int left_justify) {
         len++;
 
     // Right padding (left justify): print string first
-    if (left_justify) {
+    if (left_justify != 0) {
         debug_swo_puts(s);
         for (int i = len; i < width; i++)
             debug_swo_putc(' ');

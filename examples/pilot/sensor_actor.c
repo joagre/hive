@@ -14,6 +14,7 @@
 #include "hive_ipc.h"
 #include "hive_select.h"
 #include "hive_log.h"
+#include <stdbool.h>
 
 #define SENSOR_INTERVAL_US (TIME_STEP_MS * 1000)
 
@@ -54,14 +55,15 @@ void sensor_actor(void *args, const hive_spawn_info_t *siblings,
     // Set up hive_select() sources: timer + RESET notification
     enum { SEL_TIMER, SEL_RESET };
     hive_select_source_t sources[] = {
-        [SEL_TIMER] = {HIVE_SEL_IPC,
+        [SEL_TIMER] = {.type = HIVE_SEL_IPC,
                        .ipc = {.class = HIVE_MSG_TIMER, .tag = timer}},
-        [SEL_RESET] = {HIVE_SEL_IPC, .ipc = {.sender = state->flight_manager,
-                                             .class = HIVE_MSG_NOTIFY,
-                                             .id = NOTIFY_RESET}},
+        [SEL_RESET] = {.type = HIVE_SEL_IPC,
+                       .ipc = {.sender = state->flight_manager,
+                               .class = HIVE_MSG_NOTIFY,
+                               .id = NOTIFY_RESET}},
     };
 
-    while (1) {
+    while (true) {
         hive_select_result_t result;
         status = hive_select(sources, 2, &result, -1);
         if (HIVE_FAILED(status)) {

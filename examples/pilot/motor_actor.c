@@ -28,6 +28,7 @@
 #include "hive_select.h"
 #include <string.h>
 #include <math.h>
+#include <stdbool.h>
 
 // Torque validation limits
 // These are sanity checks - values outside indicate control system failure
@@ -96,19 +97,22 @@ void motor_actor(void *args, const hive_spawn_info_t *siblings,
     // Set up hive_select() sources
     enum { SEL_TORQUE, SEL_START, SEL_STOP, SEL_RESET };
     hive_select_source_t sources[] = {
-        [SEL_TORQUE] = {HIVE_SEL_BUS, .bus = state->torque_bus},
-        [SEL_START] = {HIVE_SEL_IPC, .ipc = {.sender = state->flight_manager,
-                                             .class = HIVE_MSG_NOTIFY,
-                                             .id = NOTIFY_FLIGHT_START}},
-        [SEL_STOP] = {HIVE_SEL_IPC, .ipc = {.sender = state->flight_manager,
-                                            .class = HIVE_MSG_NOTIFY,
-                                            .id = NOTIFY_FLIGHT_STOP}},
-        [SEL_RESET] = {HIVE_SEL_IPC, .ipc = {.sender = state->flight_manager,
-                                             .class = HIVE_MSG_NOTIFY,
-                                             .id = NOTIFY_RESET}},
+        [SEL_TORQUE] = {.type = HIVE_SEL_BUS, .bus = state->torque_bus},
+        [SEL_START] = {.type = HIVE_SEL_IPC,
+                       .ipc = {.sender = state->flight_manager,
+                               .class = HIVE_MSG_NOTIFY,
+                               .id = NOTIFY_FLIGHT_START}},
+        [SEL_STOP] = {.type = HIVE_SEL_IPC,
+                      .ipc = {.sender = state->flight_manager,
+                              .class = HIVE_MSG_NOTIFY,
+                              .id = NOTIFY_FLIGHT_STOP}},
+        [SEL_RESET] = {.type = HIVE_SEL_IPC,
+                       .ipc = {.sender = state->flight_manager,
+                               .class = HIVE_MSG_NOTIFY,
+                               .id = NOTIFY_RESET}},
     };
 
-    while (1) {
+    while (true) {
         torque_cmd_t torque = TORQUE_CMD_ZERO;
 
         // Wait for torque command OR control messages

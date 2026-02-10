@@ -5,6 +5,7 @@
 
 #include <sys/stat.h>
 #include <errno.h>
+#include <stdbool.h>
 
 // Heap boundaries (from linker script)
 // Note: Stack is in CCM (separate memory), heap is in RAM - they can't collide.
@@ -74,7 +75,7 @@ int _kill(int pid, int sig) {
 }
 void __attribute__((noreturn)) _exit(int status) {
     (void)status;
-    while (1) {
+    while (true) {
         __asm__ volatile("wfi");
     }
 }
@@ -86,6 +87,6 @@ void assert_failed(uint8_t *file, uint32_t line) {
     (void)file;
     (void)line;
     // Halt on assertion failure
-    while (1)
+    while (true)
         ;
 }

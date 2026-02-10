@@ -318,7 +318,7 @@ void forth_actor(void *args, const hive_spawn_info_t *siblings, size_t n) {
     f.params = a->params;
     f.self = hive_self();
 
-    while (1) {
+    while (true) {
         int result = forth_run(&f, FORTH_YIELD_INTERVAL);
 
         if (result == FORTH_DONE) {

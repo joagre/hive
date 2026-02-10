@@ -5,6 +5,7 @@
 #include "complementary_filter.h"
 #include "types.h"
 #include <math.h>
+#include <stddef.h>
 
 // ----------------------------------------------------------------------------
 // Constants
@@ -40,7 +41,7 @@ static float vec3_magnitude(const float v[3]) {
 
 void cf_init(cf_state_t *state, const cf_config_t *config) {
     // Use provided config or defaults
-    if (config) {
+    if (config != NULL) {
         state->config = *config;
     } else {
         state->config = (cf_config_t)CF_CONFIG_DEFAULT;
@@ -160,11 +161,11 @@ void cf_update(cf_state_t *state, const sensor_data_t *sensors, float dt) {
 
 void cf_get_attitude(const cf_state_t *state, float *roll, float *pitch,
                      float *yaw) {
-    if (roll)
+    if (roll != NULL)
         *roll = state->roll;
-    if (pitch)
+    if (pitch != NULL)
         *pitch = state->pitch;
-    if (yaw)
+    if (yaw != NULL)
         *yaw = state->yaw;
 }
 

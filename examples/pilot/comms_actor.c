@@ -38,6 +38,7 @@
 #include "hive_log.h"
 #include "hive_file.h"
 #include <string.h>
+#include <stdbool.h>
 
 #ifdef HAL_HAS_RADIO
 
@@ -275,7 +276,7 @@ static void handle_rx_command(comms_state_t *state, const uint8_t *data,
             log_path = "/tmp/flm.log";
         }
 
-        if (!log_path) {
+        if (log_path == NULL) {
             HIVE_LOG_WARN("[COMMS] Log download failed: no storage available");
             return;
         }
@@ -412,7 +413,7 @@ void comms_actor(void *args, const hive_spawn_info_t *siblings,
     thrust_cmd_t latest_thrust = THRUST_CMD_ZERO;
 
     static uint32_t wake_count = 0;
-    while (1) {
+    while (true) {
         // Wait for RX event (UART IDLE interrupt signals ground station poll)
         hive_status_t status = hive_event_wait(rx_event, -1);
         if (HIVE_FAILED(status)) {

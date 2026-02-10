@@ -12,6 +12,7 @@
 #define DEBUG_SWO_H
 
 #include <stdarg.h>
+#include <stdbool.h>
 #include <stdint.h>
 
 // Initialize SWO/ITM for debug output
@@ -20,7 +21,7 @@
 void debug_swo_init(uint32_t cpu_freq_hz, uint32_t swo_baud);
 
 // Check if SWO is enabled and ready
-int debug_swo_enabled(void);
+bool debug_swo_enabled(void);
 
 // Formatted print (subset of printf: %d, %i, %u, %x, %X, %f, %s, %c, %%)
 void debug_swo_printf(const char *fmt, ...);

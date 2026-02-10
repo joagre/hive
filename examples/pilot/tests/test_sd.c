@@ -85,7 +85,7 @@ static void test_blink(int n, int on_ms, int off_ms) {
 }
 
 __attribute__((unused)) static void error_blink_forever(void) {
-    while (1) {
+    while (true) {
         hal_led_toggle();
         hal_delay_ms(300);
     }
@@ -374,7 +374,7 @@ int main(void) {
     }
 
     // Idle forever
-    while (1) {
+    while (true) {
         hal_delay_ms(1000);
     }
 

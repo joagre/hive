@@ -55,7 +55,7 @@ static void test_blink(int n, int on_ms, int off_ms) {
 }
 
 static void error_blink_forever(void) {
-    while (1) {
+    while (true) {
         hal_led_toggle();
         hal_delay_ms(300);
     }
@@ -184,14 +184,14 @@ int main(void) {
 
     if (failed > 0) {
         // Slow blink = some tests failed
-        while (1) {
+        while (true) {
             hal_led_toggle();
             hal_delay_ms(500);
         }
     } else {
         // Solid LED = all tests passed
         hal_led_on();
-        while (1) {
+        while (true) {
             hal_delay_ms(1000);
         }
     }

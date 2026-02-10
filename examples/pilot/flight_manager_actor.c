@@ -17,6 +17,7 @@
 #include "hive_timer.h"
 #include "hive_log.h"
 #include "stack_profile.h"
+#include <stdbool.h>
 
 // Flight duration per profile (flight manager decides when to land)
 #if FLIGHT_PROFILE == FLIGHT_PROFILE_FIRST_TEST
@@ -147,7 +148,7 @@ void flight_manager_actor(void *args, const hive_spawn_info_t *siblings,
     HIVE_LOG_INFO("[FLM] State machine started - IDLE");
 
     // Main state machine loop
-    while (1) {
+    while (true) {
         switch (state) {
         case FM_STATE_IDLE: {
             // Wait for GO command (from comms or auto-GO timer) or STATUS request
@@ -225,13 +226,14 @@ void flight_manager_actor(void *args, const hive_spawn_info_t *siblings,
             // Countdown with ABORT/STATUS handling
             enum { SEL_COUNTDOWN, SEL_ABORT, SEL_STATUS_REQ };
             hive_select_source_t armed_sources[] = {
-                [SEL_COUNTDOWN] = {HIVE_SEL_IPC,
+                [SEL_COUNTDOWN] = {.type = HIVE_SEL_IPC,
                                    .ipc = {.class = HIVE_MSG_TIMER,
                                            .tag = countdown_timer}},
-                [SEL_ABORT] = {HIVE_SEL_IPC, .ipc = {.sender = ids.comms,
-                                                     .class = HIVE_MSG_NOTIFY,
-                                                     .id = NOTIFY_ABORT}},
-                [SEL_STATUS_REQ] = {HIVE_SEL_IPC,
+                [SEL_ABORT] = {.type = HIVE_SEL_IPC,
+                               .ipc = {.sender = ids.comms,
+                                       .class = HIVE_MSG_NOTIFY,
+                                       .id = NOTIFY_ABORT}},
+                [SEL_STATUS_REQ] = {.type = HIVE_SEL_IPC,
                                     .ipc = {.class = HIVE_MSG_REQUEST}},
             };
             size_t num_armed_sources =
@@ -295,9 +297,10 @@ void flight_manager_actor(void *args, const hive_spawn_info_t *siblings,
             // Wait for flight timer or STATUS request
             enum { SEL_FLIGHT, SEL_STATUS_REQ };
             hive_select_source_t flying_sources[] = {
-                [SEL_FLIGHT] = {HIVE_SEL_IPC, .ipc = {.class = HIVE_MSG_TIMER,
-                                                      .tag = flight_timer}},
-                [SEL_STATUS_REQ] = {HIVE_SEL_IPC,
+                [SEL_FLIGHT] = {.type = HIVE_SEL_IPC,
+                                .ipc = {.class = HIVE_MSG_TIMER,
+                                        .tag = flight_timer}},
+                [SEL_STATUS_REQ] = {.type = HIVE_SEL_IPC,
                                     .ipc = {.class = HIVE_MSG_REQUEST}},
             };
 
@@ -329,13 +332,14 @@ void flight_manager_actor(void *args, const hive_spawn_info_t *siblings,
             // Wait for LANDED, landing timeout, or STATUS request
             enum { SEL_LANDED, SEL_TIMEOUT, SEL_STATUS_REQ };
             hive_select_source_t landing_sources[] = {
-                [SEL_LANDED] = {HIVE_SEL_IPC,
+                [SEL_LANDED] = {.type = HIVE_SEL_IPC,
                                 .ipc = {.sender = ids.altitude,
                                         .class = HIVE_MSG_NOTIFY,
                                         .id = NOTIFY_FLIGHT_LANDED}},
-                [SEL_TIMEOUT] = {HIVE_SEL_IPC, .ipc = {.class = HIVE_MSG_TIMER,
-                                                       .tag = landing_timer}},
-                [SEL_STATUS_REQ] = {HIVE_SEL_IPC,
+                [SEL_TIMEOUT] = {.type = HIVE_SEL_IPC,
+                                 .ipc = {.class = HIVE_MSG_TIMER,
+                                         .tag = landing_timer}},
+                [SEL_STATUS_REQ] = {.type = HIVE_SEL_IPC,
                                     .ipc = {.class = HIVE_MSG_REQUEST}},
             };
 
