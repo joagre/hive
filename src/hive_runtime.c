@@ -178,17 +178,7 @@ hive_status_t hive_spawn(hive_actor_fn_t fn, hive_actor_init_fn_t init,
     hive_actor_config_t default_cfg = HIVE_ACTOR_CONFIG_DEFAULT;
     const hive_actor_config_t *use_cfg = cfg ? cfg : &default_cfg;
 
-    // Copy config field by field instead of struct copy to avoid alignment
-    // issues (struct copy may use SIMD instructions requiring 16-byte
-    // alignment)
-    hive_actor_config_t actual_cfg;
-    actual_cfg.stack_size = use_cfg->stack_size;
-    actual_cfg.priority = use_cfg->priority;
-    actual_cfg.name = use_cfg->name;
-    actual_cfg.malloc_stack = use_cfg->malloc_stack;
-    actual_cfg.auto_register = use_cfg->auto_register;
-    actual_cfg.pool_block = use_cfg->pool_block;
-    actual_cfg.reuse_actor_id = use_cfg->reuse_actor_id;
+    hive_actor_config_t actual_cfg = *use_cfg;
     if (actual_cfg.stack_size == 0) {
         actual_cfg.stack_size = HIVE_DEFAULT_STACK_SIZE;
     }
