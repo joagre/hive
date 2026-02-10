@@ -16,9 +16,10 @@
 
 // Child runtime state
 typedef struct {
-    hive_actor_id_t id;  // Current actor_t ID (0 if not running)
-    uint32_t monitor_id; // Monitor ID
-    bool running;        // Is child currently running
+    hive_actor_id_t id;             // Current actor_t ID (0 if not running)
+    hive_actor_id_t saved_actor_id; // Old ID saved for reuse on restart
+    uint32_t monitor_id;            // Monitor ID
+    bool running;                   // Is child currently running
 } child_state_t;
 
 // Restart timestamp for intensity tracking
@@ -173,6 +174,10 @@ static hive_status_t spawn_child(supervisor_state_t *sup, size_t index) {
     hive_actor_config_t cfg = spec->actor_cfg;
     cfg.name = spec->name;
     cfg.auto_register = spec->auto_register;
+    if (spec->auto_register && state->saved_actor_id != HIVE_ACTOR_ID_INVALID) {
+        cfg.reuse_actor_id = state->saved_actor_id;
+    }
+    state->saved_actor_id = HIVE_ACTOR_ID_INVALID; // Reset after use
 
     // Spawn the child using new spawn API
     hive_status_t status =
@@ -325,6 +330,10 @@ static hive_status_t restart_one_for_one(supervisor_state_t *sup,
     hive_child_spec_t *spec = &sup->children[failed_index];
     child_state_t *state = &sup->child_states[failed_index];
 
+    // Save old ID for reuse if auto_register
+    if (sup->children[failed_index].auto_register) {
+        state->saved_actor_id = state->id;
+    }
     state->running = false;
     state->id = HIVE_ACTOR_ID_INVALID;
 
@@ -344,6 +353,18 @@ static hive_status_t restart_one_for_all(supervisor_state_t *sup,
                                          size_t failed_index,
                                          hive_exit_reason_t reason) {
     hive_child_spec_t *spec = &sup->children[failed_index];
+
+    // Save old IDs for all children before stopping
+    for (size_t i = 0; i < sup->num_children; i++) {
+        if (sup->children[i].auto_register && sup->child_states[i].running) {
+            sup->child_states[i].saved_actor_id = sup->child_states[i].id;
+        }
+    }
+    // Failed child is already dead but save its ID too
+    if (sup->children[failed_index].auto_register) {
+        sup->child_states[failed_index].saved_actor_id =
+            sup->child_states[failed_index].id;
+    }
 
     // Mark failed child as stopped
     sup->child_states[failed_index].running = false;
@@ -380,6 +401,13 @@ static hive_status_t restart_rest_for_one(supervisor_state_t *sup,
                                           size_t failed_index,
                                           hive_exit_reason_t reason) {
     hive_child_spec_t *spec = &sup->children[failed_index];
+
+    // Save old IDs for failed child and all after it
+    for (size_t i = failed_index; i < sup->num_children; i++) {
+        if (sup->children[i].auto_register) {
+            sup->child_states[i].saved_actor_id = sup->child_states[i].id;
+        }
+    }
 
     // Mark failed child as stopped
     sup->child_states[failed_index].running = false;

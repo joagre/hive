@@ -1,5 +1,7 @@
 # Stable Actor IDs for Registered Actors
 
+**Status** - Implemented
+
 ## Problem
 
 When a supervisor restarts an actor with ONE_FOR_ONE strategy, the respawned
@@ -15,14 +17,14 @@ With ONE_FOR_ALL this is not a problem because all actors restart together and
 receive fresh sibling arrays. But ONE_FOR_ONE (independent workers) and
 REST_FOR_ONE (pipelines) are broken by stale IDs.
 
-Current workarounds:
+Previous workarounds:
 
 - Use `hive_ipc_named_notify()` instead of `hive_ipc_notify()` - fixes notify
   targets but not sender filters
 - Use `HIVE_SENDER_ANY` in select sources - gives up sender authentication
 - Stick with ONE_FOR_ALL - correct but heavy-handed for loosely coupled systems
 
-## Proposal
+## Solution
 
 When a supervised child with `auto_register = true` is restarted, the supervisor
 reuses the old actor slot so the respawned actor keeps the same
@@ -38,57 +40,39 @@ ID on restart."
 If the need arises for stable IDs without name registration, a separate
 `reuse_actor_id` flag can be added to `hive_child_spec_t` later.
 
-### Spawn mechanism
+### Implementation
 
-Add a field to `hive_actor_config_t`:
+**`hive_actor_config_t`** gained a `reuse_actor_id` field (default 0). When
+non-zero, `hive_actor_alloc()` searches for a dead slot with the matching stale
+ID before falling back to the normal free-slot search. If the reuse slot is
+found, the actor keeps the old ID instead of getting `next_id++`.
 
-```c
-typedef struct {
-    // ... existing fields ...
-    hive_actor_id_t reuse_id;  /* 0 = allocate new, non-zero = reuse slot */
-} hive_actor_config_t;
-```
+**`child_state_t`** in the supervisor gained a `saved_actor_id` field. Each
+restart strategy saves the old actor ID before clearing the child state:
 
-The supervisor sets `reuse_id` internally before respawning - users never touch
-it directly. `hive_spawn()` checks this field: if non-zero, it claims that
-specific slot instead of searching the actor table.
+- **one_for_one** - saves the failed child's ID
+- **one_for_all** - saves all children's IDs before stopping them
+- **rest_for_one** - saves the failed child's ID and all children after it
 
-An alternative is a separate `hive_spawn_ex()` variant to keep the normal
-spawn path clean.
+The supervisor's `spawn_child()` sets `cfg.reuse_actor_id` from
+`saved_actor_id` when `auto_register = true`, then resets the saved ID.
 
-### Supervisor changes
-
-When a child with `auto_register = true` dies:
-
-1. Supervisor records the old `hive_actor_id_t`
-2. Actor slot is marked "reserved" instead of freed
-3. On respawn, supervisor sets `reuse_id = old_id` in the actor config
-4. `hive_spawn()` reuses the slot, preserving the ID
-5. Name registration transfers to the new incarnation
+Users never interact with `reuse_actor_id` directly - the supervisor manages
+it internally.
 
 ## Design considerations
 
 ### Death-restart window
 
 Between death and respawn, the slot exists but the actor is dead. Messages
-sent to that ID during the gap need defined behavior:
-
-- **Drop silently** - Same as current dead-actor behavior. Simple, predictable.
-  The new incarnation starts clean.
-- **Queue for new incarnation** - Tempting but violates the restart contract
-  ("mailbox empty on restart"). Stale messages from the previous life could
-  confuse the new actor.
-
-Recommendation: drop silently. The clean-slate contract is more important than
-message preservation.
+sent to that ID during the gap are dropped silently - same as current
+dead-actor behavior. The new incarnation starts with a clean mailbox,
+consistent with the restart contract.
 
 ### Generation counters
 
-If `hive_actor_id_t` encodes a generation counter (to detect use-after-free on
-reused slots), permanent IDs must skip the generation bump for reserved slots.
-This is a deliberate tradeoff: giving up stale-reference detection in exchange
-for stable identity.
-
+`hive_actor_id_t` is a plain `uint32_t` with no generation counter. If one
+were added in the future, reused slots must skip the generation bump.
 Acceptable because the supervisor controls who occupies the slot - there is no
 ABA risk when the same child spec always maps to the same slot.
 
@@ -101,8 +85,8 @@ contract.
 
 ### Memory cost
 
-None. The actor slot (stack, mailbox) is already allocated. Reserving it just
-prevents the slot from being reclaimed during the restart window.
+None. The dead actor slot already exists in the actor table. Reusing it just
+means finding it by ID instead of by first-fit.
 
 ## Example
 
@@ -134,3 +118,12 @@ hive_supervisor_config_t cfg = {
 If sensor crashes and restarts, motor's cached `sensor_id` from
 `hive_find_sibling()` still works. Sender filters in `hive_select()` still
 match. No code changes in any actor.
+
+## Test coverage
+
+- `tests/supervisor_test.c` test 10 - ONE_FOR_ONE preserves actor ID for
+  auto_register children
+- `tests/supervisor_test.c` test 11 - ONE_FOR_ALL preserves actor IDs for
+  auto_register children
+- `tests/supervisor_test.c` test 12 - Non-registered children get new IDs
+  (existing behavior preserved)

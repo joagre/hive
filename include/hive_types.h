@@ -103,13 +103,15 @@ typedef struct {
     bool malloc_stack;  // false = use static arena (default), true = malloc
     bool auto_register; // Register name in registry (requires name != NULL)
     bool pool_block;    // false = return NOMEM (default), true = block on pool
+    hive_actor_id_t reuse_actor_id; // 0 = allocate new, non-zero = reuse slot
 } hive_actor_config_t;
 
 // Default configuration
-#define HIVE_ACTOR_CONFIG_DEFAULT                                          \
-    {                                                                      \
-        .stack_size = 0, .priority = HIVE_PRIORITY_NORMAL, .name = NULL,   \
-        .malloc_stack = false, .auto_register = false, .pool_block = false \
+#define HIVE_ACTOR_CONFIG_DEFAULT                                           \
+    {                                                                       \
+        .stack_size = 0, .priority = HIVE_PRIORITY_NORMAL, .name = NULL,    \
+        .malloc_stack = false, .auto_register = false, .pool_block = false, \
+        .reuse_actor_id = 0                                                 \
     }
 
 // Message structure

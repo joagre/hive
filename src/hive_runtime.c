@@ -188,6 +188,7 @@ hive_status_t hive_spawn(hive_actor_fn_t fn, hive_actor_init_fn_t init,
     actual_cfg.malloc_stack = use_cfg->malloc_stack;
     actual_cfg.auto_register = use_cfg->auto_register;
     actual_cfg.pool_block = use_cfg->pool_block;
+    actual_cfg.reuse_actor_id = use_cfg->reuse_actor_id;
     if (actual_cfg.stack_size == 0) {
         actual_cfg.stack_size = HIVE_DEFAULT_STACK_SIZE;
     }

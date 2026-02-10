@@ -205,11 +205,26 @@ actor_t *hive_actor_alloc(hive_actor_fn_t fn, void *args,
 
     // Find free slot
     actor_t *a = NULL;
-    for (size_t i = 0; i < s_actor_table.max_actors; i++) {
-        if (s_actor_table.actors[i].state == ACTOR_STATE_DEAD ||
-            s_actor_table.actors[i].id == HIVE_ACTOR_ID_INVALID) {
-            a = &s_actor_table.actors[i];
-            break;
+
+    // If reuse requested, try to find the dead slot with matching stale ID
+    if (cfg->reuse_actor_id != HIVE_ACTOR_ID_INVALID) {
+        for (size_t i = 0; i < s_actor_table.max_actors; i++) {
+            if (s_actor_table.actors[i].id == cfg->reuse_actor_id &&
+                s_actor_table.actors[i].state == ACTOR_STATE_DEAD) {
+                a = &s_actor_table.actors[i];
+                break;
+            }
+        }
+    }
+
+    // Normal path (or reuse slot not found): find any free slot
+    if (a == NULL) {
+        for (size_t i = 0; i < s_actor_table.max_actors; i++) {
+            if (s_actor_table.actors[i].state == ACTOR_STATE_DEAD ||
+                s_actor_table.actors[i].id == HIVE_ACTOR_ID_INVALID) {
+                a = &s_actor_table.actors[i];
+                break;
+            }
         }
     }
 
@@ -240,9 +255,20 @@ actor_t *hive_actor_alloc(hive_actor_fn_t fn, void *args,
         return NULL;
     }
 
+    // Check if we matched the reuse slot BEFORE memset clears a->id
+    hive_actor_id_t reused_id = HIVE_ACTOR_ID_INVALID;
+    if (cfg->reuse_actor_id != HIVE_ACTOR_ID_INVALID &&
+        a->id == cfg->reuse_actor_id) {
+        reused_id = cfg->reuse_actor_id;
+    }
+
     // Initialize actor_t
     memset(a, 0, sizeof(actor_t));
-    a->id = s_actor_table.next_id++;
+    if (reused_id != HIVE_ACTOR_ID_INVALID) {
+        a->id = reused_id; // Reuse old ID
+    } else {
+        a->id = s_actor_table.next_id++; // Normal: new ID
+    }
     a->state = ACTOR_STATE_READY;
     a->priority = cfg->priority;
     a->name = cfg->name;

@@ -235,7 +235,7 @@ Preserved bus cursor position (must re-subscribe)
 .IP \(bu 2
 Preserved timer IDs (old timers cancelled, must create new ones)
 .IP \(bu 2
-Preserved hive_actor_id_t (new ID assigned on restart)
+Preserved hive_actor_id_t (new ID assigned, unless auto_register is true)
 .IP \(bu 2
 Preserved monitor/link state (must re-establish)
 .IP \(bu 2
@@ -253,6 +253,24 @@ shared-memory pointers not owned by the runtime.
 .PP
 Failure to do so causes "works in simulation, dies on hardware" bugs because
 resource lifetime is not actor lifetime.
+.SS Stable Actor IDs
+When a supervised child has
+.I auto_register = true
+in its child spec, the supervisor reuses the old actor table slot on restart
+so the respawned actor keeps the same
+.IR hive_actor_id_t .
+This means cached IDs from
+.BR hive_find_sibling ()
+and sender filters in
+.BR hive_select (3)
+remain valid across restarts.
+.PP
+Children without
+.I auto_register
+get a new ID on every restart (existing behavior).
+.PP
+All other restart contract items still apply (mailbox empty, timers cancelled,
+links/monitors cleared, etc.). Only the actor ID is preserved.
 .SS Name Registration
 A supervised child intended to be discoverable has two options:
 .IP \(bu 2
@@ -266,18 +284,26 @@ early in the actor function
 .PP
 Either way, the child will be automatically unregistered when it exits.
 .SS Client Rule
-Actors communicating with supervised children MUST NOT cache
+For children without
+.IR auto_register ,
+actors communicating with supervised children MUST NOT cache
 .I hive_actor_id_t
 across awaits, timeouts, or receive calls. They MUST re-resolve by name
 .RB ( hive_whereis (3))
 on each interaction or after any failure signal (timeout, EXIT message).
 .PP
-Alternatively, supervised siblings can use
-.BR hive_find_sibling ()
-at startup to get sibling IDs, though these IDs become stale on restart.
+For children with
+.IR auto_register = true ,
+the actor ID is stable across restarts, so cached IDs and sender filters
+remain valid. Re-resolution via
+.BR hive_whereis (3)
+is still recommended for non-sibling actors but is no longer strictly required.
 .PP
-This prevents the classic bug: client caches ID, server restarts, client notifies/requests
-dead ID, silent failure or mysterious behavior.
+Supervised siblings can use
+.BR hive_find_sibling ()
+at startup to get sibling IDs. With
+.IR auto_register = true ,
+these IDs remain valid across restarts.
 .SS Restart Contract Checklist
 .B On child restart, these are always reset:
 .IP \(bu 2

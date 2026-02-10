@@ -177,7 +177,7 @@ The runtime consists of:
 - Bus subscriptions gone, cursors reset (fresh subscribe required)
 - Timers cancelled
 - Links and monitors cleared
-- hive_actor_id_t changes
+- hive_actor_id_t changes (unless `auto_register = true` - ID is preserved)
 - Name registration removed (must re-register)
 - External handles invalid (must reacquire: fds, sockets, HAL handles)
 
@@ -191,7 +191,7 @@ The runtime consists of:
 - Every restart attempt observable (log)
 - Every give-up observable (log + shutdown callback)
 
-**Client rule** - MUST NOT cache `hive_actor_id_t` across awaits/timeouts. Re-resolve via `hive_whereis()` on each interaction.
+**Client rule** - For children without `auto_register`, MUST NOT cache `hive_actor_id_t` across awaits/timeouts. Re-resolve via `hive_whereis()` on each interaction. For `auto_register = true` children, the actor ID is stable across restarts and cached IDs remain valid.
 
 ## Key Concepts
 

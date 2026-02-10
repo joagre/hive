@@ -40,6 +40,7 @@ typedef struct {
     bool        malloc_stack; // false = use static arena (default), true = malloc
     bool        auto_register;// auto-register name in registry
     bool        pool_block;   // block on pool exhaustion (default: false)
+    hive_actor_id_t reuse_actor_id; // 0 = allocate new, non-zero = reuse slot
 } hive_actor_config_t;
 ```
 
@@ -91,9 +92,9 @@ const hive_spawn_info_t *hive_find_sibling(const hive_spawn_info_t *siblings,
 - If `cfg->auto_register` is true and `cfg->name` is set, actor is auto-registered in name registry
 
 **Sibling array lifetime**
-The sibling array is a **startup-time snapshot**. If a sibling restarts (getting a new `hive_actor_id_t`), any cached IDs become stale. For scenarios where siblings may restart:
+The sibling array is a **startup-time snapshot**. For siblings with `auto_register = true`, actor IDs are stable across restarts, so cached IDs from the sibling array remain valid. For siblings without `auto_register`, a restart assigns a new `hive_actor_id_t` and any cached IDs become stale. For those scenarios:
 - Use `hive_whereis()` for dynamic lookups
-- Sibling array is best for stable peer references in ONE_FOR_ALL supervision (all restart together)
+- Sibling array is best for stable peer references in ONE_FOR_ALL supervision (all restart together) or when siblings use `auto_register = true`
 - Registry is best for service discovery patterns where restarts are expected
 
 **Actor function return behavior (Erlang semantics)**
@@ -257,7 +258,7 @@ hive_status_t hive_unregister(const char *name);
 
 **Use with supervisors**
 
-When actors are restarted by a supervisor, they should call `hive_register()` with the same name. Actors that need to communicate with them should call `hive_whereis()` each time they need to notify or request, rather than caching the actor ID at startup. This ensures they get the current actor ID even after restarts.
+When actors are restarted by a supervisor with `auto_register = true`, the actor ID is stable across restarts and the name is automatically re-registered. Cached IDs and sender filters remain valid. For actors without `auto_register`, they should call `hive_register()` with the same name on each restart, and clients should call `hive_whereis()` each time they need to notify or request, rather than caching the actor ID at startup.
 
 ```c
 // Service actor that registers itself
@@ -302,10 +303,11 @@ void send_query(const char *query) {
    - Cross-supervisor or cross-subsystem communication
    - Service discovery pattern (many clients, one named service)
 
-3. **Avoid caching IDs from either**
-   - Both sibling IDs and registry IDs become stale after target restarts
+3. **Avoid caching IDs from either** (unless `auto_register = true`)
+   - Without `auto_register`, both sibling IDs and registry IDs become stale after target restarts
    - Always lookup fresh when the target may have restarted
    - Exception: ONE_FOR_ALL where you restart together anyway
+   - Exception: `auto_register = true` children keep the same ID across restarts
 
 ## IPC API
 
@@ -569,7 +571,7 @@ hive_status_t hive_ipc_named_request(const char *name, uint16_t id,
 - Calls the underlying `hive_ipc_notify()` or `hive_ipc_request()`
 - Returns `HIVE_ERR_NOT_FOUND` if name is not registered
 
-**Use case** - Supervised actors that may restart get new actor IDs on each restart. Caching actor IDs is unsafe across yield points. Named IPC re-resolves the name on each call, ensuring messages reach the current incarnation:
+**Use case** - Supervised actors without `auto_register` get new actor IDs on each restart. Caching actor IDs is unsafe across yield points for those actors. Named IPC re-resolves the name on each call, ensuring messages reach the current incarnation. (For `auto_register = true` children, the actor ID is stable across restarts, so direct `hive_ipc_notify()` with a cached ID also works.)
 
 ```c
 #define MSG_LOG 1
@@ -1895,10 +1897,10 @@ Returns:
 - Preserved mailbox state (mailbox is empty)
 - Preserved bus cursor position (must re-subscribe)
 - Preserved timer IDs (old timers cancelled, must create new ones)
-- Preserved hive_actor_id_t (new ID assigned on restart)
+- Preserved hive_actor_id_t (new ID assigned on restart, unless `auto_register = true`)
 - Preserved monitor/link state (must re-establish)
 
-The only state preserved across restarts is the argument passed to the child function (copied by the supervisor at configuration time).
+The only state preserved across restarts is the argument passed to the child function (copied by the supervisor at configuration time). For `auto_register = true` children, the actor ID is also preserved (the supervisor reuses the old actor table slot).
 
 **External Resources** - A restarted child MUST treat all external handles as invalid and reacquire them. This includes:
 
@@ -1915,9 +1917,9 @@ Failure to do so causes "works in simulation, dies on hardware" bugs because res
 - Register its name during startup (call `hive_register()` early)
 - Tolerate name lookup from other actors at any time
 
-**Client Rule** - Actors communicating with supervised children MUST NOT cache `hive_actor_id_t` across awaits, timeouts, or receive calls. They MUST re-resolve by name (`hive_whereis()`) on each interaction or after any failure signal (timeout, EXIT message).
+**Client Rule** - For children without `auto_register`, actors communicating with supervised children MUST NOT cache `hive_actor_id_t` across awaits, timeouts, or receive calls. They MUST re-resolve by name (`hive_whereis()`) on each interaction or after any failure signal (timeout, EXIT message). For `auto_register = true` children, the actor ID is stable across restarts and cached IDs remain valid.
 
-This prevents the classic bug: client caches ID -> server restarts -> client notifies/requests dead ID -> silent failure or mysterious behavior.
+Without `auto_register`, this prevents the classic bug: client caches ID -> server restarts -> client notifies/requests dead ID -> silent failure or mysterious behavior.
 
 ### Restart Contract Checklist
 
@@ -1928,7 +1930,7 @@ This prevents the classic bug: client caches ID -> server restarts -> client not
 - [ ] Bus cursors reset (fresh subscribe required)
 - [ ] Timers cancelled
 - [ ] Links and monitors cleared
-- [ ] hive_actor_id_t changes
+- [ ] hive_actor_id_t changes (unless `auto_register = true` - ID is preserved)
 - [ ] Name registration removed (must re-register)
 - [ ] External handles invalid (must reacquire)
 

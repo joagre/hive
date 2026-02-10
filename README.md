@@ -543,6 +543,9 @@ hive_supervisor_stop(supervisor);
 //   HIVE_CHILD_PERMANENT - Always restart (default)
 //   HIVE_CHILD_TRANSIENT - Restart only on crash (not normal exit)
 //   HIVE_CHILD_TEMPORARY - Never restart
+
+// Stable actor IDs: children with .auto_register = true keep the same
+// hive_actor_id_t across restarts, so cached IDs and sender filters stay valid.
 ```
 
 ## Running Examples
