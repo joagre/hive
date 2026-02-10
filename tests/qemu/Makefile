@@ -152,7 +152,7 @@ $(BUILD_DIR)/test_%.elf: $(BUILD_DIR)/qemu_%.o $(BUILD_DIR)/test_runner.o $(BUIL
 .PRECIOUS: $(BUILD_DIR)/test_%.elf $(BUILD_DIR)/qemu_%.o
 
 # Timeout for QEMU runs (seconds) - prevents hangs from blocking examples/tests
-QEMU_TIMEOUT ?= 30
+QEMU_TIMEOUT ?= 10
 
 # Run a single test: make run-actor_test
 .PHONY: run-%
