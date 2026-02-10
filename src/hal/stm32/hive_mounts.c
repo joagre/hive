@@ -7,6 +7,15 @@
 #include <string.h>
 #include <stdbool.h>
 
+// Preprocessor-level check for whether any mounts are configured.
+// Mirrors the #ifdef conditions used in g_mounts[] below.
+#if defined(HIVE_VFILE_LOG_BASE) || defined(HIVE_VFILE_CONFIG_BASE) || \
+    (HIVE_ENABLE_SD && defined(HIVE_SD_SPI_ID))
+#define HAS_MOUNTS 1
+#else
+#define HAS_MOUNTS 0
+#endif
+
 // ----------------------------------------------------------------------------
 // Mount Table
 // ----------------------------------------------------------------------------
@@ -62,7 +71,7 @@ static const hive_mount_t g_mounts[] = {
 // Path Matching
 // ----------------------------------------------------------------------------
 
-#if MOUNT_COUNT > 0
+#if HAS_MOUNTS
 // Check if path matches prefix with proper boundary handling.
 // "/log" matches "/log", "/log/" but NOT "/logger".
 static bool prefix_matches(const char *path, const char *prefix,
@@ -87,7 +96,7 @@ static bool prefix_matches(const char *path, const char *prefix,
 
     return false;
 }
-#endif // MOUNT_COUNT > 0
+#endif // HAS_MOUNTS
 
 // ----------------------------------------------------------------------------
 // Mount Table API
@@ -97,7 +106,7 @@ const hive_mount_t *hive_mount_find(const char *path, size_t *prefix_len) {
     const hive_mount_t *best = NULL;
     size_t best_len = 0;
 
-#if MOUNT_COUNT > 0
+#if HAS_MOUNTS
     for (size_t i = 0; i < MOUNT_COUNT; i++) {
         size_t len;
         if (prefix_matches(path, g_mounts[i].prefix, &len)) {
