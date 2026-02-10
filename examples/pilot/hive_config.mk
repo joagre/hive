@@ -23,23 +23,23 @@
 #   attitude_setpoint_bus, rate_setpoint_bus, torque_bus
 #
 # Bus subscribers (max 7 per bus on state_bus, 8 configured):
-#   sensor_bus:           estimator, [comms], [tlog] (1-3)
-#   state_bus:            altitude, attitude, position, rate, waypoint, [comms], [tlog] (5-7)
-#   thrust_bus:           rate, [comms], [tlog] (1-3)
-#   position_target_bus:  altitude, position, [tlog] (2-3)
+#   sensor_bus:           estimator, [comms], [logger] (1-3)
+#   state_bus:            altitude, attitude, position, rate, waypoint, [comms], [logger] (5-7)
+#   thrust_bus:           rate, [comms], [logger] (1-3)
+#   position_target_bus:  altitude, position, [logger] (2-3)
 #   attitude_setpoint_bus: attitude (1)
 #   rate_setpoint_bus:    rate (1)
 #   torque_bus:           motor (1)
-#   [comms] = comms_actor (HAL_HAS_RADIO), [tlog] = telemetry_logger (always)
+#   [comms] = comms_actor (HAL_HAS_RADIO), [logger] = telemetry_logger (always)
 #
 # Timers (4-6 concurrent peak, 10 configured):
 #   sensor: tick timer (1 periodic)
 #   flight_manager: sync_timer (1 periodic) + flight_timer (1 one-shot)
 #   waypoint: hover_timer (1 one-shot, on demand)
-#   [tlog]: tick timer (1 periodic, only with SIMULATED_TIME)
+#   [logger]: tick timer (1 periodic, only with SIMULATED_TIME)
 #
 # Monitors (9-11 used, 12 configured):
-#   supervisor monitors 9-11 children (depending on comms/tlog)
+#   supervisor monitors 9-11 children (depending on comms/logger)
 #
 # Links: 0 used, 8 configured
 #
@@ -47,8 +47,8 @@
 #   pipeline supervisor for all flight actors
 #
 # Supervisor children (9-11 used, 12 configured):
-#   9 flight actors + optional comms + optional tlog (all supervised)
-#   comms: HAL_HAS_RADIO, tlog: SIMULATED_TIME (both TEMPORARY)
+#   9 flight actors + optional comms + optional logger (all supervised)
+#   comms: HAL_HAS_RADIO, logger: SIMULATED_TIME (both TEMPORARY)
 #
 # Mailbox entries: ~13 peak, 32 configured
 #   IPC: START, LANDING, LANDED, STOP notifications
@@ -74,7 +74,7 @@ HIVE_CFLAGS += -DHIVE_LINK_ENTRY_POOL_SIZE=8
 HIVE_CFLAGS += -DHIVE_MONITOR_ENTRY_POOL_SIZE=12
 HIVE_CFLAGS += -DHIVE_TIMER_ENTRY_POOL_SIZE=10
 
-# Bus configuration (7 subscribers on state_bus when comms+tlog both active)
+# Bus configuration (7 subscribers on state_bus when comms+logger both active)
 HIVE_CFLAGS += -DHIVE_MAX_BUS_SUBSCRIBERS=8
 HIVE_CFLAGS += -DHIVE_MAX_BUS_ENTRIES=4
 

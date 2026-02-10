@@ -275,7 +275,7 @@ int main(void) {
     }
     (void)supervisor;
 
-    // Log actor count (9 flight actors + tlog + optional comms + 1 supervisor)
+    // Log actor count (9 flight actors + logger + optional comms + 1 supervisor)
 #ifdef HAL_HAS_RADIO
     HIVE_LOG_INFO("12 actors spawned (11 children + 1 supervisor)");
 #else

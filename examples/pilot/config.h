@@ -29,7 +29,7 @@
 #define NUM_MOTORS 4
 
 // Bus configuration (same for all platforms)
-// max_subscribers=8: state_bus has 7 subscribers when comms+tlog both active
+// max_subscribers=8: state_bus has 7 subscribers when comms+logger both active
 #define HAL_BUS_CONFIG                                                   \
     {                                                                    \
         .max_subscribers = 8, .consume_after_reads = 0, .max_age_ms = 0, \

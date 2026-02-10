@@ -455,7 +455,7 @@ cat log.txt                                     # View log directly
 - Separate from flash logging (higher rate, no flash wear)
 - Non-intrusive (LOW priority doesn't affect control loops)
 
-### Step 10: Telemetry Logger Actor
+### Step 10: Logger Actor
 Add CSV logging for PID tuning and flight analysis.
 
 **Before**
@@ -465,7 +465,7 @@ No structured data export for analysis
 
 **After**
 ```
-State Bus ──┬──► Telemetry Logger ──► /sd/tlog.csv or /tmp/tlog.csv
+State Bus ──┬──► Logger ──► /sd/tlog.csv or /tmp/tlog.csv
 Sensor Bus ─┤      (25Hz)
 Thrust Bus ─┤
 Position Target Bus ─┘

@@ -132,11 +132,11 @@ graph TB
     ThrustBus -.-> Comms
     Comms -.-> Radio([Radio])
 
-    SensorBus -.-> TLog[TLog]
-    StateBus -.-> TLog
-    ThrustBus -.-> TLog
-    PositionTargetBus -.-> TLog
-    TLog -.-> CSV([CSV])
+    SensorBus -.-> Logger[Logger]
+    StateBus -.-> Logger
+    ThrustBus -.-> Logger
+    PositionTargetBus -.-> Logger
+    Logger -.-> CSV([CSV])
 ```
 
 Hardware Abstraction Layer (HAL) provides platform independence:
@@ -175,7 +175,7 @@ Spawn order determines execution order (round-robin within priority level):
 | 8     | motor     | CRITICAL | PERMANENT | Needs torque + STOP signal, writes hardware last |
 | 9     | flight_mgr| CRITICAL | TRANSIENT | Normal exit = mission complete |
 | 10    | comms     | LOW      | TEMPORARY | Crazyflie only, not flight-critical |
-| 11    | tlog      | LOW      | TEMPORARY | CSV logging (to /sd or /tmp, exits if no storage) |
+| 11    | logger    | LOW      | TEMPORARY | CSV logging (to /sd or /tmp, exits if no storage) |
 
 Workers use `hive_find_sibling()` to look up sibling actor IDs for IPC coordination.
 
@@ -252,7 +252,7 @@ After flight completes, a stack usage report is printed to stderr:
 | attitude | 4096 | 760 | 18.6% |
 | rate | 4096 | 792 | 19.3% |
 | motor | 4096 | 504 | 12.3% |
-| tlog | 4096 | 1912 | 46.7% |
+| logger | 4096 | 1912 | 46.7% |
 | flight_mgr | 4096 | 1192 | 29.1% |
 
 Measured on x86-64 Linux (Webots simulation). ARM Cortex-M may differ slightly

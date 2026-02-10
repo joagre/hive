@@ -329,7 +329,7 @@ Results from x86-64 Linux (Webots simulation) with 4KB stacks:
 | Actor | Used | Usage | Notes |
 |-------|------|-------|-------|
 | sensor | 2056 | 50.2% | Highest - HAL sensor structs |
-| tlog | 1912 | 46.7% | CSV formatting + file I/O |
+| logger | 1912 | 46.7% | CSV formatting + file I/O |
 | estimator | 1480 | 36.1% | Kalman filter + complementary filter state |
 | altitude | 1304 | 31.8% | PID state + landing logic |
 | waypoint | 1288 | 31.4% | Waypoint list + arrival detection |

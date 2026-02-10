@@ -53,7 +53,7 @@ typedef struct {
     hive_actor_id_t attitude;
     hive_actor_id_t rate;
     hive_actor_id_t motor;
-    hive_actor_id_t tlog;
+    hive_actor_id_t logger;
     hive_actor_id_t comms;
 } sibling_ids_t;
 
@@ -62,7 +62,7 @@ static void notify_reset_all(const sibling_ids_t *ids) {
     hive_actor_id_t actors[] = {
         ids->sensor,   ids->estimator, ids->waypoint,
         ids->altitude, ids->position,  ids->attitude,
-        ids->rate,     ids->motor,     ids->tlog,
+        ids->rate,     ids->motor,     ids->logger,
     };
 
     for (size_t i = 0; i < sizeof(actors) / sizeof(actors[0]); i++) {
@@ -100,7 +100,7 @@ void flight_manager_actor(void *args, const hive_spawn_info_t *siblings,
         .attitude = hive_find_sibling(siblings, sibling_count, "attitude"),
         .rate = hive_find_sibling(siblings, sibling_count, "rate"),
         .motor = hive_find_sibling(siblings, sibling_count, "motor"),
-        .tlog = hive_find_sibling(siblings, sibling_count, "logger"),
+        .logger = hive_find_sibling(siblings, sibling_count, "logger"),
         .comms = hive_find_sibling(siblings, sibling_count, "comms"),
     };
 
@@ -120,7 +120,7 @@ void flight_manager_actor(void *args, const hive_spawn_info_t *siblings,
     if (ids.comms == HIVE_ACTOR_ID_INVALID) {
         HIVE_LOG_INFO("[FLM] comms actor not found (expected in Webots)");
     }
-    if (ids.tlog == HIVE_ACTOR_ID_INVALID) {
+    if (ids.logger == HIVE_ACTOR_ID_INVALID) {
         HIVE_LOG_INFO("[FLM] logger actor not found");
     }
 

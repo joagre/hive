@@ -289,11 +289,11 @@ graph TB
     ThrustBus -.-> Comms
     Comms -.-> RadioTx
 
-    SensorBus -.-> TLog[TLOG ACTOR<br/>CSV logging]
-    StateBus -.-> TLog
-    ThrustBus -.-> TLog
-    PositionTargetBus -.-> TLog
-    TLog -.-> CSV([CSV File])
+    SensorBus -.-> Logger[Logger<br/>CSV logging]
+    StateBus -.-> Logger
+    ThrustBus -.-> Logger
+    PositionTargetBus -.-> Logger
+    Logger -.-> CSV([CSV File])
 ```
 
 ### Actor Priority and Blocking Table
