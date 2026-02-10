@@ -77,6 +77,48 @@ Install: `make install-man` (or `sudo make install-man`)
 - **Forbidden** - `**Label:** text` format; use `**Label** - text` instead
 - **Forbidden** - Colons in bold labels; use `**Label**` not `**Label:**`
 
+### Struct Initialization
+
+Always use **designated initializers**. Never use positional initializers.
+
+```c
+// Good
+attitude_setpoint_t sp = {.roll = 0.1f, .pitch = 0.0f, .yaw = 0.0f};
+hive_select_source_t src = {.type = HIVE_SEL_BUS, .bus = my_bus};
+
+// Bad - positional
+attitude_setpoint_t sp = {0.1f, 0.0f, 0.0f};
+```
+
+`{0}` for zero-initialization is fine (standard C idiom, not a positional initializer).
+
+### Boolean Checks
+
+Use `stdbool.h`. Use explicit comparisons for pointers and integers. Implicit checks are fine for `bool` variables.
+
+```c
+// Pointers - always explicit
+if (ptr != NULL)       // Good
+if (ptr == NULL)       // Good
+if (ptr)               // Bad
+if (!ptr)              // Bad
+
+// Integers - always explicit
+if (count > 0)         // Good
+if (count != 0)        // Good
+if (fd >= 0)           // Good
+if (count)             // Bad
+
+// Bool variables - implicit is fine (and preferred)
+if (landed)            // Good
+if (!hovering)         // Good
+if (landed == true)    // Bad - anti-pattern in C (fails for non-zero non-one values)
+
+// Infinite loops
+while (true)           // Good (requires stdbool.h)
+while (1)              // Bad
+```
+
 ### IPC Terminology
 
 Use specific terms for IPC operations instead of generic "send":

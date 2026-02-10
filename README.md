@@ -871,6 +871,9 @@ The project uses **One True Style (1TBS)** enforced by clang-format.
 - K&R braces (opening brace on same line)
 - Pointer on variable: `int *ptr` not `int* ptr`
 - No single-line control bodies (always use braces)
+- Designated initializers only (`{.field = val}`, never positional `{val1, val2}`)
+- Explicit boolean checks for non-bool types (`ptr != NULL`, `count > 0`, never `if (ptr)`)
+- Use `stdbool.h` and `while (true)` for infinite loops
 
 ### Formatting Code
 
