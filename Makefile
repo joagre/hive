@@ -41,8 +41,10 @@ all: $(LIB) examples benchmarks
 .PHONY: lib
 lib: $(LIB)
 
-$(LIB):
+$(LIB): FORCE
 	$(MAKE) -C src
+
+FORCE:
 
 # Build benchmarks (delegate to benchmarks/Makefile)
 .PHONY: benchmarks
