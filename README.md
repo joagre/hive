@@ -762,11 +762,11 @@ Omits SSL/TLS, UDP, socket options by design. See `man hive_tcp` for rationale.
 Embedded code often needs to wait for multiple things: a hardware interrupt, a timer, and a command from another actor. Without unified waiting, you poll in a loop or build a state machine. `hive_select()` handles all sources in one blocking call - the actor sleeps until something is ready.
 
 ```c
-// IPC filter: {sender, class, id, tag} - use 0 (wildcard) for any field
+// IPC filter: {.sender, .class, .id, .tag} - omitted fields default to wildcard
 hive_select_source_t sources[] = {
-    {HIVE_SEL_HAL_EVENT, .event = uart_rx_event},  // UART RX interrupt
-    {HIVE_SEL_IPC, .ipc = {HIVE_SENDER_ANY, HIVE_MSG_TIMER, HIVE_ID_ANY, timeout}},
-    {HIVE_SEL_BUS, .bus = sensor_bus},
+    {.type = HIVE_SEL_HAL_EVENT, .event = uart_rx_event},  // UART RX interrupt
+    {.type = HIVE_SEL_IPC, .ipc = {.class = HIVE_MSG_TIMER, .tag = timeout}},
+    {.type = HIVE_SEL_BUS, .bus = sensor_bus},
 };
 hive_select_result_t result;
 hive_select(sources, 3, &result, -1);  // Block until any source ready

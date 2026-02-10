@@ -9,7 +9,7 @@ The current IPC API makes it awkward to dispatch on request types. `hive_ipc_req
 ```c
 // Can only filter sender + class, must use HIVE_TAG_ANY for requests
 hive_select_source_t sources[] = {
-    {HIVE_SEL_IPC, .ipc = {flight_manager, HIVE_MSG_REQUEST, HIVE_TAG_ANY}},
+    {.type = HIVE_SEL_IPC, .ipc = {.sender = flight_manager, .class = HIVE_MSG_REQUEST}},
 };
 
 // Manual payload inspection for dispatch
@@ -107,12 +107,12 @@ You only specify what you care about. Everything else matches anything.
 
 ```c
 hive_select_source_t sources[] = {
-    {HIVE_SEL_IPC, .ipc = {.sender = actor_a,
-                           .class = HIVE_MSG_NOTIFY,
-                           .id = NOTIFY_START}},
-    {HIVE_SEL_IPC, .ipc = {.sender = actor_b,
-                           .class = HIVE_MSG_NOTIFY,
-                           .id = NOTIFY_LANDED}},
+    {.type = HIVE_SEL_IPC, .ipc = {.sender = actor_a,
+                                    .class = HIVE_MSG_NOTIFY,
+                                    .id = NOTIFY_START}},
+    {.type = HIVE_SEL_IPC, .ipc = {.sender = actor_b,
+                                    .class = HIVE_MSG_NOTIFY,
+                                    .id = NOTIFY_LANDED}},
 };
 
 hive_select_result_t result;
@@ -134,19 +134,19 @@ enum { SEL_RESET, SEL_ARM, SEL_LANDED, SEL_TIMER };
 
 hive_select_source_t sources[] = {
     // Filter requests by id (tag defaults to ANY)
-    [SEL_RESET] = {HIVE_SEL_IPC, .ipc = {.sender = fm,
-                                          .class = HIVE_MSG_REQUEST,
-                                          .id = REQUEST_RESET}},
-    [SEL_ARM]   = {HIVE_SEL_IPC, .ipc = {.sender = fm,
-                                          .class = HIVE_MSG_REQUEST,
-                                          .id = REQUEST_ARM}},
+    [SEL_RESET] = {.type = HIVE_SEL_IPC, .ipc = {.sender = fm,
+                                                   .class = HIVE_MSG_REQUEST,
+                                                   .id = REQUEST_RESET}},
+    [SEL_ARM]   = {.type = HIVE_SEL_IPC, .ipc = {.sender = fm,
+                                                   .class = HIVE_MSG_REQUEST,
+                                                   .id = REQUEST_ARM}},
     // Filter notifications by id (tag defaults to ANY)
-    [SEL_LANDED] = {HIVE_SEL_IPC, .ipc = {.sender = altitude,
-                                           .class = HIVE_MSG_NOTIFY,
-                                           .id = NOTIFY_LANDED}},
+    [SEL_LANDED] = {.type = HIVE_SEL_IPC, .ipc = {.sender = altitude,
+                                                    .class = HIVE_MSG_NOTIFY,
+                                                    .id = NOTIFY_LANDED}},
     // Filter timers by tag (id defaults to ANY)
-    [SEL_TIMER] = {HIVE_SEL_IPC, .ipc = {.class = HIVE_MSG_TIMER,
-                                          .tag = my_timer}},
+    [SEL_TIMER] = {.type = HIVE_SEL_IPC, .ipc = {.class = HIVE_MSG_TIMER,
+                                                   .tag = my_timer}},
 };
 
 hive_select_result_t result;

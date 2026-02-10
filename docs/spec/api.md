@@ -263,7 +263,7 @@ When actors are restarted by a supervisor, they should call `hive_register()` wi
 // Service actor that registers itself
 void database_service(void *arg) {
     hive_register("database");
-    while (1) {
+    while (true) {
         hive_message_t msg;
         hive_ipc_recv(&msg, -1);
         // Handle database requests...
@@ -1342,11 +1342,11 @@ void comms_actor(void *args, ...) {
     hive_timer_every(100000, &timer);  // 100ms fallback
 
     hive_select_source_t sources[] = {
-        {HIVE_SEL_HAL_EVENT, .event = rx_event},
-        {HIVE_SEL_IPC, .ipc = {HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer}},
+        {.type = HIVE_SEL_HAL_EVENT, .event = rx_event},
+        {.type = HIVE_SEL_IPC, .ipc = {.class = HIVE_MSG_TIMER, .tag = timer}},
     };
 
-    while (1) {
+    while (true) {
         hive_select_result_t result;
         hive_select(sources, 2, &result, -1);
 
@@ -1368,9 +1368,9 @@ void comms_actor(void *args, ...) {
 // Define event sources
 enum { SEL_SENSOR, SEL_TIMER, SEL_COMMAND };
 hive_select_source_t sources[] = {
-    [SEL_SENSOR]  = {HIVE_SEL_BUS, .bus = sensor_bus},
-    [SEL_TIMER]   = {HIVE_SEL_IPC, .ipc = {HIVE_SENDER_ANY, HIVE_MSG_TIMER, heartbeat}},
-    [SEL_COMMAND] = {HIVE_SEL_IPC, .ipc = {HIVE_SENDER_ANY, HIVE_MSG_NOTIFY, CMD_SHUTDOWN}},
+    [SEL_SENSOR]  = {.type = HIVE_SEL_BUS, .bus = sensor_bus},
+    [SEL_TIMER]   = {.type = HIVE_SEL_IPC, .ipc = {.class = HIVE_MSG_TIMER, .tag = heartbeat}},
+    [SEL_COMMAND] = {.type = HIVE_SEL_IPC, .ipc = {.class = HIVE_MSG_NOTIFY, .id = CMD_SHUTDOWN}},
 };
 
 while (running) {
@@ -1487,7 +1487,7 @@ Do **not** use `HIVE_TAG_ANY` for timer messages - this could consume the wrong 
 // 10ms periodic timer, but actor takes 35ms to process
 hive_timer_every(10000, &timer);  // 10ms = 10000us
 
-while (1) {
+while (true) {
     hive_ipc_recv(&msg, -1);
     if (hive_msg_is_timer(&msg)) {
         // Even if 35ms passed (3-4 intervals), actor receives ONE tick
@@ -1685,10 +1685,10 @@ void uart_actor(void *args, ...) {
     hive_hal_event_id_t rx_event = hal_uart_get_rx_event();
 
     hive_select_source_t sources[] = {
-        {HIVE_SEL_HAL_EVENT, .event = rx_event},
+        {.type = HIVE_SEL_HAL_EVENT, .event = rx_event},
     };
 
-    while (1) {
+    while (true) {
         hive_select_result_t result;
         hive_select(sources, 1, &result, -1);  // Block until ISR signals
 
@@ -1955,7 +1955,7 @@ void worker(void *args, const hive_spawn_info_t *siblings, size_t sibling_count)
 
     // Can find siblings by name
     const hive_spawn_info_t *peer = hive_find_sibling(siblings, sibling_count, "worker-1");
-    if (peer) {
+    if (peer != NULL) {
         printf("Found sibling worker-1 at actor %u\n", peer->id);
     }
 

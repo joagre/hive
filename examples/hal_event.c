@@ -108,10 +108,9 @@ static void controller(void *args, const hive_spawn_info_t *siblings,
     // Set up select sources - HAL event has priority (first in array)
     enum { SEL_EVENT, SEL_HEARTBEAT };
     hive_select_source_t sources[] = {
-        [SEL_EVENT] = {HIVE_SEL_HAL_EVENT, .event = s_rx_event},
-        [SEL_HEARTBEAT] = {HIVE_SEL_IPC,
-                           .ipc = {HIVE_SENDER_ANY, HIVE_MSG_TIMER, HIVE_ID_ANY,
-                                   heartbeat}},
+        [SEL_EVENT] = {.type = HIVE_SEL_HAL_EVENT, .event = s_rx_event},
+        [SEL_HEARTBEAT] = {.type = HIVE_SEL_IPC,
+                           .ipc = {.class = HIVE_MSG_TIMER, .tag = heartbeat}},
     };
 
     int event_count = 0;

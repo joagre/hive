@@ -483,7 +483,7 @@ static void telemetry_actor(void *args, const hive_spawn_info_t *siblings,
     hive_timer_id_t telem_timer;
     hive_timer_every(10000, &telem_timer);  // 10ms = 100Hz
 
-    while (1) {
+    while (true) {
         hive_message_t msg;
         hive_ipc_recv(&msg, -1);
 

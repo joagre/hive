@@ -43,7 +43,8 @@ static void sensor_publisher(void *args, const hive_spawn_info_t *siblings,
     hive_timer_id_t tick;
     hive_timer_every(100000, &tick);
 
-    sensor_data_t data = {20.0f, 50.0f, 0};
+    sensor_data_t data = {
+        .temperature = 20.0f, .humidity = 50.0f, .sequence = 0};
 
     for (int i = 0; i < 10; i++) {
         // Wait for timer
@@ -128,14 +129,14 @@ static void controller(void *args, const hive_spawn_info_t *siblings,
     // Set up select sources
     enum { SEL_SENSOR, SEL_HEARTBEAT, SEL_STATUS, SEL_SHUTDOWN };
     hive_select_source_t sources[] = {
-        [SEL_SENSOR] = {HIVE_SEL_BUS, .bus = s_sensor_bus},
-        [SEL_HEARTBEAT] = {HIVE_SEL_IPC,
-                           .ipc = {HIVE_SENDER_ANY, HIVE_MSG_TIMER, HIVE_ID_ANY,
-                                   heartbeat}},
-        [SEL_STATUS] = {HIVE_SEL_IPC,
-                        .ipc = {HIVE_SENDER_ANY, HIVE_MSG_NOTIFY, CMD_STATUS}},
-        [SEL_SHUTDOWN] = {HIVE_SEL_IPC, .ipc = {HIVE_SENDER_ANY,
-                                                HIVE_MSG_NOTIFY, CMD_SHUTDOWN}},
+        [SEL_SENSOR] = {.type = HIVE_SEL_BUS, .bus = s_sensor_bus},
+        [SEL_HEARTBEAT] = {.type = HIVE_SEL_IPC,
+                           .ipc = {.class = HIVE_MSG_TIMER, .tag = heartbeat}},
+        [SEL_STATUS] = {.type = HIVE_SEL_IPC,
+                        .ipc = {.class = HIVE_MSG_NOTIFY, .id = CMD_STATUS}},
+        [SEL_SHUTDOWN] = {.type = HIVE_SEL_IPC,
+                          .ipc = {.class = HIVE_MSG_NOTIFY,
+                                  .id = CMD_SHUTDOWN}},
     };
 
     int sensor_count = 0;

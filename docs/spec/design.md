@@ -547,7 +547,7 @@ void external_producer(void) {
 // Dedicated reader actor bridges external thread -> actors
 void socket_reader_actor(void *arg) {
     int sock = listen_and_accept();
-    while (1) {
+    while (true) {
         size_t received;
         hive_tcp_recv(sock, buf, len, &received, -1);  // Blocks in event loop
         hive_ipc_notify(worker, HIVE_TAG_NONE, buf, received);  // Forward to actors

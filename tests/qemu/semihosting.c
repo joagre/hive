@@ -7,6 +7,7 @@
  * Reference: ARM Semihosting v2.0 Specification
  */
 
+#include <stdbool.h>
 #include <stdint.h>
 #include <stdarg.h>
 #include <stddef.h>
@@ -48,7 +49,7 @@ void semihosting_exit(int status) {
     semihosting_call(SYS_EXIT, &exit_params);
 
     /* Should not return, but loop just in case */
-    while (1) {
+    while (true) {
     }
 }
 

@@ -275,7 +275,7 @@ static void run_hal_event_tests(void *args, const hive_spawn_info_t *siblings,
             hive_hal_event_signal(event);
 
             hive_select_source_t sources[] = {
-                {HIVE_SEL_HAL_EVENT, .event = event},
+                {.type = HIVE_SEL_HAL_EVENT, .event = event},
             };
             hive_select_result_t result;
 
@@ -311,8 +311,9 @@ static void run_hal_event_tests(void *args, const hive_spawn_info_t *siblings,
         } else {
             // Don't signal the event - timer should fire first
             hive_select_source_t sources[] = {
-                {HIVE_SEL_HAL_EVENT, .event = event},
-                {HIVE_SEL_IPC, .ipc = {.class = HIVE_MSG_TIMER, .tag = timer}},
+                {.type = HIVE_SEL_HAL_EVENT, .event = event},
+                {.type = HIVE_SEL_IPC,
+                 .ipc = {.class = HIVE_MSG_TIMER, .tag = timer}},
             };
             hive_select_result_t result;
 
@@ -355,8 +356,8 @@ static void run_hal_event_tests(void *args, const hive_spawn_info_t *siblings,
             hive_hal_event_signal(event2);
 
             hive_select_source_t sources[] = {
-                {HIVE_SEL_HAL_EVENT, .event = event1},
-                {HIVE_SEL_HAL_EVENT, .event = event2},
+                {.type = HIVE_SEL_HAL_EVENT, .event = event1},
+                {.type = HIVE_SEL_HAL_EVENT, .event = event2},
             };
             hive_select_result_t result;
 

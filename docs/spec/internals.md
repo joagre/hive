@@ -292,7 +292,7 @@ procedure hive_run_until_blocked():
 void sensor_actor(void *arg) {
     hive_timer_id_t timer;
     hive_timer_every(TIME_STEP_MS * 1000, &timer);  // Timer-driven
-    while (1) {
+    while (true) {
         hive_message_t msg;
         hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
         read_sensors();
@@ -327,7 +327,7 @@ while (wb_robot_step(TIME_STEP_MS) != -1) {
 void sensor_actor(void *arg) {
     hive_timer_id_t timer;
     hive_timer_every(TIME_STEP_MS * 1000, &timer);
-    while (1) {
+    while (true) {
         hive_message_t msg;
         hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);  // BLOCKS
         read_sensors();
@@ -339,7 +339,7 @@ void sensor_actor(void *arg) {
 **INCORRECT pattern (will hang simulation)**
 ```c
 void bad_actor(void *arg) {
-    while (1) {
+    while (true) {
         // NO BLOCKING CALL - hive_run_until_blocked() loops forever
         do_work();
     }

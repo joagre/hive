@@ -260,7 +260,7 @@ hive_status_t hive_hal_udp_recvfrom(int handle, void *buf, size_t buflen,
     pbuf_copy_partial(sock->rx_queue, buf, copy_len, 0);
 
     *received = copy_len;
-    if (from) {
+    if (from != NULL) {
         *from = sock->rx_from;
     }
 
@@ -630,7 +630,7 @@ void hive_hal_event_wait(int timeout_ms) {
         for (int fd = 0; fd <= s_max_fd; fd++) {
             if (FD_ISSET(fd, &read_copy) || FD_ISSET(fd, &write_copy)) {
                 io_source_t *source = s_sources[fd];
-                if (source) {
+                if (source != NULL) {
                     hive_tcp_handle_event(source);
                 }
             }
@@ -786,7 +786,7 @@ int main(void) {
 
     // Spawn actors...
 
-    while (1) {
+    while (true) {
         ethernetif_poll();
         hive_run_until_blocked();
     }

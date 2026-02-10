@@ -130,8 +130,8 @@ to ensure sensor data is processed before commands:
 .PP
 .nf
 hive_select_source_t sources[] = {
-    {HIVE_SEL_BUS, .bus = sensor_bus},   /* Checked first */
-    {HIVE_SEL_IPC, .ipc = {...}},        /* Checked second */
+    {.type = HIVE_SEL_BUS, .bus = sensor_bus},   /* Checked first */
+    {.type = HIVE_SEL_IPC, .ipc = {...}},        /* Checked second */
 };
 .fi
 .SH RETURN VALUE
@@ -243,14 +243,14 @@ void controller(void *arg, const hive_spawn_info_t *siblings,
     #define CMD_ID 1  /* Application-defined command type */
     enum { SEL_SENSOR, SEL_TIMER, SEL_COMMAND };
     hive_select_source_t sources[] = {
-        [SEL_SENSOR] = {HIVE_SEL_BUS, .bus = sensor_bus},
+        [SEL_SENSOR] = {.type = HIVE_SEL_BUS, .bus = sensor_bus},
         /* Timer: filter by tag (timer id) */
-        [SEL_TIMER] = {HIVE_SEL_IPC, .ipc = {.class = HIVE_MSG_TIMER, .tag = tick}},
+        [SEL_TIMER] = {.type = HIVE_SEL_IPC, .ipc = {.class = HIVE_MSG_TIMER, .tag = tick}},
         /* Command: filter by id (message type) */
-        [SEL_COMMAND] = {HIVE_SEL_IPC, .ipc = {.class = HIVE_MSG_NOTIFY, .id = CMD_ID}},
+        [SEL_COMMAND] = {.type = HIVE_SEL_IPC, .ipc = {.class = HIVE_MSG_NOTIFY, .id = CMD_ID}},
     };
 
-    while (1) {
+    while (true) {
         hive_select_result_t result;
         hive_select(sources, 3, &result, -1);
 

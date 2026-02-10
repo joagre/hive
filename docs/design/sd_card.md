@@ -209,7 +209,7 @@ const hive_mount_t *hive_mount_find(const char *path, size_t *prefix_len) {
         }
     }
 
-    if (prefix_len) {
+    if (prefix_len != NULL) {
         *prefix_len = best_len;
     }
     return best;
@@ -332,7 +332,7 @@ hive_status_t hive_hal_file_open(const char *path, int flags, int mode,
     // Find mount for path
     size_t prefix_len;
     const hive_mount_t *mount = hive_mount_find(path, &prefix_len);
-    if (!mount) {
+    if (mount == NULL) {
         return HIVE_ERROR(HIVE_ERR_INVALID, "no mount for path");
     }
 
@@ -463,7 +463,7 @@ hive_status_t hive_hal_file_open(const char *path, int flags, int mode,
 
     size_t prefix_len;
     const hive_mount_t *mount = hive_mount_find(path, &prefix_len);
-    if (!mount) {
+    if (mount == NULL) {
         return HIVE_ERROR(HIVE_ERR_INVALID, "no mount for path");
     }
 

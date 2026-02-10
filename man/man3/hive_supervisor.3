@@ -331,7 +331,7 @@ void worker(void *args, const hive_spawn_info_t *siblings,
     const hive_spawn_info_t *peer = hive_find_sibling(siblings,
                                                     sibling_count,
                                                     "worker-1");
-    if (peer) {
+    if (peer != NULL) {
         printf("Found sibling worker-1 at actor %u\\n", peer->id);
     }
 

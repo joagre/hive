@@ -413,7 +413,7 @@ void database_service(void *args, const hive_spawn_info_t *siblings,
 
     /* Name automatically registered via auto_register=true */
 
-    while (1) {
+    while (true) {
         hive_message_t msg;
         hive_ipc_recv(&msg, -1);
         /* Handle database requests... */

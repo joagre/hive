@@ -18,7 +18,7 @@ The current `altitude_actor.c` shows the problem. It needs to:
 
 **Current code (problematic)**
 ```c
-while (1) {
+while (true) {
     // Block until state available - LANDING command delayed while blocked!
     hive_bus_read(s_state_bus, &state, sizeof(state), &len, HIVE_TIMEOUT_INFINITE);
 
@@ -38,11 +38,11 @@ while (1) {
 ```c
 enum { SEL_STATE, SEL_LANDING };
 hive_select_source_t sources[] = {
-    [SEL_STATE] = {HIVE_SEL_BUS, .bus = s_state_bus},
-    [SEL_LANDING] = {HIVE_SEL_IPC, .ipc = {HIVE_SENDER_ANY, HIVE_MSG_NOTIFY, NOTIFY_LANDING}},
+    [SEL_STATE] = {.type = HIVE_SEL_BUS, .bus = s_state_bus},
+    [SEL_LANDING] = {.type = HIVE_SEL_IPC, .ipc = {.class = HIVE_MSG_NOTIFY, .id = NOTIFY_LANDING}},
 };
 
-while (1) {
+while (true) {
     hive_select_result_t result;
     hive_select(sources, 2, &result, -1);
 
@@ -105,9 +105,9 @@ hive_status_t hive_select(const hive_select_source_t *sources, size_t num_source
 ```c
 enum { SEL_TIMER, SEL_SENSOR_BUS, SEL_COMMAND };
 hive_select_source_t sources[] = {
-    [SEL_TIMER] = {HIVE_SEL_IPC, .ipc = {HIVE_SENDER_ANY, HIVE_MSG_TIMER, my_timer}},
-    [SEL_SENSOR_BUS] = {HIVE_SEL_BUS, .bus = sensor_bus},
-    [SEL_COMMAND] = {HIVE_SEL_IPC, .ipc = {HIVE_SENDER_ANY, HIVE_MSG_NOTIFY, CMD_TAG}},
+    [SEL_TIMER] = {.type = HIVE_SEL_IPC, .ipc = {.class = HIVE_MSG_TIMER, .tag = my_timer}},
+    [SEL_SENSOR_BUS] = {.type = HIVE_SEL_BUS, .bus = sensor_bus},
+    [SEL_COMMAND] = {.type = HIVE_SEL_IPC, .ipc = {.class = HIVE_MSG_NOTIFY, .id = CMD_TAG}},
 };
 
 hive_select_result_t result;
@@ -269,7 +269,7 @@ size_t select_source_count;
 **The real win** - avoiding busy-polling
 ```c
 // WITHOUT hive_select - must busy-poll:
-while (1) {
+while (true) {
     if (hive_ipc_recv(&msg, 0) == HIVE_OK) { handle_msg(); continue; }
     if (hive_bus_read(&bus, &data, 0) == HIVE_OK) { handle_bus(); continue; }
     hive_yield();  // Wasteful
@@ -318,7 +318,7 @@ hive_select(sources, n, &result, -1);       // IPC + bus combined
 
 ```c
 hive_status_t hive_ipc_recv(hive_message_t *msg, int32_t timeout_ms) {
-    hive_select_source_t source = {HIVE_SEL_IPC, .ipc = {HIVE_SENDER_ANY, HIVE_MSG_ANY, HIVE_TAG_ANY}};
+    hive_select_source_t source = {.type = HIVE_SEL_IPC};
     hive_select_result_t result;
     hive_status_t s = hive_select(&source, 1, &result, timeout_ms);
     if (HIVE_SUCCEEDED(s)) *msg = result.ipc;
@@ -328,7 +328,7 @@ hive_status_t hive_ipc_recv(hive_message_t *msg, int32_t timeout_ms) {
 hive_status_t hive_ipc_recv_match(hive_actor_id_t from, hive_msg_class_t class,
                                 uint32_t tag, hive_message_t *msg,
                                 int32_t timeout_ms) {
-    hive_select_source_t source = {HIVE_SEL_IPC, .ipc = {from, class, tag}};
+    hive_select_source_t source = {.type = HIVE_SEL_IPC, .ipc = {.sender = from, .class = class, .tag = tag}};
     hive_select_result_t result;
     hive_status_t s = hive_select(&source, 1, &result, timeout_ms);
     if (HIVE_SUCCEEDED(s)) *msg = result.ipc;
@@ -341,13 +341,13 @@ hive_status_t hive_ipc_recv_matches(const hive_recv_filter_t *filters,
     // Build select sources from filters
     hive_select_source_t sources[num_filters];  // VLA or fixed max
     for (size_t i = 0; i < num_filters; i++) {
-        sources[i] = (hive_select_source_t){HIVE_SEL_IPC, .ipc = filters[i]};
+        sources[i] = (hive_select_source_t){.type = HIVE_SEL_IPC, .ipc = filters[i]};
     }
     hive_select_result_t result;
     hive_status_t s = hive_select(sources, num_filters, &result, timeout_ms);
     if (HIVE_SUCCEEDED(s)) {
         *msg = result.ipc;
-        if (matched_index) *matched_index = result.index;
+        if (matched_index != NULL) *matched_index = result.index;
     }
     return s;
 }
@@ -359,7 +359,7 @@ hive_status_t hive_bus_read(hive_bus_id_t bus, void *buf, size_t max_len,
 
     // Blocking path: use hive_select
     if (timeout_ms != HIVE_TIMEOUT_NONBLOCKING) {
-        hive_select_source_t source = {HIVE_SEL_BUS, .bus = bus};
+        hive_select_source_t source = {.type = HIVE_SEL_BUS, .bus = bus};
         hive_select_result_t result;
         hive_status_t s = hive_select(&source, 1, &result, timeout_ms);
         if (HIVE_SUCCEEDED(s)) {
@@ -405,10 +405,10 @@ When multiple sources have data simultaneously, sources are checked in **strict 
 ```c
 enum { SEL_STATE, SEL_SENSOR, SEL_COMMAND, SEL_TIMER };
 hive_select_source_t sources[] = {
-    [SEL_STATE] = {HIVE_SEL_BUS, .bus = state_bus},      // Checked 1st
-    [SEL_SENSOR] = {HIVE_SEL_BUS, .bus = sensor_bus},    // Checked 2nd
-    [SEL_COMMAND] = {HIVE_SEL_IPC, .ipc = {...}},        // Checked 3rd
-    [SEL_TIMER] = {HIVE_SEL_IPC, .ipc = {...}},          // Checked 4th
+    [SEL_STATE] = {.type = HIVE_SEL_BUS, .bus = state_bus},      // Checked 1st
+    [SEL_SENSOR] = {.type = HIVE_SEL_BUS, .bus = sensor_bus},    // Checked 2nd
+    [SEL_COMMAND] = {.type = HIVE_SEL_IPC, .ipc = {...}},        // Checked 3rd
+    [SEL_TIMER] = {.type = HIVE_SEL_IPC, .ipc = {...}},          // Checked 4th
 };
 ```
 
@@ -436,7 +436,7 @@ Intentionally excluded for now. Reasons:
 void net_reader(void *arg) {
     int fd = *(int *)arg;
     char buf[256];
-    while (1) {
+    while (true) {
         size_t n;
         hive_tcp_recv(fd, buf, sizeof(buf), &n, -1);
         hive_ipc_notify(handler_actor, NET_DATA_TAG, buf, n);  // Forward as IPC

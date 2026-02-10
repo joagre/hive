@@ -259,7 +259,7 @@ void my_actor(void *args, const hive_spawn_info_t *siblings, size_t count) {
     hive_actor_id_t motor = find_sibling(siblings, count, "motor");
     hive_monitor(motor);  // Get notified if motor restarts
 
-    while (1) {
+    while (true) {
         hive_message_t msg;
         hive_ipc_recv(&msg, -1);
 

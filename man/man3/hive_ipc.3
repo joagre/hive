@@ -467,7 +467,7 @@ typedef struct { int x, y; } point_t;
 
 void server(void *arg, const hive_spawn_info_t *siblings,
             size_t sibling_count) {
-    while (1) {
+    while (true) {
         hive_message_t msg;
         hive_ipc_recv(&msg, -1);
 

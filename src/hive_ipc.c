@@ -48,11 +48,11 @@ static inline void decode_header(const uint8_t *buf, hive_msg_class_t *class,
                                  uint16_t *id, uint32_t *tag) {
     uint32_t word0;
     memcpy(&word0, buf, 4);
-    if (class)
+    if (class != NULL)
         *class = (hive_msg_class_t)(word0 >> 28);
-    if (tag)
+    if (tag != NULL)
         *tag = word0 & 0x0FFFFFFF;
-    if (id) {
+    if (id != NULL) {
         memcpy(id, buf + 4, 2);
     }
 }

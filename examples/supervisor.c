@@ -9,6 +9,7 @@
 #include "hive_link.h"
 #include "hive_ipc.h"
 #include "hive_timer.h"
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
@@ -150,7 +151,7 @@ static void orchestrator_actor(void *args, const hive_spawn_info_t *siblings,
 
     // Wait for either timer or supervisor exit
     hive_message_t msg;
-    while (1) {
+    while (true) {
         status = hive_ipc_recv(&msg, -1);
         if (HIVE_FAILED(status)) {
             break;

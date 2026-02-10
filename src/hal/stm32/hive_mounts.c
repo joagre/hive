@@ -50,7 +50,9 @@ static const hive_mount_t g_mounts[] = {
     },
 #endif
     // Sentinel to avoid empty array (not valid in C11)
-    {.prefix = NULL, .backend = HIVE_BACKEND_FLASH, .flash = {0, 0, 0}},
+    {.prefix = NULL,
+     .backend = HIVE_BACKEND_FLASH,
+     .flash = {.base = 0, .size = 0, .sector = 0}},
 };
 
 // Count excludes the sentinel
@@ -64,7 +66,7 @@ static const hive_mount_t g_mounts[] = {
 // "/log" matches "/log", "/log/" but NOT "/logger".
 static bool prefix_matches(const char *path, const char *prefix,
                            size_t *match_len) {
-    if (!prefix) {
+    if (prefix == NULL) {
         return false; // Sentinel entry
     }
 
@@ -103,7 +105,7 @@ const hive_mount_t *hive_mount_find(const char *path, size_t *prefix_len) {
         }
     }
 
-    if (prefix_len) {
+    if (prefix_len != NULL) {
         *prefix_len = best_len;
     }
     return best;
@@ -117,7 +119,7 @@ hive_status_t hive_mount_available(const char *path) {
     size_t prefix_len;
     const hive_mount_t *mount = hive_mount_find(path, &prefix_len);
 
-    if (!mount) {
+    if (mount == NULL) {
         return HIVE_ERROR(HIVE_ERR_INVALID, "no mount for path");
     }
 

@@ -24,10 +24,10 @@
 // Usage:
 //   enum { SEL_STATE, SEL_TIMER, SEL_UART };
 //   hive_select_source_t sources[] = {
-//       [SEL_STATE] = {HIVE_SEL_BUS, .bus = state_bus},
-//       [SEL_TIMER] = {HIVE_SEL_IPC, .ipc = {HIVE_SENDER_ANY, HIVE_MSG_TIMER,
-//                                           HIVE_ID_ANY, timer_id}},
-//       [SEL_UART]  = {HIVE_SEL_HAL_EVENT, .event = uart_rx_event},
+//       [SEL_STATE] = {.type = HIVE_SEL_BUS, .bus = state_bus},
+//       [SEL_TIMER] = {.type = HIVE_SEL_IPC,
+//                      .ipc = {.class = HIVE_MSG_TIMER, .tag = timer_id}},
+//       [SEL_UART]  = {.type = HIVE_SEL_HAL_EVENT, .event = uart_rx_event},
 //   };
 //   hive_select_result_t result;
 //   hive_select(sources, 3, &result, -1);
@@ -69,7 +69,7 @@ hive_status_t hive_select(const hive_select_source_t *sources,
 //
 // Usage:
 //   hive_hal_event_id_t rx_event = hal_uart_get_rx_event();
-//   while (1) {
+//   while (true) {
 //       hive_event_wait(rx_event, -1);  // Block until event
 //       hal_uart_read(buf, len);        // Process the data
 //   }
