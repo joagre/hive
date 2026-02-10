@@ -28,7 +28,7 @@ Goals, design decisions, and architecture overview for the pilot autopilot.
 - Step 7: Waypoint actor (waypoint navigation)
 - Step 8: Flight manager actor (startup coordination, safety cutoff)
 - Step 9: Comms actor (radio telemetry, Crazyflie only)
-- Step 10: Telemetry logger actor (CSV logging, Webots only)
+- Step 10: Logger actor (CSV logging, Webots only)
 - Mixer moved to HAL (platform-specific, X-configuration)
 
 ## Goals
@@ -135,7 +135,7 @@ The comms actor uses TEMPORARY restart type:
 
 This isolation prevents a telemetry bug from crashing the entire flight.
 
-**Telemetry logger isolation**
+**Logger isolation**
 Same as comms - TEMPORARY restart, outside the critical path.
 
 ### Pipeline Model
@@ -223,7 +223,7 @@ complete flight record for debugging without the overhead of TRACE/DEBUG message
 
 ## Architecture Overview
 
-11-12 actors depending on platform (see [Actor Counts](README.md#actor-counts)): flight-critical workers connected via buses, supervisor, flight manager, telemetry logger, and optional comms actor:
+11-12 actors depending on platform (see [Actor Counts](README.md#actor-counts)): flight-critical workers connected via buses, supervisor, flight manager, logger, and optional comms actor:
 
 **Supervision** - All actors are supervised with ONE_FOR_ALL strategy. Flight-critical
 actors use PERMANENT restart (crash triggers restart of all). Comms uses
@@ -312,7 +312,7 @@ This table documents the scheduling design for audit and latency analysis.
 | motor | CRITICAL | hive_select (1 bus + IPC, 50ms timeout) | Yields waiting for torque, STOP, or timeout |
 | flight_manager | CRITICAL | hive_select (2 timers) | Yields waiting for sync or flight timer |
 | comms | LOW | HAL event (RX) + bus read (3 buses) | Non-critical, event-driven RX |
-| telemetry_logger | LOW | Timer + bus read (4 buses) | Non-critical, may be starved |
+| logger | LOW | Timer + bus read (4 buses) | Non-critical, may be starved |
 
 **Scheduling characteristics**
 - All flight-critical actors run at CRITICAL priority
@@ -336,7 +336,7 @@ This table documents the scheduling design for audit and latency analysis.
 | **Motor** | Torque Bus + STOP notification | Hardware | CRITICAL | PERMANENT | Output to hardware via HAL |
 | **Flight Manager** | LANDED notification | START/LANDING/STOP notifications | CRITICAL | TRANSIENT | Startup delay, landing coordination (normal exit = mission complete) |
 | **Comms** | Sensor + State + Thrust Bus + HAL event | Radio (HAL) | LOW | TEMPORARY | Radio telemetry (Crazyflie only, event-driven RX, not flight-critical) |
-| **Telemetry Logger** | Sensor + State + Thrust + Position Target Bus | CSV file | LOW | TEMPORARY | CSV logging for PID tuning (to /sd or /tmp, not flight-critical) |
+| **Logger** | Sensor + State + Thrust + Position Target Bus | CSV file | LOW | TEMPORARY | CSV logging for PID tuning (to /sd or /tmp, not flight-critical) |
 
 **Why CRITICAL for flight actors?** Flight-critical actors share the same priority so execution
 order follows spawn order (round-robin within priority level). This ensures the data pipeline

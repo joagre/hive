@@ -24,7 +24,7 @@ and fail-safe supervision. Supports Webots simulation (default) and STM32 hardwa
 |----------|-------|-------|
 | Flight-critical workers | 8 | sensor, estimator, waypoint, altitude, position, attitude, rate, motor |
 | Flight manager | 1 | Coordinates startup/shutdown, TRANSIENT restart |
-| Telemetry logger | 1 | CSV logging (to /sd or /tmp) |
+| Logger | 1 | CSV logging (to /sd or /tmp) |
 | Supervisor | 1 | Monitors all children |
 | Optional (Crazyflie) | +1 | comms_actor for radio telemetry |
 | **Total** | 11-12 | 10-11 children + 1 supervisor |
@@ -34,7 +34,7 @@ and fail-safe supervision. Supports Webots simulation (default) and STM32 hardwa
 | Feature | Webots | Crazyflie 2.1+ |
 |---------|--------|----------------|
 | `comms_actor` | No | Yes |
-| `telemetry_logger_actor` | Yes (/tmp) | Optional (/sd, ENABLE_SD=1) |
+| `logger_actor` | Yes (/tmp) | Optional (/sd, ENABLE_SD=1) |
 | Position source | Simulated GPS | Optical flow (Flow deck v2) |
 | Altitude source | Simulated rangefinder | ToF sensor (Flow deck v2) |
 | Flash logging | No | Yes |

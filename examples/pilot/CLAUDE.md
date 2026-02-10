@@ -13,7 +13,7 @@ Quadcopter autopilot using the Hive actor runtime. 11-12 actors in a supervised 
 **Actor count:** 11-12 (10-11 children + 1 supervisor)
 - 8 flight-critical workers: sensor, estimator, waypoint, altitude, position, attitude, rate, motor
 - 1 flight manager (TRANSIENT - normal exit = mission complete)
-- 1 telemetry logger (to /sd or /tmp)
+- 1 logger (to /sd or /tmp)
 - 1 supervisor
 - +1 comms actor (Crazyflie only, radio telemetry)
 
@@ -161,7 +161,7 @@ Build-time selection via `FLIGHT_PROFILE=`:
 - `motor_actor.c` - Output to HAL, 50ms deadman timeout
 - `flight_manager_actor.c` - Startup delay, flight coordination
 - `comms_actor.c` - Radio telemetry (Crazyflie only, event-driven RX)
-- `telemetry_logger_actor.c` - CSV logging at 25Hz
+- `logger_actor.c` - CSV logging at 25Hz
 
 ### HAL
 - `hal/hal.h` - Common HAL interface
@@ -212,7 +212,7 @@ All buses use `max_entries=1` (latest value only). Control loops need current st
 
 ### Supervision
 
-ONE_FOR_ALL strategy - if any flight-critical actor crashes, all restart together. This ensures consistent pipeline state. Comms and telemetry logger use TEMPORARY restart (crash doesn't affect flight).
+ONE_FOR_ALL strategy - if any flight-critical actor crashes, all restart together. This ensures consistent pipeline state. Comms and logger use TEMPORARY restart (crash doesn't affect flight).
 
 ### Motor Safety
 

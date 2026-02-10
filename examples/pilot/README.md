@@ -42,7 +42,7 @@ A complete quadcopter autopilot. Not a toy demo, but a flight controller targeti
 
 ## What it does
 
-Demonstrates waypoint navigation with a quadcopter using 11-12 actors (8 flight-critical workers + flight manager + telemetry logger + supervisor + 1 optional comms actor):
+Demonstrates waypoint navigation with a quadcopter using 11-12 actors (8 flight-critical workers + flight manager + logger + supervisor + 1 optional comms actor):
 
 1. **Sensor actor** reads raw sensors via HAL, publishes to sensor bus
 2. **Estimator actor** runs altitude Kalman filter + attitude complementary filter, publishes to state bus
@@ -54,7 +54,7 @@ Demonstrates waypoint navigation with a quadcopter using 11-12 actors (8 flight-
 8. **Motor actor** reads torque bus, writes to hardware via HAL (checks for STOP signal)
 9. **Flight manager actor** handles startup delay (60s), landing coordination, log file management
 10. **Comms actor** (Crazyflie only) sends flight data over radio at 100Hz for ground station logging
-11. **Telemetry logger actor** writes CSV at 25Hz for PID tuning analysis (to /sd or /tmp)
+11. **Logger actor** writes CSV at 25Hz for PID tuning analysis (to /sd or /tmp)
 12. **Supervisor actor** monitors all workers, restarts flight-critical actors on crash (ONE_FOR_ALL)
 
 Workers use `hive_find_sibling()` for IPC coordination via sibling info passed
@@ -111,7 +111,7 @@ See `hal/<platform>/README.md` for hardware details, pin mapping, flight profile
 
 ## Architecture
 
-11-12 actors: eight flight-critical workers + flight manager + telemetry logger + supervisor,
+11-12 actors: eight flight-critical workers + flight manager + logger + supervisor,
 plus optional comms actor on Crazyflie:
 
 ```mermaid
@@ -443,7 +443,7 @@ for full specification.
 
 ## CSV Telemetry Logging
 
-The telemetry logger actor writes flight data to CSV at 25Hz for PID tuning and
+The logger actor writes flight data to CSV at 25Hz for PID tuning and
 flight analysis. Storage is selected automatically based on mount availability:
 
 - **Crazyflie with SD card deck**: `/sd/tlog.csv` (build with `ENABLE_SD=1`)
@@ -483,7 +483,7 @@ python3 tools/plot_flight.py /tmp/tlog.csv
 
 See `tools/README.md` for the full PID tuning workflow.
 
-The telemetry logger runs at LOW priority and uses TEMPORARY restart type, so it
+The logger runs at LOW priority and uses TEMPORARY restart type, so it
 doesn't affect flight-critical control loops and won't trigger restarts if it fails.
 
 ## Files
@@ -503,7 +503,7 @@ doesn't affect flight-critical control loops and won't trigger restarts if it fa
 | `motor_actor.c` | Output: torque -> HAL -> motors |
 | `flight_manager_actor.c` | Startup delay, flight window cutoff, log file (flm.log) |
 | `comms_actor.c` | Radio telemetry (Crazyflie only) |
-| `telemetry_logger_actor.c` | CSV logging for PID tuning (to /sd or /tmp) |
+| `logger_actor.c` | CSV logging for PID tuning (to /sd or /tmp) |
 | `pid.c` | Reusable PID controller |
 | `tunable_params.c` | Runtime parameter tuning |
 | `stack_profile.c` | Stack usage profiling |

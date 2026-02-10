@@ -16,7 +16,7 @@
 # Actors (10-11 used, 13 configured):
 #   Base (10): supervisor, sensor, estimator, waypoint, altitude,
 #              position, attitude, rate, motor, flight_manager
-#   Optional: comms (HAL_HAS_RADIO), telemetry_logger (SIMULATED_TIME)
+#   Optional: comms (HAL_HAS_RADIO), logger (SIMULATED_TIME)
 #
 # Buses (7 used, 8 configured):
 #   sensor_bus, state_bus, thrust_bus, position_target_bus,
@@ -30,7 +30,7 @@
 #   attitude_setpoint_bus: attitude (1)
 #   rate_setpoint_bus:    rate (1)
 #   torque_bus:           motor (1)
-#   [comms] = comms_actor (HAL_HAS_RADIO), [logger] = telemetry_logger (always)
+#   [comms] = comms_actor (HAL_HAS_RADIO), [logger] = logger_actor (always)
 #
 # Timers (4-6 concurrent peak, 10 configured):
 #   sensor: tick timer (1 periodic)

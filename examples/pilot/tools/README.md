@@ -291,7 +291,7 @@ See `docs/tunable_radio_params.md` for full parameter list and validation ranges
 
 ## Telemetry CSV Format
 
-The telemetry logger produces CSV files with these columns:
+The logger produces CSV files with these columns:
 
 | Column | Description |
 |--------|-------------|
