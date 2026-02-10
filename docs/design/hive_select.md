@@ -5,7 +5,7 @@
 ## Motivation
 
 Currently, actors must choose one blocking primitive at a time:
-- `hive_ipc_recv()` / `hive_ipc_recv_matches()` - wait for messages
+- `hive_ipc_recv()` / `hive_ipc_recv_match()` - wait for messages
 - `hive_bus_read()` with timeout - wait for bus data
 
 This forces awkward patterns when an actor needs to respond to multiple event sources (e.g., timer ticks AND sensor bus data AND commands). A unified select would enable clean event loops.
@@ -139,31 +139,8 @@ switch (result.index) {
 
 ### Current IPC Wake (`hive_ipc.c`)
 
-IPC stores filter info in the actor struct:
-```c
-// In actor struct (hive_actor.h):
-const hive_recv_filter_t *recv_filters;  // NULL = no filter active
-size_t recv_filter_count;
-```
-
-Wake logic in `hive_mailbox_add_entry()`:
-```c
-if (recipient->state == ACTOR_STATE_WAITING) {
-    if (recipient->recv_filters == NULL) {
-        // No filter - wake on any message
-        recipient->state = ACTOR_STATE_READY;
-    } else {
-        // Check if message matches any filter
-        for (size_t i = 0; i < recipient->recv_filter_count; i++) {
-            if (entry_matches_filter(entry, &recipient->recv_filters[i])) {
-                recipient->state = ACTOR_STATE_READY;
-                break;
-            }
-        }
-        // Also wake on TIMER (could be timeout timer)
-    }
-}
-```
+Wake logic in `hive_mailbox_add_entry()` checks `select_sources` when an actor is
+waiting via `hive_select()`, or wakes on any message otherwise.
 
 ### Current Bus Wake (`hive_bus.c`)
 
@@ -237,8 +214,7 @@ size_t select_source_count;
    ```
 
 **Key design decisions**
-- Existing `recv_filters` stays for `hive_ipc_recv_matches()` - no breaking changes
-- `select_sources` is separate, used only by `hive_select()`
+- `select_sources` is used by `hive_select()` (the single blocking primitive)
 - Bus still uses `sub->blocked` flag for quick filtering before checking `select_sources`
 
 ### Error Handling
@@ -257,14 +233,12 @@ size_t select_source_count;
 |-----|------------|
 | `hive_ipc_recv()` | O(1) - first entry always matches |
 | `hive_ipc_recv_match()` | O(mailbox_depth) |
-| `hive_ipc_recv_matches()` | O(filters x mailbox_depth) |
 | `hive_select()` with 1 source | O(1) if wildcards, O(depth) if specific |
 | `hive_select()` with N sources | O(N x sources_depth) |
 
 **Why this is acceptable**
 - Source counts are tiny (2-5 typical)
 - Depths bounded by pool sizes (256 default)
-- Same O(n) pattern as existing `hive_ipc_recv_matches()`
 
 **The real win** - avoiding busy-polling
 ```c
@@ -291,7 +265,6 @@ This is the official approach - no separate implementations.
 // These all delegate to hive_select() internally:
 hive_ipc_recv(&msg, -1);                    // Any message
 hive_ipc_recv_match(from, class, id, ...);  // Single filter
-hive_ipc_recv_matches(filters, n, ...);     // Multiple IPC filters
 hive_bus_read(bus, &data, len, &actual, -1);  // Single bus (with timeout)
 
 // The unified primitive:
@@ -332,23 +305,6 @@ hive_status_t hive_ipc_recv_match(hive_actor_id_t from, hive_msg_class_t class,
     hive_select_result_t result;
     hive_status_t s = hive_select(&source, 1, &result, timeout_ms);
     if (HIVE_SUCCEEDED(s)) *msg = result.ipc;
-    return s;
-}
-
-hive_status_t hive_ipc_recv_matches(const hive_recv_filter_t *filters,
-                                  size_t num_filters, hive_message_t *msg,
-                                  int32_t timeout_ms, size_t *matched_index) {
-    // Build select sources from filters
-    hive_select_source_t sources[num_filters];  // VLA or fixed max
-    for (size_t i = 0; i < num_filters; i++) {
-        sources[i] = (hive_select_source_t){.type = HIVE_SEL_IPC, .ipc = filters[i]};
-    }
-    hive_select_result_t result;
-    hive_status_t s = hive_select(sources, num_filters, &result, timeout_ms);
-    if (HIVE_SUCCEEDED(s)) {
-        *msg = result.ipc;
-        if (matched_index != NULL) *matched_index = result.index;
-    }
     return s;
 }
 
@@ -452,7 +408,7 @@ This keeps TCP complexity isolated and lets `hive_select()` remain simple and po
 
 **Rationale**
 - **Follows existing pattern** - `hive_message_t` is in `hive_types.h`, and `hive_recv_filter_t` is a filter pattern for messages. They belong together.
-- **Cross-subsystem type** - Used by both IPC (`hive_ipc_recv_matches`) and select (`hive_select_source_t`). Shared types belong in `hive_types.h`.
+- **Cross-subsystem type** - Used by both IPC (`hive_ipc_recv_match`) and select (`hive_select_source_t`). Shared types belong in `hive_types.h`.
 - **Conceptual grouping** - Filter constants (`HIVE_SENDER_ANY`, `HIVE_MSG_ANY`, `HIVE_TAG_ANY`) are already in `hive_types.h`. The struct that uses them should be there too.
 
 **Include hierarchy**
@@ -472,7 +428,7 @@ Implementation completed 2026-01-17:
 - [x] `include/hive_select.h` - New header with types and API declaration
 - [x] `src/hive_select.c` - Implementation
 - [x] `include/hive_actor.h` - Added `select_sources` and `select_source_count` fields
-- [x] `src/hive_ipc.c` - Rewrote `hive_ipc_recv`, `hive_ipc_recv_match`, `hive_ipc_recv_matches` as wrappers
+- [x] `src/hive_ipc.c` - Rewrote `hive_ipc_recv`, `hive_ipc_recv_match` as wrappers
 - [x] `src/hive_bus.c` - Updated `hive_bus_read()` to use `hive_select()` for blocking path
 
 ### Documentation

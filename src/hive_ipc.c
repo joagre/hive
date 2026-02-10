@@ -178,26 +178,9 @@ void hive_mailbox_add_entry(actor_t *recipient, mailbox_entry_t *entry) {
                     should_wake = true;
                 }
             }
-        } else if (recipient->recv_filters == NULL) {
+        } else {
             // No filter active - wake on any message
             should_wake = true;
-        } else {
-            // Filter active - check if message matches one of the filters
-            for (size_t i = 0; i < recipient->recv_filter_count; i++) {
-                if (entry_matches_filter(entry, &recipient->recv_filters[i])) {
-                    should_wake = true;
-                    break;
-                }
-            }
-
-            // Also wake on TIMER messages (could be timeout timer)
-            if (!should_wake && entry->len >= HIVE_MSG_HEADER_SIZE) {
-                hive_msg_class_t msg_class;
-                decode_header(entry->data, &msg_class, NULL, NULL);
-                if (msg_class == HIVE_MSG_TIMER) {
-                    should_wake = true;
-                }
-            }
         }
 
         if (should_wake) {
@@ -393,9 +376,6 @@ hive_status_t hive_ipc_notify_ex(hive_actor_id_t to, hive_msg_class_t class,
                                     data, len);
 }
 
-// Maximum number of filters supported by hive_ipc_recv_matches
-#define HIVE_MAX_RECV_FILTERS 16
-
 hive_status_t hive_ipc_recv(hive_message_t *msg, int32_t timeout_ms) {
     // Wrapper around hive_select with wildcard IPC filter
     hive_select_source_t source = {.type = HIVE_SEL_IPC,
@@ -419,37 +399,6 @@ hive_status_t hive_ipc_recv_match(hive_actor_id_t from, hive_msg_class_t class,
     hive_status_t s = hive_select(&source, 1, &result, timeout_ms);
     if (HIVE_SUCCEEDED(s)) {
         *msg = result.ipc;
-    }
-    return s;
-}
-
-hive_status_t hive_ipc_recv_matches(const hive_recv_filter_t *filters,
-                                    size_t num_filters, hive_message_t *msg,
-                                    int32_t timeout_ms, size_t *matched_index) {
-    HIVE_REQUIRE_ACTOR_CONTEXT();
-
-    if (!filters || num_filters == 0) {
-        return HIVE_ERROR(HIVE_ERR_INVALID, "No filters provided");
-    }
-
-    if (num_filters > HIVE_MAX_RECV_FILTERS) {
-        return HIVE_ERROR(HIVE_ERR_INVALID, "Too many filters");
-    }
-
-    // Build select sources from filters
-    hive_select_source_t sources[HIVE_MAX_RECV_FILTERS];
-    for (size_t i = 0; i < num_filters; i++) {
-        sources[i].type = HIVE_SEL_IPC;
-        sources[i].ipc = filters[i];
-    }
-
-    hive_select_result_t result;
-    hive_status_t s = hive_select(sources, num_filters, &result, timeout_ms);
-    if (HIVE_SUCCEEDED(s)) {
-        *msg = result.ipc;
-        if (matched_index) {
-            *matched_index = result.index;
-        }
     }
     return s;
 }
@@ -489,29 +438,29 @@ hive_status_t hive_ipc_request(hive_actor_id_t to, uint16_t id,
         return status;
     }
 
-    // Wait for REPLY or EXIT from target
+    // Wait for REPLY or EXIT from target using hive_select
     // Match by tag for correlation (id doesn't matter for reply matching)
-    hive_recv_filter_t filters[] = {
-        {.sender = to, .class = HIVE_MSG_REPLY, .tag = call_tag},
-        {.sender = to, .class = HIVE_MSG_EXIT},
+    hive_select_source_t sources[] = {
+        {.type = HIVE_SEL_IPC,
+         .ipc = {.sender = to, .class = HIVE_MSG_REPLY, .tag = call_tag}},
+        {.type = HIVE_SEL_IPC, .ipc = {.sender = to, .class = HIVE_MSG_EXIT}},
     };
 
-    hive_message_t msg;
-    size_t matched;
-    status = hive_ipc_recv_matches(filters, 2, &msg, timeout_ms, &matched);
+    hive_select_result_t result;
+    status = hive_select(sources, 2, &result, timeout_ms);
     hive_demonitor(monitor_id);
 
     if (HIVE_FAILED(status)) {
         return status;
     }
 
-    if (matched == 1) {
+    if (result.index == 1) {
         // EXIT - target died
         return HIVE_ERROR(HIVE_ERR_CLOSED, "Target actor_t died");
     }
 
     // REPLY received - return to caller
-    *reply = msg;
+    *reply = result.ipc;
     return HIVE_SUCCESS;
 }
 
@@ -550,13 +499,6 @@ bool hive_msg_is_timer(const hive_message_t *msg) {
         return false;
     }
     return msg->class == HIVE_MSG_TIMER;
-}
-
-bool hive_msg_is_exit(const hive_message_t *msg) {
-    if (!msg) {
-        return false;
-    }
-    return msg->class == HIVE_MSG_EXIT;
 }
 
 // -----------------------------------------------------------------------------

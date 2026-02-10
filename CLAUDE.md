@@ -318,7 +318,6 @@ hive_timer_recv(my_timer, &msg, -1);
 - **`hive_ipc_notify_ex(to, class, id, data, len)`**: Notify with explicit class and id
 - **`hive_ipc_recv(msg, timeout)`**: Receive any message
 - **`hive_ipc_recv_match(from, class, id, msg, timeout)`**: Selective receive with filtering
-- **`hive_ipc_recv_matches(filters, num_filters, msg, timeout, matched_index)`**: Multi-pattern selective receive (wait for any of several message types)
 - **`hive_ipc_request(to, id, req, len, reply, timeout)`**: Blocking request/reply (monitors target, waits for REPLY or death)
 - **`hive_ipc_reply(request, data, len)`**: Reply to a REQUEST message
 - **`hive_timer_recv(timer, msg, timeout)`**: Wait for a specific timer message
@@ -343,8 +342,8 @@ if (msg.class == HIVE_MSG_REQUEST) { ... }
 
 ### Selective Receive
 - `hive_ipc_recv_match()` scans mailbox for messages matching filter criteria (sender, class, id)
-- `hive_ipc_recv_matches()` waits for any message matching one of several filters (useful for waiting on timer OR notification, REPLY OR EXIT)
 - `hive_timer_recv()` waits for a specific timer message (tag filtering handled internally)
+- For multi-pattern matching (multiple IPC filters, bus + IPC, etc.), use `hive_select()`
 - Non-matching messages are **skipped but not dropped** - they remain in mailbox
 - Filter on sender (`HIVE_SENDER_ANY`), class (`HIVE_MSG_ANY`), id (`HIVE_ID_ANY`) - all wildcards are 0, so omitted fields in designated initializers default to "match any"
 - For tag-based filtering (e.g., timers, request/reply correlation), use `hive_select()` with `hive_recv_filter_t`

@@ -397,7 +397,7 @@ if (msg.class == HIVE_MSG_REQUEST) {
 // Use msg.tag for request/reply correlation
 ```
 
-**Lifetime rule** - Data is valid until the next successful `hive_ipc_recv()`, `hive_ipc_recv_match()`, or `hive_ipc_recv_matches()` call. Copy immediately if needed beyond current iteration.
+**Lifetime rule** - Data is valid until the next successful `hive_ipc_recv()`, `hive_ipc_recv_match()`, or `hive_select()` call. Copy immediately if needed beyond current iteration.
 
 ### Functions
 
@@ -451,50 +451,7 @@ hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_REQUEST, HIVE_ID_ANY, &msg, -1);
 hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_NOTIFY, MSG_SENSOR_DATA, &msg, -1);
 ```
 
-#### Multi-Pattern Selective Receive
-
-```c
-// Filter structure for multi-pattern matching
-// All wildcards are 0, so unspecified fields default to "match any"
-typedef struct {
-    hive_actor_id_t  sender;   // HIVE_SENDER_ANY (0) for any sender
-    hive_msg_class_t class;    // HIVE_MSG_ANY (0) for any class
-    uint16_t         id;       // HIVE_ID_ANY (0) for any id
-    uint32_t         tag;      // HIVE_TAG_ANY (0) for any tag
-} hive_recv_filter_t;
-
-// Receive message matching ANY of the provided filters
-// matched_index (optional): which filter matched (0-based)
-hive_status_t hive_ipc_recv_matches(const hive_recv_filter_t *filters,
-                            size_t num_filters, hive_message_t *msg,
-                            int32_t timeout_ms, size_t *matched_index);
-```
-
-**Use cases**
-- Waiting for REPLY or EXIT (used internally by `hive_ipc_request()`)
-- Waiting for multiple timer types (sync timer OR flight timer)
-- State machines waiting for multiple event types
-
-**Usage example**
-```c
-// Wait for either a sync timer or a landed notification
-// Unspecified fields default to 0 (wildcard) via C designated initializers
-enum { FILTER_SYNC_TIMER, FILTER_LANDED };
-hive_recv_filter_t filters[] = {
-    // Timer: filter by class
-    [FILTER_SYNC_TIMER] = {.class = HIVE_MSG_TIMER},
-    // Notification: filter by id (message type)
-    [FILTER_LANDED] = {.class = HIVE_MSG_NOTIFY, .id = NOTIFY_LANDED},
-};
-hive_message_t msg;
-size_t matched;
-hive_ipc_recv_matches(filters, 2, &msg, -1, &matched);
-if (matched == FILTER_SYNC_TIMER) {
-    // Handle sync timer
-} else {
-    // Handle landed notification
-}
-```
+For multi-pattern receive (waiting on multiple IPC filters, bus sources, or HAL events simultaneously), use `hive_select()`. See the [Unified Event Waiting](#unified-event-waiting-hive_select) section.
 
 #### Request/Reply
 
@@ -642,7 +599,7 @@ if (status.code == HIVE_ERR_NOMEM) {
 ### Message Data Lifetime
 
 **CRITICAL LIFETIME RULE**
-- **Data is ONLY valid until the next successful `hive_ipc_recv()`, `hive_ipc_recv_match()`, or `hive_ipc_recv_matches()` call**
+- **Data is ONLY valid until the next successful `hive_ipc_recv()`, `hive_ipc_recv_match()`, or `hive_select()` call**
 - **Per actor: only ONE message payload pointer is valid at a time**
 - **Storing `msg.data` across receive iterations causes use-after-free**
 - **If you need the data later, COPY IT IMMEDIATELY**
@@ -683,7 +640,7 @@ Global pool limits: **Yes** - all actors share:
 
 ### Selective Receive Semantics
 
-`hive_ipc_recv_match()` and `hive_ipc_recv_matches()` implement selective receive. This is the key mechanism for building complex protocols like request/reply.
+`hive_ipc_recv_match()` implements selective receive. This is the key mechanism for building complex protocols like request/reply. For multi-pattern matching, use `hive_select()`.
 
 **Blocking behavior**
 
@@ -1409,7 +1366,6 @@ The existing blocking APIs are thin wrappers around `hive_select()`:
 |------------------|--------------------------|
 | `hive_ipc_recv()` | Single IPC source with wildcard filter |
 | `hive_ipc_recv_match()` | Single IPC source with specific filter |
-| `hive_ipc_recv_matches()` | Multiple IPC sources |
 | `hive_bus_read()` (non-zero timeout) | Single bus source |
 
 This architectural design ensures consistent blocking behavior and wake-up logic across all APIs.

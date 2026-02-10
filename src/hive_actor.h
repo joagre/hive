@@ -67,10 +67,6 @@ typedef struct {
     // Active message (for proper cleanup)
     mailbox_entry_t *active_msg;
 
-    // For selective receive: filter array to match against (multi-pattern)
-    const hive_recv_filter_t *recv_filters; // NULL = no filter active
-    size_t recv_filter_count;               // Number of filters in array
-
     // For hive_select: multi-source wait (IPC + bus)
     const hive_select_source_t *select_sources; // NULL = not in select
     size_t select_source_count;                 // Number of sources in array

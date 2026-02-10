@@ -207,6 +207,14 @@ hive_status_t hive_demonitor(uint32_t monitor_id) {
     return HIVE_ERROR(HIVE_ERR_INVALID, "Monitor ID not found");
 }
 
+// Check if message is an exit notification
+bool hive_msg_is_exit(const hive_message_t *msg) {
+    if (msg == NULL) {
+        return false;
+    }
+    return msg->class == HIVE_MSG_EXIT;
+}
+
 // Decode exit message
 hive_status_t hive_decode_exit(const hive_message_t *msg,
                                hive_exit_msg_t *out) {

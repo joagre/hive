@@ -36,14 +36,6 @@ hive_status_t hive_ipc_recv_match(hive_actor_id_t from, hive_msg_class_t class,
                                   uint16_t id, hive_message_t *msg,
                                   int32_t timeout_ms);
 
-// Receive message matching ANY of the provided filters (multi-pattern receive)
-// Waits until a message matches one of the filters in the array.
-// If matched_index is non-NULL, stores which filter matched (0-based).
-// Useful for waiting on multiple conditions (e.g., REPLY or EXIT, timer A or B).
-hive_status_t hive_ipc_recv_matches(const hive_recv_filter_t *filters,
-                                    size_t num_filters, hive_message_t *msg,
-                                    int32_t timeout_ms, size_t *matched_index);
-
 // -----------------------------------------------------------------------------
 // Request/Reply Pattern
 // -----------------------------------------------------------------------------
@@ -69,9 +61,6 @@ hive_status_t hive_ipc_reply(const hive_message_t *request, const void *data,
 
 // Check if message is a timer tick
 bool hive_msg_is_timer(const hive_message_t *msg);
-
-// Check if message is an exit notification
-bool hive_msg_is_exit(const hive_message_t *msg);
 
 // -----------------------------------------------------------------------------
 // Named IPC (uses name registry under the hood)

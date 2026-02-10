@@ -124,7 +124,7 @@ typedef struct {
     const void *data; // Payload pointer (past header), valid until next recv
 } hive_message_t;
 
-// Filter for selective receive (used by hive_ipc_recv_matches, hive_select)
+// Filter for selective receive (used by hive_select)
 // All wildcards = 0, so unspecified fields in designated initializers match any.
 // Example: {.sender = actor, .class = HIVE_MSG_NOTIFY} matches any id/tag from actor.
 typedef struct {

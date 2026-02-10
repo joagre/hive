@@ -194,7 +194,6 @@ This is a breaking API change affecting:
 
 **Receive side:**
 - `hive_ipc_recv_match()` - adds `id` parameter, removes `tag` parameter
-- `hive_ipc_recv_matches()` - filter struct gains `id` field, retains `tag` field
 - `hive_select()` - source filter struct gains `id` field
 
 **Internal:**
@@ -260,7 +259,6 @@ Most changes are mechanical:
 |----------|-----|-----|--------|
 | `hive_ipc_recv` | `(msg, timeout)` | `(msg, timeout)` | Unchanged |
 | `hive_ipc_recv_match` | `(from, class, tag, msg, timeout)` | `(from, class, id, msg, timeout)` | Adds id, removes tag |
-| `hive_ipc_recv_matches` | `(filters, n, msg, timeout, idx)` | `(filters, n, msg, timeout, idx)` | Filter struct gains id |
 
 ### Select Functions
 
@@ -289,7 +287,7 @@ typedef struct {
 } hive_ipc_filter_t;
 ```
 
-Used by: `hive_ipc_recv_matches`, `hive_select` (inside `hive_select_source_t`). Note: `hive_ipc_recv_match` only filters on sender/class/id (tag filtering via `hive_select` or `hive_ipc_recv_matches`).
+Used by: `hive_select` (inside `hive_select_source_t`). Note: `hive_ipc_recv_match` only filters on sender/class/id (tag filtering via `hive_select`).
 
 Note: Timer waiting now uses `hive_timer_recv(timer, msg, timeout)` instead of filtering by tag in `hive_ipc_recv_match()`.
 

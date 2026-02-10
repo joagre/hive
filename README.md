@@ -640,7 +640,6 @@ Messages have two identifiers: `id` (message type for dispatch) and `tag` (corre
 - `hive_ipc_notify_ex(to, class, id, data, len)` - Notify with explicit class and id
 - `hive_ipc_recv(msg, timeout)` - Receive any message (`msg.class`, `msg.id`, `msg.tag`, `msg.data`)
 - `hive_ipc_recv_match(from, class, id, msg, timeout)` - Selective receive with filtering
-- `hive_ipc_recv_matches(filters, n, msg, timeout, matched_idx)` - Multi-pattern selective receive
 - `hive_ipc_request(to, id, req, len, reply, timeout)` - Blocking request/reply
 - `hive_ipc_reply(request, data, len)` - Reply to a REQUEST message
 - `hive_ipc_named_notify(name, id, data, len)` - Notify by actor name

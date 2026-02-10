@@ -1,7 +1,7 @@
 .\" Man page for IPC functions
 .TH HIVE_IPC 3 "January 2026" "Hive 1.0" "Actor Runtime Manual"
 .SH NAME
-hive_ipc_notify, hive_ipc_notify_ex, hive_ipc_recv, hive_ipc_recv_match, hive_ipc_recv_matches, hive_ipc_request, hive_ipc_reply, hive_ipc_named_notify, hive_ipc_named_request, hive_msg_is_timer, hive_ipc_pending, hive_ipc_count, hive_pool_set_block, hive_pool_get_block \- inter-process communication
+hive_ipc_notify, hive_ipc_notify_ex, hive_ipc_recv, hive_ipc_recv_match, hive_ipc_request, hive_ipc_reply, hive_ipc_named_notify, hive_ipc_named_request, hive_msg_is_timer, hive_ipc_pending, hive_ipc_count, hive_pool_set_block, hive_pool_get_block \- inter-process communication
 .SH SYNOPSIS
 .nf
 .B #include <hive_ipc.h>
@@ -12,8 +12,6 @@ hive_ipc_notify, hive_ipc_notify_ex, hive_ipc_recv, hive_ipc_recv_match, hive_ip
 .BI "hive_status_t hive_ipc_recv(hive_message_t *" msg ", int32_t " timeout_ms ");"
 .BI "hive_status_t hive_ipc_recv_match(hive_actor_id_t " from ", hive_msg_class_t " class ","
 .BI "                            uint16_t " id ", hive_message_t *" msg ", int32_t " timeout_ms ");"
-.BI "hive_status_t hive_ipc_recv_matches(const hive_recv_filter_t *" filters ", size_t " num_filters ","
-.BI "                            hive_message_t *" msg ", int32_t " timeout_ms ", size_t *" matched_index ");"
 .BI "hive_status_t hive_ipc_request(hive_actor_id_t " to ", uint16_t " id ", const void *" request ", size_t " req_len ","
 .BI "                         hive_message_t *" reply ", int32_t " timeout_ms ");"
 .BI "hive_status_t hive_ipc_reply(const hive_message_t *" request ", const void *" data ", size_t " len ");"
@@ -59,23 +57,6 @@ The
 field is for request/reply correlation (runtime-generated, used internally).
 Access payload directly via cast:
 .I my_type *p = (my_type *)msg.data;
-.SS Receive Filter Structure
-For multi-pattern selective receive, the
-.I hive_recv_filter_t
-structure specifies matching criteria:
-.PP
-.nf
-typedef struct {
-    hive_actor_id_t  sender;  /* HIVE_SENDER_ANY (0) for any sender */
-    hive_msg_class_t class;   /* HIVE_MSG_ANY (0) for any class */
-    uint16_t         id;      /* HIVE_ID_ANY (0) for any id */
-    uint32_t         tag;     /* HIVE_TAG_ANY (0) for any tag */
-} hive_recv_filter_t;
-.fi
-.PP
-All wildcard constants are 0, allowing C designated initializers to default
-unspecified fields to "match any". Use wildcard constants to match any value in
-that field.
 .SS Message Classes
 .TP
 .B HIVE_MSG_NOTIFY
@@ -164,38 +145,9 @@ Non-matching messages are skipped but remain in the mailbox. This operation is
 .B O(n)
 where n is the mailbox depth.
 .PP
-.BR hive_ipc_recv_matches ()
-performs multi-pattern selective receive, scanning the mailbox for a message
-matching
-.B any
-of the filters in the
-.I filters
-array. This is useful when waiting for multiple event types (e.g., a reply OR
-an exit notification, timer A OR timer B). The
-.I num_filters
-parameter specifies the array size. If
-.I matched_index
-is non-NULL, it receives the 0-based index of the filter that matched. The
-same timeout semantics apply as for
-.BR hive_ipc_recv ().
-.PP
-Example usage:
-.PP
-.nf
-/* Filter format: {sender, class, id, tag} - unspecified fields default to 0 (wildcard) */
-enum { FILTER_SYNC_TIMER, FILTER_LANDED };
-hive_recv_filter_t filters[] = {
-    /* Timer: filter by tag (timer id) */
-    [FILTER_SYNC_TIMER] = {.class = HIVE_MSG_TIMER, .tag = sync_timer},
-    /* Notification: filter by id (message type) */
-    [FILTER_LANDED] = {.class = HIVE_MSG_NOTIFY, .id = NOTIFY_LANDED},
-};
-hive_message_t msg;
-size_t matched;
-hive_ipc_recv_matches(filters, 2, &msg, -1, &matched);
-if (matched == FILTER_SYNC_TIMER) { /* sync timer */ }
-else { /* landed notification */ }
-.fi
+For multi-pattern receive (waiting on multiple IPC filters, bus sources, or HAL
+events simultaneously), use
+.BR hive_select (3).
 .SS Request/Reply Pattern
 .BR hive_ipc_request ()
 issues a request and blocks until a reply is received, the target dies, or
@@ -499,10 +451,9 @@ void client(void *arg, const hive_spawn_info_t *siblings,
 .fi
 .SS Implementation Note
 The receive functions
-.BR hive_ipc_recv (),
-.BR hive_ipc_recv_match (),
+.BR hive_ipc_recv ()
 and
-.BR hive_ipc_recv_matches ()
+.BR hive_ipc_recv_match ()
 are implemented as thin wrappers around
 .BR hive_select (3),
 the unified event waiting primitive.

@@ -347,7 +347,6 @@ When an actor calls a blocking API, the following contract applies:
 | `hive_yield()` | Immediately reschedules (no wait condition) |
 | `hive_ipc_recv()` | Message arrives or timeout (if timeout != 0) |
 | `hive_ipc_recv_match()` | Matching message arrives or timeout |
-| `hive_ipc_recv_matches()` | Message matching any filter arrives or timeout |
 | `hive_timer_recv()` | Timer tick arrives or timeout |
 | `hive_ipc_request()` | Reply arrives or timeout |
 | `hive_bus_read()` (with timeout) | Bus data available or timeout |
@@ -371,7 +370,7 @@ When an actor calls a blocking API, the following contract applies:
 **Unblock conditions**
 - I/O readiness signaled (TCP socket becomes readable/writable)
 - Timer expires (for APIs with timeout)
-- Message arrives in mailbox (for `hive_ipc_recv()`, `hive_ipc_recv_match()`, `hive_ipc_recv_matches()`, `hive_ipc_request()`, `hive_timer_recv()`)
+- Message arrives in mailbox (for `hive_ipc_recv()`, `hive_ipc_recv_match()`, `hive_ipc_request()`, `hive_timer_recv()`)
 - Bus data published (for `hive_bus_read()` with non-zero timeout)
 - **Important**: Mailbox arrival only unblocks actors blocked in IPC receive operations, not actors blocked on TCP or bus read
 

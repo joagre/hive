@@ -295,10 +295,6 @@ actor_t *hive_actor_alloc(hive_actor_fn_t fn, void *args,
     a->startup_siblings = siblings;
     a->startup_sibling_count = sibling_count;
 
-    // Initialize receive filters (NULL = no active filter)
-    a->recv_filters = NULL;
-    a->recv_filter_count = 0;
-
     // Initialize context with actor_t function
     // Startup info (args, siblings, count) is stored in actor_t struct
     // Cast to match hive_context_init signature (const void* vs const hive_spawn_info_t*)
