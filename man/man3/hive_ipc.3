@@ -232,14 +232,16 @@ parameter must be the message received via
 Example:
 .PP
 .nf
-/* Server side - wait for CMD_ADD request and reply */
+/* Server side - wait for CMD_ADD request using hive_select */
 #define CMD_ADD 1
-hive_message_t msg;
-hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_REQUEST,
-                    CMD_ADD, HIVE_TAG_ANY, &msg, -1);
-point_t *p = (point_t *)msg.data;
-int result = p->x + p->y;
-hive_ipc_reply(&msg, &result, sizeof(result));
+hive_select_source_t src = {
+    .type = HIVE_SEL_IPC,
+    .ipc = {.class = HIVE_MSG_REQUEST, .id = CMD_ADD}};
+hive_select_result_t result;
+hive_select(&src, 1, &result, -1);
+point_t *p = (point_t *)result.ipc.data;
+int sum = p->x + p->y;
+hive_ipc_reply(&result.ipc, &sum, sizeof(sum));
 
 /* Client side - issue request and wait for reply */
 point_t req = {.x = 10, .y = 20};
@@ -485,6 +487,7 @@ Deterministic memory usage suitable for certification
 .nf
 #include <hive_runtime.h>
 #include <hive_ipc.h>
+#include <hive_select.h>
 #include <stdio.h>
 
 typedef struct { int x, y; } point_t;
@@ -492,13 +495,16 @@ typedef struct { int x, y; } point_t;
 
 void server(void *arg, const hive_spawn_info_t *siblings,
             size_t sibling_count) {
+    hive_select_source_t src = {
+        .type = HIVE_SEL_IPC,
+        .ipc = {.class = HIVE_MSG_REQUEST, .id = MSG_ADD_POINTS}};
+
     while (true) {
-        hive_message_t msg;
-        hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_REQUEST,
-                            MSG_ADD_POINTS, HIVE_TAG_ANY, &msg, -1);
-        point_t *p = (point_t *)msg.data;
-        int result = p->x + p->y;
-        hive_ipc_reply(&msg, &result, sizeof(result));
+        hive_select_result_t result;
+        hive_select(&src, 1, &result, -1);
+        point_t *p = (point_t *)result.ipc.data;
+        int sum = p->x + p->y;
+        hive_ipc_reply(&result.ipc, &sum, sizeof(sum));
     }
 }
 
@@ -506,7 +512,7 @@ void client(void *arg, const hive_spawn_info_t *siblings,
             size_t sibling_count) {
     hive_actor_id_t server_id = *(hive_actor_id_t *)arg;
 
-    point_t req = {10, 20};
+    point_t req = {.x = 10, .y = 20};
     hive_message_t reply;
 
     hive_status_t s = hive_ipc_request(server_id, MSG_ADD_POINTS,
