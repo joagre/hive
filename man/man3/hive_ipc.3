@@ -228,6 +228,31 @@ automatically. The
 .I request
 parameter must be the message received via
 .BR hive_ipc_recv ().
+.PP
+Example:
+.PP
+.nf
+/* Server side - receive request and reply */
+hive_message_t msg;
+hive_ipc_recv(&msg, -1);
+if (msg.class == HIVE_MSG_REQUEST) {
+    point_t *p = (point_t *)msg.data;
+    int result = p->x + p->y;
+    hive_ipc_reply(&msg, &result, sizeof(result));
+}
+
+/* Client side - issue request and wait for reply */
+#define CMD_ADD 1
+point_t req = {.x = 10, .y = 20};
+hive_message_t reply;
+hive_status_t s = hive_ipc_request(server_id, CMD_ADD,
+                                    &req, sizeof(req),
+                                    &reply, 5000);
+if (HIVE_SUCCEEDED(s)) {
+    int *result = (int *)reply.data;
+    printf("Result: %d\\n", *result);
+}
+.fi
 .SS Named IPC
 Named IPC functions resolve actor names to IDs automatically, providing a
 convenient way to notify or request named actors without manual
