@@ -30,11 +30,11 @@ hive_status_t hive_ipc_notify_ex(hive_actor_id_t to, hive_msg_class_t class,
 hive_status_t hive_ipc_recv(hive_message_t *msg, int32_t timeout_ms);
 
 // Receive message matching filters (selective receive)
-// Pass HIVE_SENDER_ANY, HIVE_MSG_ANY, HIVE_ID_ANY, HIVE_TAG_ANY to match any.
+// Pass HIVE_SENDER_ANY, HIVE_MSG_ANY, HIVE_ID_ANY to match any.
 // Scans mailbox for first matching message (O(n) worst case).
 hive_status_t hive_ipc_recv_match(hive_actor_id_t from, hive_msg_class_t class,
-                                  uint16_t id, uint32_t tag,
-                                  hive_message_t *msg, int32_t timeout_ms);
+                                  uint16_t id, hive_message_t *msg,
+                                  int32_t timeout_ms);
 
 // Receive message matching ANY of the provided filters (multi-pattern receive)
 // Waits until a message matches one of the filters in the array.

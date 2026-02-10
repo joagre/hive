@@ -23,8 +23,7 @@ static void actor_a(void *args, const hive_spawn_info_t *siblings,
     hive_timer_after(100000, &wait_timer); // 100ms
 
     hive_message_t msg;
-    hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, HIVE_ID_ANY,
-                        wait_timer, &msg, -1);
+    hive_timer_recv(wait_timer, &msg, -1);
     printf("Actor A: Timer fired, linking to Actor B...\n");
 
     // Link to Actor B
@@ -69,8 +68,7 @@ static void actor_b(void *args, const hive_spawn_info_t *siblings,
     hive_timer_after(500000, &wait_timer);
 
     hive_message_t msg;
-    hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, HIVE_ID_ANY,
-                        wait_timer, &msg, -1);
+    hive_timer_recv(wait_timer, &msg, -1);
 
     printf("Actor B: Exiting normally\n");
     return;

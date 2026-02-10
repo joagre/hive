@@ -1,7 +1,7 @@
 .\" Man page for timer functions
 .TH HIVE_TIMER 3 "January 2026" "Hive 1.0" "Actor Runtime Manual"
 .SH NAME
-hive_timer_after, hive_timer_every, hive_timer_cancel, hive_sleep, hive_get_time \- actor timers
+hive_timer_after, hive_timer_every, hive_timer_cancel, hive_timer_recv, hive_sleep, hive_get_time \- actor timers
 .SH SYNOPSIS
 .nf
 .B #include <hive_timer.h>
@@ -9,6 +9,7 @@ hive_timer_after, hive_timer_every, hive_timer_cancel, hive_sleep, hive_get_time
 .BI "hive_status_t hive_timer_after(uint32_t " delay_us ", hive_timer_id_t *" out ");"
 .BI "hive_status_t hive_timer_every(uint32_t " interval_us ", hive_timer_id_t *" out ");"
 .BI "hive_status_t hive_timer_cancel(hive_timer_id_t " id ");"
+.BI "hive_status_t hive_timer_recv(hive_timer_id_t " timer ", hive_message_t *" msg ", int32_t " timeout_ms ");"
 .BI "hive_status_t hive_sleep(uint32_t " delay_us ");"
 .BI "uint64_t hive_get_time(void);"
 .fi
@@ -36,14 +37,31 @@ and tag set to the timer ID.
 .BR hive_timer_cancel ()
 cancels a timer. One-shot timers that have already fired cannot be cancelled
 (they no longer exist). Periodic timers can be cancelled at any time.
+.SS Waiting for a Timer
+.BR hive_timer_recv ()
+waits for a specific timer message identified by
+.IR timer .
+Other messages remain in the mailbox (selective receive). This is the
+recommended way to wait for a particular timer:
+.PP
+.nf
+hive_timer_id_t my_timer;
+hive_timer_after(500000, &my_timer);
+hive_message_t msg;
+hive_timer_recv(my_timer, &msg, -1);
+.fi
+.PP
+The
+.I timeout_ms
+parameter follows the same semantics as
+.BR hive_ipc_recv (3).
 .SS Sleeping
 .BR hive_sleep ()
 suspends the calling actor for
 .I delay_us
-microseconds. Unlike a naive implementation using
-.BR hive_ipc_recv ()
-with a timeout, this function uses selective receive to wait only for the
-internal timer message. Other messages arriving during the sleep remain in the
+microseconds. Implemented using
+.BR hive_timer_recv ()
+internally. Other messages arriving during the sleep remain in the
 mailbox and are not lost.
 .SS Getting Current Time
 .BR hive_get_time ()
@@ -85,33 +103,25 @@ if (hive_msg_is_timer(&msg)) {
     /* Handle timer */
 }
 .fi
-.SS Waiting for a Specific Timer
-Use
-.BR hive_ipc_recv_match (3)
-with the hive_timer_id_t to wait for a specific timer. This is the recommended
-pattern when you need to wait for a particular timer without consuming
-other messages:
+.SS Waiting for a Specific Timer (hive_select)
+For advanced use cases (e.g., waiting on a timer AND a bus simultaneously),
+use
+.BR hive_select (3)
+with a timer filter:
 .PP
 .nf
 hive_timer_id_t my_timer;
 hive_timer_after(500000, &my_timer);
-
-/* Wait specifically for this timer (id=HIVE_ID_ANY, tag=timer_id) */
-hive_message_t msg;
-hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, HIVE_ID_ANY, my_timer, &msg, -1);
+hive_select_source_t src = {
+    .type = HIVE_SEL_IPC,
+    .ipc = {.class = HIVE_MSG_TIMER, .tag = my_timer}};
+hive_select_result_t result;
+hive_select(&src, 1, &result, -1);
 .fi
 .PP
-Do NOT use HIVE_TAG_ANY when waiting for timer messages, as this could
-consume timer messages from other timers. Timers use the
-.I tag
-field for the timer ID. Always use the specific hive_timer_id_t
-returned by
-.BR hive_timer_after ()
-or
-.BR hive_timer_every ().
-This is how
-.BR hive_sleep ()
-is implemented internally.
+For the simple case of waiting for a single timer, prefer
+.BR hive_timer_recv ()
+instead.
 .SH RETURN VALUE
 All functions return an
 .I hive_status_t

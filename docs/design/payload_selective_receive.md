@@ -71,7 +71,7 @@ hive_ipc_notify(to, id, data, len);
 hive_ipc_request(to, id, data, len, reply, timeout);
 
 // Receive - filter includes id
-hive_ipc_recv_match(from, class, id, tag, msg, timeout);
+hive_ipc_recv_match(from, class, id, msg, timeout);
 ```
 
 ### Filter Structure
@@ -193,8 +193,8 @@ This is a breaking API change affecting:
 - `hive_ipc_named_request()` - adds `id` parameter
 
 **Receive side:**
-- `hive_ipc_recv_match()` - adds `id` parameter
-- `hive_ipc_recv_matches()` - filter struct gains `id` field
+- `hive_ipc_recv_match()` - adds `id` parameter, removes `tag` parameter
+- `hive_ipc_recv_matches()` - filter struct gains `id` field, retains `tag` field
 - `hive_select()` - source filter struct gains `id` field
 
 **Internal:**
@@ -220,7 +220,7 @@ All existing code using IPC will need updates.
 |----------|-------|--------|
 | `hive_ipc_notify()` | ~70 | Semantic: tag to id (same position) |
 | `hive_ipc_request()` | ~6 | Add id parameter |
-| `hive_ipc_recv_match()` | ~76 | Add id parameter |
+| `hive_ipc_recv_match()` | ~76 | Add id parameter, remove tag parameter |
 | `HIVE_SEL_IPC` sources | ~20 | Add .id field |
 
 **Pilot example:**
@@ -259,7 +259,7 @@ Most changes are mechanical:
 | Function | Old | New | Change |
 |----------|-----|-----|--------|
 | `hive_ipc_recv` | `(msg, timeout)` | `(msg, timeout)` | Unchanged |
-| `hive_ipc_recv_match` | `(from, class, tag, msg, timeout)` | `(from, class, id, tag, msg, timeout)` | Adds id |
+| `hive_ipc_recv_match` | `(from, class, tag, msg, timeout)` | `(from, class, id, msg, timeout)` | Adds id, removes tag |
 | `hive_ipc_recv_matches` | `(filters, n, msg, timeout, idx)` | `(filters, n, msg, timeout, idx)` | Filter struct gains id |
 
 ### Select Functions
@@ -289,7 +289,9 @@ typedef struct {
 } hive_ipc_filter_t;
 ```
 
-Used by: `hive_ipc_recv_match`, `hive_ipc_recv_matches`, `hive_select` (inside `hive_select_source_t`)
+Used by: `hive_ipc_recv_matches`, `hive_select` (inside `hive_select_source_t`). Note: `hive_ipc_recv_match` only filters on sender/class/id (tag filtering via `hive_select` or `hive_ipc_recv_matches`).
+
+Note: Timer waiting now uses `hive_timer_recv(timer, msg, timeout)` instead of filtering by tag in `hive_ipc_recv_match()`.
 
 ## Use Case Verification
 

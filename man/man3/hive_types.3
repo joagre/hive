@@ -155,9 +155,13 @@ Wildcard for filtering in
 No tag needed (0). Use for notifications that don't require correlation.
 .TP
 .B HIVE_TAG_ANY
-Wildcard for filtering in
-.BR hive_ipc_recv_match ()
-(0).
+Wildcard for tag filtering in
+.BR hive_recv_filter_t
+(used by
+.BR hive_select (3)
+and
+.BR hive_ipc_recv_matches (3)).
+Value is 0.
 .SS Special Sender IDs
 .TP
 .B HIVE_SENDER_ANY

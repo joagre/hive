@@ -36,8 +36,7 @@ static void signal_source(void *args, const hive_spawn_info_t *siblings,
 
     // Wait for consumer to be ready
     hive_message_t msg;
-    hive_ipc_recv_match(consumer, HIVE_MSG_NOTIFY, TAG_START, HIVE_TAG_ANY,
-                        &msg, -1);
+    hive_ipc_recv_match(consumer, HIVE_MSG_NOTIFY, TAG_START, &msg, -1);
     printf("[Signal] Consumer ready, starting signal sequence\n");
 
     // Simulate hardware interrupts at irregular intervals

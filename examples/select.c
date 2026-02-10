@@ -49,8 +49,7 @@ static void sensor_publisher(void *args, const hive_spawn_info_t *siblings,
     for (int i = 0; i < 10; i++) {
         // Wait for timer
         hive_message_t msg;
-        hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, HIVE_ID_ANY, tick,
-                            &msg, -1);
+        hive_timer_recv(tick, &msg, -1);
 
         // Simulate changing sensor readings
         data.temperature += 0.5f;
@@ -187,8 +186,7 @@ static void controller(void *args, const hive_spawn_info_t *siblings,
         // Check for exit messages (publisher finished)
         hive_message_t msg;
         if (HIVE_SUCCEEDED(hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_EXIT,
-                                               HIVE_ID_ANY, HIVE_TAG_ANY, &msg,
-                                               0))) {
+                                               HIVE_ID_ANY, &msg, 0))) {
             if (hive_msg_is_exit(&msg)) {
                 hive_exit_msg_t exit_info;
                 hive_decode_exit(&msg, &exit_info);

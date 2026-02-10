@@ -103,8 +103,7 @@ static void client_actor(void *args, const hive_spawn_info_t *siblings,
     hive_timer_id_t timer;
     hive_timer_after(50000, &timer); // 50ms
     hive_message_t msg;
-    hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, HIVE_ID_ANY, timer,
-                        &msg, -1);
+    hive_timer_recv(timer, &msg, -1);
 
     // Connect to server
     int fd = -1;
@@ -243,8 +242,7 @@ static void echo_client_actor(void *args, const hive_spawn_info_t *siblings,
     hive_timer_id_t timer;
     hive_timer_after(50000, &timer);
     hive_message_t msg;
-    hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, HIVE_ID_ANY, timer,
-                        &msg, -1);
+    hive_timer_recv(timer, &msg, -1);
 
     int fd = -1;
     hive_status_t status =
@@ -806,16 +804,14 @@ static void test12_actor_death_during_recv(void *args,
     hive_timer_id_t timer;
     hive_timer_after(50000, &timer); // 50ms
     hive_message_t msg;
-    hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, HIVE_ID_ANY, timer,
-                        &msg, -1);
+    hive_timer_recv(timer, &msg, -1);
 
     // Close the socket from under it - this should unblock and cleanup
     hive_tcp_close(server_fd);
 
     // Wait for actor death notification or timeout
     hive_timer_after(500000, &timer); // 500ms timeout
-    status = hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, HIVE_ID_ANY,
-                                 timer, &msg, -1);
+    status = hive_timer_recv(timer, &msg, -1);
 
     if (HIVE_SUCCEEDED(status) && hive_msg_is_exit(&msg)) {
         TEST_PASS("actor cleaned up after socket closed during recv");

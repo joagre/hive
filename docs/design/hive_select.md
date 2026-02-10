@@ -290,7 +290,7 @@ This is the official approach - no separate implementations.
 ```c
 // These all delegate to hive_select() internally:
 hive_ipc_recv(&msg, -1);                    // Any message
-hive_ipc_recv_match(from, class, tag, ...); // Single filter
+hive_ipc_recv_match(from, class, id, ...);  // Single filter
 hive_ipc_recv_matches(filters, n, ...);     // Multiple IPC filters
 hive_bus_read(bus, &data, len, &actual, -1);  // Single bus (with timeout)
 
@@ -326,9 +326,9 @@ hive_status_t hive_ipc_recv(hive_message_t *msg, int32_t timeout_ms) {
 }
 
 hive_status_t hive_ipc_recv_match(hive_actor_id_t from, hive_msg_class_t class,
-                                uint32_t tag, hive_message_t *msg,
+                                uint16_t id, hive_message_t *msg,
                                 int32_t timeout_ms) {
-    hive_select_source_t source = {.type = HIVE_SEL_IPC, .ipc = {.sender = from, .class = class, .tag = tag}};
+    hive_select_source_t source = {.type = HIVE_SEL_IPC, .ipc = {.sender = from, .class = class, .id = id}};
     hive_select_result_t result;
     hive_status_t s = hive_select(&source, 1, &result, timeout_ms);
     if (HIVE_SUCCEEDED(s)) *msg = result.ipc;

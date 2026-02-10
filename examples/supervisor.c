@@ -34,8 +34,7 @@ static void worker_actor(void *args, const hive_spawn_info_t *siblings,
         hive_timer_id_t t;
         hive_timer_after(100000, &t); // 100ms
         hive_message_t msg;
-        hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, HIVE_ID_ANY, t,
-                            &msg, -1);
+        hive_timer_recv(t, &msg, -1);
 
         printf("Worker %d: iteration %d (total: %d)\n", worker_id, i + 1,
                s_worker_iterations[worker_id]);

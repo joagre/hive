@@ -346,11 +346,10 @@ if (HIVE_FAILED(status)) {
     // Handle error...
 }
 
-// Wait for specific timer using selective receive (recommended)
-// hive_ipc_recv_match(from, class, id, tag, msg, timeout)
-// For timers: id=HIVE_ID_ANY, tag=timer_id (timers use tag for correlation)
+// Wait for specific timer using hive_timer_recv (recommended)
+// hive_timer_recv(timer, msg, timeout)
 hive_message_t msg;
-status = hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, HIVE_ID_ANY, timer, &msg, -1);
+status = hive_timer_recv(timer, &msg, -1);
 if (HIVE_FAILED(status)) {
     // HIVE_ERR_TIMEOUT if timeout expires (not possible with -1)
 }
@@ -640,7 +639,7 @@ Messages have two identifiers: `id` (message type for dispatch) and `tag` (corre
 - `hive_ipc_notify(to, id, data, len)` - Fire-and-forget notification with message type
 - `hive_ipc_notify_ex(to, class, id, data, len)` - Notify with explicit class and id
 - `hive_ipc_recv(msg, timeout)` - Receive any message (`msg.class`, `msg.id`, `msg.tag`, `msg.data`)
-- `hive_ipc_recv_match(from, class, id, tag, msg, timeout)` - Selective receive with filtering
+- `hive_ipc_recv_match(from, class, id, msg, timeout)` - Selective receive with filtering
 - `hive_ipc_recv_matches(filters, n, msg, timeout, matched_idx)` - Multi-pattern selective receive
 - `hive_ipc_request(to, id, req, len, reply, timeout)` - Blocking request/reply
 - `hive_ipc_reply(request, data, len)` - Reply to a REQUEST message
@@ -672,6 +671,7 @@ Messages have two identifiers: `id` (message type for dispatch) and `tag` (corre
 - `hive_timer_after(delay_us, out)` - Create one-shot timer
 - `hive_timer_every(interval_us, out)` - Create periodic timer
 - `hive_timer_cancel(id)` - Cancel a timer
+- `hive_timer_recv(timer, msg, timeout)` - Wait for a specific timer message
 - `hive_sleep(delay_us)` - Sleep without losing messages (uses selective receive)
 - `hive_get_time()` - Get current monotonic time in microseconds
 - `hive_msg_is_timer(msg)` - Check if message is a timer tick (also in IPC)

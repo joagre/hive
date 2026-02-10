@@ -25,6 +25,12 @@ hive_status_t hive_timer_every(uint32_t interval_us, hive_timer_id_t *out);
 // Cancel timer
 hive_status_t hive_timer_cancel(hive_timer_id_t id);
 
+// Wait for a specific timer message (selective receive)
+// Other messages remain in mailbox. Uses hive_select() internally.
+// timeout_ms: -1 = block forever, 0 = non-blocking, >0 = timeout in ms
+hive_status_t hive_timer_recv(hive_timer_id_t timer, hive_message_t *msg,
+                              int32_t timeout_ms);
+
 // Sleep for specified duration (microseconds)
 // Uses selective receive - other messages remain in mailbox
 hive_status_t hive_sleep(uint32_t delay_us);

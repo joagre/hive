@@ -409,12 +409,12 @@ hive_status_t hive_ipc_recv(hive_message_t *msg, int32_t timeout_ms) {
 }
 
 hive_status_t hive_ipc_recv_match(hive_actor_id_t from, hive_msg_class_t class,
-                                  uint16_t id, uint32_t tag,
-                                  hive_message_t *msg, int32_t timeout_ms) {
+                                  uint16_t id, hive_message_t *msg,
+                                  int32_t timeout_ms) {
     // Wrapper around hive_select with single IPC filter
     hive_select_source_t source = {
         .type = HIVE_SEL_IPC,
-        .ipc = {.sender = from, .class = class, .id = id, .tag = tag}};
+        .ipc = {.sender = from, .class = class, .id = id}};
     hive_select_result_t result;
     hive_status_t s = hive_select(&source, 1, &result, timeout_ms);
     if (HIVE_SUCCEEDED(s)) {

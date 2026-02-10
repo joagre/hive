@@ -106,8 +106,7 @@ static void target_delayed_exit(void *args, const hive_spawn_info_t *siblings,
     hive_timer_after(delay_ms * 1000, &timer); // Convert ms to us
 
     hive_message_t msg;
-    hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, HIVE_ID_ANY, timer,
-                        &msg, -1);
+    hive_timer_recv(timer, &msg, -1);
 
     return;
 }
@@ -186,8 +185,7 @@ static void target_slow_exit(void *args, const hive_spawn_info_t *siblings,
     hive_timer_after(500000, &timer); // 500ms delay
 
     hive_message_t msg;
-    hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, HIVE_ID_ANY, timer,
-                        &msg, -1);
+    hive_timer_recv(timer, &msg, -1);
 
     return;
 }
@@ -306,8 +304,7 @@ static void test5_coordinator(void *args, const hive_spawn_info_t *siblings,
     hive_timer_id_t timer;
     hive_timer_after(700000, &timer); // 700ms
     hive_message_t msg;
-    hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, HIVE_ID_ANY, timer,
-                        &msg, -1);
+    hive_timer_recv(timer, &msg, -1);
 
     if (!g_target_received_exit) {
         TEST_PASS("target NOT notified when monitor dies (unidirectional)");
@@ -394,8 +391,7 @@ static void double_demonitor_target(void *args,
     hive_timer_id_t timer;
     hive_timer_after(500000, &timer);
     hive_message_t msg;
-    hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, HIVE_ID_ANY, timer,
-                        &msg, -1);
+    hive_timer_recv(timer, &msg, -1);
     return;
 }
 
@@ -441,8 +437,7 @@ static void test8_double_demonitor(void *args,
     hive_timer_id_t timer;
     hive_timer_after(600000, &timer);
     hive_message_t msg;
-    hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, HIVE_ID_ANY, timer,
-                        &msg, -1);
+    hive_timer_recv(timer, &msg, -1);
 
     return;
 }
@@ -515,8 +510,7 @@ static void test9_monitor_pool_exhaustion(void *args,
     hive_timer_id_t timer;
     hive_timer_after(200000, &timer);
     hive_message_t msg;
-    hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, HIVE_ID_ANY, timer,
-                        &msg, -1);
+    hive_timer_recv(timer, &msg, -1);
 
     // Drain exit notifications
     while (hive_ipc_pending()) {

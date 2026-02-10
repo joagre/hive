@@ -82,7 +82,7 @@ void receiver_actor(void *args, const hive_spawn_info_t *siblings,
         fflush(stdout);
 
         hive_status_t status = hive_ipc_recv_match(
-            HIVE_SENDER_ANY, HIVE_MSG_ANY, HIVE_ID_ANY, TAG_DONE, &msg, 5000);
+            HIVE_SENDER_ANY, HIVE_MSG_ANY, TAG_DONE, &msg, 5000);
 
         if (HIVE_SUCCEEDED(status)) {
             printf("Receiver: Got DONE signal\n");

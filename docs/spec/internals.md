@@ -294,7 +294,7 @@ void sensor_actor(void *arg) {
     hive_timer_every(TIME_STEP_MS * 1000, &timer);  // Timer-driven
     while (true) {
         hive_message_t msg;
-        hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
+        hive_timer_recv(timer, &msg, -1);
         read_sensors();
         publish_to_bus();
     }
@@ -329,7 +329,7 @@ void sensor_actor(void *arg) {
     hive_timer_every(TIME_STEP_MS * 1000, &timer);
     while (true) {
         hive_message_t msg;
-        hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);  // BLOCKS
+        hive_timer_recv(timer, &msg, -1);  // BLOCKS
         read_sensors();
         publish_to_bus();
     }

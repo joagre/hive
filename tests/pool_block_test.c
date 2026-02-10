@@ -232,8 +232,7 @@ static void timer_under_exhaustion_sender(void *args,
 
     // Wait for timer with timeout
     hive_message_t msg;
-    s = hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, HIVE_ID_ANY, timer,
-                            &msg, 1000);
+    s = hive_timer_recv(timer, &msg, 1000);
     if (HIVE_SUCCEEDED(s)) {
         printf("    Timer fired successfully!\n");
         test_passed = true;

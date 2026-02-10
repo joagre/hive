@@ -364,7 +364,6 @@ Messages have two identifiers: `id` (message type for dispatch) and `tag` (corre
 
 **Tag semantics** (correlation for request/reply)
 - **HIVE_TAG_NONE**: Used for simple NOTIFY messages where no correlation is needed
-- **HIVE_TAG_ANY**: Used in `hive_ipc_recv_match()` to match any tag
 - **Generated tags**: Created automatically by `hive_ipc_request()` for request/reply correlation
 - **Timer IDs**: Timers use the tag field for the timer ID
 
@@ -423,37 +422,33 @@ hive_status_t hive_ipc_recv(hive_message_t *msg, int32_t timeout_ms);
 #### Selective Receive
 
 ```c
-// Receive with filtering on sender, class, id, and/or tag
+// Receive with filtering on sender, class, and/or id
 // Blocks until message matches ALL non-wildcard criteria, or timeout
-// All wildcards are 0: HIVE_SENDER_ANY, HIVE_MSG_ANY, HIVE_ID_ANY, HIVE_TAG_ANY
+// All wildcards are 0: HIVE_SENDER_ANY, HIVE_MSG_ANY, HIVE_ID_ANY
 hive_status_t hive_ipc_recv_match(hive_actor_id_t from, hive_msg_class_t class,
-                            uint16_t id, uint32_t tag, hive_message_t *msg, int32_t timeout_ms);
+                            uint16_t id, hive_message_t *msg, int32_t timeout_ms);
 ```
 
 **Filter semantics** (all wildcards are 0)
 - `from == HIVE_SENDER_ANY (0)` -> match any sender
 - `class == HIVE_MSG_ANY (0)` -> match any class
 - `id == HIVE_ID_ANY (0)` -> match any id
-- `tag == HIVE_TAG_ANY (0)` -> match any tag
 - Non-wildcard values must match exactly
 
 **Usage examples**
 ```c
 // Match any message (equivalent to hive_ipc_recv)
-hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_ANY, HIVE_ID_ANY, HIVE_TAG_ANY, &msg, -1);
+hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_ANY, HIVE_ID_ANY, &msg, -1);
 
 // Match only from specific sender
-hive_ipc_recv_match(some_actor, HIVE_MSG_ANY, HIVE_ID_ANY, HIVE_TAG_ANY, &msg, -1);
+hive_ipc_recv_match(some_actor, HIVE_MSG_ANY, HIVE_ID_ANY, &msg, -1);
 
 // Match REQUEST messages from any sender
-hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_REQUEST, HIVE_ID_ANY, HIVE_TAG_ANY, &msg, -1);
-
-// Match REPLY with specific tag (used internally by hive_ipc_request)
-hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_REPLY, HIVE_ID_ANY, expected_tag, &msg, 5000);
+hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_REQUEST, HIVE_ID_ANY, &msg, -1);
 
 // Match NOTIFY with specific message type
 #define MSG_SENSOR_DATA 1
-hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_NOTIFY, MSG_SENSOR_DATA, HIVE_TAG_ANY, &msg, -1);
+hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_NOTIFY, MSG_SENSOR_DATA, &msg, -1);
 ```
 
 #### Multi-Pattern Selective Receive
@@ -486,8 +481,8 @@ hive_status_t hive_ipc_recv_matches(const hive_recv_filter_t *filters,
 // Unspecified fields default to 0 (wildcard) via C designated initializers
 enum { FILTER_SYNC_TIMER, FILTER_LANDED };
 hive_recv_filter_t filters[] = {
-    // Timer: filter by tag (timer id)
-    [FILTER_SYNC_TIMER] = {.class = HIVE_MSG_TIMER, .tag = sync_timer},
+    // Timer: filter by class
+    [FILTER_SYNC_TIMER] = {.class = HIVE_MSG_TIMER},
     // Notification: filter by id (message type)
     [FILTER_LANDED] = {.class = HIVE_MSG_NOTIFY, .id = NOTIFY_LANDED},
 };
@@ -715,8 +710,7 @@ hive_message_t reply;
 hive_ipc_request(server, &request, sizeof(request), &reply, 5000);
 
 // Or manually using selective receive:
-uint32_t expected_tag = 42;  // Known tag from earlier call
-hive_ipc_recv_match(server, HIVE_MSG_REPLY, expected_tag, &reply, 5000);
+hive_ipc_recv_match(server, HIVE_MSG_REPLY, HIVE_ID_ANY, &reply, 5000);
 
 // During the wait:
 // - NOTIFY messages from other actors: skipped, stay in mailbox
@@ -791,9 +785,9 @@ void request_reply_actor(void *arg) {
     hive_ipc_request(server, &req, sizeof(req), &reply, 5000);
     // Timer tick arrived during request/reply wait - it's in mailbox
 
-    // Now process timer using selective receive with hive_timer_id_t
+    // Now process timer using hive_timer_recv
     hive_message_t timer_msg;
-    hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, t, &timer_msg, 0);
+    hive_timer_recv(t, &timer_msg, 0);
 }
 ```
 
@@ -1345,7 +1339,7 @@ void comms_actor(void *args, ...) {
 
     hive_select_source_t sources[] = {
         {.type = HIVE_SEL_HAL_EVENT, .event = rx_event},
-        {.type = HIVE_SEL_IPC, .ipc = {.class = HIVE_MSG_TIMER, .tag = timer}},
+        {.type = HIVE_SEL_IPC, .ipc = {.class = HIVE_MSG_TIMER}},
     };
 
     while (true) {
@@ -1462,13 +1456,12 @@ bool hive_msg_is_timer(const hive_message_t *msg);
 
 Timer wake-ups are delivered as messages with `class == HIVE_MSG_TIMER`. The tag contains the `hive_timer_id_t`. The actor receives these in its normal `hive_ipc_recv()` loop and can use `hive_msg_is_timer()` to identify timer messages.
 
-**Important** - When waiting for a specific timer, use selective receive with the hive_timer_id_t as the tag filter:
+**Important** - When waiting for a specific timer, use `hive_timer_recv()`:
 ```c
 hive_timer_id_t my_timer;
 hive_timer_after(500000, &my_timer);
-hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, my_timer, &msg, -1);
+hive_timer_recv(my_timer, &msg, -1);
 ```
-Do **not** use `HIVE_TAG_ANY` for timer messages - this could consume the wrong timer's message if multiple timers are active.
 
 ### Timer Tick Coalescing (Periodic Timers)
 
@@ -2004,7 +1997,7 @@ void orchestrator(void *args, const hive_spawn_info_t *siblings, size_t sibling_
 
     // Wait for supervisor exit (intensity exceeded or explicit stop)
     hive_message_t msg;
-    hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_EXIT, HIVE_TAG_ANY, &msg, -1);
+    hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_EXIT, HIVE_ID_ANY, &msg, -1);
 
     return;
 }

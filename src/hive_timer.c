@@ -13,7 +13,7 @@
 #include "hive_timer.h"
 #include "hive_internal.h"
 #include "hive_actor.h"
-#include "hive_ipc.h"
+#include "hive_select.h"
 #include "hal/hive_hal_timer.h"
 
 // Timer subsystem state
@@ -70,6 +70,18 @@ hive_status_t hive_timer_cancel(hive_timer_id_t id) {
     return hive_hal_timer_cancel(id);
 }
 
+hive_status_t hive_timer_recv(hive_timer_id_t timer, hive_message_t *msg,
+                              int32_t timeout_ms) {
+    hive_select_source_t source = {
+        .type = HIVE_SEL_IPC, .ipc = {.class = HIVE_MSG_TIMER, .tag = timer}};
+    hive_select_result_t result;
+    hive_status_t s = hive_select(&source, 1, &result, timeout_ms);
+    if (HIVE_SUCCEEDED(s)) {
+        *msg = result.ipc;
+    }
+    return s;
+}
+
 hive_status_t hive_sleep(uint32_t delay_us) {
     // Create one-shot timer
     hive_timer_id_t timer;
@@ -79,10 +91,9 @@ hive_status_t hive_sleep(uint32_t delay_us) {
     }
 
     // Wait specifically for THIS timer message
-    // Other messages remain in mailbox_t (selective receive)
+    // Other messages remain in mailbox (selective receive)
     hive_message_t msg;
-    return hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, HIVE_ID_ANY,
-                               timer, &msg, -1);
+    return hive_timer_recv(timer, &msg, -1);
 }
 
 uint64_t hive_get_time(void) {

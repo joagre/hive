@@ -38,8 +38,7 @@ static void publisher_actor(void *args, const hive_spawn_info_t *siblings,
     for (int i = 0; i < 10; i++) {
         // Wait for timer tick using selective receive with hive_timer_id_t
         hive_message_t msg;
-        status = hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER,
-                                     HIVE_ID_ANY, timer, &msg, -1);
+        status = hive_timer_recv(timer, &msg, -1);
         if (HIVE_FAILED(status)) {
             printf("Publisher: Failed to receive: %s\n", HIVE_ERR_STR(status));
             break;

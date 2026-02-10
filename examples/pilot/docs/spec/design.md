@@ -176,15 +176,15 @@ if (HIVE_FAILED(hive_bus_subscribe(state->sensor_bus))) {
 }
 ```
 
-**Hot path - blocking calls** (`hive_select`, `hive_bus_read` with timeout, `hive_ipc_recv_match`):
+**Hot path - blocking calls** (`hive_select`, `hive_bus_read` with timeout, `hive_timer_recv`):
 Log error and call `hive_exit(HIVE_EXIT_REASON_CRASH)`. These failures indicate a fundamental runtime problem that the
 actor cannot recover from.
 
 ```c
 // Sensor waits for periodic timer (producer role)
-status = hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
+status = hive_timer_recv(timer, &msg, -1);
 if (HIVE_FAILED(status)) {
-    HIVE_LOG_ERROR("[SENSOR] recv_match failed: %s", HIVE_ERR_STR(status));
+    HIVE_LOG_ERROR("[SENSOR] timer_recv failed: %s", HIVE_ERR_STR(status));
     hive_exit(HIVE_EXIT_REASON_CRASH);
 }
 ```

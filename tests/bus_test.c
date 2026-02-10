@@ -157,8 +157,7 @@ static void test2_multi_subscriber(void *args,
     hive_timer_id_t timer;
     hive_timer_after(50000, &timer); // 50ms
     hive_message_t msg;
-    hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, HIVE_ID_ANY, timer,
-                        &msg, -1);
+    hive_timer_recv(timer, &msg, -1);
 
     // Publish data
     const char *data = "Broadcast!";
@@ -171,8 +170,7 @@ static void test2_multi_subscriber(void *args,
 
     // Wait for subscribers to read
     hive_timer_after(200000, &timer); // 200ms
-    hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, HIVE_ID_ANY, timer,
-                        &msg, -1);
+    hive_timer_recv(timer, &msg, -1);
 
     // Check results
     int count = g_subscriber_received[0] + g_subscriber_received[1] +
@@ -250,8 +248,7 @@ static void test3_max_readers(void *args, const hive_spawn_info_t *siblings,
     hive_timer_id_t timer;
     hive_timer_after(50000, &timer);
     hive_message_t msg;
-    hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, HIVE_ID_ANY, timer,
-                        &msg, -1);
+    hive_timer_recv(timer, &msg, -1);
 
     // Publish one entry
     const char *data = "Limited reads";
@@ -259,8 +256,7 @@ static void test3_max_readers(void *args, const hive_spawn_info_t *siblings,
 
     // Wait for subscribers to try reading
     hive_timer_after(300000, &timer);
-    hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, HIVE_ID_ANY, timer,
-                        &msg, -1);
+    hive_timer_recv(timer, &msg, -1);
 
     // Count how many succeeded
     int success_count = g_max_readers_success[0] + g_max_readers_success[1] +

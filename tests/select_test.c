@@ -147,8 +147,7 @@ static void test3_publisher(void *args, const hive_spawn_info_t *siblings,
     hive_timer_id_t timer;
     hive_timer_after(50000, &timer);
     hive_message_t msg;
-    hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, HIVE_ID_ANY, timer,
-                        &msg, -1);
+    hive_timer_recv(timer, &msg, -1);
 
     int data = 99;
     hive_bus_publish(s_test_bus, &data, sizeof(data));
@@ -323,8 +322,7 @@ static void test6_bus_publisher(void *args, const hive_spawn_info_t *siblings,
     hive_timer_id_t timer;
     hive_timer_after(50000, &timer);
     hive_message_t msg;
-    hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, HIVE_ID_ANY, timer,
-                        &msg, -1);
+    hive_timer_recv(timer, &msg, -1);
 
     int data = which_bus == 1 ? 111 : 222;
     hive_bus_publish(which_bus == 1 ? s_bus1 : s_bus2, &data, sizeof(data));
@@ -394,8 +392,7 @@ static void test7_mixed_sender(void *args, const hive_spawn_info_t *siblings,
     hive_timer_id_t timer;
     hive_timer_after(50000, &timer);
     hive_message_t msg;
-    hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, HIVE_ID_ANY, timer,
-                        &msg, -1);
+    hive_timer_recv(timer, &msg, -1);
 
     int data = 777;
     hive_ipc_notify(target, TAG_A, &data, sizeof(data));

@@ -47,8 +47,7 @@ static void wait_ms(int ms) {
     hive_timer_id_t t;
     hive_timer_after((uint64_t)ms * 1000, &t);
     hive_message_t msg;
-    hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, HIVE_ID_ANY, t, &msg,
-                        -1);
+    hive_timer_recv(t, &msg, -1);
 }
 
 // =============================================================================
@@ -186,8 +185,8 @@ static void test1_basic_lifecycle(void *args, const hive_spawn_info_t *siblings,
 
     // Wait for supervisor exit
     hive_message_t msg;
-    status = hive_ipc_recv_match(supervisor, HIVE_MSG_EXIT, HIVE_ID_ANY,
-                                 HIVE_TAG_ANY, &msg, 1000);
+    status =
+        hive_ipc_recv_match(supervisor, HIVE_MSG_EXIT, HIVE_ID_ANY, &msg, 1000);
     if (HIVE_FAILED(status)) {
         TEST_FAIL("supervisor did not exit");
         return;
@@ -472,8 +471,8 @@ static void test5_restart_intensity(void *args,
 
     // Wait for supervisor to give up and shut down
     hive_message_t msg;
-    status = hive_ipc_recv_match(supervisor, HIVE_MSG_EXIT, HIVE_ID_ANY,
-                                 HIVE_TAG_ANY, &msg, 2000);
+    status =
+        hive_ipc_recv_match(supervisor, HIVE_MSG_EXIT, HIVE_ID_ANY, &msg, 2000);
 
     if (HIVE_SUCCEEDED(status)) {
         TEST_PASS("supervisor shut down after intensity exceeded");
@@ -623,8 +622,8 @@ static void test7_empty_children(void *args, const hive_spawn_info_t *siblings,
 
     // Wait for exit
     hive_message_t msg;
-    status = hive_ipc_recv_match(supervisor, HIVE_MSG_EXIT, HIVE_ID_ANY,
-                                 HIVE_TAG_ANY, &msg, 1000);
+    status =
+        hive_ipc_recv_match(supervisor, HIVE_MSG_EXIT, HIVE_ID_ANY, &msg, 1000);
     if (HIVE_SUCCEEDED(status)) {
         TEST_PASS("empty supervisor stops cleanly");
     } else {

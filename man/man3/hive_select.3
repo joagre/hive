@@ -49,10 +49,7 @@ if exceeded.
 .SS Source Types
 .TP
 .B HIVE_SEL_IPC
-Wait for an IPC message matching the specified filter. The filter uses the
-same semantics as
-.BR hive_ipc_recv_match (3):
-wildcards
+Wait for an IPC message matching the specified filter. Wildcards
 .BR HIVE_SENDER_ANY ", " HIVE_MSG_ANY ", " HIVE_ID_ANY ", and " HIVE_TAG_ANY
 (all are 0) can be used to match any value. The filter fields are: sender,
 class, id (message type), and tag (correlation). With C designated initializers,
@@ -188,7 +185,10 @@ is the core primitive. The following APIs are thin wrappers:
 \- select with wildcard IPC filter
 .IP \(bu 2
 .BR hive_ipc_recv_match ()
-\- select with single IPC filter
+\- select with single IPC filter (sender, class, id)
+.IP \(bu 2
+.BR hive_timer_recv ()
+\- select with timer-specific IPC filter (class=TIMER, tag=timer_id)
 .IP \(bu 2
 .BR hive_ipc_recv_matches ()
 \- select with multiple IPC filters

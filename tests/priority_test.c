@@ -86,8 +86,7 @@ static void test1_coordinator(void *args, const hive_spawn_info_t *siblings,
     hive_timer_id_t timer;
     hive_timer_after(50000, &timer); // 50ms
     hive_message_t msg;
-    hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, HIVE_ID_ANY, timer,
-                        &msg, -1);
+    hive_timer_recv(timer, &msg, -1);
 
     // Check execution order: should be CRITICAL(0), HIGH(1), NORMAL(2), LOW(3)
     // But coordinator is also NORMAL, so order depends on round-robin
@@ -184,8 +183,7 @@ static void test2_coordinator(void *args, const hive_spawn_info_t *siblings,
     hive_timer_id_t timer;
     hive_timer_after(100000, &timer); // 100ms
     hive_message_t msg;
-    hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, HIVE_ID_ANY, timer,
-                        &msg, -1);
+    hive_timer_recv(timer, &msg, -1);
 
     printf("  Execution sequence: ");
     for (int i = 0; i < g_rr_count; i++) {
@@ -276,8 +274,7 @@ static void test3_coordinator(void *args, const hive_spawn_info_t *siblings,
     hive_timer_id_t timer;
     hive_timer_after(100000, &timer);
     hive_message_t msg;
-    hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, HIVE_ID_ANY, timer,
-                        &msg, -1);
+    hive_timer_recv(timer, &msg, -1);
 
     if (g_high_ran_first) {
         TEST_PASS("high priority actor runs before low priority continues");
@@ -326,8 +323,7 @@ static void test4_coordinator(void *args, const hive_spawn_info_t *siblings,
     hive_timer_id_t timer;
     hive_timer_after(100000, &timer);
     hive_message_t msg;
-    hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, HIVE_ID_ANY, timer,
-                        &msg, -1);
+    hive_timer_recv(timer, &msg, -1);
 
     bool all_ran =
         g_prio_ran[0] && g_prio_ran[1] && g_prio_ran[2] && g_prio_ran[3];
@@ -389,8 +385,7 @@ static void test5_coordinator(void *args, const hive_spawn_info_t *siblings,
     hive_timer_id_t timer;
     hive_timer_after(50000, &timer);
     hive_message_t msg;
-    hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, HIVE_ID_ANY, timer,
-                        &msg, -1);
+    hive_timer_recv(timer, &msg, -1);
 
     return;
 }

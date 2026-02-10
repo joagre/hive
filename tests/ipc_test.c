@@ -487,8 +487,7 @@ static void delayed_sender_actor(void *args, const hive_spawn_info_t *siblings,
     hive_timer_id_t timer;
     hive_timer_after(50000, &timer);
     hive_message_t msg;
-    hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, HIVE_ID_ANY, timer,
-                        &msg, -1);
+    hive_timer_recv(timer, &msg, -1);
 
     int data = 123;
     hive_ipc_notify(target, HIVE_ID_NONE, &data, sizeof(data));
@@ -623,13 +622,12 @@ static void test12_selective_receive(void *args,
     hive_timer_id_t timer;
     hive_timer_after(50000, &timer);
     hive_message_t timer_msg;
-    hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, HIVE_ID_ANY, timer,
-                        &timer_msg, -1);
+    hive_timer_recv(timer, &timer_msg, -1);
 
     // Use selective receive to filter by sender
     hive_message_t msg;
-    hive_status_t status = hive_ipc_recv_match(
-        sender, HIVE_MSG_ANY, HIVE_ID_ANY, HIVE_TAG_ANY, &msg, 100);
+    hive_status_t status =
+        hive_ipc_recv_match(sender, HIVE_MSG_ANY, HIVE_ID_ANY, &msg, 100);
 
     if (HIVE_SUCCEEDED(status)) {
         if (msg.sender == sender) {

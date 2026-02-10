@@ -184,7 +184,7 @@ void sensor_actor(void *arg, const hive_spawn_info_t *siblings,
 
     while (true) {
         hive_message_t msg;
-        hive_ipc_recv_match(HIVE_SENDER_ANY, HIVE_MSG_TIMER, timer, &msg, -1);
+        hive_timer_recv(timer, &msg, -1);
         /* Read sensors, publish to bus */
     }
 }
