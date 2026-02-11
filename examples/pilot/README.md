@@ -113,7 +113,8 @@ See `hal/<platform>/README.md` for hardware details, pin mapping, flight profile
 
 ## Architecture
 
-12-13 actors communicate via single-entry buses in a control pipeline:
+12-13 actors communicate via single-entry buses in a control pipeline.
+Rectangles are actors, rounded boxes are buses, cylinders are external I/O.
 
 ```mermaid
 graph TB
@@ -139,8 +140,6 @@ graph TB
     PositionTargetBus -.-> Logger
     Logger -.-> CSV[(CSV)]
 ```
-
-Rectangles are actors, rounded boxes are buses, cylinders are external I/O.
 
 IPC notifications coordinate flight state transitions (all fire-and-forget):
 
