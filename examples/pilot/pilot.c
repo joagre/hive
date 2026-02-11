@@ -138,10 +138,10 @@ int main(void) {
          .name = "sensor",
          .auto_register = true,
          .restart = HIVE_CHILD_PERMANENT,
-         .actor_cfg = {.priority = HIVE_PRIORITY_CRITICAL,
+         .actor_cfg = {.stack_size = 4096,
+                       .priority = HIVE_PRIORITY_CRITICAL,
                        .name = "sensor",
-                       .pool_block =
-                           false}}, // CRITICAL: never block control loop
+                       .pool_block = false}},
         {.start = estimator_actor,
          .init = estimator_actor_init,
          .init_args = &buses,
@@ -149,11 +149,10 @@ int main(void) {
          .name = "estimator",
          .auto_register = true,
          .restart = HIVE_CHILD_PERMANENT,
-         .actor_cfg = {.stack_size = 5120, // 77.5% of 4KB measured
+         .actor_cfg = {.stack_size = 5120,
                        .priority = HIVE_PRIORITY_CRITICAL,
                        .name = "estimator",
-                       .pool_block =
-                           false}}, // CRITICAL: never block control loop
+                       .pool_block = false}},
         {.start = waypoint_actor,
          .init = waypoint_actor_init,
          .init_args = &buses,
@@ -161,10 +160,10 @@ int main(void) {
          .name = "waypoint",
          .auto_register = true,
          .restart = HIVE_CHILD_PERMANENT,
-         .actor_cfg = {.priority = HIVE_PRIORITY_CRITICAL,
+         .actor_cfg = {.stack_size = 4096,
+                       .priority = HIVE_PRIORITY_CRITICAL,
                        .name = "waypoint",
-                       .pool_block =
-                           false}}, // CRITICAL: never block control loop
+                       .pool_block = false}},
         {.start = altitude_actor,
          .init = altitude_actor_init,
          .init_args = &buses,
@@ -172,10 +171,10 @@ int main(void) {
          .name = "altitude",
          .auto_register = true,
          .restart = HIVE_CHILD_PERMANENT,
-         .actor_cfg = {.priority = HIVE_PRIORITY_CRITICAL,
+         .actor_cfg = {.stack_size = 4096,
+                       .priority = HIVE_PRIORITY_CRITICAL,
                        .name = "altitude",
-                       .pool_block =
-                           false}}, // CRITICAL: never block control loop
+                       .pool_block = false}},
         {.start = position_actor,
          .init = position_actor_init,
          .init_args = &buses,
@@ -183,10 +182,10 @@ int main(void) {
          .name = "position",
          .auto_register = true,
          .restart = HIVE_CHILD_PERMANENT,
-         .actor_cfg = {.priority = HIVE_PRIORITY_CRITICAL,
+         .actor_cfg = {.stack_size = 4096,
+                       .priority = HIVE_PRIORITY_CRITICAL,
                        .name = "position",
-                       .pool_block =
-                           false}}, // CRITICAL: never block control loop
+                       .pool_block = false}},
         {.start = attitude_actor,
          .init = attitude_actor_init,
          .init_args = &buses,
@@ -194,10 +193,10 @@ int main(void) {
          .name = "attitude",
          .auto_register = true,
          .restart = HIVE_CHILD_PERMANENT,
-         .actor_cfg = {.priority = HIVE_PRIORITY_CRITICAL,
+         .actor_cfg = {.stack_size = 4096,
+                       .priority = HIVE_PRIORITY_CRITICAL,
                        .name = "attitude",
-                       .pool_block =
-                           false}}, // CRITICAL: never block control loop
+                       .pool_block = false}},
         {.start = rate_actor,
          .init = rate_actor_init,
          .init_args = &buses,
@@ -205,10 +204,10 @@ int main(void) {
          .name = "rate",
          .auto_register = true,
          .restart = HIVE_CHILD_PERMANENT,
-         .actor_cfg = {.priority = HIVE_PRIORITY_CRITICAL,
+         .actor_cfg = {.stack_size = 4096,
+                       .priority = HIVE_PRIORITY_CRITICAL,
                        .name = "rate",
-                       .pool_block =
-                           false}}, // CRITICAL: never block control loop
+                       .pool_block = false}},
         {.start = motor_actor,
          .init = motor_actor_init,
          .init_args = &buses,
@@ -216,10 +215,10 @@ int main(void) {
          .name = "motor",
          .auto_register = true,
          .restart = HIVE_CHILD_PERMANENT,
-         .actor_cfg = {.priority = HIVE_PRIORITY_CRITICAL,
+         .actor_cfg = {.stack_size = 4096,
+                       .priority = HIVE_PRIORITY_CRITICAL,
                        .name = "motor",
-                       .pool_block =
-                           false}}, // CRITICAL: never block control loop
+                       .pool_block = false}},
         {.start = flight_manager_actor,
          .init = flight_manager_actor_init,
          .init_args = &buses,
@@ -227,10 +226,10 @@ int main(void) {
          .name = "flight_manager",
          .auto_register = true,
          .restart = HIVE_CHILD_PERMANENT, // Loops for multiple flights
-         .actor_cfg = {.priority = HIVE_PRIORITY_CRITICAL,
+         .actor_cfg = {.stack_size = 4096,
+                       .priority = HIVE_PRIORITY_CRITICAL,
                        .name = "flight_mgr",
-                       .pool_block =
-                           false}}, // CRITICAL: never block control loop
+                       .pool_block = false}},
         {.start = battery_actor,
          .init = battery_actor_init,
          .init_args = &buses,
@@ -238,7 +237,8 @@ int main(void) {
          .name = "battery",
          .auto_register = true,
          .restart = HIVE_CHILD_TEMPORARY,
-         .actor_cfg = {.priority = HIVE_PRIORITY_LOW,
+         .actor_cfg = {.stack_size = 4096,
+                       .priority = HIVE_PRIORITY_LOW,
                        .name = "battery",
                        .pool_block = true}},
 #ifdef HAL_HAS_RADIO
@@ -249,7 +249,8 @@ int main(void) {
          .name = "comms",
          .auto_register = true,
          .restart = HIVE_CHILD_TEMPORARY,
-         .actor_cfg = {.priority = HIVE_PRIORITY_LOW,
+         .actor_cfg = {.stack_size = 4096,
+                       .priority = HIVE_PRIORITY_LOW,
                        .name = "comms",
                        .pool_block = true}},
 #endif
@@ -259,8 +260,8 @@ int main(void) {
          .init_args_size = sizeof(logger_config),
          .name = "logger",
          .auto_register = true,
-         .restart = HIVE_CHILD_TEMPORARY,  // Not flight-critical, don't restart
-         .actor_cfg = {.stack_size = 5120, // 86.9% of 4KB measured
+         .restart = HIVE_CHILD_TEMPORARY, // Not flight-critical, don't restart
+         .actor_cfg = {.stack_size = 5120,
                        .priority = HIVE_PRIORITY_LOW,
                        .name = "logger",
                        .pool_block = true}},
