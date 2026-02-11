@@ -2,6 +2,7 @@
 
 Date: 2026-02-10
 Updated: 2026-02-11 (cross-referenced against Bitcraze crazyflie-firmware)
+Updated: 2026-02-11 (findings #2, #9, #11, #12, #14 fixed)
 
 Comprehensive audit comparing the Webots simulation HAL
 (`hal/webots-crazyflie/`) against the real hardware HAL
@@ -28,24 +29,12 @@ such fallback.
 **Files** - `estimator_actor.c:324-336`, `hal/crazyflie-2.1+/hal_config.h:81`,
 `hal/crazyflie-2.1+/platform.c:1257`
 
-### 2. PWM frequency 1000x too slow (NEW - found during cross-reference)
+### 2. ~~PWM frequency 1000x too slow~~ FIXED
 
-Both Hive and Bitcraze use 8-bit PWM resolution (`ARR=255`), but the
-prescaler differs dramatically:
+**Fixed in commit 0e2af17.** PSC changed from 999 to 0, giving ~328 kHz
+PWM matching Bitcraze.
 
-| | Hive | Bitcraze |
-|---|---|---|
-| PSC | 999 | 0 |
-| ARR | 255 | 255 |
-| PWM frequency | 328 Hz | ~328 kHz |
-| Resolution | 8-bit (256 levels) | 8-bit (256 levels) |
-
-Bitcraze deliberately chose ~328 kHz because at lower frequencies the
-PWM ripple affects the NCP702 voltage regulator on the Crazyflie PCB
-(documented in `motors.h` line 46). The Hive pilot's 328 Hz PWM could
-cause audible motor whine and voltage regulator instability.
-
-**Files** - `hal/crazyflie-2.1+/platform.c:856-861`
+**Files** - `hal/crazyflie-2.1+/platform.c`
 **Bitcraze ref** - `src/drivers/interface/motors.h:44-50`,
 `src/drivers/src/motors_def.c:29-48`
 
@@ -148,18 +137,14 @@ known limitation. Keep flights short.
 `hal/crazyflie-2.1+/platform.c:1248-1251`
 **Bitcraze ref** - `src/modules/src/sensfusion6.c:181-252`
 
-### 9. Kalman filter over-corrects with repeated stale measurements
+### 9. ~~Kalman filter over-corrects with repeated stale measurements~~ FIXED
 
-The rangefinder updates at 40Hz but `altitude_kf_update()` runs every
-4ms (250Hz). The same measurement is fed 6x as independent observations,
-artificially shrinking covariance.
+**Fixed in commit 64c1982.** Split into separate predict (every cycle)
+and correct (only when a new altitude measurement arrives). Detects new
+data by value change, matching Bitcraze's approach of gating corrections
+on fresh measurements.
 
-Bitcraze solves this with a measurement queue: sensors enqueue data
-asynchronously, and the Kalman filter dequeues and processes ONLY actual
-new measurements. Prediction runs at 100 Hz (not 1000 Hz like the IMU),
-and IMU data is subsampled via an accumulator before prediction.
-
-**Files** - `estimator_actor.c:369`, `fusion/altitude_kf.c:239-242`
+**Files** - `estimator_actor.c`
 **Bitcraze ref** - `src/modules/src/estimator/estimator_kalman.c:301-367`,
 `src/deck/drivers/src/zranger2.c:131-132`
 
@@ -179,30 +164,25 @@ system shutdown on critical low, and LED/sound alerts.
 
 ## Safety/Robustness Gaps in Real HAL
 
-### 11. No hardware watchdog
+### 11. ~~No hardware watchdog~~ FIXED
 
-If MCU hangs, motors hold last PWM indefinitely. The 50ms deadman in
-motor_actor helps only if the scheduler is alive.
+**Fixed in commit 0e2af17.** IWDG enabled with Bitcraze-matching config
+(prescaler 32, reload 188, 100-353ms timeout). Fed every 80ms from
+SysTick_Handler. Detects watchdog resets on startup via RCC flag.
 
-Bitcraze uses IWDG (Independent Watchdog) with a 100-353ms timeout,
-fed every 80ms from the system task. It also detects and logs watchdog
-resets on startup. This protects against the unbounded I2C loop in
-finding #13 and other hangs.
-
+**Files** - `hal/crazyflie-2.1+/platform.c`
 **Bitcraze ref** - `src/drivers/src/watchdog.c:47-76`
 
-### 12. No HardFault handler
+### 12. ~~No HardFault handler~~ FIXED
 
-Maps to `Default_Handler` (infinite loop with motors running).
+**Fixed in commit 0e2af17.** HardFault handler extracts stacked
+registers (R0-R3, R12, LR, PC, PSR) and ARM fault status registers
+(CFSR, HFSR, BFAR) via SWO. Separate MemManage, BusFault, and
+UsageFault handlers also stop motors. All handlers call
+`platform_emergency_stop()` first, then loop without feeding the
+watchdog (IWDG resets MCU within 100-353ms).
 
-Bitcraze has a full HardFault handler that: extracts all stacked
-registers (R0-R3, R12, LR, PC, PSR), prints them via UART, reads
-all ARM fault status registers, stops all motors, shows LED fault
-pattern, and persists fault data to RAM for post-mortem. Separate
-handlers for MemManage, BusFault, and UsageFault also call
-`motorsStop()`.
-
-**Files** - `hal/crazyflie-2.1+/startup_stm32f405.s:255`
+**Files** - `hal/crazyflie-2.1+/platform.c`
 **Bitcraze ref** - `src/drivers/src/nvic.c:87-154`
 
 ### 13. I2C bus recovery loop is unbounded - same as Bitcraze
@@ -219,17 +199,13 @@ Bitcraze's and the I2C3 path.
 **Files** - `hal/crazyflie-2.1+/i2c_drv.c:334`
 **Bitcraze ref** - `src/drivers/src/i2c_drv.c:322-339`
 
-### 14. I2C1 clock timing too fast
+### 14. ~~I2C1 clock timing too fast~~ FIXED
 
-Comment says 500 NOPs needed for 3us half-cycle, code uses 100 NOPs
-(0.6us), giving ~833 kHz clock - above I2C fast mode spec (400 kHz).
+**Fixed in commit 0e2af17.** NOP loops replaced with
+`platform_delay_us(3)` for accurate 3us half-cycle timing (~167 kHz
+clock, well within I2C fast mode spec).
 
-Bitcraze uses proper `sleepus(10)` timestamp-based delays (10us
-half-cycle, giving 50 kHz clock, well within spec). Hive's I2C3 path
-(Bitcraze-derived code) correctly uses `sleepus()`, but the I2C1 path
-in `platform.c` uses fragile NOP-counting with incorrect count.
-
-**Files** - `hal/crazyflie-2.1+/platform.c:180-192`
+**Files** - `hal/crazyflie-2.1+/platform.c`
 **Bitcraze ref** - `src/drivers/src/i2c_drv.c:72,332-338`,
 `src/utils/src/sleepus.c:29-34`
 
@@ -304,26 +280,26 @@ total specific force. This means:
 1. Use `FIRST_TEST` profile (0.5m hover only)
 2. Bench-test motor mixing with props off - verify pitch/roll/yaw directions
 3. Keep flight under 30 seconds to limit drift accumulation
-4. Have a kill switch ready (the 50ms deadman is good but watchdog is missing)
+4. Have a kill switch ready (50ms deadman + IWDG watchdog provide backup)
 5. Check battery voltage before each attempt
-6. If altitude oscillates visibly, check PWM frequency first (finding #2)
+6. ~~If altitude oscillates visibly, check PWM frequency first (finding #2)~~ PWM fixed
 
 ## Cross-Reference Summary
 
 | Finding | Hive | Bitcraze | Match? |
 |---|---|---|---|
 | PWM resolution | 8-bit (ARR=255) | 8-bit (ARR=255) | Yes |
-| PWM frequency | 328 Hz (PSC=999) | ~328 kHz (PSC=0) | **NO** |
+| PWM frequency | ~328 kHz (PSC=0) | ~328 kHz (PSC=0) | Yes (FIXED) |
 | Motor mixer signs | Legacy: same | Legacy: same | Yes |
 | Motor numbering | M1-M4, FR/BR/BL/FL | M1-M4, FR/BR/BL/FL | Yes |
 | Motor pin mapping | PA1/PB11/PA15/PB9 | PA1/PB11/PA15/PB9 | Yes |
 | Flow gyro compensation | None | EKF measurement model | **NO** |
 | Attitude estimation | Euler integration | Quaternion (Mahony) | **NO** |
 | Yaw drift (no mag) | Yes | Yes (same limitation) | Yes |
-| KF stale measurement | Corrects every cycle | Queue, new data only | **NO** |
+| KF stale measurement | Correct on new data only | Queue, new data only | Yes (FIXED) |
 | Battery monitoring | One-time log + telemetry | PM task, auto-shutdown | **NO** |
-| HardFault handler | Infinite loop | Motor stop + diagnostics | **NO** |
-| Watchdog | None | IWDG, 100-353ms | **NO** |
+| HardFault handler | Motor stop + register dump | Motor stop + diagnostics | Yes (FIXED) |
+| Watchdog | IWDG, 100-353ms | IWDG, 100-353ms | Yes (FIXED) |
 | I2C bus unlock loop | Unbounded (I2C3) | Unbounded (same code) | Yes |
-| I2C1 bus recovery timing | 100 NOPs (0.6us) | sleepus(10) (10us) | **NO** |
+| I2C1 bus recovery timing | delay_us(3) (3us) | sleepus(10) (10us) | Yes (FIXED) |
 | Barometer in estimator | Disabled | Active at 50 Hz | **NO** |
