@@ -11,6 +11,7 @@ Updated: 2026-02-11 (finding #7 accepted - hardware limitation)
 Updated: 2026-02-11 (finding #8 accepted - hardware limitation)
 Updated: 2026-02-11 (finding #15 accepted - adequate for hover envelope)
 Updated: 2026-02-11 (finding #16 accepted - prop wash, rangefinder sufficient)
+Updated: 2026-02-11 (all minor items accepted)
 
 Comprehensive audit comparing the Webots simulation HAL
 (`hal/webots-crazyflie/`) against the real hardware HAL
@@ -242,16 +243,16 @@ total specific force. This means:
 | Optical flow | 250 Hz | ~100 Hz (PMW3901) | Variable rate |
 | Control loop | 250 Hz | 250 Hz | Matched |
 
-## Minor / Not Urgent
+## Minor / Not Urgent - ALL ACCEPTED
 
-- Gravity constant difference (9.81 vs 9.80665) - negligible
-- Barometer calibration wastes ~1s at startup for unused data
-- `FLOW_SCALE = 0.0005f` may need in-flight calibration
-- Landing detection threshold (0.08m) is near VL53L1x minimum range
-- `cf_use_mag` tunable defaults to enabled but mag_valid is always false - harmless
-- PID derivative computed on error, not measurement - derivative kick on setpoint changes
-- `platform_get_time_us()` has a race between reading ms and SysTick->VAL (sanity-checked downstream)
-- GPIO AFR registers OR'd without clearing first (`platform.c:236,414`) - correct from reset but not after software reset
+- Gravity constant difference (9.81 vs 9.80665) - 0.04%, absorbed by PID tuning
+- Barometer calibration wastes ~1s at startup - negligible within 15s grace period
+- `FLOW_SCALE = 0.0005f` may need in-flight calibration - real-world tuning item
+- Landing detection threshold (0.08m) near VL53L1x minimum range (~0.04m) - margin sufficient, velocity also checked
+- `cf_use_mag` tunable defaults to enabled but mag_valid always false - harmless dead path
+- PID derivative on error, not measurement - derivative kick on setpoint changes, not critical at hover angles
+- `platform_get_time_us()` race between ms and SysTick->VAL - sanity-checked downstream
+- GPIO AFR registers OR'd without clearing (`platform.c:236,414`) - correct from hardware reset, IWDG guarantees hardware reset
 
 ## Recommendation for First Flight
 
@@ -272,7 +273,7 @@ total specific force. This means:
 | Motor numbering | M1-M4, FR/BR/BL/FL | M1-M4, FR/BR/BL/FL | Yes |
 | Motor pin mapping | PA1/PB11/PA15/PB9 | PA1/PB11/PA15/PB9 | Yes |
 | Flow gyro compensation | Velocity-domain subtraction | EKF measurement model | Yes (FIXED) |
-| Attitude estimation | Euler integration | Quaternion (Mahony) | **NO** |
+| Attitude estimation | Euler integration | Quaternion (Mahony) | **NO** (ACCEPTED) |
 | Yaw drift (no mag) | Yes | Yes (same limitation) | Yes |
 | KF stale measurement | Correct on new data only | Queue, new data only | Yes (FIXED) |
 | Battery monitoring | 2 Hz actor, debounced landing | PM task, auto-shutdown | Yes (FIXED) |
@@ -280,4 +281,4 @@ total specific force. This means:
 | Watchdog | IWDG, 100-353ms | IWDG, 100-353ms | Yes (FIXED) |
 | I2C bus unlock loop | Bounded (9 cycles) | Unbounded (same code) | Better (FIXED) |
 | I2C1 bus recovery timing | delay_us(3) (3us) | sleepus(10) (10us) | Yes (FIXED) |
-| Barometer in estimator | Disabled | Active at 50 Hz | **NO** |
+| Barometer in estimator | Disabled | Active at 50 Hz | **NO** (ACCEPTED) |
