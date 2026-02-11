@@ -10,6 +10,7 @@ Updated: 2026-02-11 (finding #6 accepted - requires real-world tuning)
 Updated: 2026-02-11 (finding #7 accepted - hardware limitation)
 Updated: 2026-02-11 (finding #8 accepted - hardware limitation)
 Updated: 2026-02-11 (finding #15 accepted - adequate for hover envelope)
+Updated: 2026-02-11 (finding #16 accepted - prop wash, rangefinder sufficient)
 
 Comprehensive audit comparing the Webots simulation HAL
 (`hal/webots-crazyflie/`) against the real hardware HAL
@@ -206,16 +207,14 @@ acrobatic flight modes where large angles are intentional.
 **Files** - `fusion/complementary_filter.c:82-84`
 **Bitcraze ref** - `src/modules/src/sensfusion6.c:181-252`
 
-### 16. Barometer disabled vs Bitcraze active at 50 Hz
+### 16. Barometer disabled vs Bitcraze active at 50 Hz - ACCEPTED
 
-Hive initializes BMP388 and calibrates it (~1s at startup) but then
-discards all readings during flight.
-
-Bitcraze reads the barometer at 50 Hz and fuses it into the Kalman
-filter as a Z-altitude observation. The measurement noise parameter
-(`measNoiseBaro`) naturally down-weights noisy barometer readings rather
-than discarding them entirely. This provides altitude sensing above
-rangefinder range and redundancy if the rangefinder fails.
+Deliberately disabled for first flight tests. Prop wash corrupts
+barometer readings at low altitude, and all flight profiles are now
+capped at 1.0m (well within VL53L1x rangefinder range). The rangefinder
+provides reliable altitude data in this envelope. Barometer fusion is a
+future improvement for flights above 1.0m where the rangefinder loses
+signal.
 
 **Files** - `hal/crazyflie-2.1+/platform.c:1254-1259`
 **Bitcraze ref** - `src/hal/src/sensors_bmi088_bmp3xx.c:350-368`,
