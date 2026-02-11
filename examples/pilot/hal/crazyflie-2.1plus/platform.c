@@ -115,6 +115,12 @@ extern void hive_timer_tick_isr(void);
 void SysTick_Handler(void) {
     s_sys_tick_ms++;
     hive_timer_tick_isr();
+
+    // Feed IWDG every 80ms (Bitcraze feeds from system task at 80ms)
+    // Timeout is 100-353ms, so 80ms feed gives comfortable margin
+    if ((s_sys_tick_ms % 80) == 0) {
+        IWDG_ReloadCounter();
+    }
 }
 
 // ----------------------------------------------------------------------------
@@ -124,6 +130,24 @@ void SysTick_Handler(void) {
 static void systick_init(void) {
     // Configure SysTick for 1ms interrupts
     SysTick_Config(SystemCoreClock / 1000);
+}
+
+static void watchdog_init(void) {
+    // Detect if we restarted due to watchdog timeout
+    if (RCC_GetFlagStatus(RCC_FLAG_IWDGRST) != RESET) {
+        RCC_ClearFlag();
+        debug_swo_printf("[INIT] WARNING: Watchdog reset detected!\n");
+    }
+
+    // Configure IWDG (matching Bitcraze: prescaler 32, reload 188)
+    // LSI oscillator: 17-47 kHz on STM32F405
+    // At prescaler 32: 531-1469 Hz watchdog clock
+    // Reload 188 gives timeout of 100-353ms across LSI range
+    IWDG_WriteAccessCmd(IWDG_WriteAccess_Enable);
+    IWDG_SetPrescaler(IWDG_Prescaler_32);
+    IWDG_SetReload(188);
+    IWDG_ReloadCounter();
+    IWDG_Enable();
 }
 
 static void gpio_init(void) {
@@ -176,32 +200,24 @@ static void i2c1_bus_recovery(void) {
     I2C1_SDA_PORT->MODER &= ~(3U << (I2C1_SDA_PIN_NUM * 2));
 
     // Clock out up to 9 bits to release stuck slave
-    // Delay ~3us per half-cycle at 168MHz (100 NOPs ~= 0.6us, need ~500 for 3us)
+    // 3us per half-cycle gives ~167kHz clock, well within I2C fast mode spec
     for (int i = 0; i < 9; i++) {
         if (I2C1_SDA_PORT->IDR & (1U << I2C1_SDA_PIN_NUM)) {
             break;
         }
         I2C1_SCL_PORT->ODR &= ~(1U << I2C1_SCL_PIN_NUM);
-        for (volatile int d = 0; d < 100; d++) {
-            __NOP();
-        }
+        platform_delay_us(3);
         I2C1_SCL_PORT->ODR |= (1U << I2C1_SCL_PIN_NUM);
-        for (volatile int d = 0; d < 100; d++) {
-            __NOP();
-        }
+        platform_delay_us(3);
     }
 
     // Generate STOP condition (SDA low->high while SCL high)
     I2C1_SDA_PORT->MODER |= (1U << (I2C1_SDA_PIN_NUM * 2));
     I2C1_SDA_PORT->OTYPER |= (1U << I2C1_SDA_PIN_NUM);
     I2C1_SDA_PORT->ODR &= ~(1U << I2C1_SDA_PIN_NUM);
-    for (volatile int d = 0; d < 100; d++) {
-        __NOP();
-    }
+    platform_delay_us(3);
     I2C1_SDA_PORT->ODR |= (1U << I2C1_SDA_PIN_NUM);
-    for (volatile int d = 0; d < 100; d++) {
-        __NOP();
-    }
+    platform_delay_us(3);
 
     // Restore pins to AF mode
     I2C1_SCL_PORT->MODER &= ~(3U << (I2C1_SCL_PIN_NUM * 2));
@@ -853,11 +869,13 @@ static void motors_init(void) {
     GPIOB->AFR[1] &= ~(0xFU << 4);       // Clear AF for PB9
     GPIOB->AFR[1] |= (2U << 4);          // AF2 for PB9
 
-    // Configure TIM2 for 328Hz PWM (Crazyflie motor ESC frequency)
+    // Configure TIM2 for ~328kHz PWM (Crazyflie brushed motor frequency)
     // APB1 timer clock = 84MHz (42MHz APB1 x2)
-    // PSC = 999 -> 84MHz/1000 = 84kHz
-    // ARR = 255 -> 84kHz/256 = 328Hz
-    TIM2->PSC = 999;
+    // PSC = 0 -> 84MHz / 1 = 84MHz
+    // ARR = 255 -> 84MHz / 256 = ~328kHz
+    // Bitcraze uses ~328kHz because lower frequencies cause PWM ripple
+    // that affects the NCP702 voltage regulator on the Crazyflie PCB.
+    TIM2->PSC = 0;
     TIM2->ARR = 255;
 
     // PWM mode 1 on channels 1, 2, 4 (CH3 not used on TIM2)
@@ -872,8 +890,8 @@ static void motors_init(void) {
     TIM2->CCR4 = 0;
     TIM2->CR1 = TIM_CR1_CEN;
 
-    // Configure TIM4 for 328Hz PWM (same frequency)
-    TIM4->PSC = 999;
+    // Configure TIM4 for ~328kHz PWM (same frequency as TIM2)
+    TIM4->PSC = 0;
     TIM4->ARR = 255;
     TIM4->CCMR2 = TIM_CCMR2_OC4M_2 | TIM_CCMR2_OC4M_1; // CH4 PWM mode 1
     TIM4->CCMR2 |= TIM_CCMR2_OC4PE;
@@ -984,6 +1002,11 @@ int platform_init(void) {
     // Try to initialize flow deck (optional - may not be present)
     debug_swo_printf("[INIT] Checking for flow deck...\n");
     s_flow_deck_present = flow_deck_init();
+
+    // Enable IWDG watchdog last - once enabled, it cannot be disabled.
+    // Any hang (including during runtime) will reset the MCU within
+    // 100-353ms. SysTick_Handler feeds it every 80ms.
+    watchdog_init();
 
     s_initialized = true;
     debug_swo_printf("[INIT] Platform init complete\n");
@@ -1443,4 +1466,70 @@ void platform_debug_printf(const char *fmt, ...) {
     va_start(args, fmt);
     debug_swo_vprintf(fmt, args);
     va_end(args);
+}
+
+// ----------------------------------------------------------------------------
+// Fault Handlers
+//
+// Override weak aliases from startup_stm32f405.s. The critical action is
+// platform_emergency_stop() which zeroes all motor PWM outputs. Debug
+// output via SWO is best-effort. The IWDG watchdog will reset the MCU
+// within 100-353ms since the fault handler loop does not feed it.
+// ----------------------------------------------------------------------------
+
+// HardFault handler - assembly trampoline extracts stacked registers,
+// then branches to C handler for debug output.
+// Tests LR bit 2 to determine if MSP or PSP was active.
+__attribute__((used, naked)) void HardFault_Handler(void) {
+    __asm volatile("TST LR, #4       \n"
+                   "ITE EQ            \n"
+                   "MRSEQ R0, MSP     \n"
+                   "MRSNE R0, PSP     \n"
+                   "B hardfault_handler_c \n");
+}
+
+__attribute__((used)) void hardfault_handler_c(uint32_t *fault_stack) {
+    platform_emergency_stop();
+
+    debug_swo_printf("\n[FAULT] HardFault!\n");
+    debug_swo_printf("R0  = 0x%08lX\n", fault_stack[0]);
+    debug_swo_printf("R1  = 0x%08lX\n", fault_stack[1]);
+    debug_swo_printf("R2  = 0x%08lX\n", fault_stack[2]);
+    debug_swo_printf("R3  = 0x%08lX\n", fault_stack[3]);
+    debug_swo_printf("R12 = 0x%08lX\n", fault_stack[4]);
+    debug_swo_printf("LR  = 0x%08lX\n", fault_stack[5]);
+    debug_swo_printf("PC  = 0x%08lX\n", fault_stack[6]);
+    debug_swo_printf("PSR = 0x%08lX\n", fault_stack[7]);
+    // ARM fault status registers
+    debug_swo_printf("CFSR = 0x%08lX\n", *(volatile uint32_t *)0xE000ED28);
+    debug_swo_printf("HFSR = 0x%08lX\n", *(volatile uint32_t *)0xE000ED2C);
+    debug_swo_printf("BFAR = 0x%08lX\n", *(volatile uint32_t *)0xE000ED38);
+
+    while (true) {
+        __NOP();
+    }
+}
+
+__attribute__((used)) void MemManage_Handler(void) {
+    platform_emergency_stop();
+    debug_swo_printf("\n[FAULT] MemManage!\n");
+    while (true) {
+        __NOP();
+    }
+}
+
+__attribute__((used)) void BusFault_Handler(void) {
+    platform_emergency_stop();
+    debug_swo_printf("\n[FAULT] BusFault!\n");
+    while (true) {
+        __NOP();
+    }
+}
+
+__attribute__((used)) void UsageFault_Handler(void) {
+    platform_emergency_stop();
+    debug_swo_printf("\n[FAULT] UsageFault!\n");
+    while (true) {
+        __NOP();
+    }
 }
