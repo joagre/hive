@@ -9,6 +9,7 @@ Updated: 2026-02-11 (finding #1 fixed)
 Updated: 2026-02-11 (finding #6 accepted - requires real-world tuning)
 Updated: 2026-02-11 (finding #7 accepted - hardware limitation)
 Updated: 2026-02-11 (finding #8 accepted - hardware limitation)
+Updated: 2026-02-11 (finding #15 accepted - adequate for hover envelope)
 
 Comprehensive audit comparing the Webots simulation HAL
 (`hal/webots-crazyflie/`) against the real hardware HAL
@@ -193,18 +194,14 @@ clock, well within I2C fast mode spec).
 
 ## Estimator Architecture Differences
 
-### 15. Complementary filter uses Euler integration, Bitcraze uses quaternions
+### 15. Complementary filter uses Euler integration, Bitcraze uses quaternions - ACCEPTED
 
-Hive integrates gyro rates directly into Euler angles:
-```
-roll += gyro_x * dt
-pitch += gyro_y * dt
-```
-
-Bitcraze uses Mahony AHRS algorithm operating in quaternion space. This
-avoids cross-axis coupling errors, gimbal lock, and the singularity
-issues of Euler angle integration. At small angles (<15 degrees, typical
-for hover) the difference is negligible.
+Euler integration has cross-axis coupling errors that scale with tilt
+angle (~3.4% at 15 degrees, ~29% at 45 degrees). For the current flight
+envelope (hover, <15 degrees tilt, 45 degree emergency cutoff) the
+difference from quaternion-based estimation is negligible. Accepted for
+now. Quaternion-based Mahony AHRS is required before expanding to
+acrobatic flight modes where large angles are intentional.
 
 **Files** - `fusion/complementary_filter.c:82-84`
 **Bitcraze ref** - `src/modules/src/sensfusion6.c:181-252`
