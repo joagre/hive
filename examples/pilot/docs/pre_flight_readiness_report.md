@@ -6,6 +6,7 @@ Updated: 2026-02-11 (findings #2, #9, #11, #12, #14 fixed)
 Updated: 2026-02-11 (findings #3, #5, #13 fixed)
 Updated: 2026-02-11 (finding #10 fixed)
 Updated: 2026-02-11 (finding #1 fixed)
+Updated: 2026-02-11 (finding #6 accepted - requires real-world tuning)
 
 Comprehensive audit comparing the Webots simulation HAL
 (`hal/webots-crazyflie/`) against the real hardware HAL
@@ -85,13 +86,12 @@ safer than running on stale accel/gyro data.
 
 ## Items That Will Cause Degraded Performance
 
-### 6. PID gains tuned for different motor dynamics
+### 6. PID gains tuned for different motor dynamics - ACCEPTED
 
-Webots simulates a 20ms first-order motor lag and tunes gains to
-compensate. The real HAL writes PWM directly - no software lag. The
-`hal_config.h` gains are already lower for CF (e.g., attitude Kp 1.8 vs
-2.5, rate Kp 0.020 vs 0.028), which is the right direction, but they
-may still need real-world tuning.
+Requires real-world flight testing to tune. Crazyflie `hal_config.h`
+gains are already conservative relative to Webots (lower Kp/Ki across
+the board). Runtime parameter tuning via radio eliminates the
+reflash cycle. Accepted as a known first-flight item.
 
 | Parameter | Webots | Crazyflie | Notes |
 |---|---|---|---|
