@@ -187,6 +187,14 @@ void estimator_actor(void *args, const hive_spawn_info_t *siblings,
     bool rangefinder_mode = false;
     float last_valid_rangefinder_alt = 0.0f;
 
+    // Track previous altitude measurement to detect new data.
+    // The rangefinder updates at ~40Hz while the control loop runs at 250Hz.
+    // Only run KF correction when a genuinely new measurement arrives,
+    // otherwise the covariance shrinks too fast (same data treated as
+    // independent observations).
+    float prev_measured_altitude = 0.0f;
+    bool have_altitude_measurement = false;
+
     // Track sensor state transitions for logging
     bool prev_gps_valid = false;
     bool prev_velocity_valid = false;
@@ -230,6 +238,8 @@ void estimator_actor(void *args, const hive_spawn_info_t *siblings,
             last_valid_y = 0.0f;
             rangefinder_mode = false;
             last_valid_rangefinder_alt = 0.0f;
+            prev_measured_altitude = 0.0f;
+            have_altitude_measurement = false;
             prev_gps_valid = false;
             prev_velocity_valid = false;
             prev_time = hive_get_time();
@@ -358,6 +368,12 @@ void estimator_actor(void *args, const hive_spawn_info_t *siblings,
         float accel_z = accel_world_z - GRAVITY;
 
         // Run Kalman filter
+        // Predict every cycle (accelerometer integration).
+        // Correct only when a new altitude measurement arrives.
+        // The rangefinder runs at ~40Hz while the control loop runs at
+        // 250Hz. Feeding the same measurement repeatedly would shrink
+        // covariance too fast (Bitcraze solves this with a measurement
+        // queue; we detect new data by value change).
         if (!alt_kf.initialized) {
             if (!isfinite(measured_altitude)) {
                 HIVE_LOG_ERROR(
@@ -365,8 +381,16 @@ void estimator_actor(void *args, const hive_spawn_info_t *siblings,
                 measured_altitude = 0.0f;
             }
             altitude_kf_reset(&alt_kf, measured_altitude);
+            prev_measured_altitude = measured_altitude;
+            have_altitude_measurement = true;
         }
-        altitude_kf_update(&alt_kf, accel_z, measured_altitude, dt);
+        altitude_kf_predict(&alt_kf, accel_z, dt);
+        bool new_measurement = have_altitude_measurement &&
+                               (measured_altitude != prev_measured_altitude);
+        if (new_measurement) {
+            altitude_kf_correct(&alt_kf, measured_altitude);
+            prev_measured_altitude = measured_altitude;
+        }
 
         // Get estimates from KF
         altitude_kf_get_state(&alt_kf, &est.altitude, &est.vertical_velocity,
