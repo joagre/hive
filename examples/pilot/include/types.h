@@ -18,9 +18,11 @@
 typedef struct sensor_data {
     // Accelerometer (m/s^2, body frame)
     float accel[3]; // [x, y, z]
+    bool accel_valid;
 
     // Gyroscope (rad/s, body frame)
     float gyro[3]; // [x, y, z]
+    bool gyro_valid;
 
     // Magnetometer (uT, body frame) - optional
     float mag[3];   // [x, y, z]
@@ -48,7 +50,8 @@ typedef struct sensor_data {
 
 #define SENSOR_DATA_ZERO                                                     \
     {                                                                        \
-        .accel = {0.0f, 0.0f, 0.0f}, .gyro = {0.0f, 0.0f, 0.0f},             \
+        .accel = {0.0f, 0.0f, 0.0f}, .accel_valid = false,                   \
+        .gyro = {0.0f, 0.0f, 0.0f}, .gyro_valid = false,                     \
         .mag = {0.0f, 0.0f, 0.0f}, .mag_valid = false, .pressure_hpa = 0.0f, \
         .baro_altitude = 0.0f, .baro_temp_c = 0.0f, .baro_valid = false,     \
         .gps_x = 0.0f, .gps_y = 0.0f, .gps_z = 0.0f, .gps_valid = false,     \

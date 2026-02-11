@@ -330,8 +330,13 @@ static void i2cdrvdevUnlockBus(GPIO_TypeDef *portSCL, GPIO_TypeDef *portSDA,
                                uint16_t pinSCL, uint16_t pinSDA) {
     GPIO_SetBits(portSDA, pinSDA);
 
-    // Check SDA line to determine if slave is asserting bus and clock out if so
-    while (GPIO_ReadInputDataBit(portSDA, pinSDA) == Bit_RESET) {
+    // Check SDA line to determine if slave is asserting bus and clock out if so.
+    // Bounded to 9 clock cycles (I2C standard maximum to release any slave),
+    // matching the I2C1 recovery loop in platform.c (pre-flight finding #13).
+    for (int i = 0; i < 9; i++) {
+        if (GPIO_ReadInputDataBit(portSDA, pinSDA) != Bit_RESET) {
+            break;
+        }
         // Set clock high
         GPIO_SetBits(portSCL, pinSCL);
         // Wait for any clock stretching to finish

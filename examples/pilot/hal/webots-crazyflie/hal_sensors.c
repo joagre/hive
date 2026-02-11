@@ -24,6 +24,7 @@ void hal_read_sensors(sensor_data_t *sensors) {
     sensors->accel[0] = -GRAVITY * sinf(pitch);
     sensors->accel[1] = GRAVITY * sinf(roll) * cosf(pitch);
     sensors->accel[2] = GRAVITY * cosf(roll) * cosf(pitch);
+    sensors->accel_valid = true;
 
     // Add accelerometer noise
     sensors->accel[0] += ACCEL_NOISE_STDDEV * randf_gaussian();
@@ -34,6 +35,7 @@ void hal_read_sensors(sensor_data_t *sensors) {
     sensors->gyro[0] = (float)gyro[0];
     sensors->gyro[1] = (float)gyro[1];
     sensors->gyro[2] = (float)gyro[2];
+    sensors->gyro_valid = true;
 
     // Add gyro noise and bias drift
     g_gyro_bias[0] += GYRO_BIAS_DRIFT * randf_gaussian();

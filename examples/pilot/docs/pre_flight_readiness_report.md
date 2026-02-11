@@ -3,6 +3,7 @@
 Date: 2026-02-10
 Updated: 2026-02-11 (cross-referenced against Bitcraze crazyflie-firmware)
 Updated: 2026-02-11 (findings #2, #9, #11, #12, #14 fixed)
+Updated: 2026-02-11 (findings #3, #5, #13 fixed)
 
 Comprehensive audit comparing the Webots simulation HAL
 (`hal/webots-crazyflie/`) against the real hardware HAL
@@ -38,26 +39,15 @@ PWM matching Bitcraze.
 **Bitcraze ref** - `src/drivers/interface/motors.h:44-50`,
 `src/drivers/src/motors_def.c:29-48`
 
-### 3. Optical flow velocity not compensated for body rotation
+### 3. ~~Optical flow velocity not compensated for body rotation~~ FIXED
 
-Confirmed missing. Bitcraze compensates in the EKF measurement model
-(`mm_flow.c`), not in the deck driver. The key equations:
+**Fixed.** Gyro-induced rotational flow is now subtracted from the raw
+pixel velocity before body-to-world rotation, matching the signs in
+Bitcraze `mm_flow.c:79` (`-omega_y`) and `:92` (`+omega_x`). The
+`R[2][2]` tilt compensation is skipped for now (cos(15 deg) = 0.966,
+negligible at hover angles).
 
-```
-predictedNX = (dt * Npix / thetapix) * (Vx * R[2][2] / z - omega_y)
-predictedNY = (dt * Npix / thetapix) * (Vy * R[2][2] / z + omega_x)
-```
-
-The `omega_y` / `omega_x` terms subtract gyro-induced rotational flow
-from the raw sensor reading, isolating translational velocity. Hive's
-code uses a simple `delta * FLOW_SCALE * height` with no gyro term.
-Every attitude correction injects false velocity into the position
-estimate.
-
-Bitcraze also applies tilt compensation via `R[2][2]` (rotation matrix
-element) to the translational term. Hive does not.
-
-**Files** - `hal/crazyflie-2.1+/platform.c:1300-1301`
+**Files** - `hal/crazyflie-2.1+/platform.c`
 **Bitcraze ref** - `src/modules/src/kalman_core/mm_flow.c:79,92`
 
 ### 4. Motor mixer pitch sign - VERIFIED OK
@@ -82,17 +72,16 @@ pin assignments all match the Bitcraze reference:
 **Bitcraze ref** - `src/modules/src/power_distribution_quadrotor.c:84-93`,
 `src/drivers/src/motors_def.c:720-726`
 
-### 5. Stale sensor data on I2C failure
+### 5. ~~Stale sensor data on I2C failure~~ FIXED
 
-When `bmi088_get_accel_data()` fails, the previous reading is silently
-reused. No validity flag, no error counter. A single I2C glitch during
-flight means the estimator runs on stale gyro/accel data.
+**Fixed.** Added `accel_valid` and `gyro_valid` flags to `sensor_data_t`.
+HAL sets flags false before reading, true on success. Estimator checks
+both flags at the top of `validate_sensors()` and skips the cycle if
+either is false. Skipping one 4ms estimator cycle on I2C failure is
+safer than running on stale accel/gyro data.
 
-Bitcraze has the same pattern in their sensor driver, but is protected
-by their watchdog (see finding #11) and HardFault handler (see
-finding #12) which limit the blast radius of failures.
-
-**Files** - `hal/crazyflie-2.1+/platform.c:1241`
+**Files** - `include/types.h`, `hal/crazyflie-2.1+/platform.c`,
+`hal/webots-crazyflie/hal_sensors.c`, `estimator_actor.c`
 
 ## Items That Will Cause Degraded Performance
 
@@ -185,18 +174,13 @@ watchdog (IWDG resets MCU within 100-353ms).
 **Files** - `hal/crazyflie-2.1+/platform.c`
 **Bitcraze ref** - `src/drivers/src/nvic.c:87-154`
 
-### 13. I2C bus recovery loop is unbounded - same as Bitcraze
+### 13. ~~I2C bus recovery loop is unbounded~~ FIXED
 
-The `i2cdrvdevUnlockBus()` function has an unbounded `while` loop on SDA
-stuck low. Cross-reference confirms Bitcraze has the identical unbounded
-loop. However, Bitcraze is protected by their IWDG watchdog which would
-reset the system within ~350ms. Hive has no such safety net.
+**Fixed.** Changed the unbounded `while` loop to a bounded `for` loop
+with a 9-iteration limit (I2C standard maximum clock cycles to release
+any slave), matching the I2C1 recovery in `platform.c`.
 
-Note: Hive's separate I2C1 recovery in `platform.c:180` uses a bounded
-`for (int i = 0; i < 9; i++)` loop, which is actually better than both
-Bitcraze's and the I2C3 path.
-
-**Files** - `hal/crazyflie-2.1+/i2c_drv.c:334`
+**Files** - `hal/crazyflie-2.1+/i2c_drv.c`
 **Bitcraze ref** - `src/drivers/src/i2c_drv.c:322-339`
 
 ### 14. ~~I2C1 clock timing too fast~~ FIXED
@@ -293,13 +277,13 @@ total specific force. This means:
 | Motor mixer signs | Legacy: same | Legacy: same | Yes |
 | Motor numbering | M1-M4, FR/BR/BL/FL | M1-M4, FR/BR/BL/FL | Yes |
 | Motor pin mapping | PA1/PB11/PA15/PB9 | PA1/PB11/PA15/PB9 | Yes |
-| Flow gyro compensation | None | EKF measurement model | **NO** |
+| Flow gyro compensation | Velocity-domain subtraction | EKF measurement model | Yes (FIXED) |
 | Attitude estimation | Euler integration | Quaternion (Mahony) | **NO** |
 | Yaw drift (no mag) | Yes | Yes (same limitation) | Yes |
 | KF stale measurement | Correct on new data only | Queue, new data only | Yes (FIXED) |
 | Battery monitoring | One-time log + telemetry | PM task, auto-shutdown | **NO** |
 | HardFault handler | Motor stop + register dump | Motor stop + diagnostics | Yes (FIXED) |
 | Watchdog | IWDG, 100-353ms | IWDG, 100-353ms | Yes (FIXED) |
-| I2C bus unlock loop | Unbounded (I2C3) | Unbounded (same code) | Yes |
+| I2C bus unlock loop | Bounded (9 cycles) | Unbounded (same code) | Better (FIXED) |
 | I2C1 bus recovery timing | delay_us(3) (3us) | sleepus(10) (10us) | Yes (FIXED) |
 | Barometer in estimator | Disabled | Active at 50 Hz | **NO** |

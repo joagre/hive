@@ -40,6 +40,13 @@ static inline bool is_valid_float(float f) {
 // Validate sensor data, return false if any critical value is bad
 // Logs which sensor failed for post-mortem analysis
 static bool validate_sensors(const sensor_data_t *s) {
+    // Check accel/gyro validity flags (pre-flight finding #5).
+    // Skipping one 4ms cycle on I2C failure is better than running on stale data.
+    if (!s->accel_valid || !s->gyro_valid) {
+        HIVE_LOG_WARN("[EST] Sensor fail: accel_valid=%d gyro_valid=%d",
+                      s->accel_valid, s->gyro_valid);
+        return false;
+    }
     // Check gyro
     for (int i = 0; i < 3; i++) {
         if (!is_valid_float(s->gyro[i])) {

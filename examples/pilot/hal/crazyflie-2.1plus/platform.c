@@ -1260,18 +1260,22 @@ void platform_read_sensors(sensor_data_t *sensors) {
     const float accel_scale = (24.0f * GRAVITY / 32768.0f) * s_accel_scale;
     const float gyro_scale = (2000.0f / 32768.0f) * (M_PI / 180.0f);
 
-    // Read accelerometer
+    // Read accelerometer (pre-flight finding #5: validity flags)
+    sensors->accel_valid = false;
     if (bmi088_get_accel_data(&accel_data, &s_bmi088_dev) == BMI088_OK) {
         sensors->accel[0] = accel_data.x * accel_scale;
         sensors->accel[1] = accel_data.y * accel_scale;
         sensors->accel[2] = accel_data.z * accel_scale;
+        sensors->accel_valid = true;
     }
 
-    // Read gyroscope (with bias correction)
+    // Read gyroscope (with bias correction, pre-flight finding #5: validity flags)
+    sensors->gyro_valid = false;
     if (bmi088_get_gyro_data(&gyro_data, &s_bmi088_dev) == BMI088_OK) {
         sensors->gyro[0] = gyro_data.x * gyro_scale - s_gyro_bias[0];
         sensors->gyro[1] = gyro_data.y * gyro_scale - s_gyro_bias[1];
         sensors->gyro[2] = gyro_data.z * gyro_scale - s_gyro_bias[2];
+        sensors->gyro_valid = true;
     }
 
     // Read barometer (disabled - using ToF rangefinder for altitude instead)
@@ -1322,6 +1326,13 @@ void platform_read_sensors(sensor_data_t *sensors) {
             // Formula: velocity = pixel_delta * SCALE * height
             float vx_body = delta_x * HAL_FLOW_SCALE * height_m;
             float vy_body = delta_y * HAL_FLOW_SCALE * height_m;
+
+            // Compensate for body rotation (pre-flight finding #3).
+            // The PMW3901 sees rotational flow when the drone pitches/rolls.
+            // Subtract the gyro-induced component to isolate translational
+            // velocity. Signs match Bitcraze mm_flow.c:79 and :92.
+            vx_body -= sensors->gyro[1] * height_m; // pitch rate
+            vy_body += sensors->gyro[0] * height_m; // roll rate
 
             // Integrate yaw from gyro (simple dead-reckoning)
             // Note: This drifts over time, but flow-based position drifts anyway
