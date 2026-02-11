@@ -129,19 +129,19 @@ graph TB
     StateBus --> Rate
     Rate --> TorqueBus([Torque Bus]) --> Motor[Motor]
 
-    Battery[Battery] -.->|LOW_BATTERY| FlightMgr[Flight Manager]
-
     SensorBus -.-> Comms[Comms]
     StateBus -.-> Comms
     ThrustBus -.-> Comms
-    Comms -.-> Radio([Radio])
+    Comms -.-> Radio[(Radio)]
 
     SensorBus -.-> Logger[Logger]
     StateBus -.-> Logger
     ThrustBus -.-> Logger
     PositionTargetBus -.-> Logger
-    Logger -.-> CSV([CSV])
+    Logger -.-> CSV[(CSV)]
 ```
+
+Rectangles are actors, rounded boxes are buses, cylinders are external I/O.
 
 IPC notifications coordinate flight state transitions (all fire-and-forget):
 
