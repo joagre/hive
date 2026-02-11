@@ -327,21 +327,25 @@ Key memory optimizations in `hive_config.mk`:
 ### Measured Stack Usage
 
 Build with `STACK_PROFILE=1` to measure actual stack usage via watermarking.
-Results from x86-64 Linux (Webots simulation) with 4KB stacks:
+Results from x86-64 Linux (Webots simulation). Estimator and logger use 5KB
+stacks; all others use 4KB:
 
-| Actor | Used | Usage | Notes |
-|-------|------|-------|-------|
-| sensor | 2056 | 50.2% | Highest - HAL sensor structs |
-| logger | 1912 | 46.7% | CSV formatting + file I/O |
-| estimator | 1480 | 36.1% | Kalman filter + complementary filter state |
-| altitude | 1304 | 31.8% | PID state + landing logic |
-| waypoint | 1288 | 31.4% | Waypoint list + arrival detection |
-| flight_mgr | 1192 | 29.1% | Log file management + IPC |
-| supervisor | 1128 | 27.5% | Child management overhead |
-| rate | 792 | 19.3% | Rate PIDs |
-| attitude | 760 | 18.6% | Attitude PIDs |
-| position | 664 | 16.2% | Position PD |
-| motor | 504 | 12.3% | Lowest - simple output |
+| Actor | Size | Used | Usage | Notes |
+|-------|------|------|-------|-------|
+| waypoint | 4096 | 2936 | 71.7% | Waypoint list + arrival detection |
+| rate | 4096 | 2920 | 71.3% | Rate PIDs |
+| attitude | 4096 | 2904 | 70.9% | Attitude PIDs |
+| altitude | 4096 | 2872 | 70.1% | PID state + landing logic |
+| flight_mgr | 4096 | 2856 | 69.7% | Log file management + IPC |
+| logger | 5120 | 3560 | 69.5% | CSV formatting + file I/O |
+| sensor | 4096 | 2808 | 68.6% | HAL sensor structs |
+| position | 4096 | 2808 | 68.6% | Position PD |
+| motor | 4096 | 2744 | 67.0% | Simple output |
+| battery | 4096 | 2712 | 66.2% | Timer + IPC |
+| supervisor | 4096 | 2664 | 65.0% | Child management overhead |
+| estimator | 5120 | 3176 | 62.0% | Kalman filter + complementary filter state |
 
-All actors fit comfortably in 4KB with ~50% headroom (50.2% peak).
+Peak usage is 71.7% (waypoint) with ~1.2KB headroom. Estimator and logger
+were bumped to 5KB after 4KB measurements showed insufficient headroom
+(86.9% and 77.5% respectively).
 ARM Cortex-M may differ slightly due to calling conventions.

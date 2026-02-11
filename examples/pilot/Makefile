@@ -49,9 +49,9 @@ include hive_config.mk
 # =============================================================================
 
 # Smaller stacks sufficient for simulation
-# 13 actors x 4KB = 52KB, plus ~4KB headroom for allocator
+# 11 actors x 4KB + 2 x 5KB (estimator, logger) = 54KB, plus ~6KB headroom
 HIVE_CFLAGS += -DHIVE_DEFAULT_STACK_SIZE=4096
-HIVE_CFLAGS += '-DHIVE_STACK_ARENA_SIZE=(56*1024)'
+HIVE_CFLAGS += '-DHIVE_STACK_ARENA_SIZE=(60*1024)'
 
 # =============================================================================
 # Compiler Flags

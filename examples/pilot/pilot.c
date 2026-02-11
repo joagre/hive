@@ -149,7 +149,8 @@ int main(void) {
          .name = "estimator",
          .auto_register = true,
          .restart = HIVE_CHILD_PERMANENT,
-         .actor_cfg = {.priority = HIVE_PRIORITY_CRITICAL,
+         .actor_cfg = {.stack_size = 5120, // 77.5% of 4KB measured
+                       .priority = HIVE_PRIORITY_CRITICAL,
                        .name = "estimator",
                        .pool_block =
                            false}}, // CRITICAL: never block control loop
@@ -258,8 +259,9 @@ int main(void) {
          .init_args_size = sizeof(logger_config),
          .name = "logger",
          .auto_register = true,
-         .restart = HIVE_CHILD_TEMPORARY, // Not flight-critical, don't restart
-         .actor_cfg = {.priority = HIVE_PRIORITY_LOW,
+         .restart = HIVE_CHILD_TEMPORARY,  // Not flight-critical, don't restart
+         .actor_cfg = {.stack_size = 5120, // 86.9% of 4KB measured
+                       .priority = HIVE_PRIORITY_LOW,
                        .name = "logger",
                        .pool_block = true}},
     };
