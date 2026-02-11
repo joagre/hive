@@ -37,11 +37,11 @@ static const waypoint_t waypoints[] = {
 #elif FLIGHT_PROFILE == FLIGHT_PROFILE_ALTITUDE
 // Altitude-only waypoints (no GPS, x/y fixed at origin)
 // Position actor sees zero error, drone hovers in place
-// Max altitude 1.2m to stay within flow deck range (VL53L1x: 1.3m)
+// Max altitude 1.0m (VL53L1x rangefinder ceiling is 1.3m)
 static const waypoint_t waypoints[] = {
     {0.0f, 0.0f, 0.5f, 0.0f}, // 0.5m - start low
     {0.0f, 0.0f, 0.8f, 0.0f}, // 0.8m
-    {0.0f, 0.0f, 1.2f, 0.0f}, // 1.2m - max height (within flow deck range)
+    {0.0f, 0.0f, 1.0f, 0.0f}, // 1.0m - max height
     {0.0f, 0.0f, 0.8f, 0.0f}, // 0.8m - descend
 };
 #define WAYPOINT_HOVER_TIME_US (5 * 1000000) // 5 seconds hover
@@ -49,14 +49,13 @@ static const waypoint_t waypoints[] = {
 
 #elif FLIGHT_PROFILE == FLIGHT_PROFILE_FULL_3D
 // Full 3D waypoint navigation demo
-// Altitudes limited to 1.2m max to stay within flow deck range (VL53L1x: 1.3m)
+// Max altitude 1.0m (VL53L1x rangefinder ceiling is 1.3m)
 static const waypoint_t waypoints[] = {
-    {0.0f, 0.0f, 0.8f, 0.0f}, // Start: origin, 0.8m
-    {1.0f, 0.0f, 1.0f, 0.0f}, // Waypoint 1: +X, rise to 1.0m
-    {1.0f, 1.0f, 1.2f,
-     M_PI_F / 2.0f},            // Waypoint 2: corner, rise to 1.2m, face east
-    {0.0f, 1.0f, 1.0f, M_PI_F}, // Waypoint 3: -X, drop to 1.0m, face south
-    {0.0f, 0.0f, 0.8f, 0.0f},   // Return: origin, 0.8m, face north
+    {0.0f, 0.0f, 0.6f, 0.0f},          // Start: origin, 0.6m
+    {1.0f, 0.0f, 0.8f, 0.0f},          // Waypoint 1: +X, rise to 0.8m
+    {1.0f, 1.0f, 1.0f, M_PI_F / 2.0f}, // Waypoint 2: corner, 1.0m, face east
+    {0.0f, 1.0f, 0.8f, M_PI_F},        // Waypoint 3: -X, 0.8m, face south
+    {0.0f, 0.0f, 0.6f, 0.0f},          // Return: origin, 0.6m, face north
 };
 #define WAYPOINT_HOVER_TIME_US (2 * 1000000) // 2 seconds hover
 #define FLIGHT_PROFILE_NAME "FULL_3D"

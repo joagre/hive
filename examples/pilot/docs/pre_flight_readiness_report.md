@@ -5,6 +5,7 @@ Updated: 2026-02-11 (cross-referenced against Bitcraze crazyflie-firmware)
 Updated: 2026-02-11 (findings #2, #9, #11, #12, #14 fixed)
 Updated: 2026-02-11 (findings #3, #5, #13 fixed)
 Updated: 2026-02-11 (finding #10 fixed)
+Updated: 2026-02-11 (finding #1 fixed)
 
 Comprehensive audit comparing the Webots simulation HAL
 (`hal/webots-crazyflie/`) against the real hardware HAL
@@ -16,20 +17,18 @@ crazyflie-firmware source in `local/crazyflie-firmware/`.
 
 ## Items That Could Cause a Crash
 
-### 1. Keep waypoints below ~1.0m (most important)
+### 1. ~~Keep waypoints below ~1.0m (most important)~~ FIXED
 
-The VL53L1x rangefinder tops out at 1.3m and the barometer is disabled
-on the real HAL. Above 1.3m, the Kalman filter runs on stale altitude
-data and becomes overconfident. The `ALTITUDE` and `FULL_3D` profiles
-have 1.2m waypoints - dangerously close to the ceiling. Use `FIRST_TEST`
-(0.5m hover) for initial flights.
+**Fixed.** All flight profiles now capped at 1.0m maximum altitude,
+giving 0.3m margin below the VL53L1x rangefinder ceiling (1.3m).
+ALTITUDE profile peak lowered from 1.2m to 1.0m. FULL_3D profile
+range changed from 0.8-1.2m to 0.6-1.0m. FIRST_TEST unchanged (0.5m).
 
-Bitcraze uses barometer as a backup altitude source (see finding #15),
+Bitcraze uses barometer as a backup altitude source (see finding #16),
 which provides altitude sensing above rangefinder range. Hive has no
-such fallback.
+such fallback, so staying well below the rangefinder ceiling is essential.
 
-**Files** - `estimator_actor.c:324-336`, `hal/crazyflie-2.1+/hal_config.h:81`,
-`hal/crazyflie-2.1+/platform.c:1257`
+**Files** - `include/flight_profiles.h`
 
 ### 2. ~~PWM frequency 1000x too slow~~ FIXED
 

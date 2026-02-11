@@ -154,10 +154,10 @@ Only proceed if tethered flight was stable.
 # Conservative hover test (6s at 0.5m)
 make -f Makefile.crazyflie-2.1plus FLIGHT_PROFILE=FLIGHT_PROFILE_FIRST_TEST
 
-# Altitude changes (max 1.2m, within flow deck range)
+# Altitude changes (max 1.0m, within flow deck range)
 make -f Makefile.crazyflie-2.1plus FLIGHT_PROFILE=FLIGHT_PROFILE_ALTITUDE
 
-# Full 3D (requires Flow deck, max 1.2m)
+# Full 3D (requires Flow deck, max 1.0m)
 make -f Makefile.crazyflie-2.1plus FLIGHT_PROFILE=FLIGHT_PROFILE_FULL_3D
 ```
 
