@@ -7,6 +7,7 @@ Updated: 2026-02-11 (findings #3, #5, #13 fixed)
 Updated: 2026-02-11 (finding #10 fixed)
 Updated: 2026-02-11 (finding #1 fixed)
 Updated: 2026-02-11 (finding #6 accepted - requires real-world tuning)
+Updated: 2026-02-11 (finding #7 accepted - hardware limitation)
 
 Comprehensive audit comparing the Webots simulation HAL
 (`hal/webots-crazyflie/`) against the real hardware HAL
@@ -102,12 +103,15 @@ reflash cycle. Accepted as a known first-flight item.
 | `HAL_ATTITUDE_PID_KP` | 2.5 | 1.8 | CF notably lower |
 | `HAL_RATE_PID_KP` | 0.028 | 0.020 | CF lower |
 
-### 7. Position will drift - no absolute reference
+### 7. Position will drift - no absolute reference - ACCEPTED
 
-Webots uses GPS-quality position. Real CF dead-reckons from optical flow
-integration. Combined with finding #3 (rotation coupling) and no
-integral term in the position PD controller (`position_actor.c:122`),
-expect steady-state position offset and cumulative drift.
+Optical flow gives velocity, not position. Integration accumulates drift
+and there is no absolute position reference (GPS/Lighthouse/UWB).
+This is a hardware limitation. The position PD controller has no
+integral term, so steady-state offset from persistent disturbances
+(wind, asymmetric thrust) is not corrected. Adding a bounded integral
+term is a future improvement to validate during real-world flight
+testing.
 
 ### 8. Yaw will drift continuously - same as Bitcraze
 
