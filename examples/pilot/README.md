@@ -143,6 +143,52 @@ graph TB
     Logger -.-> CSV([CSV])
 ```
 
+IPC notifications coordinate flight state transitions (all fire-and-forget):
+
+```mermaid
+graph LR
+    subgraph Ground
+        Comms[Comms]
+    end
+
+    subgraph Flight Coordination
+        FlightMgr[Flight Manager]
+        Battery[Battery]
+        Altitude[Altitude]
+    end
+
+    subgraph Control Pipeline
+        Sensor[Sensor]
+        Estimator[Estimator]
+        Waypoint[Waypoint]
+        Position[Position]
+        Attitude[Attitude]
+        Rate[Rate]
+        Motor[Motor]
+        Logger[Logger]
+    end
+
+    Comms -->|GO| FlightMgr
+    Comms -->|ABORT| FlightMgr
+    Battery -->|LOW_BATTERY| FlightMgr
+    Altitude -->|FLIGHT_LANDED| FlightMgr
+
+    FlightMgr -->|RESET| Sensor
+    FlightMgr -->|RESET| Estimator
+    FlightMgr -->|RESET| Waypoint
+    FlightMgr -->|RESET| Position
+    FlightMgr -->|RESET| Attitude
+    FlightMgr -->|RESET| Rate
+    FlightMgr -->|RESET| Motor
+    FlightMgr -->|RESET| Logger
+    FlightMgr -->|RESET| Battery
+
+    FlightMgr -->|FLIGHT_START| Motor
+    FlightMgr -->|FLIGHT_START| Waypoint
+    FlightMgr -->|LANDING| Altitude
+    FlightMgr -->|FLIGHT_STOP| Motor
+```
+
 Hardware Abstraction Layer (HAL) provides platform independence:
 - `hal_init()`, `hal_cleanup()` - platform lifecycle
 - `hal_self_test()`, `hal_calibrate()` - startup checks
