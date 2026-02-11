@@ -4,15 +4,16 @@ This file provides guidance to Claude Code when working with the pilot autopilot
 
 ## Project Overview
 
-Quadcopter autopilot using the Hive actor runtime. 11-12 actors in a supervised control pipeline with cascaded PID control, sensor fusion, and telemetry logging.
+Quadcopter autopilot using the Hive actor runtime. 12-13 actors in a supervised control pipeline with cascaded PID control, sensor fusion, battery monitoring, and telemetry logging.
 
 **Platforms:**
 - Crazyflie 2.1+ hardware (STM32F405 + nRF51822)
 - Webots simulation
 
-**Actor count:** 11-12 (10-11 children + 1 supervisor)
+**Actor count:** 12-13 (11-12 children + 1 supervisor)
 - 8 flight-critical workers: sensor, estimator, waypoint, altitude, position, attitude, rate, motor
 - 1 flight manager (TRANSIENT - normal exit = mission complete)
+- 1 battery monitor (TEMPORARY - 2 Hz voltage sampling, emergency landing)
 - 1 logger (hive log sync + CSV telemetry to /sd or /tmp)
 - 1 supervisor
 - +1 comms actor (Crazyflie only, radio telemetry)
@@ -160,6 +161,7 @@ Build-time selection via `FLIGHT_PROFILE=`:
 - `rate_actor.c` - Rate PIDs
 - `motor_actor.c` - Output to HAL, 50ms deadman timeout
 - `flight_manager_actor.c` - Startup delay, flight coordination
+- `battery_actor.c` - Battery voltage monitoring (2 Hz), emergency landing
 - `comms_actor.c` - Radio telemetry (Crazyflie only, event-driven RX)
 - `logger_actor.c` - Hive log sync + CSV telemetry at 25Hz
 
@@ -212,7 +214,7 @@ All buses use `max_entries=1` (latest value only). Control loops need current st
 
 ### Supervision
 
-ONE_FOR_ALL strategy - if any flight-critical actor crashes, all restart together. This ensures consistent pipeline state. Comms and logger use TEMPORARY restart (crash doesn't affect flight).
+ONE_FOR_ALL strategy - if any flight-critical actor crashes, all restart together. This ensures consistent pipeline state. Battery, comms, and logger use TEMPORARY restart (crash doesn't affect flight).
 
 ### Motor Safety
 
@@ -223,6 +225,7 @@ ONE_FOR_ALL strategy - if any flight-critical actor crashes, all restart togethe
 - Altitude cutoff at 2m
 - Thrust ramp on takeoff (0.5s)
 - 10-second landing timeout (forces shutdown if landing detection fails)
+- Battery monitoring at 2 Hz with 5-second debounce (3.0V critical triggers emergency landing)
 
 ## ESB Radio Protocol
 

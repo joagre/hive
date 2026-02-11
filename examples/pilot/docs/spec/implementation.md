@@ -32,6 +32,7 @@ Code is split into focused modules:
 | `rate_actor.c/h` | Rate PIDs -> torque commands |
 | `motor_actor.c/h` | Output: torque -> HAL -> motors |
 | `flight_manager_actor.c/h` | Startup delay, flight window cutoff |
+| `battery_actor.c/h` | Battery voltage monitoring, emergency landing |
 | `comms_actor.c/h` | Radio telemetry (Crazyflie only) |
 | `logger_actor.c/h` | Hive log sync + CSV telemetry (to /sd or /tmp) |
 | `pid.c/h` | Reusable PID controller |
@@ -202,6 +203,7 @@ All actor code is platform-independent. Actors use:
 | `rate_actor.c/h` | Bus API only |
 | `motor_actor.c/h` | HAL (hal_write_torque) + IPC + bus API |
 | `flight_manager_actor.c/h` | IPC only (no bus) |
+| `battery_actor.c/h` | HAL (hal_power_get_battery) + IPC |
 | `comms_actor.c/h` | HAL (hal_esb_*, hal_power_*) + bus API (Crazyflie only) |
 | `pid.c/h` | Pure C, no runtime deps |
 | `types.h` | Data structures |
@@ -223,6 +225,7 @@ examples/pilot/
     rate_actor.c         # Rate PIDs -> torque commands
     motor_actor.c        # Output: torque -> HAL -> motors
     flight_manager_actor.c # Startup delay, flight window cutoff
+    battery_actor.c      # Battery voltage monitoring
     comms_actor.c        # Radio telemetry (Crazyflie only)
     logger_actor.c           # Hive log sync + CSV telemetry
     pid.c                # Reusable PID controller
@@ -314,11 +317,11 @@ Hive memory settings are split between shared and platform-specific files:
 | `Makefile.<platform>` | Platform-specific: stack sizes, flash layout |
 
 The shared settings in `hive_config.mk` are determined by the pilot application
-(11-12 actors, 7 buses, pool sizes for supervision) and are identical across all
+(12-13 actors, 7 buses, pool sizes for supervision) and are identical across all
 platforms. Only stack sizes vary based on available RAM.
 
 Key memory optimizations in `hive_config.mk`:
-- Supervisor pool reduced to 1 supervisor with 12 children (saves ~23 KB vs default)
+- Supervisor pool reduced to 1 supervisor with 13 children (saves ~23 KB vs default)
 - Pool sizes tuned for pilot's actual usage patterns
 
 ### Measured Stack Usage

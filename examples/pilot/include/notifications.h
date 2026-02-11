@@ -21,6 +21,7 @@ typedef enum {
     NOTIFY_GO = 0x05, // Comms -> flight manager: ground station sent GO command
     NOTIFY_ABORT = 0x06, // Comms -> flight manager: abort countdown/flight
     NOTIFY_RESET = 0x07, // Flight manager -> all: reset internal state
+    NOTIFY_LOW_BATTERY = 0x08, // Battery -> flight manager: voltage critical
 } pilot_notification_t;
 
 #endif // PILOT_NOTIFICATIONS_H

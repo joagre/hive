@@ -49,8 +49,9 @@ include hive_config.mk
 # =============================================================================
 
 # Smaller stacks sufficient for simulation
+# 13 actors x 4KB = 52KB, plus ~4KB headroom for allocator
 HIVE_CFLAGS += -DHIVE_DEFAULT_STACK_SIZE=4096
-HIVE_CFLAGS += '-DHIVE_STACK_ARENA_SIZE=(52*1024)'
+HIVE_CFLAGS += '-DHIVE_STACK_ARENA_SIZE=(56*1024)'
 
 # =============================================================================
 # Compiler Flags
@@ -103,7 +104,7 @@ LDLIBS := -lhive -lController -lm
 PILOT_SRCS := pilot.c pid.c stack_profile.c tunable_params.c \
 	sensor_actor.c estimator_actor.c altitude_actor.c waypoint_actor.c \
 	position_actor.c attitude_actor.c rate_actor.c motor_actor.c \
-	flight_manager_actor.c logger_actor.c \
+	flight_manager_actor.c battery_actor.c logger_actor.c \
 	$(HAL_DIR)/hal_init.c \
 	$(HAL_DIR)/hal_sensors.c \
 	$(HAL_DIR)/hal_motors.c \

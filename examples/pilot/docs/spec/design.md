@@ -29,6 +29,7 @@ Goals, design decisions, and architecture overview for the pilot autopilot.
 - Step 8: Flight manager actor (startup coordination, safety cutoff)
 - Step 9: Comms actor (radio telemetry, Crazyflie only)
 - Step 10: Logger actor (hive log sync, CSV telemetry)
+- Step 11: Battery actor (voltage monitoring, debounced emergency landing)
 - Mixer moved to HAL (platform-specific, X-configuration)
 
 ## Goals
@@ -135,6 +136,11 @@ The comms actor uses TEMPORARY restart type:
 
 This isolation prevents a telemetry bug from crashing the entire flight.
 
+**Battery actor isolation**
+Same as comms - TEMPORARY restart, LOW priority. If battery actor crashes,
+flight continues without voltage monitoring. This is acceptable because the
+battery actor is an advisory safety layer, not part of the control loop.
+
 **Logger isolation**
 Same as comms - TEMPORARY restart, outside the critical path.
 
@@ -223,11 +229,11 @@ complete flight record for debugging without the overhead of TRACE/DEBUG message
 
 ## Architecture Overview
 
-11-12 actors depending on platform (see [Actor Counts](README.md#actor-counts)): flight-critical workers connected via buses, supervisor, flight manager, logger, and optional comms actor:
+12-13 actors depending on platform (see [Actor Counts](README.md#actor-counts)): flight-critical workers connected via buses, supervisor, flight manager, battery monitor, logger, and optional comms actor:
 
 **Supervision** - All actors are supervised with ONE_FOR_ALL strategy. Flight-critical
-actors use PERMANENT restart (crash triggers restart of all). Comms uses
-TEMPORARY restart (crash/exit doesn't trigger restarts, just stops comms).
+actors use PERMANENT restart (crash triggers restart of all). Battery, comms, and
+logger use TEMPORARY restart (crash/exit doesn't trigger restarts).
 
 **Sibling Info** - Workers use `hive_find_sibling()` to look up sibling actor IDs
 for IPC communication. The supervisor passes sibling info at spawn time.
@@ -284,6 +290,8 @@ graph TB
 
     Motor --> WriteTorque
 
+    Battery[BATTERY ACTOR<br/>voltage monitor] -.->|LOW_BATTERY| FlightMgr[FLIGHT MANAGER]
+
     SensorBus -.-> Comms
     StateBus -.-> Comms
     ThrustBus -.-> Comms
@@ -311,6 +319,7 @@ This table documents the scheduling design for audit and latency analysis.
 | rate | CRITICAL | Bus read (3 buses) | Yields waiting for state + thrust + rate setpoint |
 | motor | CRITICAL | hive_select (1 bus + IPC, 50ms timeout) | Yields waiting for torque, STOP, or timeout |
 | flight_manager | CRITICAL | hive_select (2 timers) | Yields waiting for sync or flight timer |
+| battery | LOW | hive_select (timer + IPC) | Yields waiting for sample timer or RESET |
 | comms | LOW | HAL event (RX) + bus read (3 buses) | Non-critical, event-driven RX |
 | logger | LOW | Timer + bus read (4 buses) | Non-critical, may be starved |
 
@@ -334,7 +343,8 @@ This table documents the scheduling design for audit and latency analysis.
 | **Attitude** | Attitude Setpoint + State | Rate Setpoint Bus | CRITICAL | PERMANENT | Attitude PIDs |
 | **Rate** | State + Thrust + Rate SP | Torque Bus | CRITICAL | PERMANENT | Rate PIDs |
 | **Motor** | Torque Bus + STOP notification | Hardware | CRITICAL | PERMANENT | Output to hardware via HAL |
-| **Flight Manager** | LANDED notification | START/LANDING/STOP notifications | CRITICAL | TRANSIENT | Startup delay, landing coordination (normal exit = mission complete) |
+| **Flight Manager** | LANDED + LOW_BATTERY notifications | START/LANDING/STOP/RESET notifications | CRITICAL | TRANSIENT | Startup delay, landing coordination (normal exit = mission complete) |
+| **Battery** | Timer (2 Hz) + RESET notification | LOW_BATTERY notification | LOW | TEMPORARY | Voltage monitoring, debounced emergency landing (not flight-critical) |
 | **Comms** | Sensor + State + Thrust Bus + HAL event | Radio (HAL) | LOW | TEMPORARY | Radio telemetry (Crazyflie only, event-driven RX, not flight-critical) |
 | **Logger** | Sensor + State + Thrust + Position Target Bus | CSV file | LOW | TEMPORARY | Hive log sync + CSV telemetry (to /sd or /tmp, not flight-critical) |
 

@@ -40,6 +40,8 @@ The following safety features run on all platforms (Webots and STM32):
 | Motor deadman | motor_actor.c | Motors zeroed if no torque command within 50ms |
 | Flight duration | flight_manager_actor.c | Controlled landing after timeout (6-60s depending on flight profile) |
 | Landing timeout | flight_manager_actor.c | Forces shutdown if landing detection fails (10s max) |
+| Battery monitoring | battery_actor.c | 2 Hz voltage sampling, 3.2V warning, 3.0V critical with 5s debounce |
+| Low battery landing | flight_manager_actor.c | Emergency landing on debounced critical voltage (ARMED: disarm, FLYING: land) |
 
 The following safety features are STM32-only (disabled in Webots):
 
@@ -130,7 +132,7 @@ A supervisor actor would centralize these checks and add the additional features
 ### Missing Safety Features (Production Requirements)
 
 - **Geofence**: No boundary limits - drone can fly away indefinitely
-- **Battery monitoring**: No low-voltage warning or auto-land (requires syslink to NRF51)
+- **Battery monitoring**: ~~No low-voltage warning or auto-land~~ IMPLEMENTED - battery_actor monitors at 2 Hz with debounced emergency landing
 - **Arming/disarming**: No safety switch to prevent accidental motor start
 - **Pre-flight checks**: No sensor validation before takeoff
 - **Communication loss**: No failsafe if telemetry link drops
@@ -177,11 +179,11 @@ Features intentionally omitted from this demonstration:
 ## Architecture Evolution Roadmap
 
 This section documents how the architecture evolved from a monolithic design to the current
-multi-actor implementation. Steps 1-10 are complete; Step 11 is future work.
+multi-actor implementation. Steps 1-11 are complete; Step 12 is future work.
 
 ### Future Architecture (Aspirational)
 
-This simplified diagram shows the end-goal architecture including future features (Step 11).
+This simplified diagram shows the end-goal architecture including future features (Step 12).
 The "Setpoint Actor" would replace the current Waypoint + Flight Manager pattern with a
 unified setpoint source supporting RC input and mode switching.
 
@@ -516,7 +518,52 @@ python3 tools/plot_flight.py /tmp/tlog.csv
 - Compare before/after gain changes
 - Non-intrusive (LOW priority doesn't affect control loops)
 
-### Step 11 (Future): RC Input / Mode Switching
+### Step 11: Battery Actor
+Add in-flight battery monitoring with debounced emergency landing.
+
+**Before**
+```
+Battery voltage logged once at startup, included in telemetry packets.
+No autonomic action on low voltage.
+```
+
+**After**
+```
+Battery Actor ──► (2 Hz timer) ──► hal_power_get_battery()
+                                       │
+                                       v (voltage < 3.0V, 10 consecutive readings)
+                    ──► LOW_BATTERY ──► Flight Manager
+                                           │
+                                           v (ARMED: disarm, FLYING: land)
+```
+
+**Implementation**
+- 2 Hz sampling via periodic timer (500ms interval)
+- Two-tier thresholds matching Bitcraze pm_stm32f4.c:
+  - WARNING: 3.2V - log WARN once
+  - CRITICAL: 3.0V - 10 consecutive readings (5s debounce)
+- On debounced critical: sends NOTIFY_LOW_BATTERY to flight_manager (once)
+- Flight manager handles LOW_BATTERY in two states:
+  - ARMED: cancel countdown, disarm motors, return to IDLE
+  - FLYING: initiate controlled landing (same path as flight timer expiry)
+- Handles NOTIFY_RESET from flight_manager (resets debounce state)
+- LOW priority, TEMPORARY restart, pool_block=true
+
+**Debounce rationale** - Motor load causes voltage sag of 0.2-0.5V during
+aggressive maneuvers. Without debouncing, transient sag would trigger false
+critical alerts. 10 consecutive readings at 2 Hz (5 seconds) matches Bitcraze.
+
+**On simulation** - `hal_power_get_battery()` returns 4.2V always, so the
+actor runs harmlessly (never triggers). This exercises the code path without
+affecting simulation behavior.
+
+**Benefits**
+- Prevents crash from depleted battery (controlled landing instead)
+- Matches Bitcraze's proven thresholds and debounce timing
+- Decoupled from control loop (LOW priority, IPC to flight_manager)
+- Flight_manager decides action based on current state (no motor commands from battery actor)
+
+### Step 12 (Future): RC Input / Mode Switching
 
 **Future extensions**
 - RC input handling (manual override)

@@ -1,6 +1,6 @@
 # Pilot Example
 
-A complete quadcopter autopilot. Not a toy demo, but a flight controller targeting real hardware. Demonstrates Hive in a safety-critical embedded context with 11 actors, cascaded PID control, sensor fusion, pub-sub data flow, and fail-safe supervision.
+A complete quadcopter autopilot. Not a toy demo, but a flight controller targeting real hardware. Demonstrates Hive in a safety-critical embedded context with 12 actors, cascaded PID control, sensor fusion, battery monitoring, pub-sub data flow, and fail-safe supervision.
 
 ## Table of Contents
 
@@ -42,7 +42,7 @@ A complete quadcopter autopilot. Not a toy demo, but a flight controller targeti
 
 ## What it does
 
-Demonstrates waypoint navigation with a quadcopter using 11-12 actors (8 flight-critical workers + flight manager + logger + supervisor + 1 optional comms actor):
+Demonstrates waypoint navigation with a quadcopter using 12-13 actors (8 flight-critical workers + flight manager + battery monitor + logger + supervisor + optional comms actor):
 
 1. **Sensor actor** reads raw sensors via HAL, publishes to sensor bus
 2. **Estimator actor** runs altitude Kalman filter + attitude complementary filter, publishes to state bus
@@ -53,9 +53,10 @@ Demonstrates waypoint navigation with a quadcopter using 11-12 actors (8 flight-
 7. **Rate actor** runs rate PIDs, publishes torque commands
 8. **Motor actor** reads torque bus, writes to hardware via HAL (checks for STOP signal)
 9. **Flight manager actor** handles startup delay (60s), landing coordination, log file management
-10. **Comms actor** (Crazyflie only) sends flight data over radio at 100Hz for ground station logging
-11. **Logger actor** syncs hive runtime log periodically, writes CSV telemetry at 25Hz (to /sd or /tmp)
-12. **Supervisor actor** monitors all workers, restarts flight-critical actors on crash (ONE_FOR_ALL)
+10. **Battery actor** monitors voltage at 2 Hz, debounced emergency landing on critical low (3.0V)
+11. **Comms actor** (Crazyflie only) sends flight data over radio at 100Hz for ground station logging
+12. **Logger actor** syncs hive runtime log periodically, writes CSV telemetry at 25Hz (to /sd or /tmp)
+13. **Supervisor actor** monitors all workers, restarts flight-critical actors on crash (ONE_FOR_ALL)
 
 Workers use `hive_find_sibling()` for IPC coordination via sibling info passed
 by the supervisor at spawn time.
@@ -70,7 +71,8 @@ Optional SD card logging with Micro SD Card Deck (build with `ENABLE_SD=1`).
 **Safety features (all platforms)** - Emergency cutoff on excessive tilt (>45 deg), excessive
 altitude (>2m), or touchdown. Motor deadman watchdog zeros motors if no command received
 within 50ms (protects against controller crash). Flight duration limited by flight manager
-(10s/40s/60s per profile).
+(10s/40s/60s per profile). Battery monitoring with two-tier thresholds (3.2V warning, 3.0V
+critical) and 5-second debouncing triggers emergency landing on critical low voltage.
 
 ## Prerequisites
 
@@ -111,8 +113,8 @@ See `hal/<platform>/README.md` for hardware details, pin mapping, flight profile
 
 ## Architecture
 
-11-12 actors: eight flight-critical workers + flight manager + logger + supervisor,
-plus optional comms actor on Crazyflie:
+12-13 actors: eight flight-critical workers + flight manager + battery monitor + logger
++ supervisor, plus optional comms actor on Crazyflie:
 
 ```mermaid
 graph TB
@@ -126,6 +128,8 @@ graph TB
     StateBus --> Attitude --> RateSP([Rate SP Bus]) --> Rate
     StateBus --> Rate
     Rate --> TorqueBus([Torque Bus]) --> Motor[Motor]
+
+    Battery[Battery] -.->|LOW_BATTERY| FlightMgr[Flight Manager]
 
     SensorBus -.-> Comms[Comms]
     StateBus -.-> Comms
@@ -174,8 +178,9 @@ Spawn order determines execution order (round-robin within priority level):
 | 7     | rate      | CRITICAL | PERMANENT | Needs state + thrust + rate setpoints |
 | 8     | motor     | CRITICAL | PERMANENT | Needs torque + STOP signal, writes hardware last |
 | 9     | flight_mgr| CRITICAL | TRANSIENT | Normal exit = mission complete |
-| 10    | comms     | LOW      | TEMPORARY | Crazyflie only, not flight-critical |
-| 11    | logger    | LOW      | TEMPORARY | Hive log sync + CSV telemetry (to /sd or /tmp) |
+| 10    | battery   | LOW      | TEMPORARY | Voltage monitoring, emergency landing on critical low |
+| 11    | comms     | LOW      | TEMPORARY | Crazyflie only, not flight-critical |
+| 12    | logger    | LOW      | TEMPORARY | Hive log sync + CSV telemetry (to /sd or /tmp) |
 
 Workers use `hive_find_sibling()` to look up sibling actor IDs for IPC coordination.
 
@@ -329,11 +334,11 @@ make -f Makefile.crazyflie-2.1plus ENABLE_SD=1
 **Example: hive_config.mk contents**
 ```makefile
 # Pilot requires fewer resources than library defaults
-HIVE_CFLAGS += -DHIVE_MAX_ACTORS=16
+HIVE_CFLAGS += -DHIVE_MAX_ACTORS=14
 HIVE_CFLAGS += -DHIVE_MAX_BUSES=8
 HIVE_CFLAGS += -DHIVE_MAILBOX_ENTRY_POOL_SIZE=32
 HIVE_CFLAGS += -DHIVE_DEFAULT_STACK_SIZE=4096
-HIVE_CFLAGS += '-DHIVE_STACK_ARENA_SIZE=(52*1024)'
+HIVE_CFLAGS += '-DHIVE_STACK_ARENA_SIZE=(56*1024)'
 ```
 
 **Example: hive_board_config.mk contents**
@@ -502,6 +507,7 @@ doesn't affect flight-critical control loops and won't trigger restarts if it fa
 | `rate_actor.c` | Rate PIDs -> torque commands |
 | `motor_actor.c` | Output: torque -> HAL -> motors |
 | `flight_manager_actor.c` | Startup delay, flight window cutoff, log file (flm.log) |
+| `battery_actor.c` | Battery voltage monitoring (2 Hz), emergency landing on critical low |
 | `comms_actor.c` | Radio telemetry (Crazyflie only) |
 | `logger_actor.c` | Hive log sync + CSV telemetry (to /sd or /tmp) |
 | `pid.c` | Reusable PID controller |

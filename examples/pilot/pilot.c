@@ -1,7 +1,8 @@
 // Pilot - Quadcopter autopilot using the Hive actor runtime
 //
-// 11 actors in a supervised control pipeline: sensor fusion, cascaded PID
-// control (altitude/position/attitude/rate), and telemetry logging.
+// 12 actors in a supervised control pipeline: sensor fusion, cascaded PID
+// control (altitude/position/attitude/rate), battery monitoring, and
+// telemetry logging.
 //
 // See README.md for architecture, data flow, and build instructions.
 
@@ -26,6 +27,7 @@
 #include "motor_actor.h"
 #include "flight_manager_actor.h"
 #include "stack_profile.h"
+#include "battery_actor.h"
 #ifdef HAL_HAS_RADIO
 #include "comms_actor.h"
 #endif
@@ -122,11 +124,12 @@ int main(void) {
         .buses = &buses,
     };
 
-    // Define child specs for supervisor (9 flight actors + optional comms + logger)
+    // Define child specs for supervisor
+    // (9 flight actors + battery + optional comms + logger)
     // Each actor's init function receives pilot_buses_t and extracts what it needs.
     // Control loop order: sensor -> estimator -> waypoint -> altitude ->
     //                     position -> attitude -> rate -> motor -> flight_manager
-    // Comms and logger run at LOW priority with TEMPORARY restart.
+    // Battery, comms, and logger run at LOW priority with TEMPORARY restart.
     hive_child_spec_t children[] = {
         {.start = sensor_actor,
          .init = sensor_actor_init,
@@ -227,6 +230,16 @@ int main(void) {
                        .name = "flight_mgr",
                        .pool_block =
                            false}}, // CRITICAL: never block control loop
+        {.start = battery_actor,
+         .init = battery_actor_init,
+         .init_args = &buses,
+         .init_args_size = sizeof(buses),
+         .name = "battery",
+         .auto_register = true,
+         .restart = HIVE_CHILD_TEMPORARY,
+         .actor_cfg = {.priority = HIVE_PRIORITY_LOW,
+                       .name = "battery",
+                       .pool_block = true}},
 #ifdef HAL_HAS_RADIO
         {.start = comms_actor,
          .init = comms_actor_init,
@@ -275,11 +288,11 @@ int main(void) {
     }
     (void)supervisor;
 
-    // Log actor count (9 flight actors + logger + optional comms + 1 supervisor)
+    // Log actor count (9 flight + battery + logger + optional comms + supervisor)
 #ifdef HAL_HAS_RADIO
-    HIVE_LOG_INFO("12 actors spawned (11 children + 1 supervisor)");
+    HIVE_LOG_INFO("13 actors spawned (12 children + 1 supervisor)");
 #else
-    HIVE_LOG_INFO("11 actors spawned (10 children + 1 supervisor)");
+    HIVE_LOG_INFO("12 actors spawned (11 children + 1 supervisor)");
 #endif
 
     // Main loop - time control differs between real-time and simulation

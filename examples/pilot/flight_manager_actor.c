@@ -55,14 +55,15 @@ typedef struct {
     hive_actor_id_t motor;
     hive_actor_id_t logger;
     hive_actor_id_t comms;
+    hive_actor_id_t battery;
 } sibling_ids_t;
 
 // Notify all siblings to reset their internal state (fire-and-forget)
 static void notify_reset_all(const sibling_ids_t *ids) {
     hive_actor_id_t actors[] = {
-        ids->sensor,   ids->estimator, ids->waypoint,
-        ids->altitude, ids->position,  ids->attitude,
-        ids->rate,     ids->motor,     ids->logger,
+        ids->sensor,   ids->estimator, ids->waypoint, ids->altitude,
+        ids->position, ids->attitude,  ids->rate,     ids->motor,
+        ids->logger,   ids->battery,
     };
 
     for (size_t i = 0; i < sizeof(actors) / sizeof(actors[0]); i++) {
@@ -102,6 +103,7 @@ void flight_manager_actor(void *args, const hive_spawn_info_t *siblings,
         .motor = hive_find_sibling(siblings, sibling_count, "motor"),
         .logger = hive_find_sibling(siblings, sibling_count, "logger"),
         .comms = hive_find_sibling(siblings, sibling_count, "comms"),
+        .battery = hive_find_sibling(siblings, sibling_count, "battery"),
     };
 
     // Required siblings
@@ -223,25 +225,36 @@ void flight_manager_actor(void *args, const hive_spawn_info_t *siblings,
         }
 
         case FM_STATE_ARMED: {
-            // Countdown with ABORT/STATUS handling
-            enum { SEL_COUNTDOWN, SEL_ABORT, SEL_STATUS_REQ };
-            hive_select_source_t armed_sources[] = {
-                [SEL_COUNTDOWN] = {.type = HIVE_SEL_IPC,
-                                   .ipc = {.class = HIVE_MSG_TIMER,
-                                           .tag = countdown_timer}},
-                [SEL_ABORT] = {.type = HIVE_SEL_IPC,
-                               .ipc = {.sender = ids.comms,
-                                       .class = HIVE_MSG_NOTIFY,
-                                       .id = NOTIFY_ABORT}},
-                [SEL_STATUS_REQ] = {.type = HIVE_SEL_IPC,
-                                    .ipc = {.class = HIVE_MSG_REQUEST}},
-            };
-            size_t num_armed_sources =
-                (ids.comms != HIVE_ACTOR_ID_INVALID) ? 3 : 2;
-            // If no comms, skip ABORT source
-            if (ids.comms == HIVE_ACTOR_ID_INVALID) {
-                armed_sources[SEL_ABORT] = armed_sources[SEL_STATUS_REQ];
+            // Countdown with ABORT/LOW_BATTERY/STATUS handling
+            hive_select_source_t armed_sources[4];
+            size_t num_armed_sources = 0;
+
+            // Countdown timer (always present)
+            armed_sources[num_armed_sources++] = (hive_select_source_t){
+                .type = HIVE_SEL_IPC,
+                .ipc = {.class = HIVE_MSG_TIMER, .tag = countdown_timer}};
+
+            // ABORT from comms (if available)
+            if (ids.comms != HIVE_ACTOR_ID_INVALID) {
+                armed_sources[num_armed_sources++] =
+                    (hive_select_source_t){.type = HIVE_SEL_IPC,
+                                           .ipc = {.sender = ids.comms,
+                                                   .class = HIVE_MSG_NOTIFY,
+                                                   .id = NOTIFY_ABORT}};
             }
+
+            // Low battery from battery actor
+            if (ids.battery != HIVE_ACTOR_ID_INVALID) {
+                armed_sources[num_armed_sources++] =
+                    (hive_select_source_t){.type = HIVE_SEL_IPC,
+                                           .ipc = {.sender = ids.battery,
+                                                   .class = HIVE_MSG_NOTIFY,
+                                                   .id = NOTIFY_LOW_BATTERY}};
+            }
+
+            // STATUS request (always last)
+            armed_sources[num_armed_sources++] = (hive_select_source_t){
+                .type = HIVE_SEL_IPC, .ipc = {.class = HIVE_MSG_REQUEST}};
 
             hive_select_result_t result;
             hive_status_t s =
@@ -259,9 +272,14 @@ void flight_manager_actor(void *args, const hive_spawn_info_t *siblings,
                 continue;
             }
 
-            // Handle ABORT
-            if (result.ipc.id == NOTIFY_ABORT) {
-                HIVE_LOG_INFO("[FLM] ABORT received - returning to IDLE");
+            // Handle ABORT or LOW_BATTERY - same action: cancel and disarm
+            if (result.ipc.id == NOTIFY_ABORT ||
+                result.ipc.id == NOTIFY_LOW_BATTERY) {
+                if (result.ipc.id == NOTIFY_LOW_BATTERY) {
+                    HIVE_LOG_WARN("[FLM] LOW BATTERY - cancelling countdown");
+                } else {
+                    HIVE_LOG_INFO("[FLM] ABORT received - returning to IDLE");
+                }
                 hive_timer_cancel(countdown_timer);
                 hal_disarm();
                 HIVE_LOG_INFO("[FLM] Motors disarmed");
@@ -294,18 +312,31 @@ void flight_manager_actor(void *args, const hive_spawn_info_t *siblings,
         }
 
         case FM_STATE_FLYING: {
-            // Wait for flight timer or STATUS request
-            enum { SEL_FLIGHT, SEL_STATUS_REQ };
-            hive_select_source_t flying_sources[] = {
-                [SEL_FLIGHT] = {.type = HIVE_SEL_IPC,
-                                .ipc = {.class = HIVE_MSG_TIMER,
-                                        .tag = flight_timer}},
-                [SEL_STATUS_REQ] = {.type = HIVE_SEL_IPC,
-                                    .ipc = {.class = HIVE_MSG_REQUEST}},
-            };
+            // Wait for flight timer, low battery, or STATUS request
+            hive_select_source_t flying_sources[3];
+            size_t num_flying_sources = 0;
+
+            // Flight timer
+            flying_sources[num_flying_sources++] = (hive_select_source_t){
+                .type = HIVE_SEL_IPC,
+                .ipc = {.class = HIVE_MSG_TIMER, .tag = flight_timer}};
+
+            // Low battery from battery actor
+            if (ids.battery != HIVE_ACTOR_ID_INVALID) {
+                flying_sources[num_flying_sources++] =
+                    (hive_select_source_t){.type = HIVE_SEL_IPC,
+                                           .ipc = {.sender = ids.battery,
+                                                   .class = HIVE_MSG_NOTIFY,
+                                                   .id = NOTIFY_LOW_BATTERY}};
+            }
+
+            // STATUS request
+            flying_sources[num_flying_sources++] = (hive_select_source_t){
+                .type = HIVE_SEL_IPC, .ipc = {.class = HIVE_MSG_REQUEST}};
 
             hive_select_result_t result;
-            hive_status_t s = hive_select(flying_sources, 2, &result, -1);
+            hive_status_t s =
+                hive_select(flying_sources, num_flying_sources, &result, -1);
             if (HIVE_FAILED(s)) {
                 HIVE_LOG_ERROR("[FLM] select (flying) failed: %s",
                                HIVE_ERR_STR(s));
@@ -319,9 +350,15 @@ void flight_manager_actor(void *args, const hive_spawn_info_t *siblings,
                 continue;
             }
 
-            // Flight timer expired
-            HIVE_LOG_INFO(
-                "[FLM] Flight duration complete - initiating LANDING");
+            // Low battery or flight timer - both initiate landing
+            if (result.ipc.id == NOTIFY_LOW_BATTERY) {
+                HIVE_LOG_WARN("[FLM] LOW BATTERY - emergency landing");
+                hive_timer_cancel(flight_timer);
+            } else {
+                HIVE_LOG_INFO(
+                    "[FLM] Flight duration complete - initiating LANDING");
+            }
+
             hive_ipc_notify(ids.altitude, NOTIFY_LANDING, NULL, 0);
             hive_timer_after(LANDING_TIMEOUT_US, &landing_timer);
             state = FM_STATE_LANDING;

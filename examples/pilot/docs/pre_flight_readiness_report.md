@@ -4,6 +4,7 @@ Date: 2026-02-10
 Updated: 2026-02-11 (cross-referenced against Bitcraze crazyflie-firmware)
 Updated: 2026-02-11 (findings #2, #9, #11, #12, #14 fixed)
 Updated: 2026-02-11 (findings #3, #5, #13 fixed)
+Updated: 2026-02-11 (finding #10 fixed)
 
 Comprehensive audit comparing the Webots simulation HAL
 (`hal/webots-crazyflie/`) against the real hardware HAL
@@ -137,18 +138,16 @@ on fresh measurements.
 **Bitcraze ref** - `src/modules/src/estimator/estimator_kalman.c:301-367`,
 `src/deck/drivers/src/zranger2.c:131-132`
 
-### 10. No battery monitoring during flight
+### 10. ~~No battery monitoring during flight~~ FIXED
 
-Voltage is logged once before flight and included in telemetry packets,
-but there is no in-flight low-voltage protection. No actor checks
-battery during flight to trigger an emergency landing.
+**Fixed.** Added `battery_actor` - dedicated LOW-priority actor that
+samples `hal_power_get_battery()` at 2 Hz. Two-tier thresholds matching
+Bitcraze (3.2V warning, 3.0V critical) with 10-reading debounce (5
+seconds). On debounced critical, sends `NOTIFY_LOW_BATTERY` to
+flight_manager, which cancels countdown (ARMED state) or initiates
+emergency landing (FLYING state).
 
-Bitcraze has a comprehensive battery management system: dedicated PM
-task at 10 Hz, two-tier voltage thresholds (3.2V warning, 3.0V critical),
-5-second debouncing to avoid false triggers from voltage sag, automatic
-system shutdown on critical low, and LED/sound alerts.
-
-**Files** - `pilot.c:63`, `comms_actor.c:541`
+**Files** - `battery_actor.c`, `flight_manager_actor.c`
 **Bitcraze ref** - `src/hal/src/pm_stm32f4.c:397-501`
 
 ## Safety/Robustness Gaps in Real HAL
@@ -281,7 +280,7 @@ total specific force. This means:
 | Attitude estimation | Euler integration | Quaternion (Mahony) | **NO** |
 | Yaw drift (no mag) | Yes | Yes (same limitation) | Yes |
 | KF stale measurement | Correct on new data only | Queue, new data only | Yes (FIXED) |
-| Battery monitoring | One-time log + telemetry | PM task, auto-shutdown | **NO** |
+| Battery monitoring | 2 Hz actor, debounced landing | PM task, auto-shutdown | Yes (FIXED) |
 | HardFault handler | Motor stop + register dump | Motor stop + diagnostics | Yes (FIXED) |
 | Watchdog | IWDG, 100-353ms | IWDG, 100-353ms | Yes (FIXED) |
 | I2C bus unlock loop | Bounded (9 cycles) | Unbounded (same code) | Better (FIXED) |
