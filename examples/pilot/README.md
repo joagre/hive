@@ -113,8 +113,7 @@ See `hal/<platform>/README.md` for hardware details, pin mapping, flight profile
 
 ## Architecture
 
-12-13 actors: eight flight-critical workers + flight manager + battery monitor
-+ logger + supervisor, plus optional comms actor on Crazyflie:
+12-13 actors communicate via single-entry buses in a control pipeline:
 
 ```mermaid
 graph TB
