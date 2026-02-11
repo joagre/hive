@@ -8,6 +8,7 @@ Updated: 2026-02-11 (finding #10 fixed)
 Updated: 2026-02-11 (finding #1 fixed)
 Updated: 2026-02-11 (finding #6 accepted - requires real-world tuning)
 Updated: 2026-02-11 (finding #7 accepted - hardware limitation)
+Updated: 2026-02-11 (finding #8 accepted - hardware limitation)
 
 Comprehensive audit comparing the Webots simulation HAL
 (`hal/webots-crazyflie/`) against the real hardware HAL
@@ -113,18 +114,13 @@ integral term, so steady-state offset from persistent disturbances
 term is a future improvement to validate during real-world flight
 testing.
 
-### 8. Yaw will drift continuously - same as Bitcraze
+### 8. Yaw will drift continuously - same as Bitcraze - ACCEPTED
 
-No magnetometer, no runtime gyro bias correction. The complementary
+No magnetometer on BMI088, no absolute yaw reference. The complementary
 filter corrects roll/pitch via accelerometer but has zero yaw correction
-source.
-
-Cross-reference confirms Bitcraze has the same limitation for stock
-CF2.1+ without Lighthouse. Their default complementary estimator
-(sensfusion6) is 6-DOF with no yaw correction. The Kalman estimator
-only gets yaw corrections from the Lighthouse positioning system, not
-the onboard magnetometer. Both Hive and Bitcraze accept yaw drift as a
-known limitation. Keep flights short.
+source. At parity with Bitcraze for stock CF2.1+ without Lighthouse.
+The real fix requires external hardware (Lighthouse, magnetometer deck,
+UWB). Flight durations are short (6-60s), bounding the drift. Accepted.
 
 **Files** - `fusion/complementary_filter.c:82-84`,
 `hal/crazyflie-2.1+/platform.c:1248-1251`
