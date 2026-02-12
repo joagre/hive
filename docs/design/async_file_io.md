@@ -40,7 +40,7 @@ page cache. Rarely blocks in practice. No changes needed.
 
 ## Design
 
-DMA + yield in the FatFS diskio layer (STM32 only). Make SPI transfers
+DMA + yield in the SPI SD driver (STM32 only). Make SPI transfers
 non-blocking by yielding to the scheduler during DMA.
 
 No ring buffer needed for SD:
@@ -49,53 +49,83 @@ No ring buffer needed for SD:
 - FatFS has its own internal sector cache for small writes
 - Adding a ring buffer would be buffering on top of buffering
 
-### DMA + yield in diskio
+### Where the yield goes
 
-**Modified diskio layer:**
+The call chain is:
+```
+hive_file_write() -> f_write() [FatFS] -> disk_write() [diskio.c]
+    -> spi_sd_write_blocks() [spi_sd.c] -> spi_send(buf, 512) [blocking]
+                                         -> wait_ready()       [blocking]
+```
+
+The blocking happens inside `spi_sd.c`, not `diskio.c`. The SD protocol
+requires sending commands, data tokens, CRC bytes, and polling busy status -
+all of which live in `spi_sd.c`. The DMA replaces `spi_send(buf, 512)` and
+`spi_recv(buf, 512)` calls, and the yield replaces the `wait_ready()` busy
+loop. `diskio.c` and FatFS are unchanged.
+
+### DMA + yield in spi_sd
+
+**Modified SPI SD driver:**
 ```c
-// src/hal/stm32/diskio.c (FatFS hardware abstraction)
+// src/hal/stm32/spi_sd.c - inside spi_sd_write_blocks()
 
-DRESULT disk_write(BYTE pdrv, const BYTE *buff, LBA_t sector, UINT count) {
-    // Start DMA transfer (returns immediately)
-    spi_sd_start_dma_write(buff, sector, count);
+// Instead of byte-by-byte: spi_send(buf, 512)
+// Start DMA transfer (returns immediately)
+spi_ll_dma_start(buf, 512, SPI_LL_DIR_TX);
 
-    // Yield to scheduler - other actors run while DMA transfers data
-    hive_event_wait(sd_dma_event, SD_WRITE_TIMEOUT_MS);
+// Yield to scheduler - other actors run while DMA transfers data
+hive_event_wait(s_dma_event, SD_TIMEOUT_MS);
 
-    // DMA complete - check result
-    return spi_sd_check_result() ? RES_OK : RES_ERROR;
-}
-
-DRESULT disk_read(BYTE pdrv, BYTE *buff, LBA_t sector, UINT count) {
-    // Same pattern for reads
-    spi_sd_start_dma_read(buff, sector, count);
-    hive_event_wait(sd_dma_event, SD_READ_TIMEOUT_MS);
-    return spi_sd_check_result() ? RES_OK : RES_ERROR;
+// DMA complete - check result
+if (!spi_ll_dma_ok()) {
+    spi_ll_cs_high();
+    return -1;
 }
 ```
 
 **How it works:**
-1. `disk_write()` starts a DMA transfer on the SPI peripheral
-2. DMA runs autonomously (no CPU involvement)
-3. `hive_event_wait()` yields the current actor to the scheduler
-4. The scheduler runs other actors (sensor, estimator, altitude, etc.)
-5. When DMA completes, the SPI DMA ISR calls `hive_hal_event_signal()`
-6. The scheduler wakes the yielded actor
-7. `disk_write()` returns, FatFS continues
+1. `spi_sd_write_blocks()` sends the SD command and data token (byte-by-byte,
+   ~10 bytes - fast)
+2. `spi_ll_dma_start()` starts DMA for the 512-byte sector data
+3. DMA runs autonomously on the SPI1 peripheral (no CPU involvement)
+4. `hive_event_wait()` yields the current actor to the scheduler
+5. The scheduler runs other actors (sensor, estimator, altitude, etc.)
+6. When DMA completes, the SPI1 RX DMA ISR calls `hive_hal_event_signal()`
+7. The scheduler wakes the yielded actor
+8. `spi_sd_write_blocks()` sends CRC, checks response, and waits for card
+   ready (also yielding)
 
-**Key insight:** FatFS doesn't need to change. It calls `disk_write()` and
-gets a result. It doesn't know the scheduler ran flight-critical actors in
-between. The diskio layer is already platform-specific, so this is a clean
-abstraction boundary.
+**Key insight:** FatFS and diskio.c don't change. The yield is invisible to
+them - `spi_sd_write_blocks()` still returns 0 or -1. The scheduler ran
+flight-critical actors during the DMA transfer.
+
+### DMA hardware (Crazyflie 2.1+)
+
+SD card uses SPI1 (shared with Flow Deck):
+- PA5 = SCK, PA6 = MISO, PA7 = MOSI, PC12 = CS
+
+SPI is full-duplex, so both TX and RX DMA streams must run for every
+transfer. For writes, TX sends actual data and RX captures discarded bytes.
+For reads, TX sends 0xFF and RX captures data.
+
+**DMA2 stream allocation on STM32F405:**
+| Stream | Channel | Usage |
+|--------|---------|-------|
+| DMA2 Stream 0 | Ch 3 | SPI1_RX (SD card) |
+| DMA2 Stream 2 | Ch 5 | USART6_RX (syslink - already in use) |
+| DMA2 Stream 3 | Ch 3 | SPI1_TX (SD card) |
+
+No conflicts. Stream 2 is syslink, streams 0 and 3 are free.
 
 **ISR integration:**
 ```c
-// SPI DMA transfer complete ISR
-void DMA1_Stream4_IRQHandler(void) {
-    if (DMA1->HISR & DMA_HISR_TCIF4) {
-        DMA1->HIFCR = DMA_HIFCR_CTCIF4;  // Clear flag
-        spi_sd_dma_finish();               // Deassert CS, etc.
-        hive_hal_event_signal(SD_DMA_EVENT_ID);  // Wake actor
+// SPI1 RX DMA complete ISR (DMA2 Stream 0)
+// RX completes after TX, so this signals "transfer done"
+void DMA2_Stream0_IRQHandler(void) {
+    if (DMA2->LISR & DMA_LISR_TCIF0) {
+        DMA2->LIFCR = DMA_LIFCR_CTCIF0;            // Clear flag
+        hive_hal_event_signal(s_sd_dma_event_id);   // Wake actor
     }
 }
 ```
@@ -103,8 +133,8 @@ void DMA1_Stream4_IRQHandler(void) {
 `hive_hal_event_signal()` is already ISR-safe (single 32-bit store on ARM
 Cortex-M). This uses the existing HAL event mechanism - no new primitives.
 
-**What about disk_read()?** Same pattern. DMA + yield for reads too. This
-makes log download via radio non-blocking as well.
+**Reads use the same pattern.** DMA + yield for reads too. This makes log
+download via radio non-blocking as well.
 
 ### Typical write flow during flight
 
@@ -113,16 +143,21 @@ Logger actor (LOW priority, every 40ms):
     hive_file_write(csv_line, ~150 bytes)
         -> f_write() [FatFS buffers in sector cache]
         -> if sector full:
-            -> disk_write(sector)
-                -> start SPI DMA       [~1 us]
-                -> hive_event_wait()   [yields to scheduler]
-                    ... sensor_actor runs (CRITICAL) ...
-                    ... estimator_actor runs ...
-                    ... altitude_actor runs ...
-                    ... rate_actor runs ...
-                    ... motor_actor runs ...
-                -> DMA ISR signals event
-                -> actor wakes, continues
+            -> disk_write(sector) [diskio.c, unchanged]
+                -> spi_sd_write_blocks() [spi_sd.c]
+                    -> send CMD24 + data token [byte-by-byte, ~10 bytes]
+                    -> spi_ll_dma_start(buf, 512)  [starts DMA, ~1 us]
+                    -> hive_event_wait()           [yields to scheduler]
+                        ... sensor_actor runs (CRITICAL) ...
+                        ... estimator_actor runs ...
+                        ... altitude_actor runs ...
+                        ... rate_actor runs ...
+                        ... motor_actor runs ...
+                    -> DMA2 Stream 0 ISR signals event
+                    -> actor wakes, sends CRC, checks response
+                    -> wait_ready() with hive_yield() loop
+                        ... other actors run between polls ...
+                    -> card ready, return 0
         -> return HIVE_SUCCESS
 ```
 
@@ -178,39 +213,40 @@ negligible compared to the 250ms card-internal delay.
 
 ## Implementation Plan
 
-### Step 1 - DMA SPI transfer functions
+### Step 1 - DMA bulk transfer in spi_ll
+
+Add DMA bulk transfer functions to the SPI low-level interface. These
+replace byte-by-byte `spi_send()`/`spi_recv()` for 512-byte sector data.
 
 Files to modify:
-- `src/hal/stm32/spi_sd.c` - Add `spi_sd_start_dma_write()`,
-  `spi_sd_start_dma_read()`, `spi_sd_check_result()`
-- `hal/crazyflie-2.1plus/spi_ll_sd.c` - Board-specific DMA stream/channel
-  config, ISR handlers
+- `src/hal/stm32/spi_ll.h` - Add `spi_ll_dma_init()`, `spi_ll_dma_start()`,
+  `spi_ll_dma_ok()` to low-level SPI interface
+- `examples/pilot/hal/crazyflie-2.1plus/spi_ll_sd.c` - Implement DMA
+  using DMA2 Stream 0 (SPI1_RX) and DMA2 Stream 3 (SPI1_TX), add ISR
 
-Prerequisites:
-- Identify free DMA streams on the STM32F405 (must not conflict with UART
-  DMA used by syslink)
-- Verify SPI peripheral supports DMA (SPI1/SPI2/SPI3 all do on STM32F405)
+DMA streams are board-specific (depends on which SPI peripheral the SD card
+is on and which DMA streams are free). On the Crazyflie 2.1+, SD card uses
+SPI1 and syslink already uses DMA2 Stream 2, leaving Stream 0 and Stream 3
+free for SPI1.
 
-### Step 2 - Yield in diskio
+### Step 2 - DMA + yield in spi_sd
 
-Files to modify:
-- `src/hal/stm32/diskio.c` - Replace synchronous SPI calls with DMA + yield
-  pattern in `disk_write()` and `disk_read()`
-
-This is the core change. FatFS calls `disk_write()`/`disk_read()` in the
-diskio layer. We replace the blocking SPI transfer with DMA start + yield +
-wake on completion.
-
-### Step 3 - Card busy-wait with yield
+Replace blocking byte loops with DMA start + yield in the SD protocol layer.
 
 Files to modify:
-- `src/hal/stm32/spi_sd.c` - Replace busy-wait loop with yield loop
+- `src/hal/stm32/spi_sd.c` - Replace `spi_send(buf, 512)` and
+  `spi_recv(buf, 512)` with `spi_ll_dma_start()` + `hive_event_wait()`.
+  Replace `wait_ready()` tight loop with `hive_yield()` loop.
 
-After DMA transfer completes, the SD card may internally busy for up to
-250ms. The current code polls MISO in a tight loop. Replace with a yield
-loop so other actors run during the wait.
+This is the core change. The SD protocol (commands, tokens, CRC) stays
+byte-by-byte. Only the 512-byte sector data transfers use DMA. The
+`wait_ready()` busy loop becomes a yield loop so other actors run during
+card-internal write latency (up to 250ms).
 
-### Step 4 - Testing
+`diskio.c` is unchanged - it calls `spi_sd_write_blocks()` /
+`spi_sd_read_blocks()` which now yield internally.
+
+### Step 3 - Testing
 
 - Bench test: verify DMA transfers complete correctly (ground test mode)
 - Timing test: measure scheduler latency during SD writes with stack
@@ -228,7 +264,8 @@ loop so other actors run during the wait.
 - **Linux path unchanged** - OS page cache handles buffering, no DMA needed
 - **Single SPI bus** - Only one actor can do SD I/O at a time (logger owns
   the SD file descriptors)
-- **FatFS unchanged** - All changes are in the diskio layer below FatFS
+- **FatFS unchanged** - No modifications to FatFS source
+- **diskio unchanged** - All changes are in spi_sd.c and spi_ll_sd.c below
 
 ## Alternatives Considered
 
