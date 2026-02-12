@@ -136,6 +136,33 @@ Cortex-M). This uses the existing HAL event mechanism - no new primitives.
 **Reads use the same pattern.** DMA + yield for reads too. This makes log
 download via radio non-blocking as well.
 
+### SPI bus locking during DMA
+
+On the Crazyflie 2.1+, the SD card and Flow Deck (PMW3901) share SPI1.
+Today this works because cooperative scheduling means only one actor
+touches SPI1 at a time - no yield occurs during an SPI transfer. DMA +
+yield breaks this: the logger starts a DMA transfer on SPI1, yields, the
+sensor actor runs at CRITICAL priority, and tries to read the flow deck
+via SPI1. Both devices selected, both driving MISO - corrupted data.
+
+Fix: add `spi_ll_lock()` / `spi_ll_unlock()` to the spi_ll interface. A
+simple boolean flag, sufficient for a single-threaded cooperative scheduler.
+
+```c
+// In spi_ll.h
+void spi_ll_lock(void);    // Acquire SPI bus (yields if busy)
+void spi_ll_unlock(void);  // Release SPI bus
+```
+
+The SD DMA path holds the lock during the transfer (~195us for 512 bytes
+at 21MHz). The flow deck driver checks the lock before each SPI access and
+yields if busy. The sensor read gets delayed by at most ~195us, negligible
+for a 4ms sensor loop.
+
+During the busy-wait phase (timer poll every 1ms), each poll briefly locks
+the bus for one `spi_ll_xfer()` call (~0.4us). Between polls the bus is
+free for the flow deck.
+
 ### Typical write flow during flight
 
 ```
@@ -146,17 +173,18 @@ Logger actor (LOW priority, every 40ms):
             -> disk_write(sector) [diskio.c, unchanged]
                 -> spi_sd_write_blocks() [spi_sd.c]
                     -> send CMD24 + data token [byte-by-byte, ~10 bytes]
-                    -> spi_ll_dma_start(buf, 512)  [starts DMA, ~1 us]
-                    -> hive_event_wait()           [yields to scheduler]
+                    -> spi_ll_lock()                [acquire SPI bus]
+                    -> spi_ll_dma_start(buf, 512)   [starts DMA, ~1 us]
+                    -> hive_event_wait()            [yields to scheduler]
                         ... sensor_actor runs (CRITICAL) ...
-                        ... estimator_actor runs ...
-                        ... altitude_actor runs ...
-                        ... rate_actor runs ...
-                        ... motor_actor runs ...
+                        ... flow deck skips SPI (bus locked, ~195us) ...
+                        ... estimator, altitude, rate, motor run ...
                     -> DMA2 Stream 0 ISR signals event
+                    -> spi_ll_unlock()              [release SPI bus]
                     -> actor wakes, sends CRC, checks response
                     -> wait_ready() with hive_timer_every() poll
                         ... other actors run between 1ms polls ...
+                        ... flow deck reads SPI normally ...
                     -> card ready, return 0
         -> return HIVE_SUCCESS
 ```
@@ -177,9 +205,9 @@ SD cards have two sources of latency:
 
 The current SPI driver clocks 0xFF bytes in a tight loop, checking if the
 response is 0xFF (card ready). With DMA yield, this busy-wait must also
-yield to the scheduler.
+yield to the scheduler so other actors can run during the wait.
 
-**Chosen approach - Periodic timer + yield:**
+Poll every 1ms using `hive_timer_every()`, clocking one byte per poll:
 ```c
 #define SD_BUSY_POLL_INTERVAL_US 1000  // 1ms between polls
 #define SD_BUSY_TIMEOUT_MS       500   // 500ms max busy time
@@ -222,7 +250,8 @@ replace byte-by-byte `spi_send()`/`spi_recv()` for 512-byte sector data.
 
 Files to modify:
 - `src/hal/stm32/spi_ll.h` - Add `spi_ll_dma_init()`, `spi_ll_dma_start()`,
-  `spi_ll_dma_ok()` to low-level SPI interface
+  `spi_ll_dma_ok()`, `spi_ll_lock()`, `spi_ll_unlock()` to low-level SPI
+  interface
 - `examples/pilot/hal/crazyflie-2.1plus/spi_ll_sd.c` - Implement DMA
   using DMA2 Stream 0 (SPI1_RX) and DMA2 Stream 3 (SPI1_TX), add ISR
 
