@@ -155,8 +155,8 @@ Logger actor (LOW priority, every 40ms):
                         ... motor_actor runs ...
                     -> DMA2 Stream 0 ISR signals event
                     -> actor wakes, sends CRC, checks response
-                    -> wait_ready() with hive_yield() loop
-                        ... other actors run between polls ...
+                    -> wait_ready() with hive_timer_every() poll
+                        ... other actors run between 1ms polls ...
                     -> card ready, return 0
         -> return HIVE_SUCCESS
 ```
@@ -175,41 +175,43 @@ SD cards have two sources of latency:
    250ms to program its internal flash (wear leveling, garbage collection).
    During this time, the card holds MISO low (busy signal).
 
-The current SPI driver polls MISO waiting for the card to finish. With DMA
-yield, this busy-wait must also yield to the scheduler. Options:
+The current SPI driver clocks 0xFF bytes in a tight loop, checking if the
+response is 0xFF (card ready). With DMA yield, this busy-wait must also
+yield to the scheduler.
 
-**Option A - Timer-based polling with yield:**
+**Chosen approach - Periodic timer + yield:**
 ```c
-while (!spi_sd_card_ready()) {
-    hive_yield();  // Let other actors run, check again next schedule
-}
-```
-Simple but wastes scheduler cycles polling. At 250Hz control loop, each
-yield is ~4ms, so worst case we check 60+ times during a 250ms spike.
+#define SD_BUSY_POLL_INTERVAL_US 1000  // 1ms between polls
+#define SD_BUSY_TIMEOUT_MS       500   // 500ms max busy time
 
-**Option B - Busy signal interrupt + HAL event:**
-```c
-// Configure MISO pin as EXTI interrupt (rising edge = card ready)
-spi_sd_enable_busy_irq();
-hive_event_wait(sd_busy_event, SD_BUSY_TIMEOUT_MS);
-spi_sd_disable_busy_irq();
-```
-Efficient but requires EXTI line for the MISO pin. Must verify pin is
-EXTI-capable on the Crazyflie 2.1+ board.
-
-**Option C - Periodic timer + yield:**
-```c
 hive_timer_id_t poll_timer;
-hive_timer_after(1000, &poll_timer);  // Check every 1ms
-while (!spi_sd_card_ready()) {
-    hive_timer_recv(poll_timer, &msg, -1);  // Yield for 1ms
-    hive_timer_after(1000, &poll_timer);
+hive_timer_every(SD_BUSY_POLL_INTERVAL_US, &poll_timer);
+while (spi_ll_xfer(0xFF) != 0xFF) {
+    hive_status_t s = hive_timer_recv(poll_timer, &msg, SD_BUSY_TIMEOUT_MS);
+    if (HIVE_FAILED(s)) {
+        hive_timer_cancel(poll_timer);
+        return -1;  // Timeout - card stuck
+    }
 }
+hive_timer_cancel(poll_timer);
 ```
-Predictable overhead (~1ms granularity), uses existing timer mechanism.
 
-Option A is simplest and adequate. The scheduler overhead of extra yields is
-negligible compared to the 250ms card-internal delay.
+Predictable overhead (~1ms granularity), uses existing timer primitive.
+Worst case during a 250ms spike: 250 polls, each yielding for 1ms while
+other actors run.
+
+**Alternatives rejected:**
+
+*hive_yield() loop* - Polls as fast as the scheduler reschedules. Works for
+the pilot (250Hz = ~4ms between polls) but in applications with few or fast
+actors, spins at a very high rate for up to 250ms. Not appropriate for a
+general-purpose runtime.
+
+*EXTI interrupt on MISO* - The SD busy signal is read by clocking 0xFF
+through SPI, not by passively monitoring the GPIO level. Using EXTI would
+require reconfiguring the pin from SPI alternate function to GPIO input
+mid-transfer, or relying on underdocumented EXTI behavior with AF-mode
+pins. Fragile, board-specific, and unnecessary.
 
 ## Implementation Plan
 
@@ -236,12 +238,13 @@ Replace blocking byte loops with DMA start + yield in the SD protocol layer.
 Files to modify:
 - `src/hal/stm32/spi_sd.c` - Replace `spi_send(buf, 512)` and
   `spi_recv(buf, 512)` with `spi_ll_dma_start()` + `hive_event_wait()`.
-  Replace `wait_ready()` tight loop with `hive_yield()` loop.
+  Replace `wait_ready()` tight loop with `hive_timer_every()` +
+  `hive_timer_recv()` poll loop.
 
 This is the core change. The SD protocol (commands, tokens, CRC) stays
 byte-by-byte. Only the 512-byte sector data transfers use DMA. The
-`wait_ready()` busy loop becomes a yield loop so other actors run during
-card-internal write latency (up to 250ms).
+`wait_ready()` busy loop becomes a periodic timer poll so other actors
+run during card-internal write latency (up to 250ms).
 
 `diskio.c` is unchanged - it calls `spi_sd_write_blocks()` /
 `spi_sd_read_blocks()` which now yield internally.
