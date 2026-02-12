@@ -159,9 +159,18 @@ at 21MHz). The flow deck driver checks the lock before each SPI access and
 yields if busy. The sensor read gets delayed by at most ~195us, negligible
 for a 4ms sensor loop.
 
-During the busy-wait phase (timer poll every 1ms), each poll briefly locks
-the bus for one `spi_ll_xfer()` call (~0.4us). Between polls the bus is
-free for the flow deck.
+During the busy-wait phase, CS management is important. The current code
+holds SD CS low for the entire wait_ready() loop. With timer-based polling,
+we deassert CS between polls so the flow deck can use SPI1 freely. SD cards
+track busy state internally - reasserting CS and clocking 0xFF still reads
+the correct busy/ready status. Each poll briefly locks the bus (~0.4us for
+one `spi_ll_xfer()`). Between polls the bus is free for the flow deck.
+
+```
+DMA transfer:  lock -> CS low -> DMA 512 bytes -> CS high -> unlock
+Busy poll:     lock -> CS low -> xfer(0xFF) -> CS high -> unlock -> sleep 1ms
+               ... flow deck reads SPI freely between polls ...
+```
 
 ### Typical write flow during flight
 
