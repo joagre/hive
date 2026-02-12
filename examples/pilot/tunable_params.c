@@ -196,7 +196,7 @@ void tunable_params_init(tunable_params_t *params) {
     params->wp_hover_time_s = 2.0f;
 
     // Flight manager
-    params->thrust_ramp_ms = 500.0f; // 0.5 seconds
+    params->thrust_ramp_ms = 750.0f; // Slower ramp reduces overshoot (was 500)
 
     // Altitude Kalman filter - from config.h
     params->kf_q_altitude = ALT_KF_Q_ALTITUDE;

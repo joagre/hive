@@ -111,10 +111,9 @@
 #define POS_KD 0.06f         // Low D - noisy velocity
 #define MAX_TILT_ANGLE 0.20f // ~11 degrees - limit for noise tolerance
 #else
-// Conservative first-flight values for real hardware
-// Optical flow is noisy; start sluggish and tune up gradually
-#define POS_KP 0.08f         // Conservative (Webots: 0.12)
-#define POS_KD 0.10f         // Reduced D for noise (Webots: 0.18)
+// Flight-tested gains - flow deck tracks well, tighter position hold
+#define POS_KP 0.14f         // Stronger hold (was 0.08, Webots: 0.12)
+#define POS_KD 0.16f         // More velocity damping (was 0.10, Webots: 0.18)
 #define MAX_TILT_ANGLE 0.25f // ~14 degrees (safer limit)
 #endif
 
