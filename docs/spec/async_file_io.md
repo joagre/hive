@@ -24,72 +24,32 @@ hive_file_write() -> ring_push() [8KB RAM buffer, microseconds]
                   -> staging_commit() [256B flash write, ~1-2ms, only when full]
 ```
 
+The flash ring buffer exists because of flash-specific constraints: sector
+erase is slow, programming must run from RAM with interrupts disabled. The
+ring buffer decouples write frequency from flash programming frequency. This
+is the right design for flash but is not a general I/O pattern.
+
 **SD card files** (`/sd/*`) - Fully synchronous, no buffering:
 ```
 hive_file_write() -> f_write() [FatFS] -> disk_write() [SPI] -> hardware
                      entire call blocks scheduler for duration of SPI transfer
 ```
 
+**Linux files** - Synchronous POSIX I/O, but the OS kernel buffers writes in
+page cache. Rarely blocks in practice. No changes needed.
+
 ## Design
 
-Two layers, each independently valuable:
+DMA + yield in the FatFS diskio layer (STM32 only). Make SPI transfers
+non-blocking by yielding to the scheduler during DMA.
 
-1. **Ring buffer for SD card** (both platforms) - Absorbs write bursts into
-   RAM, batches I/O. Same pattern as flash files.
-2. **DMA + yield in diskio** (STM32 only) - Makes SPI transfers non-blocking
-   by yielding to the scheduler during DMA.
+No ring buffer needed for SD:
+- On Linux, the OS page cache already buffers writes
+- On STM32, DMA + yield makes the SPI transfer itself non-blocking
+- FatFS has its own internal sector cache for small writes
+- Adding a ring buffer would be buffering on top of buffering
 
-### Layer 1 - SD card ring buffer
-
-Add a ring buffer between `hive_file_write()` and FatFS, identical in concept
-to the flash ring buffer. Writes push to RAM (fast). Actual FatFS writes
-happen during flush.
-
-```
-Writer actor                    Ring buffer              FatFS/SPI
-    |                               |                       |
-    |-- hive_file_write(data) ----->|                       |
-    |   [memcpy to ring, O(1)]      |                       |
-    |<-- HIVE_SUCCESS --------------|                       |
-    |                               |                       |
-    |-- hive_file_sync() ---------->|                       |
-    |                               |-- f_write(batch) ---->|
-    |                               |   [SPI transfer]      |
-    |                               |<-- done --------------|
-    |<-- HIVE_SUCCESS --------------|                       |
-```
-
-**Flush triggers:**
-- Explicit `hive_file_sync()` call (application-controlled)
-- Ring buffer approaching full (e.g., 75% threshold)
-- File close
-
-**Ring buffer full behavior:**
-- Default (`pool_block = false`): Return `HIVE_ERR_NOMEM`, caller decides
-- With `pool_block = true`: Yield until space available (flush in progress)
-- This follows the same pattern as IPC pool exhaustion
-
-**Configuration:**
-```c
-// In hive_static_config.h
-#define HIVE_SD_RING_SIZE       (8 * 1024)  // 8 KB default (same as flash)
-```
-
-**Memory:**
-- Static ring buffer: `HIVE_SD_RING_SIZE` bytes (8 KB default)
-- Allocated at init, not on hot path
-- One ring buffer shared across all SD file descriptors (writes are
-  serialized anyway - single SPI bus)
-
-**Platform behavior:**
-- **STM32** - Ring buffer absorbs writes, flush goes through FatFS/SPI
-- **Linux** - Ring buffer absorbs writes, flush uses POSIX write() (already
-  fast due to OS page cache, but ring still helps with burst absorption)
-
-### Layer 2 - DMA yield (STM32 only)
-
-Make the SPI transfer itself non-blocking by using DMA and yielding to the
-scheduler while the transfer runs.
+### DMA + yield in diskio
 
 **Modified diskio layer:**
 ```c
@@ -103,6 +63,13 @@ DRESULT disk_write(BYTE pdrv, const BYTE *buff, LBA_t sector, UINT count) {
     hive_event_wait(sd_dma_event, SD_WRITE_TIMEOUT_MS);
 
     // DMA complete - check result
+    return spi_sd_check_result() ? RES_OK : RES_ERROR;
+}
+
+DRESULT disk_read(BYTE pdrv, BYTE *buff, LBA_t sector, UINT count) {
+    // Same pattern for reads
+    spi_sd_start_dma_read(buff, sector, count);
+    hive_event_wait(sd_dma_event, SD_READ_TIMEOUT_MS);
     return spi_sd_check_result() ? RES_OK : RES_ERROR;
 }
 ```
@@ -139,116 +106,148 @@ Cortex-M). This uses the existing HAL event mechanism - no new primitives.
 **What about disk_read()?** Same pattern. DMA + yield for reads too. This
 makes log download via radio non-blocking as well.
 
-### Combined flow
-
-With both layers active, a typical write path during flight:
+### Typical write flow during flight
 
 ```
 Logger actor (LOW priority, every 40ms):
-    hive_file_write(csv_line)
-        -> ring_push()          [~1 us, never blocks scheduler]
-        -> return HIVE_SUCCESS
-
-Logger actor (every 1 second):
-    hive_file_sync()
-        -> flush ring to FatFS
-        -> f_write(8KB batch)
+    hive_file_write(csv_line, ~150 bytes)
+        -> f_write() [FatFS buffers in sector cache]
+        -> if sector full:
             -> disk_write(sector)
-                -> start SPI DMA   [~1 us]
-                -> hive_event_wait [yields to scheduler]
-                    ... sensor_actor runs ...
+                -> start SPI DMA       [~1 us]
+                -> hive_event_wait()   [yields to scheduler]
+                    ... sensor_actor runs (CRITICAL) ...
                     ... estimator_actor runs ...
                     ... altitude_actor runs ...
                     ... rate_actor runs ...
                     ... motor_actor runs ...
                 -> DMA ISR signals event
                 -> actor wakes, continues
-            -> disk_write(next sector)
-                -> [repeat yield pattern]
         -> return HIVE_SUCCESS
 ```
 
-The control loop runs uninterrupted at 250Hz. The SD card write happens in
-the background, sector by sector, with the scheduler running other actors
-between each sector transfer.
+The control loop runs uninterrupted at 250Hz. SD card writes happen in the
+background, sector by sector, with the scheduler running other actors between
+each sector transfer. Even SD card latency spikes (100ms+) are harmless -
+the logger actor simply stays yielded longer while flight-critical actors
+keep running.
+
+### SD card busy-wait after DMA
+
+SD cards have two sources of latency:
+1. **SPI transfer** - Moving bytes over the bus. DMA handles this.
+2. **Card-internal write** - After receiving data, the card may take up to
+   250ms to program its internal flash (wear leveling, garbage collection).
+   During this time, the card holds MISO low (busy signal).
+
+The current SPI driver polls MISO waiting for the card to finish. With DMA
+yield, this busy-wait must also yield to the scheduler. Options:
+
+**Option A - Timer-based polling with yield:**
+```c
+while (!spi_sd_card_ready()) {
+    hive_yield();  // Let other actors run, check again next schedule
+}
+```
+Simple but wastes scheduler cycles polling. At 250Hz control loop, each
+yield is ~4ms, so worst case we check 60+ times during a 250ms spike.
+
+**Option B - Busy signal interrupt + HAL event:**
+```c
+// Configure MISO pin as EXTI interrupt (rising edge = card ready)
+spi_sd_enable_busy_irq();
+hive_event_wait(sd_busy_event, SD_BUSY_TIMEOUT_MS);
+spi_sd_disable_busy_irq();
+```
+Efficient but requires EXTI line for the MISO pin. Must verify pin is
+EXTI-capable on the Crazyflie 2.1+ board.
+
+**Option C - Periodic timer + yield:**
+```c
+hive_timer_id_t poll_timer;
+hive_timer_after(1000, &poll_timer);  // Check every 1ms
+while (!spi_sd_card_ready()) {
+    hive_timer_recv(poll_timer, &msg, -1);  // Yield for 1ms
+    hive_timer_after(1000, &poll_timer);
+}
+```
+Predictable overhead (~1ms granularity), uses existing timer mechanism.
+
+Option A is simplest and adequate. The scheduler overhead of extra yields is
+negligible compared to the 250ms card-internal delay.
 
 ## Implementation Plan
 
-### Phase 1 - Ring buffer for SD card
+### Step 1 - DMA SPI transfer functions
 
 Files to modify:
-- `src/hal/stm32/hive_hal_file.c` - Add ring buffer to SD write path
-- `src/hal/linux/hive_hal_file.c` - Add ring buffer to file write path
-- `include/hive_static_config.h` - Add `HIVE_SD_RING_SIZE` config
+- `src/hal/stm32/spi_sd.c` - Add `spi_sd_start_dma_write()`,
+  `spi_sd_start_dma_read()`, `spi_sd_check_result()`
+- `hal/crazyflie-2.1plus/spi_ll_sd.c` - Board-specific DMA stream/channel
+  config, ISR handlers
 
-The flash ring buffer implementation in `hive_hal_file.c` (STM32) is the
-template. The SD path needs:
-- Static ring buffer allocation
-- `sd_write()` pushes to ring instead of calling `f_write()` directly
-- `sd_sync()` flushes ring through `f_write()`
-- `sd_close()` flushes before closing
+Prerequisites:
+- Identify free DMA streams on the STM32F405 (must not conflict with UART
+  DMA used by syslink)
+- Verify SPI peripheral supports DMA (SPI1/SPI2/SPI3 all do on STM32F405)
 
-On Linux, the same pattern applies to POSIX file writes.
-
-**Testing:**
-- Unit test: ring buffer push/flush/wrap behavior
-- Integration test: file write + sync + read back
-- QEMU test: SD card write path with ring buffer
-- Flight test: verify no scheduler stalls during logging
-
-### Phase 2 - DMA yield in diskio (STM32)
+### Step 2 - Yield in diskio
 
 Files to modify:
-- `src/hal/stm32/spi_sd.c` - Add DMA transfer functions
-- `src/hal/stm32/diskio.c` - Use DMA + yield in disk_read/disk_write
-- `hal/crazyflie-2.1plus/spi_ll_sd.c` - Board-specific DMA config
-- `hal/crazyflie-2.1plus/hal_config.h` - DMA channel/stream assignments
+- `src/hal/stm32/diskio.c` - Replace synchronous SPI calls with DMA + yield
+  pattern in `disk_write()` and `disk_read()`
 
-The existing `hive_hal_event_signal()` / `hive_event_wait()` mechanism
-handles the ISR-to-actor communication. The SPI DMA peripheral is already
-available on the STM32F405 (DMA1 or DMA2 depending on SPI peripheral).
+This is the core change. FatFS calls `disk_write()`/`disk_read()` in the
+diskio layer. We replace the blocking SPI transfer with DMA start + yield +
+wake on completion.
 
-**Prerequisites:**
-- Phase 1 must be complete (ring buffer provides the batching)
-- DMA channel must not conflict with other peripherals (UART DMA for syslink)
-- Need to verify which DMA streams are free on the Crazyflie 2.1+
+### Step 3 - Card busy-wait with yield
 
-**Testing:**
-- Bench test: verify DMA transfers complete correctly
-- Timing test: measure scheduler latency during SD writes
-- Flight test: full flight with SD logging, verify no deadman timeouts
+Files to modify:
+- `src/hal/stm32/spi_sd.c` - Replace busy-wait loop with yield loop
 
-### Phase 3 - Verification
+After DMA transfer completes, the SD card may internally busy for up to
+250ms. The current code polls MISO in a tight loop. Replace with a yield
+loop so other actors run during the wait.
 
-- Run flight test with FIRST_TEST profile + SD logging
-- Verify motor deadman never fires during normal operation
-- Measure worst-case scheduler latency during SD writes
-- Compare telemetry quality (no gaps in 25Hz CSV)
+### Step 4 - Testing
+
+- Bench test: verify DMA transfers complete correctly (ground test mode)
+- Timing test: measure scheduler latency during SD writes with stack
+  watermarking
+- Flight test: FIRST_TEST profile + SD logging, verify no deadman timeouts
+- Stress test: rapid logging at maximum rate, verify no data corruption
 
 ## Constraints
 
-- **No heap allocation** - Ring buffer is statically allocated
-- **No new runtime primitives** - Uses existing HAL events and pool patterns
-- **Backward compatible** - API unchanged, behavior improves transparently
+- **No heap allocation** - All DMA descriptors and buffers are static
+- **No new runtime primitives** - Uses existing HAL events and
+  `hive_event_wait()`
+- **Backward compatible** - `hive_file_write()` API unchanged
 - **Flash path unchanged** - Already has ring buffer, no modification needed
-- **Single SPI bus** - Ring buffer serializes writes naturally (one flush at
-  a time)
+- **Linux path unchanged** - OS page cache handles buffering, no DMA needed
+- **Single SPI bus** - Only one actor can do SD I/O at a time (logger owns
+  the SD file descriptors)
+- **FatFS unchanged** - All changes are in the diskio layer below FatFS
 
 ## Alternatives Considered
 
-**Idle-time flush** - Flush SD ring buffer during scheduler idle (WFI). This
-would never block actor execution but risks data loss if the system is busy
-and never reaches idle. Also doesn't help if the ring fills up.
+**Ring buffer for SD card** - Adds a RAM buffer between `hive_file_write()`
+and FatFS. Reduces blocking frequency but doesn't eliminate it - the flush
+still blocks during SPI. On Linux, redundant with OS page cache. On STM32,
+redundant with DMA yield. Buffering on top of buffering.
 
-**Dedicated flush actor** - A separate actor that owns the SD card and
-processes write requests via IPC. Adds complexity (message passing for every
-write) and doesn't solve the blocking problem (the flush actor still blocks
-during SPI).
+**Idle-time flush** - Flush writes during scheduler idle (WFI). Risks data
+loss if the system never reaches idle. Doesn't help if writes happen faster
+than idle time allows.
+
+**Dedicated flush actor** - Separate actor for SD card I/O via IPC. Adds
+message-passing overhead for every write and doesn't solve blocking (the
+flush actor still blocks during SPI without DMA yield).
 
 **Reduce log verbosity only** - Treats the symptom. Any future log message
 during flight could trigger the same stall. Not acceptable for a flight
 controller.
 
-**Increase deadman timeout** - Makes the symptom less likely to manifest but
-doesn't fix the underlying scheduler stall. Other time-sensitive actors would
-still be affected.
+**Increase deadman timeout** - Makes the symptom less likely but doesn't fix
+the scheduler stall. Other time-sensitive actors would still be starved.
