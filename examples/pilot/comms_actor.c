@@ -454,9 +454,9 @@ void comms_actor(void *args, const hive_spawn_info_t *siblings,
         uint8_t rx_buf[32];
         size_t rx_len;
         while (hal_esb_recv(rx_buf, sizeof(rx_buf), &rx_len)) {
-            HIVE_LOG_INFO("[COMMS] RX len=%zu: %02x %02x", rx_len,
-                          rx_len > 0 ? rx_buf[0] : 0,
-                          rx_len > 1 ? rx_buf[1] : 0);
+            HIVE_LOG_DEBUG("[COMMS] RX len=%zu: %02x %02x", rx_len,
+                           rx_len > 0 ? rx_buf[0] : 0,
+                           rx_len > 1 ? rx_buf[1] : 0);
             handle_rx_command(state, rx_buf, rx_len);
         }
 

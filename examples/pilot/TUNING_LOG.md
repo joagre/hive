@@ -35,9 +35,17 @@ Attitude/rate gains unchanged. Kalman filter unchanged.
 | Velocity at 0.5m | 0.30 m/s | <0.15 m/s |
 | XY drift | 2.4 cm | <5 cm (tighter hold) |
 
-### Results
+### Results (test 9 - crash)
 
-Pending flight test.
+Crash at t=1.76s into flight. **Not a tuning issue.** Root cause: SD card
+write blocking the scheduler. The hive log was opened at `/sd/hive.log`
+(unbuffered SD path), and GPS valid/lost spam + COMMS RX logging generated
+hundreds of synchronous SPI writes per second. An SD card latency spike
+(108ms) caused a motor deadman timeout, zeroing thrust mid-climb at 0.35m.
+The drone flipped and crashed.
+
+The tuning parameters were never tested in actual hover. Retained for next
+flight after fixing the SD card write path (ring buffer + DMA yield).
 
 ---
 
