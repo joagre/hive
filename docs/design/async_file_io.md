@@ -254,6 +254,33 @@ card-internal write latency (up to 250ms).
 - Flight test: FIRST_TEST profile + SD logging, verify no deadman timeouts
 - Stress test: rapid logging at maximum rate, verify no data corruption
 
+### Step 4 - Documentation update
+
+SD card file I/O is no longer blocking. Many places in the documentation
+warn about file I/O stalling the scheduler and recommend LOW priority actors
+for file work. After DMA yield, SD writes on STM32 yield cooperatively like
+any other blocking call (`hive_ipc_recv`, `hive_event_wait`). Linux file I/O
+is still synchronous POSIX but rarely blocks in practice (OS page cache).
+
+The "file I/O is synchronous" framing changes to: file I/O is non-blocking
+on STM32 (DMA + yield for SD, ring buffer for flash) and synchronous on
+Linux (OS-buffered, rarely stalls).
+
+Files to update:
+- `CLAUDE.md` - File subsystem description (line 155: "Synchronous POSIX
+  I/O (briefly pauses scheduler)"), man page description (line 35:
+  "Synchronous file I/O"), platform differences (line 569)
+- `README.md` - File I/O note (line 138: "synchronous and briefly stalls
+  the scheduler"), code example comment (line 369)
+- `docs/spec/api.md` - File API note (line 2062: "synchronous and briefly
+  pauses the scheduler"), STM32 behavior (line 2117), sync description
+  (line 2135)
+- `docs/spec/design.md` - LOW priority recommendation (line 468)
+- `docs/spec/internals.md` - Platform differences table (line 489:
+  "Synchronous POSIX")
+- `man/man3/hive_file.3` - Blocking note (line 23), scheduler stall
+  description (line 163)
+
 ## Constraints
 
 - **No heap allocation** - All DMA descriptors and buffers are static
