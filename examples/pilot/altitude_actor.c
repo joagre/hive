@@ -158,11 +158,10 @@ void altitude_actor(void *args, const hive_spawn_info_t *siblings,
             hive_bus_read(state->position_target_bus, &target, sizeof(target),
                           &len, HIVE_TIMEOUT_NONBLOCKING);
         if (read_status.code == HIVE_OK) {
-            // Log first successful read
-            static bool first_read = true;
-            if (first_read && target.z != target_altitude) {
-                HIVE_LOG_INFO("[ALT] Got target z=%.2f", target.z);
-                first_read = false;
+            // Log target changes
+            if (target.z != target_altitude) {
+                HIVE_LOG_INFO("[ALT] Target changed: %.2f -> %.2f",
+                              target_altitude, target.z);
             }
             target_altitude = target.z;
         }
@@ -219,6 +218,11 @@ void altitude_actor(void *args, const hive_spawn_info_t *siblings,
                 hive_ipc_notify(state->flight_manager, NOTIFY_FLIGHT_LANDED,
                                 NULL, 0);
             }
+        } else if (target_altitude <= 0.0f) {
+            // No target yet - stay on ground, keep ramp and PID fresh
+            thrust = 0.0f;
+            ramp_start_time = 0;
+            pid_reset(&alt_pid);
         } else if (landing_mode) {
             // Landing mode: control descent rate, not altitude
             // Target velocity = landing_descent_rate, adjust thrust to achieve it

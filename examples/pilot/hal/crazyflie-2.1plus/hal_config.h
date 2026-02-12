@@ -5,7 +5,7 @@
 
 // Calibrated hover thrust (normalized 0.0-1.0)
 // Measured with thrust test - drone light on skids at this value
-#define HAL_HOVER_THRUST 0.38f
+#define HAL_HOVER_THRUST 0.65f
 
 /*
  * Motor mapping (Bitcraze standard, viewed from above):

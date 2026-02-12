@@ -164,6 +164,27 @@ hive_status_t hive_log_file_sync(void) {
 #endif
 }
 
+hive_status_t hive_log_file_truncate(void) {
+#if HIVE_LOG_TO_FILE
+    if (s_log_fd < 0) {
+        return HIVE_SUCCESS; // No file open
+    }
+
+    // Sync pending data before truncating
+    hive_file_sync(s_log_fd);
+
+    hive_status_t s = hive_file_truncate(s_log_fd);
+    if (HIVE_FAILED(s)) {
+        return s;
+    }
+
+    s_seq = 0; // Reset sequence number for fresh file
+    return HIVE_SUCCESS;
+#else
+    return HIVE_SUCCESS;
+#endif
+}
+
 hive_status_t hive_log_file_close(void) {
 #if HIVE_LOG_TO_FILE
     if (s_log_fd < 0) {

@@ -135,4 +135,14 @@ hive_status_t hive_hal_file_sync(int fd) {
     return HIVE_SUCCESS;
 }
 
+hive_status_t hive_hal_file_truncate(int fd) {
+    if (ftruncate(fd, 0) < 0) {
+        return HIVE_ERROR(HIVE_ERR_IO, "ftruncate failed");
+    }
+    if (lseek(fd, 0, SEEK_SET) < 0) {
+        return HIVE_ERROR(HIVE_ERR_IO, "lseek failed");
+    }
+    return HIVE_SUCCESS;
+}
+
 #endif // HIVE_ENABLE_FILE

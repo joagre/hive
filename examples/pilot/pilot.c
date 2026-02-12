@@ -56,6 +56,8 @@ int main(void) {
         return 1;
     }
 
+    hal_printf("[PILOT] Build: " __DATE__ " " __TIME__ "\n");
+
 #ifdef HAL_HAS_RADIO
     // Initialize ESB radio (blocks until nRF51 responds or timeout)
     if (hal_esb_init() != 0) {

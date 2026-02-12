@@ -100,4 +100,10 @@ hive_status_t hive_hal_file_sync(int fd) {
     return HIVE_ERROR(HIVE_ERR_INVALID, "File I/O not implemented");
 }
 
+// Truncate file to zero length and reset write position.
+hive_status_t hive_hal_file_truncate(int fd) {
+    (void)fd;
+    return HIVE_ERROR(HIVE_ERR_INVALID, "File I/O not implemented");
+}
+
 #endif // HIVE_ENABLE_FILE

@@ -90,18 +90,9 @@ static bool validate_sensors(const sensor_data_t *s) {
             return false;
         }
     }
-    // Barometer validation (only if marked valid)
-    if (s->baro_valid) {
-        if (!is_valid_float(s->baro_altitude)) {
-            HIVE_LOG_ERROR("[EST] Sensor fail: baro=NaN/Inf");
-            return false;
-        }
-        if (s->baro_altitude < -1.0f || s->baro_altitude > MAX_ALTITUDE_M) {
-            HIVE_LOG_ERROR("[EST] Sensor fail: baro=%.2f out of [-1,%.0f]",
-                           s->baro_altitude, MAX_ALTITUDE_M);
-            return false;
-        }
-    }
+    // Barometer: skip validation entirely. Baro is unreliable (prop wash,
+    // temperature drift) and we use the rangefinder for altitude. Bad baro
+    // must never reject the entire sensor reading and starve the pipeline.
     // Velocity validation (only if marked valid)
     if (s->velocity_valid) {
         if (!is_valid_float(s->velocity_x) || !is_valid_float(s->velocity_y)) {
@@ -347,10 +338,9 @@ void estimator_actor(void *args, const hive_spawn_info_t *siblings,
             // Rangefinder invalid but we've used it before - hold last value.
             // The Kalman filter will coast on accelerometer integration.
             measured_altitude = last_valid_rangefinder_alt;
-        } else if (sensors.baro_valid) {
-            // Never had rangefinder - use baro (pre-flight on ground)
-            measured_altitude = sensors.baro_altitude;
         }
+        // No baro fallback - rangefinder is our only altitude source.
+        // Before first rangefinder reading, Kalman filter coasts at 0.
 
         // -----------------------------------------------------------------
         // Altitude and vertical velocity estimation (Kalman filter)

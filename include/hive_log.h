@@ -35,6 +35,11 @@ hive_status_t hive_log_file_open(const char *path);
 // On STM32, this flushes the ring buffer to flash
 hive_status_t hive_log_file_sync(void);
 
+// Truncate log file to zero length (clear all contents)
+// Syncs pending data, then truncates. Write position resets to start.
+// Use on RESET to start fresh logs for each flight.
+hive_status_t hive_log_file_truncate(void);
+
 // Close log file (call after flight, e.g., during DISARM)
 // Performs final sync before closing
 hive_status_t hive_log_file_close(void);

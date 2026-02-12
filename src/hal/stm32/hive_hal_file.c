@@ -496,6 +496,37 @@ static hive_status_t flash_sync(int index) {
     return HIVE_SUCCESS;
 }
 
+static hive_status_t flash_truncate(int index) {
+    if (index < 0 || index >= HIVE_MAX_FLASH_FILES) {
+        return HIVE_ERROR(HIVE_ERR_INVALID, "invalid flash fd");
+    }
+
+    flash_file_t *ff = &s_flash_files[index];
+    if (!ff->opened) {
+        return HIVE_ERROR(HIVE_ERR_INVALID, "file not open");
+    }
+
+    if (!ff->write_mode) {
+        return HIVE_ERROR(HIVE_ERR_INVALID, "file not opened for writing");
+    }
+
+    // Erase flash sector
+    if (!flash_erase_sector(hive_mount_flash_sector(ff->mount))) {
+        return HIVE_ERROR(HIVE_ERR_IO, "flash erase failed");
+    }
+
+    // Reset write position, ring buffer, and staging
+    ff->write_pos = 0;
+    ff->erased_ok = true;
+    if (s_ring_file_idx == index) {
+        s_ring_head = 0;
+        s_ring_tail = 0;
+        staging_reset();
+    }
+
+    return HIVE_SUCCESS;
+}
+
 // ============================================================================
 // SD Backend (FatFS)
 // ============================================================================
@@ -769,6 +800,29 @@ static hive_status_t sd_sync(int index) {
     return HIVE_SUCCESS;
 }
 
+static hive_status_t sd_truncate(int index) {
+    if (index < 0 || index >= HIVE_MAX_SD_FILES) {
+        return HIVE_ERROR(HIVE_ERR_INVALID, "invalid SD fd");
+    }
+
+    if (!s_sd_file_used[index]) {
+        return HIVE_ERROR(HIVE_ERR_INVALID, "file not open");
+    }
+
+    // Seek to beginning and truncate
+    FRESULT res = f_lseek(&s_sd_files[index], 0);
+    if (res != FR_OK) {
+        return HIVE_ERROR(HIVE_ERR_IO, "f_lseek failed");
+    }
+
+    res = f_truncate(&s_sd_files[index]);
+    if (res != FR_OK) {
+        return HIVE_ERROR(HIVE_ERR_IO, "f_truncate failed");
+    }
+
+    return HIVE_SUCCESS;
+}
+
 // Check if SD card is available (for mount_available API)
 hive_status_t sd_check_available(const hive_mount_t *mount) {
     // If already initialized, we're good
@@ -943,6 +997,24 @@ hive_status_t hive_hal_file_sync(int fd) {
 #if HIVE_ENABLE_SD
     case HIVE_BACKEND_SD:
         return sd_sync(index);
+#endif
+
+    default:
+        return HIVE_ERROR(HIVE_ERR_INVALID, "invalid fd");
+    }
+}
+
+hive_status_t hive_hal_file_truncate(int fd) {
+    hive_file_backend_t backend = FD_BACKEND(fd);
+    int index = FD_INDEX(fd);
+
+    switch (backend) {
+    case HIVE_BACKEND_FLASH:
+        return flash_truncate(index);
+
+#if HIVE_ENABLE_SD
+    case HIVE_BACKEND_SD:
+        return sd_truncate(index);
 #endif
 
     default:

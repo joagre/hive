@@ -63,7 +63,7 @@ static void notify_reset_all(const sibling_ids_t *ids) {
     hive_actor_id_t actors[] = {
         ids->sensor,   ids->estimator, ids->waypoint, ids->altitude,
         ids->position, ids->attitude,  ids->rate,     ids->motor,
-        ids->logger,   ids->battery,
+        ids->logger,   ids->battery,   ids->comms,
     };
 
     for (size_t i = 0; i < sizeof(actors) / sizeof(actors[0]); i++) {

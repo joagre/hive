@@ -450,6 +450,12 @@ bool hal_esb_tx_ready(void) {
     return s_initialized && txen_ready();
 }
 
+void hal_esb_flush_rx(void) {
+    s_dma_rx_read_pos = dma_get_write_pos();
+    s_rx_state = RX_START1;
+    s_radio_packet_ready = false;
+}
+
 bool hal_esb_recv(void *buf, size_t max_len, size_t *out_len) {
     if (!s_initialized) {
         return false;
@@ -470,6 +476,17 @@ bool hal_esb_recv(void *buf, size_t max_len, size_t *out_len) {
     // Process DMA buffer until we find a radio packet or run out of data
     uint32_t write_pos = dma_get_write_pos();
     uint32_t read_pos = s_dma_rx_read_pos;
+
+    // Detect potential DMA buffer overflow.
+    // If available bytes >= 3/4 buffer, we likely fell behind and
+    // the DMA wrapped past our read position, corrupting data.
+    // Flush and resync rather than feeding garbage to the parser.
+    uint32_t available = (write_pos - read_pos) & (DMA_RX_BUFFER_SIZE - 1);
+    if (available >= (DMA_RX_BUFFER_SIZE * 3 / 4)) {
+        s_dma_rx_read_pos = write_pos;
+        s_rx_state = RX_START1;
+        return false;
+    }
 
     while (read_pos != write_pos) {
         uint8_t byte = s_dma_rx_buffer[read_pos];

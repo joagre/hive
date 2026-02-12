@@ -88,4 +88,12 @@ hive_status_t hive_hal_file_pwrite(int fd, const void *buf, size_t len,
 // STM32: Flush ring buffer to flash
 hive_status_t hive_hal_file_sync(int fd);
 
+// Truncate file to zero length and reset write position.
+// fd: File descriptor (must be open for writing)
+// Returns: HIVE_SUCCESS or error status
+// Linux: ftruncate(fd, 0) + lseek(fd, 0, SEEK_SET)
+// STM32 flash: Erase sector + reset ring buffer
+// STM32 SD: f_lseek(0) + f_truncate()
+hive_status_t hive_hal_file_truncate(int fd);
+
 #endif // HIVE_HAL_FILE_H

@@ -45,6 +45,11 @@ hive_status_t hive_file_pwrite(int fd, const void *buf, size_t len,
 // Sync file to disk
 hive_status_t hive_file_sync(int fd);
 
+// Truncate file to zero length and reset write position
+// Equivalent to POSIX ftruncate(fd, 0) + lseek(fd, 0, SEEK_SET)
+// File must be open for writing
+hive_status_t hive_file_truncate(int fd);
+
 // Check if a mount point is available
 // For SD card: checks if card is inserted and filesystem mounted
 // For FLASH/POSIX: always returns HIVE_SUCCESS

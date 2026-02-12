@@ -141,6 +141,12 @@ bool hal_esb_tx_ready(void);
 // Returns true if packet available, false if none pending.
 bool hal_esb_recv(void *buf, size_t max_len, size_t *out_len);
 
+// Flush pending RX data and reset syslink parser.
+// Call once at actor startup to skip stale data from boot period.
+// The 256-byte DMA circular buffer wraps during the grace period;
+// this syncs the read position to the current DMA write position.
+void hal_esb_flush_rx(void);
+
 // Get HAL event ID for RX notification.
 // This event is signaled by the UART IDLE interrupt when data arrives.
 // Use with hive_event_wait() or hive_select(HIVE_SEL_HAL_EVENT).

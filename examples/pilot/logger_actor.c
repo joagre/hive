@@ -191,26 +191,20 @@ void logger_actor(void *args, const hive_spawn_info_t *siblings,
         }
 
         if (result.index == SEL_RESET) {
-            // RESET notification - truncate CSV file for new flight
-            // (hive log is kept continuous for debugging)
-            if (state->csv_fd >= 0) {
-                HIVE_LOG_INFO("[LOG] RESET - truncating CSV file");
-                hive_file_close(state->csv_fd);
+            // RESET notification - truncate both logs for new flight
 
-                // Reopen file with truncation
-                status =
-                    hive_file_open(state->csv_path,
-                                   HIVE_O_WRONLY | HIVE_O_CREAT | HIVE_O_TRUNC,
-                                   0644, &state->csv_fd);
-                if (HIVE_FAILED(status)) {
-                    HIVE_LOG_ERROR("[LOG] Cannot reopen %s: %s",
-                                   state->csv_path, HIVE_ERR_STR(status));
-                    state->csv_fd = -1;
-                } else {
-                    // Write CSV header
-                    write_csv_header(state->csv_fd, line_buf, sizeof(line_buf));
-                }
+            // Truncate hive log
+            if (state->hive_log_open) {
+                hive_log_file_truncate();
             }
+
+            // Truncate CSV
+            if (state->csv_fd >= 0) {
+                hive_file_truncate(state->csv_fd);
+                write_csv_header(state->csv_fd, line_buf, sizeof(line_buf));
+            }
+
+            HIVE_LOG_INFO("[LOG] RESET - logs truncated");
 
             // Reset counters
             start_time = hive_get_time();

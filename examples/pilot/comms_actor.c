@@ -226,7 +226,14 @@ static void handle_rx_command(comms_state_t *state, const uint8_t *data,
         // Ground station sends GO to start flight sequence
         HIVE_LOG_INFO("[COMMS] GO command received from ground station");
         if (state->flight_manager != HIVE_ACTOR_ID_INVALID) {
-            hive_ipc_notify(state->flight_manager, NOTIFY_GO, NULL, 0);
+            hive_status_t s =
+                hive_ipc_notify(state->flight_manager, NOTIFY_GO, NULL, 0);
+            if (HIVE_FAILED(s)) {
+                HIVE_LOG_WARN(
+                    "[COMMS] GO notify failed: %s - retrying via name",
+                    HIVE_ERR_STR(s));
+                hive_ipc_named_notify("flight_manager", NOTIFY_GO, NULL, 0);
+            }
         }
         return;
     }
@@ -386,7 +393,9 @@ void comms_actor(void *args, const hive_spawn_info_t *siblings,
             "[COMMS] flight_manager sibling not found - ARM disabled");
     }
 
-    // Radio already initialized from main() via hal_esb_init()
+    // Radio already initialized from main() via hal_esb_init().
+    // Flush stale DMA data from boot/grace period.
+    hal_esb_flush_rx();
     HIVE_LOG_INFO("[COMMS] Radio initialized");
 
     // Subscribe to buses
@@ -412,15 +421,30 @@ void comms_actor(void *args, const hive_spawn_info_t *siblings,
     sensor_data_t latest_sensors = SENSOR_DATA_ZERO;
     thrust_cmd_t latest_thrust = THRUST_CMD_ZERO;
 
+    // Select sources: HAL event (radio RX) + IPC (RESET notification)
+    hive_select_source_t sources[] = {
+        {.type = HIVE_SEL_HAL_EVENT, .event = rx_event},
+        {.type = HIVE_SEL_IPC,
+         .ipc = {.class = HIVE_MSG_NOTIFY, .id = NOTIFY_RESET}},
+    };
+
     static uint32_t wake_count = 0;
     while (true) {
-        // Wait for RX event (UART IDLE interrupt signals ground station poll)
-        hive_status_t status = hive_event_wait(rx_event, -1);
+        // Wait for radio RX event or RESET notification
+        hive_select_result_t result;
+        hive_status_t status = hive_select(sources, 2, &result, -1);
         if (HIVE_FAILED(status)) {
-            HIVE_LOG_ERROR("[COMMS] event wait failed: %s",
-                           HIVE_ERR_STR(status));
+            HIVE_LOG_ERROR("[COMMS] select failed: %s", HIVE_ERR_STR(status));
             hive_exit(HIVE_EXIT_REASON_CRASH);
         }
+
+        // Handle RESET: flush syslink parser to resync after DMA overflow
+        if (result.index == 1) {
+            hal_esb_flush_rx();
+            HIVE_LOG_INFO("[COMMS] RESET - syslink flushed");
+            continue;
+        }
+
         wake_count++;
         if ((wake_count % 500) == 1) {
             HIVE_LOG_INFO("[COMMS] wake %lu", wake_count);

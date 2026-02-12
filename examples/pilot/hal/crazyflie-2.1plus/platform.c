@@ -1100,6 +1100,24 @@ bool platform_self_test(void) {
     debug_swo_printf("[TEST] Baro: P=%.1f Pa T=%.2f C\n", baro_data.pressure,
                      baro_data.temperature);
 
+    // Motor bench test - spin each motor briefly at low power
+    // This verifies PWM output actually reaches the motors.
+    // Keep power low (10%) and duration short (150ms) to avoid movement.
+    debug_swo_printf("[TEST] Motor bench test (10%% x 150ms each)...\n");
+    const uint32_t test_pwm = 25; // ~10% of 255
+    const uint32_t test_ms = 150;
+    const char *motor_names[] = {"M1 (FR)", "M2 (BR)", "M3 (BL)", "M4 (FL)"};
+    volatile uint32_t *ccr[] = {&TIM2->CCR2, &TIM2->CCR4, &TIM2->CCR1,
+                                &TIM4->CCR4};
+    for (int i = 0; i < 4; i++) {
+        debug_swo_printf("[TEST] %s...\n", motor_names[i]);
+        *ccr[i] = test_pwm;
+        platform_delay_ms(test_ms);
+        *ccr[i] = 0;
+        platform_delay_ms(50); // Brief pause between motors
+    }
+    debug_swo_printf("[TEST] Motor bench test complete\n");
+
     debug_swo_printf("[TEST] Self-test PASSED\n");
     return true;
 }
@@ -1261,20 +1279,28 @@ void platform_read_sensors(sensor_data_t *sensors) {
     const float gyro_scale = (2000.0f / 32768.0f) * (M_PI / 180.0f);
 
     // Read accelerometer (pre-flight finding #5: validity flags)
+    // Axis transform: BMI088 is mounted rotated 90 degrees on CF2.1+ PCB.
+    // Body frame: body_X = -sensor_Y, body_Y = sensor_X, body_Z = sensor_Z
+    // Matches Bitcraze sensors_bmi088_bmp388.c axis mapping.
     sensors->accel_valid = false;
     if (bmi088_get_accel_data(&accel_data, &s_bmi088_dev) == BMI088_OK) {
-        sensors->accel[0] = accel_data.x * accel_scale;
-        sensors->accel[1] = accel_data.y * accel_scale;
-        sensors->accel[2] = accel_data.z * accel_scale;
+        sensors->accel[0] = -(accel_data.y * accel_scale);
+        sensors->accel[1] = (accel_data.x * accel_scale);
+        sensors->accel[2] = (accel_data.z * accel_scale);
         sensors->accel_valid = true;
     }
 
     // Read gyroscope (with bias correction, pre-flight finding #5: validity flags)
+    // Same axis transform as accelerometer. Bias is in sensor frame,
+    // so subtract before transforming to body frame.
     sensors->gyro_valid = false;
     if (bmi088_get_gyro_data(&gyro_data, &s_bmi088_dev) == BMI088_OK) {
-        sensors->gyro[0] = gyro_data.x * gyro_scale - s_gyro_bias[0];
-        sensors->gyro[1] = gyro_data.y * gyro_scale - s_gyro_bias[1];
-        sensors->gyro[2] = gyro_data.z * gyro_scale - s_gyro_bias[2];
+        float gx = gyro_data.x * gyro_scale - s_gyro_bias[0];
+        float gy = gyro_data.y * gyro_scale - s_gyro_bias[1];
+        float gz = gyro_data.z * gyro_scale - s_gyro_bias[2];
+        sensors->gyro[0] = -gy;
+        sensors->gyro[1] = gx;
+        sensors->gyro[2] = gz;
         sensors->gyro_valid = true;
     }
 

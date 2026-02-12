@@ -147,6 +147,10 @@ $(HAL_LIB):
 # Config files that affect all builds
 CONFIG_DEPS := hive_config.mk $(HAL_DIR)/hive_board_config.mk
 
+# Always recompile pilot.c so __DATE__/__TIME__ stay current
+.PHONY: FORCE
+$(BUILD_DIR)/pilot/pilot.o: FORCE
+
 $(BUILD_DIR)/pilot/%.o: %.c $(CONFIG_DEPS)
 	@mkdir -p $(dir $@)
 	@echo "CC $<"

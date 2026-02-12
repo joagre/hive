@@ -107,6 +107,12 @@ hive_status_t hive_file_sync(int fd) {
     return hive_hal_file_sync(fd);
 }
 
+hive_status_t hive_file_truncate(int fd) {
+    HIVE_REQUIRE_INIT(s_file.initialized, "File I/O");
+
+    return hive_hal_file_truncate(fd);
+}
+
 hive_status_t hive_file_mount_available(const char *path) {
     if (!path) {
         return HIVE_ERROR(HIVE_ERR_INVALID, "NULL path");

@@ -143,6 +143,9 @@ CONFIG_DEPS := hive_config.mk
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
 
+# Always recompile pilot.c so __DATE__/__TIME__ stay current
+pilot.o: FORCE
+
 $(TARGET): $(PILOT_OBJS) $(HIVE_LIB)
 	$(CC) $(LDFLAGS) -o $@ $(PILOT_OBJS) $(LDLIBS)
 
