@@ -333,4 +333,4 @@ Files to update:
 - **Single SPI bus** - Only one actor can do SD I/O at a time (logger owns
   the SD file descriptors)
 - **FatFS unchanged** - No modifications to FatFS source
-- **diskio unchanged** - All changes are in spi_sd.c and spi_ll_sd.c below
+- **diskio unchanged** - All changes are in spi_sd.c and spi_ll_sd.c
