@@ -276,11 +276,11 @@ static void handle_rx_command(comms_state_t *state, const uint8_t *data,
         // Find log file path (must match flight_manager_actor.c)
         const char *log_path = NULL;
         if (HIVE_SUCCEEDED(hive_file_mount_available("/sd"))) {
-            log_path = "/sd/flm.log";
+            log_path = "/sd/hive.log";
         } else if (HIVE_SUCCEEDED(hive_file_mount_available("/log"))) {
             log_path = "/log";
         } else if (HIVE_SUCCEEDED(hive_file_mount_available("/tmp"))) {
-            log_path = "/tmp/flm.log";
+            log_path = "/tmp/hive.log";
         }
 
         if (log_path == NULL) {

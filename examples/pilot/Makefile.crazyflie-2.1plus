@@ -141,7 +141,7 @@ $(HIVE_LIB): $(CONFIG_DEPS)
 		ENABLE_SD=$(ENABLE_SD) \
 		CFLAGS="$(CFLAGS)"
 
-$(HAL_LIB):
+$(HAL_LIB): FORCE
 	@$(MAKE) -C $(HAL_DIR) ENABLE_SD=$(ENABLE_SD) FLIGHT_PROFILE=$(FLIGHT_PROFILE)
 
 # Config files that affect all builds

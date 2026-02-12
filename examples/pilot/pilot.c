@@ -95,7 +95,13 @@ int main(void) {
 
     // Open hive log file early so all HIVE_LOG* calls go to disk
     // Logger actor will sync periodically; we close at exit
-    hive_log_file_open(HIVE_LOG_FILE_PATH);
+    hive_status_t log_status = hive_log_file_open(HIVE_LOG_FILE_PATH);
+    if (HIVE_FAILED(log_status)) {
+        hal_printf("[PILOT] Log file open failed: %s (path=%s)\n",
+                   HIVE_ERR_STR(log_status), HIVE_LOG_FILE_PATH);
+    } else {
+        hal_printf("[PILOT] Log file opened: %s\n", HIVE_LOG_FILE_PATH);
+    }
     hal_flush_early_log(); // Replay early HAL messages to log file
 
     // Initialize tunable parameters with platform defaults

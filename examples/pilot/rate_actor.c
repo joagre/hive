@@ -155,11 +155,14 @@ void rate_actor(void *args, const hive_spawn_info_t *siblings,
 
         // Torque command uses standard conventions (HAL handles platform
         // differences)
+        // Yaw output is negated to match Bitcraze controller_pid.c line 131.
+        // The BMI088 gyro Z sign is correct for measurement, but the motor
+        // mixer expects opposite yaw torque polarity.
         torque_cmd_t cmd;
         cmd.thrust = thrust;
         cmd.roll = pid_update(&roll_pid, rate_sp.roll, est.roll_rate, dt);
         cmd.pitch = pid_update(&pitch_pid, rate_sp.pitch, est.pitch_rate, dt);
-        cmd.yaw = pid_update(&yaw_pid, rate_sp.yaw, est.yaw_rate, dt);
+        cmd.yaw = -pid_update(&yaw_pid, rate_sp.yaw, est.yaw_rate, dt);
 
         status = hive_bus_publish(state->torque_bus, &cmd, sizeof(cmd));
         if (HIVE_FAILED(status)) {

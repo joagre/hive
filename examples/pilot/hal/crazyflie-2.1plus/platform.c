@@ -1279,28 +1279,28 @@ void platform_read_sensors(sensor_data_t *sensors) {
     const float gyro_scale = (2000.0f / 32768.0f) * (M_PI / 180.0f);
 
     // Read accelerometer (pre-flight finding #5: validity flags)
-    // Axis transform: BMI088 is mounted rotated 90 degrees on CF2.1+ PCB.
-    // Body frame: body_X = -sensor_Y, body_Y = sensor_X, body_Z = sensor_Z
-    // Matches Bitcraze sensors_bmi088_bmp388.c axis mapping.
+    // BMI088 on CF2.1+ has sensor X axis pointing AFT (backward).
+    // Ground test confirmed: nose-up gives negative pitch with identity mapping.
+    // Fix: negate accel X so positive X = forward = correct pitch sign.
+    // Roll (Y axis) is correct. Z axis unchanged.
     sensors->accel_valid = false;
     if (bmi088_get_accel_data(&accel_data, &s_bmi088_dev) == BMI088_OK) {
-        sensors->accel[0] = -(accel_data.y * accel_scale);
-        sensors->accel[1] = (accel_data.x * accel_scale);
-        sensors->accel[2] = (accel_data.z * accel_scale);
+        sensors->accel[0] = -(accel_data.x * accel_scale);
+        sensors->accel[1] = accel_data.y * accel_scale;
+        sensors->accel[2] = accel_data.z * accel_scale;
         sensors->accel_valid = true;
     }
 
     // Read gyroscope (with bias correction, pre-flight finding #5: validity flags)
-    // Same axis transform as accelerometer. Bias is in sensor frame,
-    // so subtract before transforming to body frame.
+    // Negate gyro Y (pitch rate) to match accel X negation above.
+    // Gyro Z (yaw) is NOT negated here - yaw sign correction is applied
+    // as output negation in rate_actor.c, matching Bitcraze controller_pid.c
+    // line 131 which negates the yaw PID output, not the gyro input.
     sensors->gyro_valid = false;
     if (bmi088_get_gyro_data(&gyro_data, &s_bmi088_dev) == BMI088_OK) {
-        float gx = gyro_data.x * gyro_scale - s_gyro_bias[0];
-        float gy = gyro_data.y * gyro_scale - s_gyro_bias[1];
-        float gz = gyro_data.z * gyro_scale - s_gyro_bias[2];
-        sensors->gyro[0] = -gy;
-        sensors->gyro[1] = gx;
-        sensors->gyro[2] = gz;
+        sensors->gyro[0] = gyro_data.x * gyro_scale - s_gyro_bias[0];
+        sensors->gyro[1] = -(gyro_data.y * gyro_scale - s_gyro_bias[1]);
+        sensors->gyro[2] = gyro_data.z * gyro_scale - s_gyro_bias[2];
         sensors->gyro_valid = true;
     }
 
@@ -1356,9 +1356,11 @@ void platform_read_sensors(sensor_data_t *sensors) {
             // Compensate for body rotation (pre-flight finding #3).
             // The PMW3901 sees rotational flow when the drone pitches/rolls.
             // Subtract the gyro-induced component to isolate translational
-            // velocity. Signs match Bitcraze mm_flow.c:79 and :92.
-            vx_body -= sensors->gyro[1] * height_m; // pitch rate
-            vy_body += sensors->gyro[0] * height_m; // roll rate
+            // velocity. Based on Bitcraze mm_flow.c:79 and :92.
+            // Note: gyro[1] is negated (pitch axis fix), so += here gives
+            // the original subtraction of raw pitch rate.
+            vx_body += sensors->gyro[1] * height_m; // pitch rate (negated)
+            vy_body += sensors->gyro[0] * height_m; // roll rate (unchanged)
 
             // Integrate yaw from gyro (simple dead-reckoning)
             // Note: This drifts over time, but flow-based position drifts anyway

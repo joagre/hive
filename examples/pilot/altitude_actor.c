@@ -273,9 +273,10 @@ void altitude_actor(void *args, const hive_spawn_info_t *siblings,
         }
 
         if (++count % DEBUG_PRINT_INTERVAL == 0) {
-            HIVE_LOG_DEBUG("[ALT] tgt=%.2f alt=%.2f vvel=%.2f thrust=%.3f %s",
-                           target_altitude, est.altitude, est.vertical_velocity,
-                           thrust, landing_mode ? "[LANDING]" : "");
+            HIVE_LOG_DEBUG("[ALT] r=%.1f p=%.1f alt=%.2f vvel=%.2f thr=%.3f %s",
+                           est.roll * RAD_TO_DEG, est.pitch * RAD_TO_DEG,
+                           est.altitude, est.vertical_velocity, thrust,
+                           landing_mode ? "[LND]" : "");
         }
     }
 }
