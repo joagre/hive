@@ -311,6 +311,11 @@ due to calling conventions. Estimator and logger use 5KB stacks; all others use
 
 Note: Comms actor (Crazyflie only) not included in Webots measurements.
 
+These numbers include `HIVE_LOG_LEVEL=INFO` (default). Disabling logging
+(`HIVE_LOG_LEVEL=NONE`) reduces stack usage considerably since `HIVE_LOG_*`
+macros expand to `printf`-style formatting, one of the largest stack consumers
+in embedded C. With logging compiled out, stack sizes could be reduced.
+
 ## Error Handling
 
 Actors use explicit error checking instead of `assert()`, enabling the supervisor to
