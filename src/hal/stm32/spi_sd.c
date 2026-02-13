@@ -8,6 +8,10 @@
 // yields via periodic timer polling. Commands, tokens, and CRC bytes
 // remain byte-by-byte (fast, no yield needed).
 //
+// If called outside actor context (e.g., during FatFS mount from main()
+// before the scheduler starts), sector transfers fall back to byte-by-byte
+// and busy-waits use polling instead of timer yield.
+//
 // Reference: http://elm-chan.org/docs/mmc/mmc_e.html
 
 #include "spi_sd.h"
@@ -21,6 +25,16 @@
 #include "hive_timer.h"
 #include <string.h>
 #include <stdbool.h>
+
+// Forward declaration - detect whether scheduler is running.
+// Returns NULL when called from main() before hive_run().
+// DMA + yield requires actor context; falls back to byte-by-byte otherwise.
+struct actor;
+extern struct actor *hive_actor_current(void);
+
+static inline bool in_actor_context(void) {
+    return hive_actor_current() != NULL;
+}
 
 // Debug output - uses platform debug printf
 // Enable SD_DEBUG_ENABLE to see initialization details
@@ -187,7 +201,18 @@ static int wait_data_token(uint8_t token, uint32_t timeout_ms) {
 // Transfer one sector (512 bytes) via DMA, yielding to scheduler.
 // Locks SPI bus during DMA to prevent flow deck access.
 // CS must already be asserted by caller.
+// Falls back to byte-by-byte if not in actor context (e.g., during mount).
 static int dma_xfer(void *buf, uint32_t len, spi_ll_dma_dir_t dir) {
+    if (!in_actor_context()) {
+        // No scheduler running - use synchronous byte-by-byte transfer
+        if (dir == SPI_LL_DIR_RX) {
+            spi_recv(buf, len);
+        } else {
+            spi_send(buf, len);
+        }
+        return 0;
+    }
+
     spi_ll_lock();
     spi_ll_dma_start(buf, len, dir);
     hive_status_t s = hive_event_wait(s_dma_event, SD_DMA_TIMEOUT_MS);
@@ -202,7 +227,16 @@ static int dma_xfer(void *buf, uint32_t len, spi_ll_dma_dir_t dir) {
 // Wait for card ready with scheduler yield.
 // Deasserts CS between polls so other SPI devices can use the bus.
 // Each poll briefly locks the bus for one byte transfer (~0.4us).
+// Falls back to synchronous busy-wait if not in actor context.
 static int wait_ready_yield(void) {
+    if (!in_actor_context()) {
+        // No scheduler - use synchronous busy-wait (same as init phase)
+        spi_ll_cs_low();
+        int ret = wait_ready(SD_BUSY_TIMEOUT_MS);
+        spi_ll_cs_high();
+        return ret;
+    }
+
     // Check immediately before starting timer
     spi_ll_lock();
     spi_ll_cs_low();
