@@ -6,6 +6,11 @@
 //   PA7 = MOSI (AF5) - shared
 //   PC12 = CS  (GPIO output, IO4 on deck connector)
 //
+// DMA allocation (STM32F405):
+//   DMA2 Stream 0, Channel 3 = SPI1_RX (SD card)
+//   DMA2 Stream 3, Channel 3 = SPI1_TX (SD card)
+//   DMA2 Stream 2, Channel 5 = USART6_RX (syslink - not ours)
+//
 // WARNING: This driver reconfigures SPI1 clock speed. If used alongside
 // flow deck, ensure proper CS management - only one device active at a time.
 // Flow deck uses ~1.3 MHz (Mode 0), SD card uses 328 kHz init / 21 MHz fast.
@@ -16,8 +21,11 @@
 
 #if HIVE_ENABLE_SD
 
+#include "spi_ll.h"
 #include "stm32f4xx.h"
+#include "hal/hive_hal_event.h"
 #include <stdint.h>
+#include <stdbool.h>
 
 // ---------------------------------------------------------------------------
 // Pin Configuration
@@ -26,6 +34,28 @@
 // SD card CS pin on PC12 (IO4 on deck connector)
 #define SD_CS_PIN GPIO_Pin_12
 #define SD_CS_PORT GPIOC
+
+// ---------------------------------------------------------------------------
+// DMA State
+// ---------------------------------------------------------------------------
+
+// DMA2 Stream 0, Channel 3 = SPI1_RX
+// DMA2 Stream 3, Channel 3 = SPI1_TX
+#define SD_DMA_CHANNEL 3
+
+// HAL event for DMA complete notification (set by spi_sd.c)
+static hive_hal_event_id_t s_dma_event_id = HIVE_HAL_EVENT_INVALID;
+
+// DMA completion status (set by ISR, read by spi_sd.c via spi_ll_dma_ok)
+static volatile bool s_dma_complete = false;
+static volatile bool s_dma_error = false;
+
+// SPI bus lock flag (checked by flow deck before SPI access)
+static bool s_bus_locked = false;
+
+// Dummy byte for DMA (TX sends 0xFF for reads, RX discards data for writes)
+static uint8_t s_dma_dummy_tx = 0xFF;
+static uint8_t s_dma_dummy_rx;
 
 // ---------------------------------------------------------------------------
 // SPI Low-Level Implementation (shares SPI1 with flow deck)
@@ -125,6 +155,125 @@ uint8_t spi_ll_xfer(uint8_t data) {
 
     // Read received byte
     return *((volatile uint8_t *)&SPI1->DR);
+}
+
+// ---------------------------------------------------------------------------
+// DMA Bulk Transfer
+// ---------------------------------------------------------------------------
+
+void spi_ll_dma_init(hive_hal_event_id_t event_id) {
+    s_dma_event_id = event_id;
+
+    // Enable DMA2 clock
+    RCC->AHB1ENR |= RCC_AHB1ENR_DMA2EN;
+
+    // Enable NVIC for DMA2 Stream 0 (SPI1_RX complete signals transfer done)
+    NVIC_SetPriority(DMA2_Stream0_IRQn, 5);
+    NVIC_EnableIRQ(DMA2_Stream0_IRQn);
+}
+
+void spi_ll_dma_start(void *buf, uint32_t len, spi_ll_dma_dir_t dir) {
+    s_dma_complete = false;
+    s_dma_error = false;
+
+    // Disable both streams before configuration
+    DMA2_Stream0->CR &= ~DMA_SxCR_EN;
+    DMA2_Stream3->CR &= ~DMA_SxCR_EN;
+    while (DMA2_Stream0->CR & DMA_SxCR_EN)
+        ;
+    while (DMA2_Stream3->CR & DMA_SxCR_EN)
+        ;
+
+    // Clear all interrupt flags for Stream 0 (RX) and Stream 3 (TX)
+    DMA2->LIFCR = DMA_LIFCR_CTCIF0 | DMA_LIFCR_CHTIF0 | DMA_LIFCR_CTEIF0 |
+                  DMA_LIFCR_CDMEIF0 | DMA_LIFCR_CFEIF0;
+    DMA2->LIFCR = DMA_LIFCR_CTCIF3 | DMA_LIFCR_CHTIF3 | DMA_LIFCR_CTEIF3 |
+                  DMA_LIFCR_CDMEIF3 | DMA_LIFCR_CFEIF3;
+
+    // Configure RX DMA (Stream 0, Channel 3) - peripheral to memory
+    DMA2_Stream0->CR = (SD_DMA_CHANNEL << 25) | // Channel select
+                       DMA_SxCR_TCIE;           // Transfer complete interrupt
+    DMA2_Stream0->PAR = (uint32_t)&SPI1->DR;
+    DMA2_Stream0->NDTR = len;
+
+    if (dir == SPI_LL_DIR_RX) {
+        // RX: capture received data into caller's buffer
+        DMA2_Stream0->M0AR = (uint32_t)buf;
+        DMA2_Stream0->CR |= DMA_SxCR_MINC; // Memory increment
+    } else {
+        // TX: discard received bytes into dummy variable
+        DMA2_Stream0->M0AR = (uint32_t)&s_dma_dummy_rx;
+        // No MINC - write same location repeatedly
+    }
+
+    // Configure TX DMA (Stream 3, Channel 3) - memory to peripheral
+    DMA2_Stream3->CR = (SD_DMA_CHANNEL << 25) | // Channel select
+                       DMA_SxCR_DIR_0;          // Memory-to-peripheral
+    DMA2_Stream3->PAR = (uint32_t)&SPI1->DR;
+    DMA2_Stream3->NDTR = len;
+
+    if (dir == SPI_LL_DIR_TX) {
+        // TX: send actual data from caller's buffer
+        DMA2_Stream3->M0AR = (uint32_t)buf;
+        DMA2_Stream3->CR |= DMA_SxCR_MINC; // Memory increment
+    } else {
+        // RX: send 0xFF dummy bytes to clock data in
+        s_dma_dummy_tx = 0xFF;
+        DMA2_Stream3->M0AR = (uint32_t)&s_dma_dummy_tx;
+        // No MINC - read same 0xFF byte repeatedly
+    }
+
+    // Enable SPI DMA requests
+    SPI1->CR2 |= SPI_CR2_TXDMAEN | SPI_CR2_RXDMAEN;
+
+    // Start RX first (must be ready before TX clocks data out)
+    DMA2_Stream0->CR |= DMA_SxCR_EN;
+    DMA2_Stream3->CR |= DMA_SxCR_EN;
+}
+
+bool spi_ll_dma_ok(void) {
+    return s_dma_complete && !s_dma_error;
+}
+
+// ---------------------------------------------------------------------------
+// SPI Bus Locking
+// ---------------------------------------------------------------------------
+
+void spi_ll_lock(void) {
+    s_bus_locked = true;
+}
+
+void spi_ll_unlock(void) {
+    s_bus_locked = false;
+}
+
+bool spi_ll_is_locked(void) {
+    return s_bus_locked;
+}
+
+// ---------------------------------------------------------------------------
+// DMA ISR
+// ---------------------------------------------------------------------------
+
+// SPI1 RX DMA complete (DMA2 Stream 0)
+// RX finishes after TX, so this signals "entire transfer done"
+void DMA2_Stream0_IRQHandler(void) {
+    // Transfer complete
+    if (DMA2->LISR & DMA_LISR_TCIF0) {
+        DMA2->LIFCR = DMA_LIFCR_CTCIF0;
+        SPI1->CR2 &= ~(SPI_CR2_TXDMAEN | SPI_CR2_RXDMAEN);
+        s_dma_complete = true;
+        hive_hal_event_signal(s_dma_event_id);
+    }
+
+    // Transfer error or FIFO error
+    if (DMA2->LISR & (DMA_LISR_TEIF0 | DMA_LISR_DMEIF0 | DMA_LISR_FEIF0)) {
+        DMA2->LIFCR = DMA_LIFCR_CTEIF0 | DMA_LIFCR_CDMEIF0 | DMA_LIFCR_CFEIF0;
+        SPI1->CR2 &= ~(SPI_CR2_TXDMAEN | SPI_CR2_RXDMAEN);
+        s_dma_error = true;
+        s_dma_complete = true;
+        hive_hal_event_signal(s_dma_event_id);
+    }
 }
 
 #else

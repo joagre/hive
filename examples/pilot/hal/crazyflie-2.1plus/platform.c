@@ -17,6 +17,11 @@
 #include "pmw3901.h"
 #include "vl53l1x_uld.h"
 
+// SPI bus locking (shared SPI1 between SD card DMA and flow deck)
+#if HIVE_ENABLE_SD
+#include "spi_ll.h"
+#endif
+
 #include <stdbool.h>
 #include <stdarg.h>
 #include <math.h>
@@ -1470,6 +1475,10 @@ bool platform_has_flow_deck(void) {
 bool platform_read_flow(int16_t *delta_x, int16_t *delta_y) {
     if (!s_flow_deck_present)
         return false;
+#if HIVE_ENABLE_SD
+    if (spi_ll_is_locked())
+        return false; // SPI1 busy with SD card DMA, skip this cycle
+#endif
     pmw3901_read_motion(&s_pmw3901_dev, delta_x, delta_y);
     return true;
 }

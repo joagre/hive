@@ -3,6 +3,11 @@
 // Platform-independent SD card protocol over SPI.
 // Board-specific SPI functions provided via spi_ll.h interface.
 //
+// Sector data transfers (512 bytes) use DMA + scheduler yield so other
+// actors run during the SPI transfer. Card busy-wait after writes also
+// yields via periodic timer polling. Commands, tokens, and CRC bytes
+// remain byte-by-byte (fast, no yield needed).
+//
 // Reference: http://elm-chan.org/docs/mmc/mmc_e.html
 
 #include "spi_sd.h"
@@ -11,6 +16,9 @@
 
 #if HIVE_ENABLE_SD
 
+#include "hal/hive_hal_event.h"
+#include "hive_select.h"
+#include "hive_timer.h"
 #include <string.h>
 #include <stdbool.h>
 
@@ -57,12 +65,24 @@ extern void platform_debug_printf(const char *fmt, ...);
 #define TOKEN_STOP_TRAN 0xFD
 
 // ---------------------------------------------------------------------------
+// DMA + Yield Configuration
+// ---------------------------------------------------------------------------
+
+#define SD_DMA_TIMEOUT_MS 100 // DMA transfer timeout (512B at 21MHz ~195us)
+#define SD_BUSY_POLL_INTERVAL_US 1000 // 1ms between busy polls
+#define SD_BUSY_TIMEOUT_MS 500        // 500ms max card busy time
+#define SD_BUSY_MAX_POLLS (SD_BUSY_TIMEOUT_MS * 1000 / SD_BUSY_POLL_INTERVAL_US)
+
+// ---------------------------------------------------------------------------
 // Driver State
 // ---------------------------------------------------------------------------
 
 static bool s_initialized = false;
 static sd_card_type_t s_card_type = SD_CARD_NONE;
 static uint32_t s_sector_count = 0;
+
+// HAL event for DMA completion (signaled by ISR in spi_ll_sd.c)
+static hive_hal_event_id_t s_dma_event = HIVE_HAL_EVENT_INVALID;
 
 // ---------------------------------------------------------------------------
 // SPI Helper Functions
@@ -158,6 +178,70 @@ static int wait_data_token(uint8_t token, uint32_t timeout_ms) {
         }
     }
     return -1;
+}
+
+// ---------------------------------------------------------------------------
+// DMA Transfer + Yield
+// ---------------------------------------------------------------------------
+
+// Transfer one sector (512 bytes) via DMA, yielding to scheduler.
+// Locks SPI bus during DMA to prevent flow deck access.
+// CS must already be asserted by caller.
+static int dma_xfer(void *buf, uint32_t len, spi_ll_dma_dir_t dir) {
+    spi_ll_lock();
+    spi_ll_dma_start(buf, len, dir);
+    hive_status_t s = hive_event_wait(s_dma_event, SD_DMA_TIMEOUT_MS);
+    spi_ll_unlock();
+
+    if (HIVE_FAILED(s) || !spi_ll_dma_ok()) {
+        return -1;
+    }
+    return 0;
+}
+
+// Wait for card ready with scheduler yield.
+// Deasserts CS between polls so other SPI devices can use the bus.
+// Each poll briefly locks the bus for one byte transfer (~0.4us).
+static int wait_ready_yield(void) {
+    // Check immediately before starting timer
+    spi_ll_lock();
+    spi_ll_cs_low();
+    uint8_t r = spi_ll_xfer(0xFF);
+    spi_ll_cs_high();
+    spi_ll_unlock();
+    if (r == 0xFF) {
+        return 0;
+    }
+
+    hive_timer_id_t poll_timer;
+    hive_status_t s = hive_timer_every(SD_BUSY_POLL_INTERVAL_US, &poll_timer);
+    if (HIVE_FAILED(s)) {
+        return -1;
+    }
+
+    int result = -1;
+    hive_message_t msg;
+
+    for (int i = 0; i < SD_BUSY_MAX_POLLS; i++) {
+        s = hive_timer_recv(poll_timer, &msg, SD_BUSY_TIMEOUT_MS);
+        if (HIVE_FAILED(s)) {
+            break; // Timer failure or timeout
+        }
+
+        spi_ll_lock();
+        spi_ll_cs_low();
+        r = spi_ll_xfer(0xFF);
+        spi_ll_cs_high();
+        spi_ll_unlock();
+
+        if (r == 0xFF) {
+            result = 0;
+            break;
+        }
+    }
+
+    hive_timer_cancel(poll_timer);
+    return result;
 }
 
 // ---------------------------------------------------------------------------
@@ -376,6 +460,14 @@ int spi_sd_init(void) {
     // Switch to high speed
     spi_ll_set_fast();
 
+    // Initialize DMA for non-blocking sector transfers
+    s_dma_event = hive_hal_event_create();
+    if (s_dma_event == HIVE_HAL_EVENT_INVALID) {
+        SD_DEBUG("Failed to create DMA event\n");
+        return -1;
+    }
+    spi_ll_dma_init(s_dma_event);
+
     s_initialized = true;
     SD_DEBUG("SD card initialized: %lu sectors (%lu MB)\n", s_sector_count,
              s_sector_count / 2048);
@@ -412,7 +504,10 @@ int spi_sd_read_blocks(uint8_t *buf, uint32_t sector, uint32_t count) {
             return -1;
         }
 
-        spi_recv(buf, 512);
+        if (dma_xfer(buf, 512, SPI_LL_DIR_RX) != 0) {
+            spi_ll_cs_high();
+            return -1;
+        }
         spi_ll_xfer(0xFF); // CRC
         spi_ll_xfer(0xFF);
     } else {
@@ -429,7 +524,11 @@ int spi_sd_read_blocks(uint8_t *buf, uint32_t sector, uint32_t count) {
                 return -1;
             }
 
-            spi_recv(buf + i * 512, 512);
+            if (dma_xfer(buf + i * 512, 512, SPI_LL_DIR_RX) != 0) {
+                send_cmd(CMD12, 0);
+                spi_ll_cs_high();
+                return -1;
+            }
             spi_ll_xfer(0xFF); // CRC
             spi_ll_xfer(0xFF);
         }
@@ -463,7 +562,10 @@ int spi_sd_write_blocks(const uint8_t *buf, uint32_t sector, uint32_t count) {
 
         spi_ll_xfer(0xFF);               // Gap
         spi_ll_xfer(TOKEN_SINGLE_BLOCK); // Data token
-        spi_send(buf, 512);
+        if (dma_xfer((void *)buf, 512, SPI_LL_DIR_TX) != 0) {
+            spi_ll_cs_high();
+            return -1;
+        }
         spi_ll_xfer(0xFF); // CRC
         spi_ll_xfer(0xFF);
 
@@ -474,7 +576,11 @@ int spi_sd_write_blocks(const uint8_t *buf, uint32_t sector, uint32_t count) {
             return -1;
         }
 
-        wait_ready(500);
+        // Deassert CS before yielding busy-wait (frees SPI for flow deck)
+        spi_ll_cs_high();
+        if (wait_ready_yield() != 0) {
+            return -1;
+        }
     } else {
         // Multi-block write
         if (send_cmd(CMD25, addr) != 0) {
@@ -485,7 +591,10 @@ int spi_sd_write_blocks(const uint8_t *buf, uint32_t sector, uint32_t count) {
         for (uint32_t i = 0; i < count; i++) {
             spi_ll_xfer(0xFF);              // Gap
             spi_ll_xfer(TOKEN_MULTI_BLOCK); // Data token
-            spi_send(buf + i * 512, 512);
+            if (dma_xfer((void *)(buf + i * 512), 512, SPI_LL_DIR_TX) != 0) {
+                spi_ll_cs_high();
+                return -1;
+            }
             spi_ll_xfer(0xFF); // CRC
             spi_ll_xfer(0xFF);
 
@@ -497,14 +606,22 @@ int spi_sd_write_blocks(const uint8_t *buf, uint32_t sector, uint32_t count) {
                 return -1;
             }
 
-            wait_ready(500);
+            // Deassert CS before yielding busy-wait
+            spi_ll_cs_high();
+            if (wait_ready_yield() != 0) {
+                return -1;
+            }
+            // Reassert CS for next block or stop command
+            spi_ll_cs_low();
         }
 
         spi_ll_xfer(TOKEN_STOP_TRAN);
-        wait_ready(500);
+        spi_ll_cs_high();
+        if (wait_ready_yield() != 0) {
+            return -1;
+        }
     }
 
-    spi_ll_cs_high();
     return 0;
 }
 
@@ -513,11 +630,7 @@ int spi_sd_sync(void) {
         return -1;
     }
 
-    spi_ll_cs_low();
-    int result = wait_ready(500);
-    spi_ll_cs_high();
-
-    return result;
+    return wait_ready_yield();
 }
 
 uint32_t spi_sd_get_sector_count(void) {
