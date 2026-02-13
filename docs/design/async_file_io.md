@@ -139,25 +139,41 @@ download via radio non-blocking as well.
 ### SPI bus locking during DMA
 
 On the Crazyflie 2.1+, the SD card and Flow Deck (PMW3901) share SPI1.
+Two separate code paths access the same peripheral:
+
+- **SD card** - `spi_ll_sd.c:spi_ll_xfer()` -> SPI1->DR, CS on PC12
+- **Flow deck** - `platform.c:spi1_transfer()` -> SPI1->DR, CS on PB4
+
 Today this works because cooperative scheduling means only one actor
 touches SPI1 at a time - no yield occurs during an SPI transfer. DMA +
 yield breaks this: the logger starts a DMA transfer on SPI1, yields, the
 sensor actor runs at CRITICAL priority, and tries to read the flow deck
 via SPI1. Both devices selected, both driving MISO - corrupted data.
 
-Fix: add `spi_ll_lock()` / `spi_ll_unlock()` to the spi_ll interface. A
-simple boolean flag, sufficient for a single-threaded cooperative scheduler.
+Fix: add a simple boolean flag to the spi_ll interface.
 
 ```c
 // In spi_ll.h
-void spi_ll_lock(void);    // Acquire SPI bus (yields if busy)
-void spi_ll_unlock(void);  // Release SPI bus
+void spi_ll_lock(void);        // Set flag (no yield, always succeeds)
+void spi_ll_unlock(void);      // Clear flag
+bool spi_ll_is_locked(void);   // Check flag
 ```
 
-The SD DMA path holds the lock during the transfer (~195us for 512 bytes
-at 21MHz). The flow deck driver checks the lock before each SPI access and
-yields if busy. The sensor read gets delayed by at most ~195us, negligible
-for a 4ms sensor loop.
+The SD DMA path sets the lock before starting DMA and clears it after
+the actor wakes up. The flow deck driver checks the lock before reading:
+
+```c
+// In platform.c - hal_flow_read()
+if (spi_ll_is_locked())
+    return false;  // SPI busy with SD DMA, skip this cycle
+pmw3901_read_motion(&s_pmw3901_dev, delta_x, delta_y);
+```
+
+No yield, no blocking - just skip. Missing one flow reading every ~120ms
+(once per sector flush, ~195us DMA transfer) is completely harmless for
+the estimator. The cooperative scheduler guarantees no race: if the sensor
+actor is running, the logger has already yielded and the lock state is
+stable.
 
 During the busy-wait phase, CS management is important. The current code
 holds SD CS low for the entire wait_ready() loop. With timer-based polling,
