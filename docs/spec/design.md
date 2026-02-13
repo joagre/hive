@@ -447,35 +447,34 @@ The runtime provides **bounded, predictable behavior**, not full reproducibility
 
 **Design choice** - Sorting epoll events by fd/source-id before dispatch would provide reproducibility but adds O(n log n) overhead per epoll_wait. For embedded systems prioritizing latency over reproducibility, this overhead is not justified. Applications requiring reproducible replay should use external event logging.
 
-### Scheduler-Stalling Calls
+### File I/O Behavior
 
-File I/O operations (`hive_file_read()`, `hive_file_write()`, `hive_file_sync()`) are **synchronous** and briefly pause the scheduler. This is fine for short, bursty operations; typical embedded file writes complete in under 1ms.
+File I/O behavior varies by platform and file type.
 
-**Behavior**
-- Calling actor does NOT transition to `ACTOR_STATE_WAITING`
-- The scheduler event loop is paused during the syscall
-- Other actors wait briefly (no actor runs during file I/O)
-- Timer delivery is suspended (timerfd expirations accumulate in kernel)
-- After completion: accumulated timer expirations are delivered per tick-coalescing rules
+**Linux** - Synchronous POSIX I/O. The calling actor does NOT transition to
+`ACTOR_STATE_WAITING` - the scheduler event loop is paused during the syscall.
+In practice, the OS page cache buffers writes and operations rarely stall the
+scheduler. Regular files do not work with `epoll` (always report ready), so
+true async I/O would require `io_uring` (Linux 5.1+) or a thread pool.
 
-**Why synchronous?**
-- Regular files do not work with `epoll` on Linux (always report ready)
-- True async file I/O would require `io_uring` (Linux 5.1+) or a thread pool
-- For embedded (STM32): FATFS/littlefs operations are typically fast (<1ms)
-- Simplicity: no additional complexity for a rarely-needed feature
+**STM32 flash** (`/log`, `/config`) - Ring buffer for writes. Most writes
+complete immediately by copying to the ring buffer. When the buffer fills up,
+`write()` blocks to flush data to flash. `hive_file_sync()` drains the ring
+buffer (blocking). Flash sector erase on `HIVE_O_TRUNC` blocks for 1-4 seconds.
+
+**STM32 SD card** (`/sd/*`) - Non-blocking via DMA + scheduler yield. Sector
+data transfers (512 bytes) run via DMA on the SPI peripheral while the scheduler
+runs other actors. After each write, the card busy-wait uses periodic timer
+polling (1ms intervals), yielding between polls. Flight-critical actors run
+uninterrupted during SD card writes. See `docs/design/async_file_io.md` for the
+full design.
 
 **Best practices**
-- Use `HIVE_PRIORITY_LOW` actors for file work
-- Keep operations short (small buffers, brief writes)
-- For logging: batch writes or use ring buffers
-- Initialization/shutdown: file I/O is fine at any priority (no real-time constraints yet)
+- Linux and flash: use `HIVE_PRIORITY_LOW` actors for file work, keep operations short
+- SD card: safe at any priority (yields cooperatively like `hive_ipc_recv`)
+- Initialization/shutdown: file I/O is fine at any priority
 
-**Avoid** - File I/O from `HIVE_PRIORITY_CRITICAL` actors in tight control loops.
-
-**Design alternatives not implemented**
-- `io_uring`: Would add Linux 5.1+ dependency and significant complexity
-- Thread pool: Contradicts single-threaded design; removed in event loop migration
-- DMA with completion interrupt (STM32): Could be added for specific flash/SD drivers
+**Avoid** - Flash file I/O from `HIVE_PRIORITY_CRITICAL` actors in tight control loops (flash writes can block when the ring buffer is full).
 
 ### Priority Levels
 

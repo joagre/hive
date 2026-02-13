@@ -460,11 +460,11 @@ if (no_runnable_actors) {
 - Sockets are level-triggered by default (readable until data consumed)
 - epoll guarantees: if I/O is ready, epoll_wait will return it
 
-**File I/O stalling**
-- File operations (read, write, fsync) are **synchronous** and stall the entire scheduler
-- See [Scheduler-Stalling Calls](design.md#scheduler-stalling-calls) section for detailed semantics and consequences
-- On embedded systems: FATFS/littlefs operations are fast (< 1ms typical)
-- On Linux dev: Acceptable for development workloads
+**File I/O**
+- Linux: synchronous POSIX (OS page cache buffers writes, rarely stalls)
+- STM32 flash: ring buffer (fast writes, blocks when buffer full)
+- STM32 SD card: non-blocking via DMA + scheduler yield (actors run during transfer)
+- See [File I/O Behavior](design.md#file-io-behavior) for details
 
 ### Advantages
 
@@ -486,7 +486,7 @@ The runtime uses a Hardware Abstraction Layer (HAL) to isolate platform-specific
 | Event notification | epoll | WFI + interrupt flags |
 | Timer | timerfd + epoll | Software timer wheel (SysTick/TIM) |
 | TCP | Non-blocking BSD sockets + epoll | Stubs (future lwIP support) |
-| File | Synchronous POSIX | Flash-backed virtual files + optional SD card via FatFS |
+| File | Synchronous POSIX (OS-buffered) | Flash ring buffer + SD card DMA yield |
 
 ### HAL Headers
 

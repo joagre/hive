@@ -2059,7 +2059,7 @@ denominator across platforms where flash-backed virtual files may not support th
 
 File I/O operations.
 
-> **Note** - File I/O is synchronous and briefly pauses the scheduler. This is fine for short operations - use `LOW` priority actors for file work. See [Scheduler-Stalling Calls](design.md#scheduler-stalling-calls) for details.
+> **Note** - File I/O behavior varies by platform. On Linux, operations are synchronous POSIX calls (OS page cache buffers writes, rarely stalls). On STM32, flash files use a ring buffer and SD card files use DMA + scheduler yield (non-blocking). See [File I/O Behavior](design.md#file-io-behavior) for details.
 
 ```c
 hive_status_t hive_file_open(const char *path, int flags, int mode, int *out);
@@ -2114,11 +2114,11 @@ On Linux, these map directly to POSIX equivalents. On STM32, they're interpreted
 **Linux**
 - Standard filesystem paths (e.g., `/tmp/log.bin`)
 - Uses POSIX `open()`, `read()`, `write()`, `fsync()`
-- Synchronous blocking I/O
+- Synchronous I/O (OS page cache buffers writes, rarely stalls scheduler)
 - All flags and functions fully supported
 
-**STM32**
-- Virtual file paths mapped to flash sectors (e.g., `/log`)
+**STM32 Flash** (`/log`, `/config`)
+- Virtual file paths mapped to flash sectors
 - Board configuration via -D flags (each virtual file is optional):
   ```makefile
   # /log virtual file (required for flight logging)
@@ -2135,17 +2135,20 @@ On Linux, these map directly to POSIX equivalents. On STM32, they're interpreted
 - `hive_file_sync()` drains ring buffer to flash (blocking)
 - No data loss - writes block when buffer is full to ensure delivery
 
-**STM32 Write Behavior**
+**STM32 SD Card** (`/sd/*`)
+- Full FatFS filesystem (FAT12/16/32) via SPI
+- Non-blocking: sector transfers use DMA + scheduler yield
+- Card busy-wait yields via periodic timer polling (1ms intervals)
+- Other actors run during SD card writes (flight-critical loops unaffected)
+- Requires `ENABLE_SD=1` build flag and board-specific `spi_ll_sd.c`
 
-The STM32 implementation uses a ring buffer for efficiency. Most writes complete
-immediately. When the buffer fills up, `write()` blocks to flush data to flash
-before continuing. This ensures the same no-data-loss semantics as Linux, while
-still providing fast writes in the common case.
+**Write Behavior Summary**
 
-| Platform | Behavior | Data Loss |
-|----------|----------|-----------|
-| Linux | Blocking | Never (or error) |
-| STM32 | Fast (ring buffer), blocks when full | Never (or error) |
+| Platform | Behavior | Scheduler Impact |
+|----------|----------|------------------|
+| Linux | Synchronous POSIX | OS-buffered, rarely stalls |
+| STM32 flash | Ring buffer, blocks when full | Brief stall on buffer flush |
+| STM32 SD card | DMA + yield | Non-blocking (actors run during transfer) |
 
 **STM32 API Restrictions**
 

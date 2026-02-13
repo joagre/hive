@@ -1,7 +1,7 @@
 .\" Man page for file I/O functions
 .TH HIVE_FILE 3 "January 2026" "Hive 1.0" "Actor Runtime Manual"
 .SH NAME
-hive_file_open, hive_file_close, hive_file_read, hive_file_pread, hive_file_write, hive_file_pwrite, hive_file_sync, hive_file_mount_available \- synchronous file I/O
+hive_file_open, hive_file_close, hive_file_read, hive_file_pread, hive_file_write, hive_file_pwrite, hive_file_sync, hive_file_mount_available \- file I/O
 .SH SYNOPSIS
 .nf
 .B #include <hive_file.h>
@@ -16,11 +16,17 @@ hive_file_open, hive_file_close, hive_file_read, hive_file_pread, hive_file_writ
 .BI "hive_status_t hive_file_mount_available(const char *" path ");"
 .fi
 .SH DESCRIPTION
-These functions provide synchronous file I/O for actors.
-.B WARNING:
-File I/O is blocking and stalls the entire scheduler. On embedded systems with
-fast filesystems (FATFS, littlefs), operations complete quickly (<1ms typically).
-On Linux, regular files cannot use epoll, so blocking is unavoidable.
+These functions provide file I/O for actors. Behavior varies by platform:
+.IP \(bu 2
+.B Linux:
+Synchronous POSIX I/O. OS page cache buffers writes, rarely stalls scheduler.
+.IP \(bu 2
+.B STM32 flash
+(/log, /config): Ring buffer for writes, blocks when buffer full.
+.IP \(bu 2
+.B STM32 SD card
+(/sd/*): Non-blocking via DMA + scheduler yield. Other actors run during transfers.
+.PP
 .SS Opening and Closing Files
 .BR hive_file_open ()
 opens the file at
@@ -157,30 +163,28 @@ These omissions reflect the lowest common denominator across platforms. On
 embedded targets with flash-backed virtual files, many of these operations are
 either impossible or would require complex emulation. The API provides what can
 be implemented efficiently on resource-constrained targets.
-.SS Blocking Behavior (Critical)
-File I/O is
-.B completely synchronous
-and blocks the scheduler. Unlike TCP which integrates with epoll, file
-operations cannot be made non-blocking on Linux (regular files ignore O_NONBLOCK).
+.SS Blocking Behavior
+.B Linux and STM32 flash:
+File I/O is synchronous and may briefly pause the scheduler. On Linux, the OS
+page cache buffers writes so stalls are rare. Flash writes block only when the
+ring buffer is full.
 .PP
-While a file operation is in progress:
-.IP \(bu 2
-.B All other actors are blocked
-.IP \(bu 2
-Timers may fire late
-.IP \(bu 2
-TCP is delayed
+.B STM32 SD card:
+SD card I/O is non-blocking. Sector data transfers use DMA with scheduler yield
+(other actors run during the SPI transfer). Card busy-wait uses periodic timer
+polling (1ms intervals), also yielding. SD card file I/O is safe at any actor
+priority.
 .SS Safety-Critical Usage
-For autopilot and other safety-critical applications, restrict file I/O to:
+For autopilot and other safety-critical applications:
 .IP \(bu 2
-.B Initialization:
-Load configuration files at startup before flight
+.B SD card logging:
+Safe during flight (non-blocking DMA yield)
 .IP \(bu 2
-.B Shutdown:
-Save state or logs after flight
+.B Flash file I/O:
+Restrict to initialization, shutdown, or LOW priority actors
 .IP \(bu 2
-.B Non-critical phases:
-Ground operations, pre-flight checks
+.B Linux:
+Acceptable for development workloads (OS-buffered)
 .PP
 .B Never use file I/O in flight-critical code paths.
 .SS STM32 Flash File Implementation
@@ -255,7 +259,14 @@ are accessed through the
 .B /sd
 mount point.
 .PP
+SD card I/O is non-blocking. Sector data transfers use DMA with scheduler yield
+(other actors run during the SPI transfer). Card busy-wait uses periodic timer
+polling (1ms intervals), also yielding. SD card file I/O is safe at any actor
+priority.
+.PP
 .B SD Card Characteristics:
+.IP \(bu 2
+Non-blocking via DMA + scheduler yield
 .IP \(bu 2
 Full FatFS filesystem support (FAT12/16/32, exFAT)
 .IP \(bu 2
@@ -444,7 +455,8 @@ hive_status_t read_record(int fd, size_t index, record_t *rec) {
 }
 .fi
 .SH NOTES ON STM32 WRITE BEHAVIOR
-On STM32, the file I/O implementation uses a
+.SS Flash Files (/log, /config)
+Flash file I/O uses a
 .B buffered ring buffer
 for efficiency. Most writes complete immediately by copying to the ring buffer.
 When the buffer fills up, write blocks to flush data to flash before continuing.
@@ -461,6 +473,15 @@ Call
 .BR hive_file_sync ()
 periodically (e.g., every 4 seconds from a dedicated actor) to ensure data is
 committed to flash before unexpected power loss.
+.SS SD Card Files (/sd/*)
+SD card I/O uses DMA with scheduler yield. Sector data transfers (512 bytes) are
+performed via DMA while the calling actor yields to the scheduler. Other actors
+run during the transfer. After each write, the card may need internal programming
+time (up to 250ms for wear leveling). This busy-wait also yields, polling every
+1ms via a periodic timer.
+.PP
+SD card file I/O never blocks the scheduler. It is safe at any actor priority,
+including in applications with flight-critical control loops.
 .SH SEE ALSO
 .BR hive_tcp (3),
 .BR hive_spawn (3),

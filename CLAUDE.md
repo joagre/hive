@@ -152,10 +152,10 @@ The runtime consists of:
 5. **Timers**: timerfd registered in epoll (Linux), hardware timers on STM32 (SysTick/TIM)
 6. **TCP**: Non-blocking sockets registered in epoll (Linux only; STM32 not yet implemented)
 7. **File**: Platform-specific implementation
-   - Linux: Synchronous POSIX I/O (briefly pauses scheduler)
-   - STM32: Flash-backed virtual files (`/log`, `/config`) with ring buffer for fast writes (blocks when buffer full)
+   - Linux: Synchronous POSIX I/O (OS page cache buffers writes, rarely stalls)
+   - STM32 flash: Virtual files (`/log`, `/config`) with ring buffer (blocks when buffer full)
+   - STM32 SD card: Non-blocking via DMA + scheduler yield (actors run during transfer)
    - Use `HIVE_O_*` flags for cross-platform compatibility
-   - Fine for short, bursty operations; use `LOW` priority actors for file work
 8. **Logging**: Structured logging with compile-time filtering
    - Log levels: TRACE, DEBUG, INFO, WARN, ERROR, NONE
    - Dual output: console (stderr) + plain text file
@@ -566,14 +566,18 @@ Different implementations for Linux (dev) vs STM32 bare metal (prod):
 - Event notification: epoll vs WFI + interrupt flags
 - Timer: timerfd + epoll vs software timer wheel (SysTick/TIM)
 - TCP: Non-blocking BSD sockets + epoll (Linux); stubs on STM32 (future lwIP)
-- File: Synchronous POSIX vs flash-backed ring buffer
+- File: Synchronous POSIX (Linux) vs flash ring buffer + SD card DMA yield (STM32)
 
 **STM32 File I/O Differences**
 
-The STM32 implementation uses flash-backed virtual files with a ring buffer for efficiency.
-Most writes complete immediately (fast path). When the buffer fills up, `write()` blocks
-to flush data to flash before continuing. This ensures the same no-data-loss semantics
-as Linux while still providing fast writes in the common case.
+Flash virtual files (`/log`, `/config`) use a ring buffer for efficiency. Most writes
+complete immediately (fast path). When the buffer fills up, `write()` blocks to flush
+data to flash before continuing.
+
+SD card files (`/sd/*`) use DMA + scheduler yield. Sector transfers (512 bytes) run via
+DMA while the scheduler runs other actors. Card busy-wait after writes yields via periodic
+timer polling. This makes SD card I/O non-blocking - flight-critical actors keep running
+during writes.
 
 STM32 restrictions:
 - Only virtual paths work (`/log`, `/config`, `/sd`) - arbitrary paths rejected
