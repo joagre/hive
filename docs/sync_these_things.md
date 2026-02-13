@@ -211,4 +211,4 @@ grep -rn 'typedef' include/ src/hal/ | grep '} [a-z_]*;$' | grep -v '_t;$'
 - Kalman filter mentions added
 - Diagrams verified (StateBus-->Rate, TLog actor)
 - Actor counts verified (10-11)
-- Memory footprint verified (~60KB flash, ~58KB RAM, 52KB stack arena)
+- Memory footprint verified (~102KB flash, ~116KB RAM, 60KB stack arena)

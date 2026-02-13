@@ -16,7 +16,7 @@
 
 **No RTOS dependency** - Hive is the runtime. No FreeRTOS, no Zephyr, no vendor SDK lock-in.
 
-**Real-world example** - The [pilot example](examples/pilot/) is a quadcopter flight controller running on a Crazyflie 2.1: 12 actors, sensor fusion, cascaded PID, 60KB flash.
+**Real-world example** - The [pilot example](examples/pilot/) is a quadcopter flight controller running on a Crazyflie 2.1: 12 actors, sensor fusion, cascaded PID, ~102KB flash.
 
 See [docs/spec/](docs/spec/) for design details.
 
@@ -176,7 +176,7 @@ See [`include/hive_static_config.h`](include/hive_static_config.h) for all compi
 
 All structures are statically allocated. Actor stacks use a static arena allocator by default (configurable size), with optional malloc via `actor_config_t.malloc_stack = true`. Stack sizes are configurable per actor, allowing different actors to use different stack sizes. Arena memory is automatically reclaimed when actors exit, with adjacent free blocks coalesced to prevent fragmentation. No malloc in hot paths. Memory footprint calculable at link time when using arena allocator (default); optional malloc'd stacks add runtime-dependent heap usage.
 
-**Embedded footprint** - The defaults above are generous for Linux development. See the [Pilot Example](#pilot-example-quadcopter-flight-controller) for a minimal embedded configuration (~60KB flash, ~58KB RAM on STM32F4).
+**Embedded footprint** - The defaults above are generous for Linux development. See the [Pilot Example](#pilot-example-quadcopter-flight-controller) for a minimal embedded configuration (~102KB flash, ~116KB RAM on STM32F4).
 
 ### Configuration Hierarchy
 
@@ -598,7 +598,7 @@ hive_supervisor_stop(supervisor);
 
 ### Pilot Example (Quadcopter Flight Controller)
 
-The `examples/pilot/` directory contains a complete quadcopter autopilot targeting real hardware (Crazyflie 2.1+). Not a toy demo: 12 actors, cascaded PID control, sensor fusion, and fail-safe supervision. Compiles to ~60KB flash and ~58KB RAM with a 52KB stack arena.
+The `examples/pilot/` directory contains a complete quadcopter autopilot targeting real hardware (Crazyflie 2.1+). Not a toy demo: 12 actors, cascaded PID control, sensor fusion, and fail-safe supervision. Compiles to ~102KB flash and ~116KB RAM with a 60KB stack arena.
 
 See [examples/pilot/README.md](examples/pilot/README.md) for build instructions and architecture details.
 

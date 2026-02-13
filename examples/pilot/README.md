@@ -34,7 +34,7 @@ A complete quadcopter autopilot. Not a toy demo, but a flight controller targeti
 
 **Platforms**
 - **Webots simulation** (default) - Crazyflie quadcopter in Webots simulator
-- **Crazyflie 2.1+** - Bitcraze nano quadcopter (~63 KB flash, ~120 KB RAM)
+- **Crazyflie 2.1+** - Bitcraze nano quadcopter (~102 KB flash, ~116 KB RAM)
 
 **Philosophy** - The pilot is a stress test for the runtime. If it reveals weaknesses (latency, scheduling, memory), the runtime is fixed, not the pilot. The pilot code should be clean and idiomatic, not full of workarounds.
 

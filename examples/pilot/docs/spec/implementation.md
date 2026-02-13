@@ -305,7 +305,7 @@ examples/pilot/
 
 | Platform | Flash | RAM | MCU |
 |----------|-------|-----|-----|
-| Crazyflie 2.1+ | ~63 KB | ~120 KB | STM32F405 (1 MB / 192 KB) |
+| Crazyflie 2.1+ | ~102 KB | ~116 KB | STM32F405 (1 MB / 192 KB) |
 
 ### Configuration Split
 
