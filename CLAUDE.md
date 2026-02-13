@@ -32,7 +32,7 @@ Man pages available:
 - `hive_bus(3)` - Publish-subscribe bus
 - `hive_select(3)` - Unified event waiting (IPC + bus + HAL events)
 - `hive_tcp(3)` - Non-blocking TCP
-- `hive_file(3)` - Synchronous file I/O
+- `hive_file(3)` - File I/O (platform-specific behavior)
 - `hive_types(3)` - Types, constants, compile-time configuration
 
 View without installing: `man man/man3/hive_ipc.3`

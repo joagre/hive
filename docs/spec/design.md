@@ -299,7 +299,7 @@ graph TB
 
         subgraph IO["I/O"]
             NET[TCP<br/>sockets]
-            FILE[File I/O<br/>synchronous]
+            FILE[File I/O<br/>platform-specific]
         end
 
         TIMERS --> NET & FILE
@@ -360,7 +360,7 @@ When an actor calls a blocking API, the following contract applies:
 - `hive_ipc_recv()` with timeout = 0 -> returns `HIVE_ERR_WOULDBLOCK` if empty
 - `hive_bus_read()` with timeout = 0 -> returns `HIVE_ERR_WOULDBLOCK` if no data
 
-**Note** - File I/O (`hive_file_*`) is NOT in this list. See "Scheduler-Stalling Calls" below.
+**Note** - File I/O (`hive_file_*`) is NOT in this list. See [File I/O Behavior](#file-io-behavior) below.
 
 **Mailbox availability while blocked**
 - Blocked actors **can** receive mailbox messages
@@ -424,7 +424,7 @@ Each blocking TCP request has an implicit state: `PENDING` -> `COMPLETED` or `TI
 - New request from same actor gets fresh epoll state
 
 **Note** - This serialization model does NOT apply to:
-- **File I/O**: Stalls scheduler synchronously (no event loop involvement)
+- **File I/O**: On Linux, stalls scheduler synchronously. On STM32, SD card I/O yields via DMA (see [File I/O Behavior](#file-io-behavior))
 
 **Predictability guarantee**
 
@@ -522,7 +522,7 @@ The runtime is **completely single-threaded**. All runtime operations execute in
 | **IPC APIs** (`hive_ipc_notify`, `hive_ipc_recv`) | Single-threaded only | Must call from actor context |
 | **Bus APIs** (`hive_bus_publish`, `hive_bus_read`) | Single-threaded only | Must call from actor context |
 | **Timer APIs** (`hive_timer_after`, `hive_timer_every`) | Single-threaded only | Must call from actor context |
-| **File APIs** (`hive_file_read`, `hive_file_write`) | Single-threaded only | Must call from actor context; stalls scheduler |
+| **File APIs** (`hive_file_read`, `hive_file_write`) | Single-threaded only | Must call from actor context; see [File I/O Behavior](#file-io-behavior) |
 | **TCP APIs** (`hive_tcp_recv`, `hive_tcp_send`) | Single-threaded only | Must call from actor context |
 
 **Forbidden from**
@@ -599,7 +599,7 @@ This pure single-threaded model provides:
 **Linux**
 - Timers: `timerfd` registered in `epoll`
 - TCP: Non-blocking sockets registered in `epoll`
-- File: Direct synchronous I/O (regular files don't work with epoll anyway)
+- File: Synchronous POSIX I/O (OS page cache buffers writes, rarely stalls)
 - Event loop: `epoll_wait()` with bounded timeout (10ms) for defensive wakeup
 
 **Defensive timeout rationale** - The 10ms bounded timeout guards against lost wakeups, misconfigured epoll registrations, or unexpected platform behavior. It is not required for correctness under ideal conditions but provides a safety net against programming errors or kernel edge cases.
