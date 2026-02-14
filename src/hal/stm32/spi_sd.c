@@ -312,70 +312,51 @@ int spi_sd_init(void) {
     for (volatile int d = 0; d < 2000000; d++)
         __asm__("nop");
 
-    // Toggle CS a few times to verify pin is working
-    SD_DEBUG("Testing CS pin toggle...\n");
-    for (int i = 0; i < 5; i++) {
-        spi_ll_cs_low();
-        for (volatile int d = 0; d < 50000; d++)
-            __asm__("nop");
-        spi_ll_cs_high();
-        for (volatile int d = 0; d < 50000; d++)
-            __asm__("nop");
-    }
-
-    // Power-on delay - some cards need 1ms+ after power stabilizes
-    for (volatile int d = 0; d < 200000; d++)
-        __asm__("nop");
-
-    // Test SPI transfer with CS high - should read back 0xFF (floating line)
+    // Abort any in-progress transfer from a previous boot.
+    // If the MCU reset mid-transfer (e.g., st-flash), the card is still
+    // powered and waiting for clocks to complete. Send CMD12 (STOP) with
+    // CS asserted, then flush with 4096+ clocks (CS high) to drain any
+    // pending data and return the card to idle native mode.
+    SD_DEBUG("Aborting stale transfer (CMD12 + flush)...\n");
+    spi_ll_cs_low();
+    send_cmd(CMD12, 0); // STOP_TRANSMISSION - abort any multi-block op
     spi_ll_cs_high();
-    (void)spi_ll_xfer(0xFF); // Discard result; used only for SPI bus activity
 
-    // CS high, send 80+ clocks to wake up card and enter native mode
-    // SD spec requires at least 74 clocks, send 200 (25 bytes) to be safe
-    SD_DEBUG("Sending %d wake-up clocks...\n", 25 * 8);
-    for (int i = 0; i < 25; i++) {
+    // 4096 clocks (512 bytes) with CS high drains any pending read data
+    // and satisfies the SD spec's 74-clock minimum for power-on reset.
+    for (int i = 0; i < 512; i++) {
         spi_ll_xfer(0xFF);
     }
 
-    // Small delay after wake-up clocks
-    for (volatile int d = 0; d < 50000; d++)
+    // Power-on delay
+    for (volatile int d = 0; d < 200000; d++)
         __asm__("nop");
 
-    SD_DEBUG("Sending CMD0 (GO_IDLE_STATE)...\n");
-
-    // Small delay before CMD0
-    for (volatile int d = 0; d < 10000; d++)
-        __asm__("nop");
-
-    // Enter SPI mode (CMD0)
-    spi_ll_cs_low();
-
-    // Small delay after CS low
-    for (volatile int d = 0; d < 10000; d++)
-        __asm__("nop");
-
-    r1 = send_cmd(CMD0, 0);
-    spi_ll_cs_high();
-
-    SD_DEBUG("CMD0 response: 0x%02X (expect 0x01)\n", r1);
-
-    // 0x00 from CMD0 is suspicious - try sending more clocks and retry
-    if (r1 == 0x00 || r1 == 0xFF) {
-        SD_DEBUG("CMD0 got 0x%02X, sending more clocks and retrying...\n", r1);
-        spi_ll_cs_high();
-        for (int i = 0; i < 50; i++) {
-            spi_ll_xfer(0xFF);
+    // Enter SPI mode (CMD0) with retries
+    r1 = 0xFF;
+    for (int attempt = 0; attempt < 5 && r1 != R1_IDLE_STATE; attempt++) {
+        if (attempt > 0) {
+            SD_DEBUG("CMD0 attempt %d...\n", attempt + 1);
+            // Flush again between retries
+            spi_ll_cs_high();
+            for (int i = 0; i < 128; i++) {
+                spi_ll_xfer(0xFF);
+            }
+            for (volatile int d = 0; d < 500000; d++)
+                __asm__("nop");
         }
+
         spi_ll_cs_low();
+        for (volatile int d = 0; d < 10000; d++)
+            __asm__("nop");
         r1 = send_cmd(CMD0, 0);
         spi_ll_cs_high();
-        SD_DEBUG("CMD0 retry response: 0x%02X\n", r1);
+        SD_DEBUG("CMD0 response: 0x%02X (expect 0x01)\n", r1);
     }
 
-    // If still not in idle state, continue anyway and see what happens
     if (r1 != R1_IDLE_STATE) {
-        SD_DEBUG("CMD0 unexpected response 0x%02X, trying CMD8 anyway\n", r1);
+        SD_DEBUG("CMD0 failed after 5 attempts (last=0x%02X)\n", r1);
+        return -1;
     }
 
     // Check voltage (CMD8)
