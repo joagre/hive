@@ -3,41 +3,34 @@
 // Platform-independent SD card protocol over SPI.
 // Board-specific SPI functions provided via spi_ll.h interface.
 //
-// Sector data transfers (512 bytes) use DMA + scheduler yield so other
-// actors run during the SPI transfer. Card busy-wait after writes also
-// yields via periodic timer polling. Commands, tokens, and CRC bytes
-// remain byte-by-byte (fast, no yield needed).
+// Sector data transfers (512 bytes) use DMA with spin-wait (~24us at
+// 21 MHz, ~23x faster than byte-by-byte). Card busy-wait after writes
+// yields via hive_sleep() with 1ms polls, matching the Bitcraze
+// waitForCardReady() pattern (CS high, yield, CS low with SPI1
+// reconfigure, poll). SPI bus is locked for the entire SD card
+// transaction (command + data + CRC + response) to prevent flow deck
+// SPI1 access on shared-bus boards.
 //
-// If called outside actor context (e.g., during FatFS mount from main()
-// before the scheduler starts), sector transfers fall back to byte-by-byte
-// and busy-waits use polling instead of timer yield.
+// Before the scheduler starts (e.g., FatFS mount from main()), DMA
+// falls back to synchronous byte-by-byte and busy-waits use polling.
 //
 // Reference: http://elm-chan.org/docs/mmc/mmc_e.html
 
 #include "spi_sd.h"
 #include "spi_ll.h"
 #include "hive_static_config.h"
+#include "hive_runtime.h"
+#include "hive_timer.h"
+#include "hal/hive_hal_event.h"
 
 #if HIVE_ENABLE_SD
 
-#include "hal/hive_hal_event.h"
-#include "hive_select.h"
-#include "hive_timer.h"
 #include <string.h>
 #include <stdbool.h>
 
-// Forward declaration - detect whether scheduler is running.
-// Returns NULL when called from main() before hive_run().
-// DMA + yield requires actor context; falls back to byte-by-byte otherwise.
-struct actor;
-extern struct actor *hive_actor_current(void);
-
-static inline bool in_actor_context(void) {
-    return hive_actor_current() != NULL;
-}
-
 // Debug output - uses platform debug printf
 // Enable SD_DEBUG_ENABLE to see initialization details
+#define SD_DEBUG_ENABLE 0
 #if defined(SD_DEBUG_ENABLE) && SD_DEBUG_ENABLE
 extern void platform_debug_printf(const char *fmt, ...);
 #define SD_DEBUG(...) platform_debug_printf("[SD] " __VA_ARGS__)
@@ -79,13 +72,10 @@ extern void platform_debug_printf(const char *fmt, ...);
 #define TOKEN_STOP_TRAN 0xFD
 
 // ---------------------------------------------------------------------------
-// DMA + Yield Configuration
+// Configuration
 // ---------------------------------------------------------------------------
 
-#define SD_DMA_TIMEOUT_MS 100 // DMA transfer timeout (512B at 21MHz ~195us)
-#define SD_BUSY_POLL_INTERVAL_US 1000 // 1ms between busy polls
-#define SD_BUSY_TIMEOUT_MS 500        // 500ms max card busy time
-#define SD_BUSY_MAX_POLLS (SD_BUSY_TIMEOUT_MS * 1000 / SD_BUSY_POLL_INTERVAL_US)
+#define SD_BUSY_TIMEOUT_MS 500 // 500ms max card busy time
 
 // ---------------------------------------------------------------------------
 // Driver State
@@ -95,8 +85,11 @@ static bool s_initialized = false;
 static sd_card_type_t s_card_type = SD_CARD_NONE;
 static uint32_t s_sector_count = 0;
 
-// HAL event for DMA completion (signaled by ISR in spi_ll_sd.c)
+// DMA completion event (signaled by ISR, waited on by actor via hive_select)
 static hive_hal_event_id_t s_dma_event = HIVE_HAL_EVENT_INVALID;
+
+// DMA wait timeout (512 bytes at 328 kHz slow = ~12ms, at 21 MHz fast = ~0.2ms)
+#define SD_DMA_TIMEOUT_MS 50
 
 // ---------------------------------------------------------------------------
 // SPI Helper Functions
@@ -195,16 +188,26 @@ static int wait_data_token(uint8_t token, uint32_t timeout_ms) {
 }
 
 // ---------------------------------------------------------------------------
-// DMA Transfer + Yield
+// DMA Transfer + Spin-Wait
 // ---------------------------------------------------------------------------
 
-// Transfer one sector (512 bytes) via DMA, yielding to scheduler.
-// Locks SPI bus during DMA to prevent flow deck access.
+// Check if running in actor context (scheduler started).
+// Before scheduler, hive_self() returns HIVE_ACTOR_ID_INVALID.
+static bool in_actor_context(void) {
+    return hive_self() != HIVE_ACTOR_ID_INVALID;
+}
+
+// Transfer sector data via DMA with spin-wait.
+// DMA is ~23x faster than byte-by-byte (24us vs 700us per 512-byte block at
+// 21 MHz) but the transfer is too short to benefit from yielding to the
+// scheduler. The meaningful yields happen in wait_ready_yield() where card
+// programming takes 10-200ms.
+// Caller must hold the SPI bus lock (spi_ll_lock) before calling.
 // CS must already be asserted by caller.
-// Falls back to byte-by-byte if not in actor context (e.g., during mount).
+// Falls back to byte-by-byte before scheduler starts (e.g., during mount).
 static int dma_xfer(void *buf, uint32_t len, spi_ll_dma_dir_t dir) {
-    if (!in_actor_context()) {
-        // No scheduler running - use synchronous byte-by-byte transfer
+    if (s_dma_event == HIVE_HAL_EVENT_INVALID) {
+        // DMA not initialized: synchronous fallback
         if (dir == SPI_LL_DIR_RX) {
             spi_recv(buf, len);
         } else {
@@ -213,69 +216,74 @@ static int dma_xfer(void *buf, uint32_t len, spi_ll_dma_dir_t dir) {
         return 0;
     }
 
-    spi_ll_lock();
+    // DMA transfer with spin-wait for completion.
+    // 512 bytes at 21 MHz = ~24us - too short to justify a context switch.
     spi_ll_dma_start(buf, len, dir);
-    hive_status_t s = hive_event_wait(s_dma_event, SD_DMA_TIMEOUT_MS);
-    spi_ll_unlock();
 
-    if (HIVE_FAILED(s) || !spi_ll_dma_ok()) {
+    uint32_t timeout = 2000000; // ~48ms at 168 MHz (generous for 24us xfer)
+    while (!spi_ll_dma_ok() && !spi_ll_dma_error() && timeout > 0) {
+        timeout--;
+    }
+
+    if (!spi_ll_dma_ok()) {
+        SD_DEBUG("DMA %s: %s\n", dir == SPI_LL_DIR_TX ? "TX" : "RX",
+                 spi_ll_dma_error() ? "ERROR" : "TIMEOUT");
+        spi_ll_dma_cleanup();
         return -1;
     }
+
+    // STM32 SPI DMA requirement: wait for BSY to clear and drain residual
+    // RX data before any byte-by-byte SPI access. Without this, the next
+    // spi_ll_xfer() may see stale data or corrupt the bus.
+    spi_ll_dma_cleanup();
     return 0;
 }
 
-// Wait for card ready with scheduler yield.
-// Deasserts CS between polls so other SPI devices can use the bus.
-// Each poll briefly locks the bus for one byte transfer (~0.4us).
-// Falls back to synchronous busy-wait if not in actor context.
+// Wait for card ready after a write operation, yielding to the scheduler.
+// Releases the SPI bus between polls so the flow deck can read at 250Hz.
+// Uses spi_ll_cs_low_poll() (lightweight reconfigure, no RCC reset) instead
+// of spi_ll_cs_low() (full RCC reset required for DMA but corrupts MSB).
+//
+// Before the scheduler starts (FatFS mount), falls back to tight polling
+// since hive_sleep() is a no-op and the 500 polls would finish in
+// microseconds - not enough time for card programming (~200ms).
 static int wait_ready_yield(void) {
     if (!in_actor_context()) {
-        // No scheduler - use synchronous busy-wait (same as init phase)
+        // Pre-scheduler: tight poll with CS held (no bus sharing needed)
         spi_ll_cs_low();
-        int ret = wait_ready(SD_BUSY_TIMEOUT_MS);
+        int rc = wait_ready(SD_BUSY_TIMEOUT_MS);
         spi_ll_cs_high();
-        return ret;
+        return rc;
     }
 
-    // Check immediately before starting timer
+    uint32_t polls = SD_BUSY_TIMEOUT_MS;
+
     spi_ll_lock();
-    spi_ll_cs_low();
+    spi_ll_cs_low_poll();
+    spi_ll_xfer(0xFF); // Discard stale byte after SPE toggle
     uint8_t r = spi_ll_xfer(0xFF);
-    spi_ll_cs_high();
-    spi_ll_unlock();
-    if (r == 0xFF) {
-        return 0;
-    }
 
-    hive_timer_id_t poll_timer;
-    hive_status_t s = hive_timer_every(SD_BUSY_POLL_INTERVAL_US, &poll_timer);
-    if (HIVE_FAILED(s)) {
-        return -1;
-    }
-
-    int result = -1;
-    hive_message_t msg;
-
-    for (int i = 0; i < SD_BUSY_MAX_POLLS; i++) {
-        s = hive_timer_recv(poll_timer, &msg, SD_BUSY_TIMEOUT_MS);
-        if (HIVE_FAILED(s)) {
-            break; // Timer failure or timeout
-        }
-
-        spi_ll_lock();
-        spi_ll_cs_low();
-        r = spi_ll_xfer(0xFF);
-        spi_ll_cs_high();
+    while (r != 0xFF && polls > 0) {
+        // Release bus: no dummy clock (avoids clock glitch on next cs_low)
+        spi_ll_cs_high_no_dummy();
         spi_ll_unlock();
 
-        if (r == 0xFF) {
-            result = 0;
-            break;
-        }
+        // Yield to scheduler for 1ms (flow deck can use SPI1)
+        hive_sleep(1000);
+
+        // Reacquire bus: lightweight reconfigure (no RCC reset, no MSB
+        // corruption). Flow deck may have changed SPI1 baud rate.
+        spi_ll_lock();
+        spi_ll_cs_low_poll();
+        spi_ll_xfer(0xFF); // Discard stale byte after SPE toggle
+        r = spi_ll_xfer(0xFF);
+        polls--;
     }
 
-    hive_timer_cancel(poll_timer);
-    return result;
+    spi_ll_cs_high();
+    spi_ll_unlock();
+
+    return (r == 0xFF) ? 0 : -1;
 }
 
 // ---------------------------------------------------------------------------
@@ -307,43 +315,63 @@ int spi_sd_init(void) {
     spi_ll_init();
     spi_ll_set_slow();
 
-    // Add a longer power-on delay for card stabilization
-    SD_DEBUG("Power-on delay (100ms equivalent)...\n");
-    for (volatile int d = 0; d < 2000000; d++)
-        __asm__("nop");
-
     // Abort any in-progress transfer from a previous boot.
     // If the MCU reset mid-transfer (e.g., st-flash), the card is still
-    // powered and waiting for clocks to complete. Send CMD12 (STOP) with
-    // CS asserted, then flush with 4096+ clocks (CS high) to drain any
-    // pending data and return the card to idle native mode.
-    SD_DEBUG("Aborting stale transfer (CMD12 + flush)...\n");
-    spi_ll_cs_low();
-    send_cmd(CMD12, 0); // STOP_TRANSMISSION - abort any multi-block op
-    spi_ll_cs_high();
+    // powered and waiting for clocks to complete. The card could be in
+    // any state: waiting for command, receiving data bytes, sending data,
+    // or busy programming. Recovery sequence:
+    //
+    // 1. Flush 520 bytes with CS LOW to complete any partial data block
+    //    (512 data + 2 CRC + padding). If the card was mid-data-receive,
+    //    it interprets incoming bytes as data, not commands, so CMD12
+    //    won't work until the data phase completes.
+    // 2. Send CMD12 (STOP_TRANSMISSION) to abort multi-block operations.
+    // 3. Deassert CS.
+    // 4. Send 1024 bytes (8192 clocks) with CS HIGH to drain any pending
+    //    read data and satisfy the SD spec's 74-clock power-on minimum.
+    SD_DEBUG("Aborting stale transfer (flush + CMD12)...\n");
 
-    // 4096 clocks (512 bytes) with CS high drains any pending read data
-    // and satisfies the SD spec's 74-clock minimum for power-on reset.
-    for (int i = 0; i < 512; i++) {
+    // Phase 1: Flush 2048 bytes with CS LOW. The card might be in mid-data
+    // receive state expecting more data bytes. 2048 bytes covers multiple
+    // blocks (4 x 512) plus overhead, ensuring the card finishes any pending
+    // data phase regardless of multi-block position.
+    spi_ll_cs_low();
+    for (int i = 0; i < 2048; i++) {
         spi_ll_xfer(0xFF);
     }
 
-    // Power-on delay
-    for (volatile int d = 0; d < 200000; d++)
+    // Phase 2: Send CMD12 to abort any multi-block operation, then wait
+    // for the card to finish programming before deassering CS.
+    send_cmd(CMD12, 0);
+    wait_ready(500);
+    spi_ll_cs_high();
+
+    // Phase 3: 8192 clocks with CS HIGH to drain pending read data
+    for (int i = 0; i < 1024; i++) {
+        spi_ll_xfer(0xFF);
+    }
+
+    // Power-on delay (~100ms at 168 MHz) - card may need time to finish
+    // internal operations (flash programming, wear leveling) after recovery.
+    for (volatile int d = 0; d < 5000000; d++)
         __asm__("nop");
 
-    // Enter SPI mode (CMD0) with retries
+    // Enter SPI mode (CMD0) with retries. Some cards need many attempts
+    // after an unclean shutdown (e.g., power loss during write). Retry with
+    // full flush and delay between attempts.
     r1 = 0xFF;
-    for (int attempt = 0; attempt < 5 && r1 != R1_IDLE_STATE; attempt++) {
+    for (int attempt = 0; attempt < 20 && r1 != R1_IDLE_STATE; attempt++) {
         if (attempt > 0) {
-            SD_DEBUG("CMD0 attempt %d...\n", attempt + 1);
+            if (attempt <= 5 || (attempt % 5) == 0) {
+                SD_DEBUG("CMD0 attempt %d...\n", attempt + 1);
+            }
             // Flush again between retries
             spi_ll_cs_high();
-            for (int i = 0; i < 128; i++) {
+            for (int i = 0; i < 1024; i++) {
                 spi_ll_xfer(0xFF);
             }
-            for (volatile int d = 0; d < 500000; d++)
-                __asm__("nop");
+            for (volatile int d = 0; d < 5000000; d++)
+                __asm__("nop"); // ~100ms
         }
 
         spi_ll_cs_low();
@@ -355,7 +383,7 @@ int spi_sd_init(void) {
     }
 
     if (r1 != R1_IDLE_STATE) {
-        SD_DEBUG("CMD0 failed after 5 attempts (last=0x%02X)\n", r1);
+        SD_DEBUG("CMD0 failed after 20 attempts (last=0x%02X)\n", r1);
         return -1;
     }
 
@@ -475,13 +503,11 @@ int spi_sd_init(void) {
     // Switch to high speed
     spi_ll_set_fast();
 
-    // Initialize DMA for non-blocking sector transfers
+    // Initialize DMA for sector transfers (ISR signals event on completion)
     s_dma_event = hive_hal_event_create();
-    if (s_dma_event == HIVE_HAL_EVENT_INVALID) {
-        SD_DEBUG("Failed to create DMA event\n");
-        return -1;
+    if (s_dma_event != HIVE_HAL_EVENT_INVALID) {
+        spi_ll_dma_init(s_dma_event);
     }
-    spi_ll_dma_init(s_dma_event);
 
     s_initialized = true;
     SD_DEBUG("SD card initialized: %lu sectors (%lu MB)\n", s_sector_count,
@@ -491,10 +517,8 @@ int spi_sd_init(void) {
 
 int spi_sd_read_blocks(uint8_t *buf, uint32_t sector, uint32_t count) {
     if (!s_initialized || count == 0) {
-        SD_DEBUG("read_blocks: not initialized or count=0\n");
         return -1;
     }
-    SD_DEBUG("read_blocks: sector=%lu count=%lu\n", sector, count);
 
     // Convert to byte address for v1/v2-SC cards
     uint32_t addr = sector;
@@ -502,25 +526,32 @@ int spi_sd_read_blocks(uint8_t *buf, uint32_t sector, uint32_t count) {
         addr *= 512;
     }
 
+    // Lock bus for entire transaction (command + data + CRC).
+    // Flow deck checks spi_ll_is_locked() before SPI1 access.
+    spi_ll_lock();
     spi_ll_cs_low();
 
     if (count == 1) {
         // Single block read
         uint8_t r = send_cmd(CMD17, addr);
         if (r != 0) {
-            SD_DEBUG("CMD17 failed: 0x%02X\n", r);
+            SD_DEBUG("CMD17 fail: r=0x%02X s=%lu\n", r, (unsigned long)sector);
             spi_ll_cs_high();
+            spi_ll_unlock();
             return -1;
         }
 
         if (wait_data_token(TOKEN_SINGLE_BLOCK, 500) != 0) {
-            SD_DEBUG("wait_data_token failed\n");
+            SD_DEBUG("R token fail: s=%lu\n", (unsigned long)sector);
             spi_ll_cs_high();
+            spi_ll_unlock();
             return -1;
         }
 
         if (dma_xfer(buf, 512, SPI_LL_DIR_RX) != 0) {
+            SD_DEBUG("R DMA fail: s=%lu\n", (unsigned long)sector);
             spi_ll_cs_high();
+            spi_ll_unlock();
             return -1;
         }
         spi_ll_xfer(0xFF); // CRC
@@ -529,6 +560,7 @@ int spi_sd_read_blocks(uint8_t *buf, uint32_t sector, uint32_t count) {
         // Multi-block read
         if (send_cmd(CMD18, addr) != 0) {
             spi_ll_cs_high();
+            spi_ll_unlock();
             return -1;
         }
 
@@ -536,12 +568,14 @@ int spi_sd_read_blocks(uint8_t *buf, uint32_t sector, uint32_t count) {
             if (wait_data_token(TOKEN_SINGLE_BLOCK, 500) != 0) {
                 send_cmd(CMD12, 0);
                 spi_ll_cs_high();
+                spi_ll_unlock();
                 return -1;
             }
 
             if (dma_xfer(buf + i * 512, 512, SPI_LL_DIR_RX) != 0) {
                 send_cmd(CMD12, 0);
                 spi_ll_cs_high();
+                spi_ll_unlock();
                 return -1;
             }
             spi_ll_xfer(0xFF); // CRC
@@ -552,6 +586,7 @@ int spi_sd_read_blocks(uint8_t *buf, uint32_t sector, uint32_t count) {
     }
 
     spi_ll_cs_high();
+    spi_ll_unlock();
     return 0;
 }
 
@@ -566,40 +601,75 @@ int spi_sd_write_blocks(const uint8_t *buf, uint32_t sector, uint32_t count) {
         addr *= 512;
     }
 
-    spi_ll_cs_low();
-
     if (count == 1) {
-        // Single block write
-        if (send_cmd(CMD24, addr) != 0) {
-            spi_ll_cs_high();
-            return -1;
-        }
+        // Single block write with retry on data response failure.
+        // Rapid same-sector rewrites (FatFS file creation) can get dresp=0x00
+        // when the card's internal state hasn't fully settled. Recovery is
+        // conservative: just deassert CS and wait for card ready before retry.
+        // IMPORTANT: Do NOT flush extra bytes with CS LOW during recovery -
+        // that can put the card in an unrecoverable state requiring power cycle.
+        int ok = 0;
+        for (int attempt = 0; attempt < 3 && !ok; attempt++) {
+            // Lock bus for entire transaction (command + data + response).
+            // Flow deck checks spi_ll_is_locked() before SPI1 access.
+            spi_ll_lock();
+            spi_ll_cs_low();
 
-        spi_ll_xfer(0xFF);               // Gap
-        spi_ll_xfer(TOKEN_SINGLE_BLOCK); // Data token
-        if (dma_xfer((void *)buf, 512, SPI_LL_DIR_TX) != 0) {
-            spi_ll_cs_high();
-            return -1;
-        }
-        spi_ll_xfer(0xFF); // CRC
-        spi_ll_xfer(0xFF);
+            uint8_t r1 = send_cmd(CMD24, addr);
+            if (r1 != 0) {
+                SD_DEBUG("W CMD24 fail: r=0x%02X s=%lu\n", r1,
+                         (unsigned long)sector);
+                spi_ll_cs_high();
+                spi_ll_unlock();
+                continue;
+            }
 
-        // Check data response
-        uint8_t resp = spi_ll_xfer(0xFF);
-        if ((resp & 0x1F) != 0x05) {
-            spi_ll_cs_high();
-            return -1;
-        }
+            spi_ll_xfer(0xFF);               // Gap
+            spi_ll_xfer(TOKEN_SINGLE_BLOCK); // Data token
+            if (dma_xfer((void *)buf, 512, SPI_LL_DIR_TX) != 0) {
+                SD_DEBUG("W DMA fail: s=%lu\n", (unsigned long)sector);
+                spi_ll_cs_high();
+                spi_ll_unlock();
+                continue;
+            }
 
-        // Deassert CS before yielding busy-wait (frees SPI for flow deck)
-        spi_ll_cs_high();
-        if (wait_ready_yield() != 0) {
+            spi_ll_xfer(0xFF); // CRC
+            spi_ll_xfer(0xFF);
+
+            // Check data response
+            uint8_t resp = spi_ll_xfer(0xFF);
+            if ((resp & 0x1F) != 0x05) {
+                SD_DEBUG("W dresp: 0x%02X s=%lu try=%d\n", resp,
+                         (unsigned long)sector, attempt);
+                // Conservative recovery: deassert CS, wait for card to finish
+                // any internal operations, then retry. No extra clocking with
+                // CS LOW (that risks corrupting card state).
+                spi_ll_cs_high();
+                spi_ll_unlock();
+                wait_ready_yield();
+                continue;
+            }
+
+            // Deassert CS and unlock before yielding busy-wait (frees SPI
+            // for flow deck during card programming time)
+            spi_ll_cs_high();
+            spi_ll_unlock();
+            if (wait_ready_yield() != 0) {
+                SD_DEBUG("W busy fail: s=%lu\n", (unsigned long)sector);
+                continue;
+            }
+            ok = 1;
+        }
+        if (!ok) {
             return -1;
         }
     } else {
         // Multi-block write
+        spi_ll_lock();
+        spi_ll_cs_low();
         if (send_cmd(CMD25, addr) != 0) {
             spi_ll_cs_high();
+            spi_ll_unlock();
             return -1;
         }
 
@@ -608,6 +678,7 @@ int spi_sd_write_blocks(const uint8_t *buf, uint32_t sector, uint32_t count) {
             spi_ll_xfer(TOKEN_MULTI_BLOCK); // Data token
             if (dma_xfer((void *)(buf + i * 512), 512, SPI_LL_DIR_TX) != 0) {
                 spi_ll_cs_high();
+                spi_ll_unlock();
                 return -1;
             }
             spi_ll_xfer(0xFF); // CRC
@@ -618,20 +689,24 @@ int spi_sd_write_blocks(const uint8_t *buf, uint32_t sector, uint32_t count) {
             if ((resp & 0x1F) != 0x05) {
                 spi_ll_xfer(TOKEN_STOP_TRAN);
                 spi_ll_cs_high();
+                spi_ll_unlock();
                 return -1;
             }
 
-            // Deassert CS before yielding busy-wait
+            // Deassert CS and unlock before yielding busy-wait
             spi_ll_cs_high();
+            spi_ll_unlock();
             if (wait_ready_yield() != 0) {
                 return -1;
             }
             // Reassert CS for next block or stop command
+            spi_ll_lock();
             spi_ll_cs_low();
         }
 
         spi_ll_xfer(TOKEN_STOP_TRAN);
         spi_ll_cs_high();
+        spi_ll_unlock();
         if (wait_ready_yield() != 0) {
             return -1;
         }

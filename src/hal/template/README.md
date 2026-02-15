@@ -200,8 +200,10 @@ hive_status_t hive_hal_file_sync(int fd);
 ```
 
 **Implementation notes**
-- All file operations should be synchronous (blocking)
-- STM32: Only virtual paths work (`/log`, `/config`) - arbitrary paths rejected
+- All file operations should be synchronous (blocking) from the HAL caller's perspective
+- STM32: Only virtual paths work (`/log`, `/config`, `/sd`) - arbitrary paths rejected
+- `/sd` requires SD card hardware and `HIVE_ENABLE_SD=1` build flag
+- SD card writes use DMA internally for speed but this is below the HAL interface
 - Mount availability checking is handled by the separate mount module (`hive_mount.h`)
 
 ### TCP (11 functions, HIVE_ENABLE_TCP=1) - `hive_hal_tcp.c`
@@ -259,7 +261,7 @@ See `src/hal/stm32/`:
 - `hive_hal_time.c` - Time (tick counter), critical sections (PRIMASK)
 - `hive_hal_event.c` - Event loop (WFI) + HAL event signaling (atomic stores + CPSID/CPSIE)
 - `hive_hal_timer.c` - Timer HAL (software timer wheel)
-- `hive_hal_file.c` - Flash-based virtual file system
+- `hive_hal_file.c` - Flash-based virtual files + SD card via FatFS
 - `hive_hal_tcp.c` - TCP stubs (future lwIP)
 - `hive_hal_context.c` - ARM context init
 - `hive_context_arm_cm.S` - ARM context switch

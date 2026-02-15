@@ -47,7 +47,7 @@ Key resources:
 |-----|---------|--------|-----------|
 | **I2C3** | On-board sensors (BMI088, BMP388) | DMA + interrupt | Reliable under load, matches Bitcraze |
 | **I2C1** | Flow deck (VL53L1x) | Polling | Infrequent reads (~40Hz), simpler |
-| **SPI1** | Flow deck (PMW3901) + SD card deck | Polling | Shared bus, CS-based selection |
+| **SPI1** | Flow deck (PMW3901) + SD card deck | Polling (flow) / DMA (SD) | Shared bus, CS-based selection |
 
 The DMA-based I2C3 driver (`i2c_drv.c`, `i2cdev.c`) is derived from the Bitcraze
 firmware, providing proven reliability for the high-frequency sensor reads.

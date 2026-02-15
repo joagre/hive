@@ -154,7 +154,7 @@ The runtime consists of:
 7. **File**: Platform-specific implementation
    - Linux: Synchronous POSIX I/O (OS page cache buffers writes, rarely stalls)
    - STM32 flash: Virtual files (`/log`, `/config`) with ring buffer (blocks when buffer full)
-   - STM32 SD card: Non-blocking via DMA + scheduler yield (actors run during transfer)
+   - STM32 SD card: DMA spin-wait for sector transfers, scheduler yield for card busy-wait
    - Use `HIVE_O_*` flags for cross-platform compatibility
 8. **Logging**: Structured logging with compile-time filtering
    - Log levels: TRACE, DEBUG, INFO, WARN, ERROR, NONE
@@ -566,7 +566,7 @@ Different implementations for Linux (dev) vs STM32 bare metal (prod):
 - Event notification: epoll vs WFI + interrupt flags
 - Timer: timerfd + epoll vs software timer wheel (SysTick/TIM)
 - TCP: Non-blocking BSD sockets + epoll (Linux); stubs on STM32 (future lwIP)
-- File: Synchronous POSIX (Linux) vs flash ring buffer + SD card DMA yield (STM32)
+- File: Synchronous POSIX (Linux) vs flash ring buffer + SD card DMA spin-wait (STM32)
 
 **STM32 File I/O Differences**
 
@@ -574,10 +574,10 @@ Flash virtual files (`/log`, `/config`) use a ring buffer for efficiency. Most w
 complete immediately (fast path). When the buffer fills up, `write()` blocks to flush
 data to flash before continuing.
 
-SD card files (`/sd/*`) use DMA + scheduler yield. Sector transfers (512 bytes) run via
-DMA while the scheduler runs other actors. Card busy-wait after writes yields via periodic
-timer polling. This makes SD card I/O non-blocking - flight-critical actors keep running
-during writes.
+SD card files (`/sd/*`) use DMA with spin-wait for sector transfers (~24us per 512 bytes
+at 21 MHz). Card busy-wait after writes (10-250ms) yields via hive_sleep() with 1ms polls,
+allowing other actors to run. The brief DMA spin-wait does not meaningfully impact 250 Hz
+control loops.
 
 STM32 restrictions:
 - Only virtual paths work (`/log`, `/config`, `/sd`) - arbitrary paths rejected

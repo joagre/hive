@@ -43,19 +43,37 @@
 // DMA2 Stream 3, Channel 3 = SPI1_TX
 #define SD_DMA_CHANNEL 3
 
-// HAL event for DMA complete notification (set by spi_sd.c)
+// HAL event signaled by ISR on DMA completion (currently unused by caller;
+// spi_sd.c polls spi_ll_dma_ok() via spin-wait instead of event_wait)
 static hive_hal_event_id_t s_dma_event_id = HIVE_HAL_EVENT_INVALID;
 
-// DMA completion status (set by ISR, read by spi_sd.c via spi_ll_dma_ok)
+// DMA completion status (set by ISR, polled by spi_sd.c via spin-wait)
 static volatile bool s_dma_complete = false;
 static volatile bool s_dma_error = false;
 
-// SPI bus lock flag (checked by flow deck before SPI access)
+// SPI bus lock flag (checked by flow deck before SPI access).
+// Held for entire SD transaction (command + data + CRC + response).
 static bool s_bus_locked = false;
+
+// Current SPI1 speed setting (reconfigured on each CS assert)
+static uint16_t s_spi_cr1 = 0;
 
 // Dummy byte for DMA (TX sends 0xFF for reads, RX discards data for writes)
 static uint8_t s_dma_dummy_tx = 0xFF;
 static uint8_t s_dma_dummy_rx;
+
+// ---------------------------------------------------------------------------
+// SPI1 Peripheral Reset
+// ---------------------------------------------------------------------------
+
+// Full SPI1 peripheral reset via RCC, matching Bitcraze SPI_I2S_DeInit().
+// Clears all registers, FIFOs, and internal state machines. Required when
+// reconfiguring SPI1 after the flow deck (PMW3901) has used it with
+// different settings.
+static void spi1_reset(void) {
+    RCC->APB2RSTR |= RCC_APB2RSTR_SPI1RST;
+    RCC->APB2RSTR &= ~RCC_APB2RSTR_SPI1RST;
+}
 
 // ---------------------------------------------------------------------------
 // SPI Low-Level Implementation (shares SPI1 with flow deck)
@@ -65,6 +83,12 @@ void spi_ll_init(void) {
     // Enable clocks
     RCC->AHB1ENR |= RCC_AHB1ENR_GPIOAEN | RCC_AHB1ENR_GPIOCEN;
     RCC->APB2ENR |= RCC_APB2ENR_SPI1EN;
+
+    // Ensure PMW3901 CS (PB4) is HIGH before touching SPI1
+    GPIOB->ODR |= (1 << 4);
+
+    // Full peripheral reset to clear stale state from flow deck init
+    spi1_reset();
 
     // Configure SPI1 GPIO using direct register access
     // PA5=SCK, PA6=MISO, PA7=MOSI all as AF5 (alternate function mode)
@@ -83,11 +107,11 @@ void spi_ll_init(void) {
     GPIOA->OSPEEDR |= (GPIO_OSPEEDER_OSPEEDR5 | GPIO_OSPEEDER_OSPEEDR6 |
                        GPIO_OSPEEDER_OSPEEDR7);
 
-    // Pull-down on SCK (PA5) and MOSI (PA7) for Mode 0 idle, no pull on MISO (PA6)
+    // Pull-down on all SPI pins for Mode 0 idle (matches Bitcraze config)
     GPIOA->PUPDR &=
         ~(GPIO_PUPDR_PUPDR5 | GPIO_PUPDR_PUPDR6 | GPIO_PUPDR_PUPDR7);
-    GPIOA->PUPDR |=
-        (GPIO_PUPDR_PUPDR5_1 | GPIO_PUPDR_PUPDR7_1); // Pull-down = 10
+    GPIOA->PUPDR |= (GPIO_PUPDR_PUPDR5_1 | GPIO_PUPDR_PUPDR6_1 |
+                     GPIO_PUPDR_PUPDR7_1); // Pull-down = 10
 
     // Configure SD CS pin (PC12) as push-pull output, high speed
     GPIOC->MODER &= ~GPIO_MODER_MODER12;
@@ -100,39 +124,70 @@ void spi_ll_init(void) {
 }
 
 void spi_ll_set_slow(void) {
-    // Wait for SPI not busy then disable
-    while (SPI1->SR & SPI_SR_BSY)
-        ;
-    SPI1->CR1 &= ~SPI_CR1_SPE;
-
-    // Full reconfigure: Mode 0, Master, 8-bit, div 256 ~328 kHz
-    SPI1->CR1 = SPI_CR1_MSTR |                               // Master mode
+    // Mode 0, Master, 8-bit, div 256 ~328 kHz
+    s_spi_cr1 = SPI_CR1_MSTR |                               // Master mode
                 SPI_CR1_BR_2 | SPI_CR1_BR_1 | SPI_CR1_BR_0 | // div 256
                 SPI_CR1_SSM | SPI_CR1_SSI;                   // Software SS
     // CPOL=0, CPHA=0 (Mode 0) - both bits are 0
 
-    SPI1->CR1 |= SPI_CR1_SPE; // Enable SPI
+    spi1_reset();
+    SPI1->CR1 = s_spi_cr1;
+    SPI1->CR1 |= SPI_CR1_SPE;
 }
 
 void spi_ll_set_fast(void) {
-    // Wait for SPI not busy then disable
-    while (SPI1->SR & SPI_SR_BSY)
-        ;
-    SPI1->CR1 &= ~SPI_CR1_SPE;
-
     // Mode 0, Master, 8-bit, div 4 ~21 MHz (max for SD high speed)
-    SPI1->CR1 = SPI_CR1_MSTR |             // Master mode
+    s_spi_cr1 = SPI_CR1_MSTR |             // Master mode
                 SPI_CR1_BR_0 |             // div 4
                 SPI_CR1_SSM | SPI_CR1_SSI; // Software SS
 
-    SPI1->CR1 |= SPI_CR1_SPE; // Enable SPI
+    spi1_reset();
+    SPI1->CR1 = s_spi_cr1;
+    SPI1->CR1 |= SPI_CR1_SPE;
 }
 
 void spi_ll_cs_low(void) {
+    // Reconfigure SPI1 for SD card before each transaction.
+    // Flow deck (PMW3901) shares SPI1 with different settings and may
+    // have used the bus since our last access. Matches Bitcraze pattern:
+    // csLow() -> spiBeginTransaction() -> spiConfigureWithSpeed().
+    //
+    // NOTE: Full peripheral reset corrupts the MSB of the first byte read
+    // (0xFF reads as 0x7F). Callers that poll for exact 0xFF (busy-wait)
+    // must discard the first byte after cs_low.
+    spi1_reset();
+    SPI1->CR1 = s_spi_cr1;
+    SPI1->CR1 |= SPI_CR1_SPE;
+
+    GPIO_ResetBits(SD_CS_PORT, SD_CS_PIN);
+}
+
+void spi_ll_cs_low_poll(void) {
+    // Lightweight SPI1 reconfigure for byte-by-byte polling.
+    // No RCC reset, so no MSB corruption on first byte read.
+    // Flow deck may have reconfigured SPI1 (1.3 MHz) during our yield,
+    // so we must restore SD card settings (21 MHz). Disable SPE first
+    // per STM32 reference manual before modifying CR1.
+    while (SPI1->SR & SPI_SR_BSY)
+        ;
+    SPI1->CR1 &= ~SPI_CR1_SPE;
+    SPI1->CR1 = s_spi_cr1;
+    SPI1->CR1 |= SPI_CR1_SPE;
+
     GPIO_ResetBits(SD_CS_PORT, SD_CS_PIN);
 }
 
 void spi_ll_cs_high(void) {
+    GPIO_SetBits(SD_CS_PORT, SD_CS_PIN);
+    // Dummy clock with CS high forces MISO to hi-z (multi-slave SPI bus)
+    spi_ll_xfer(0xFF);
+}
+
+void spi_ll_cs_high_no_dummy(void) {
+    // Deassert CS without dummy clock. Used during busy polling where we
+    // yield to the scheduler between polls. Dummy clock after CS high
+    // causes 0x7F reads on the next CS low cycle (MSB corruption from
+    // SPI1 peripheral reset). Matches Bitcraze csHigh(0) pattern.
     GPIO_SetBits(SD_CS_PORT, SD_CS_PIN);
 }
 
@@ -223,16 +278,35 @@ void spi_ll_dma_start(void *buf, uint32_t len, spi_ll_dma_dir_t dir) {
         // No MINC - read same 0xFF byte repeatedly
     }
 
-    // Enable SPI DMA requests
-    SPI1->CR2 |= SPI_CR2_TXDMAEN | SPI_CR2_RXDMAEN;
+    // Enable DMA streams BEFORE SPI DMA requests (Bitcraze order).
+    // If TXDMAEN is set while TXE=1 (SPI idle), SPI generates a DMA
+    // request immediately. The DMA stream must already be enabled to
+    // service it, otherwise the request is lost and DMA never completes.
+    DMA2_Stream0->CR |= DMA_SxCR_EN; // RX first
+    DMA2_Stream3->CR |= DMA_SxCR_EN; // TX second
 
-    // Start RX first (must be ready before TX clocks data out)
-    DMA2_Stream0->CR |= DMA_SxCR_EN;
-    DMA2_Stream3->CR |= DMA_SxCR_EN;
+    // Now enable SPI DMA requests - TX starts clocking immediately
+    SPI1->CR2 |= SPI_CR2_TXDMAEN | SPI_CR2_RXDMAEN;
 }
 
 bool spi_ll_dma_ok(void) {
     return s_dma_complete && !s_dma_error;
+}
+
+bool spi_ll_dma_error(void) {
+    return s_dma_error;
+}
+
+void spi_ll_dma_cleanup(void) {
+    // Wait for SPI to finish shifting the last byte.
+    // STM32 reference manual: "Do not disable the SPI until BSY is cleared"
+    while (SPI1->SR & SPI_SR_BSY)
+        ;
+
+    // Drain any residual RX data left from DMA
+    while (SPI1->SR & SPI_SR_RXNE) {
+        (void)SPI1->DR;
+    }
 }
 
 // ---------------------------------------------------------------------------

@@ -2059,7 +2059,7 @@ denominator across platforms where flash-backed virtual files may not support th
 
 File I/O operations.
 
-> **Note** - File I/O behavior varies by platform. On Linux, operations are synchronous POSIX calls (OS page cache buffers writes, rarely stalls). On STM32, flash files use a ring buffer and SD card files use DMA + scheduler yield (non-blocking). See [File I/O Behavior](design.md#file-io-behavior) for details.
+> **Note** - File I/O behavior varies by platform. On Linux, operations are synchronous POSIX calls (OS page cache buffers writes, rarely stalls). On STM32, flash files use a ring buffer and SD card files use DMA with spin-wait for sector transfers and scheduler yield for card busy-wait. See [File I/O Behavior](design.md#file-io-behavior) for details.
 
 ```c
 hive_status_t hive_file_open(const char *path, int flags, int mode, int *out);
@@ -2137,9 +2137,9 @@ On Linux, these map directly to POSIX equivalents. On STM32, they're interpreted
 
 **STM32 SD Card** (`/sd/*`)
 - Full FatFS filesystem (FAT12/16/32) via SPI
-- Non-blocking: sector transfers use DMA + scheduler yield
-- Card busy-wait yields via periodic timer polling (1ms intervals)
-- Other actors run during SD card writes (flight-critical loops unaffected)
+- Sector transfers use DMA with spin-wait (~24us per 512 bytes at 21 MHz)
+- Card busy-wait (10-250ms) yields via hive_sleep() with 1ms polls
+- Brief DMA spin-wait does not impact 250 Hz control loops
 - Requires `ENABLE_SD=1` build flag and board-specific `spi_ll_sd.c`
 
 **Write Behavior Summary**
@@ -2148,7 +2148,7 @@ On Linux, these map directly to POSIX equivalents. On STM32, they're interpreted
 |----------|----------|------------------|
 | Linux | Synchronous POSIX | OS-buffered, rarely stalls |
 | STM32 flash | Ring buffer, blocks when full | Brief stall on buffer flush |
-| STM32 SD card | DMA + yield | Non-blocking (actors run during transfer) |
+| STM32 SD card | DMA spin-wait + busy yield | Spin-wait ~24us per sector, busy-wait yields |
 
 **STM32 API Restrictions**
 

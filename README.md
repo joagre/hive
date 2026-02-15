@@ -135,7 +135,7 @@ Actors run until they **yield** - there is no preemption. Operations that yield:
 | `hive_tcp_*()` | |
 | `hive_exit()` | |
 
-**File I/O** (`hive_file_*`) behavior varies by platform. On Linux, file operations are synchronous POSIX calls (OS page cache buffers writes, rarely stalls). On STM32, flash files use a ring buffer and SD card files use DMA + scheduler yield (non-blocking). See [docs/spec/design.md](docs/spec/design.md#file-io-behavior) for details.
+**File I/O** (`hive_file_*`) behavior varies by platform. On Linux, file operations are synchronous POSIX calls (OS page cache buffers writes, rarely stalls). On STM32, flash files use a ring buffer and SD card files use DMA with spin-wait for sector transfers and scheduler yield for card busy-wait. See [docs/spec/design.md](docs/spec/design.md#file-io-behavior) for details.
 
 ## Performance
 
@@ -366,7 +366,7 @@ hive_timer_cancel(periodic);
 ### File and TCP
 
 ```c
-// File I/O (Linux: synchronous POSIX, STM32 SD: non-blocking DMA + yield)
+// File I/O (Linux: synchronous POSIX, STM32 SD: DMA spin-wait + busy yield)
 int fd;
 hive_status_t status = hive_file_open("test.txt", HIVE_O_RDWR | HIVE_O_CREAT, 0644, &fd);
 if (HIVE_FAILED(status)) {
@@ -700,9 +700,9 @@ operations rarely stall the scheduler in practice.
 Most writes complete immediately. When the buffer fills up, `write()` blocks to flush data to
 flash before continuing. Virtual file paths are hardcoded (`/log`, `/config`), enabled by defining their flash layout:
 
-**STM32 SD Card** - SD card files (`/sd/*`) use DMA + scheduler yield. Sector transfers run
-via DMA while other actors execute. Card busy-wait yields via periodic timer polling. This
-makes SD card I/O non-blocking - flight-critical actors keep running during writes.
+**STM32 SD Card** - SD card files (`/sd/*`) use DMA with spin-wait for sector transfers
+(~24us per 512 bytes at 21 MHz). Card busy-wait after writes (10-250ms) yields via
+hive_sleep() with 1ms polls. The brief DMA spin-wait does not impact 250 Hz control loops.
 ```c
 -DHIVE_VFILE_LOG_BASE=0x08020000   // Enables "/log" at this flash address
 -DHIVE_VFILE_LOG_SIZE=131072       // Size in bytes (128KB)
@@ -803,7 +803,7 @@ See `man hive_select` for details.
 The runtime is **completely single-threaded**. All actors run cooperatively in a single scheduler thread with zero synchronization primitives (no mutexes, atomics, or locks).
 
 - **Linux** - `epoll` for timers and TCP; synchronous file I/O (OS-buffered)
-- **STM32** - Hardware timers, WFI for idle, flash ring buffer, SD card DMA + yield
+- **STM32** - Hardware timers, WFI for idle, flash ring buffer, SD card DMA spin-wait
 
 All runtime APIs must be called from actor context. External threads must use platform IPC (sockets/pipes) with dedicated reader actors.
 

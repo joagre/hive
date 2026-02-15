@@ -6,9 +6,9 @@
 // Flash mounts configured via -D flags in Makefile.crazyflie-2.1plus:
 //   HIVE_VFILE_LOG_BASE, HIVE_VFILE_LOG_SIZE, HIVE_VFILE_LOG_SECTOR
 //
-// SD card deck configuration:
-//   SPI3 (PB3=SCK, PB4=MISO, PB5=MOSI)
-//   CS: PB6
+// SD card deck shares SPI1 with flow deck (PA5/PA6/PA7), CS on PC12.
+// NOTE: The SPI/CS config below is for the mount table API but is currently
+// ignored by spi_sd_configure() - actual pin config is in spi_ll_sd.c.
 //
 // Reference: https://www.bitcraze.io/products/micro-sd-card-deck/
 
@@ -20,11 +20,11 @@
 // Crazyflie Micro SD Card Deck Configuration
 // ----------------------------------------------------------------------------
 
-// SD card deck uses SPI3 with CS on PB6
+// SD card deck uses SPI1 with CS on PC12
 // Port numbering: 0=GPIOA, 1=GPIOB, 2=GPIOC, 3=GPIOD
-#define CF_SD_SPI_ID 3  // SPI3
-#define CF_SD_CS_PORT 1 // GPIOB
-#define CF_SD_CS_PIN 6  // Pin 6
+#define CF_SD_SPI_ID 1  // SPI1
+#define CF_SD_CS_PORT 2 // GPIOC
+#define CF_SD_CS_PIN 12 // Pin 12
 
 // ----------------------------------------------------------------------------
 // Mount Table

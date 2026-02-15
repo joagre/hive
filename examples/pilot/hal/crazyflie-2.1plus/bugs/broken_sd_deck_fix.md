@@ -90,6 +90,7 @@ git checkout -- src/deck/backends/deck_backend_onewire.c
 ## Prevention
 
 The fix in commit c29eabe prevents this from recurring. The dma_xfer()
-function in src/hal/stm32/spi_sd.c checks in_actor_context() and falls
-back to byte-by-byte SPI when called before the scheduler starts. DMA
-hardware is never started outside actor context.
+function in src/hal/stm32/spi_sd.c checks whether DMA has been
+initialized (s_dma_event != HIVE_HAL_EVENT_INVALID) and falls back to
+byte-by-byte SPI when called before spi_sd_configure(). DMA hardware
+is never started outside actor context.

@@ -463,7 +463,7 @@ if (no_runnable_actors) {
 **File I/O**
 - Linux: synchronous POSIX (OS page cache buffers writes, rarely stalls)
 - STM32 flash: ring buffer (fast writes, blocks when buffer full)
-- STM32 SD card: non-blocking via DMA + scheduler yield (actors run during transfer)
+- STM32 SD card: DMA spin-wait for sector transfers (~24us), scheduler yield for card busy-wait
 - See [File I/O Behavior](design.md#file-io-behavior) for details
 
 ### Advantages
@@ -486,7 +486,7 @@ The runtime uses a Hardware Abstraction Layer (HAL) to isolate platform-specific
 | Event notification | epoll | WFI + interrupt flags |
 | Timer | timerfd + epoll | Software timer wheel (SysTick/TIM) |
 | TCP | Non-blocking BSD sockets + epoll | Stubs (future lwIP support) |
-| File | Synchronous POSIX (OS-buffered) | Flash ring buffer + SD card DMA yield |
+| File | Synchronous POSIX (OS-buffered) | Flash ring buffer + SD card DMA spin-wait |
 
 ### HAL Headers
 

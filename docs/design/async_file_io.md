@@ -1,7 +1,8 @@
-# Async File I/O Design
+# SD Card DMA File I/O
 
-Non-blocking file I/O for the Hive actor runtime, targeting SD card writes
-on STM32 that currently block the scheduler.
+DMA-based SD card I/O for the Hive actor runtime on STM32. Sector data
+transfers use DMA with spin-wait for speed, card busy-wait yields to the
+scheduler so flight-critical actors keep running.
 
 ## Problem
 
@@ -11,342 +12,191 @@ FatFS -> SPI. SD cards have unpredictable write latency (50-250ms+ spikes
 from internal garbage collection). During this time, no other actor can run -
 including flight-critical control loops that need the CPU every 4ms.
 
-This caused a crash during flight test 9: the logger and hive log system
-generated hundreds of SD card writes per second, an SD latency spike blocked
-the scheduler for 108ms, the motor deadman timeout fired, and the drone
-flipped at 0.35m altitude.
+## Solution
 
-### Current write paths
+Two separate optimizations in `spi_sd.c`:
 
-**Flash files** (`/log`, `/config`) - Already non-blocking for common case:
+1. **DMA bulk transfer with spin-wait** - 512-byte sector data uses DMA
+   instead of byte-by-byte SPI. DMA is ~23x faster (24us vs 700us per block
+   at 21 MHz). The CPU spin-waits for the ~24us transfer - too short to
+   benefit from a context switch.
+
+2. **Yielding busy-wait** - After the card receives data, it may take
+   10-250ms to program internal flash. During this time, the driver yields
+   to the scheduler via `hive_sleep()` with 1ms polls, letting other actors
+   run.
+
+### Write flow
+
 ```
-hive_file_write() -> ring_push() [8KB RAM buffer, microseconds]
-                  -> staging_commit() [256B flash write, ~1-2ms, only when full]
-```
-
-The flash ring buffer exists because of flash-specific constraints: sector
-erase is slow, programming must run from RAM with interrupts disabled. The
-ring buffer decouples write frequency from flash programming frequency. This
-is the right design for flash but is not a general I/O pattern.
-
-**SD card files** (`/sd/*`) - Fully synchronous, no buffering:
-```
-hive_file_write() -> f_write() [FatFS] -> disk_write() [SPI] -> hardware
-                     entire call blocks scheduler for duration of SPI transfer
-```
-
-**Linux files** - Synchronous POSIX I/O, but the OS kernel buffers writes in
-page cache. Rarely blocks in practice. No changes needed.
-
-## Design
-
-DMA + yield in the SPI SD driver (STM32 only). Make SPI transfers
-non-blocking by yielding to the scheduler during DMA.
-
-No ring buffer needed for SD:
-- On Linux, the OS page cache already buffers writes
-- On STM32, DMA + yield makes the SPI transfer itself non-blocking
-- FatFS has its own internal sector cache for small writes
-- Adding a ring buffer would be buffering on top of buffering
-
-### Where the yield goes
-
-The call chain is:
-```
-hive_file_write() -> f_write() [FatFS] -> disk_write() [diskio.c]
-    -> spi_sd_write_blocks() [spi_sd.c] -> spi_send(buf, 512) [blocking]
-                                         -> wait_ready()       [blocking]
+spi_sd_write_blocks():
+    spi_ll_lock()                    acquire SPI bus
+    spi_ll_cs_low()                  assert CS (full SPI reset)
+    send_cmd(CMD24, addr)            command bytes (byte-by-byte)
+    spi_ll_xfer(0xFE)                data token
+    spi_ll_dma_start(buf, 512, TX)   start DMA
+    spin-wait ~24us                  poll spi_ll_dma_ok()
+    spi_ll_dma_cleanup()             wait BSY, drain RX FIFO
+    spi_ll_xfer(CRC)                 2 CRC bytes
+    spi_ll_xfer(0xFF)                read data response
+    spi_ll_cs_high()                 deassert CS
+    spi_ll_unlock()                  release SPI bus
+    wait_ready_yield():              card programming (10-250ms)
+        lock, cs_low_poll, read byte
+        while busy:
+            cs_high, unlock
+            hive_sleep(1ms)          YIELD - other actors run here
+            lock, cs_low_poll, read byte
+        cs_high, unlock
 ```
 
-The blocking happens inside `spi_sd.c`, not `diskio.c`. The SD protocol
-requires sending commands, data tokens, CRC bytes, and polling busy status -
-all of which live in `spi_sd.c`. The DMA replaces `spi_send(buf, 512)` and
-`spi_recv(buf, 512)` calls, and the yield replaces the `wait_ready()` busy
-loop. `diskio.c` and FatFS are unchanged.
+FatFS and `diskio.c` are unchanged. The yield is invisible to them.
 
-### DMA + yield in spi_sd
+### Read flow
 
-**Modified SPI SD driver:**
-```c
-// src/hal/stm32/spi_sd.c - inside spi_sd_write_blocks()
+Same pattern: DMA spin-wait for the 512-byte data, no card busy-wait needed
+after reads.
 
-// Instead of byte-by-byte: spi_send(buf, 512)
-// Start DMA transfer (returns immediately)
-spi_ll_dma_start(buf, 512, SPI_LL_DIR_TX);
+## DMA hardware (Crazyflie 2.1+)
 
-// Yield to scheduler - other actors run while DMA transfers data
-hive_event_wait(s_dma_event, SD_TIMEOUT_MS);
+SD card uses SPI1 (shared with Flow Deck PMW3901):
 
-// DMA complete - check result
-if (!spi_ll_dma_ok()) {
-    spi_ll_cs_high();
-    return -1;
-}
-```
-
-**How it works:**
-1. `spi_sd_write_blocks()` sends the SD command and data token (byte-by-byte,
-   ~10 bytes - fast)
-2. `spi_ll_dma_start()` starts DMA for the 512-byte sector data
-3. DMA runs autonomously on the SPI1 peripheral (no CPU involvement)
-4. `hive_event_wait()` yields the current actor to the scheduler
-5. The scheduler runs other actors (sensor, estimator, altitude, etc.)
-6. When DMA completes, the SPI1 RX DMA ISR calls `hive_hal_event_signal()`
-7. The scheduler wakes the yielded actor
-8. `spi_sd_write_blocks()` sends CRC, checks response, and waits for card
-   ready (also yielding)
-
-**Key insight:** FatFS and diskio.c don't change. The yield is invisible to
-them - `spi_sd_write_blocks()` still returns 0 or -1. The scheduler ran
-flight-critical actors during the DMA transfer.
-
-### DMA hardware (Crazyflie 2.1+)
-
-SD card uses SPI1 (shared with Flow Deck):
-- PA5 = SCK, PA6 = MISO, PA7 = MOSI, PC12 = CS
-
-SPI is full-duplex, so both TX and RX DMA streams must run for every
-transfer. For writes, TX sends actual data and RX captures discarded bytes.
-For reads, TX sends 0xFF and RX captures data.
-
-**DMA2 stream allocation on STM32F405:**
 | Stream | Channel | Usage |
 |--------|---------|-------|
 | DMA2 Stream 0 | Ch 3 | SPI1_RX (SD card) |
-| DMA2 Stream 2 | Ch 5 | USART6_RX (syslink - already in use) |
 | DMA2 Stream 3 | Ch 3 | SPI1_TX (SD card) |
 
-No conflicts. Stream 2 is syslink, streams 0 and 3 are free.
+SPI is full-duplex: both TX and RX DMA streams run for every transfer.
+For writes, TX sends data and RX discards. For reads, TX sends 0xFF and
+RX captures data. The RX stream ISR signals completion (RX finishes after
+TX, so RX complete = transfer done).
 
-**ISR integration:**
-```c
-// SPI1 RX DMA complete ISR (DMA2 Stream 0)
-// RX completes after TX, so this signals "transfer done"
-void DMA2_Stream0_IRQHandler(void) {
-    if (DMA2->LISR & DMA_LISR_TCIF0) {
-        DMA2->LIFCR = DMA_LIFCR_CTCIF0;            // Clear flag
-        hive_hal_event_signal(s_sd_dma_event_id);   // Wake actor
-    }
-}
-```
+## Quirks and lessons learned
 
-`hive_hal_event_signal()` is already ISR-safe (single 32-bit store on ARM
-Cortex-M). This uses the existing HAL event mechanism - no new primitives.
+### DMA enable order (critical)
 
-**Reads use the same pattern.** DMA + yield for reads too. This makes log
-download via radio non-blocking as well.
+DMA streams MUST be enabled BEFORE setting SPI CR2 TXDMAEN/RXDMAEN.
 
-### SPI bus locking during DMA
-
-On the Crazyflie 2.1+, the SD card and Flow Deck (PMW3901) share SPI1.
-Two separate code paths access the same peripheral:
-
-- **SD card** - `spi_ll_sd.c:spi_ll_xfer()` -> SPI1->DR, CS on PC12
-- **Flow deck** - `platform.c:spi1_transfer()` -> SPI1->DR, CS on PB4
-
-Today this works because cooperative scheduling means only one actor
-touches SPI1 at a time - no yield occurs during an SPI transfer. DMA +
-yield breaks this: the logger starts a DMA transfer on SPI1, yields, the
-sensor actor runs at CRITICAL priority, and tries to read the flow deck
-via SPI1. Both devices selected, both driving MISO - corrupted data.
-
-Fix: add a simple boolean flag to the spi_ll interface.
+When SPI is idle, TXE=1. Setting TXDMAEN while TXE=1 causes SPI to
+immediately generate a DMA request. If the DMA stream is not yet enabled,
+the request is lost and DMA never completes (timeout).
 
 ```c
-// In spi_ll.h
-void spi_ll_lock(void);        // Set flag (no yield, always succeeds)
-void spi_ll_unlock(void);      // Clear flag
-bool spi_ll_is_locked(void);   // Check flag
+// Correct (matches Bitcraze firmware):
+DMA2_Stream0->CR |= DMA_SxCR_EN;  // RX stream first
+DMA2_Stream3->CR |= DMA_SxCR_EN;  // TX stream second
+SPI1->CR2 |= SPI_CR2_TXDMAEN | SPI_CR2_RXDMAEN;  // Now safe
+
+// WRONG - causes DMA timeout:
+SPI1->CR2 |= SPI_CR2_TXDMAEN | SPI_CR2_RXDMAEN;  // Request fires NOW
+DMA2_Stream0->CR |= DMA_SxCR_EN;  // Too late, request lost
+DMA2_Stream3->CR |= DMA_SxCR_EN;
 ```
 
-The SD DMA path sets the lock before starting DMA and clears it after
-the actor wakes up. The flow deck driver checks the lock before reading:
+### Spin-wait, not yield, during DMA
+
+The original design used `hive_event_wait()` to yield during the ~24us DMA
+transfer. This caused dresp=0x00 errors (card rejecting writes) and DMA
+timeouts. The exact mechanism was never identified - the flow deck properly
+checks the bus lock and skips SPI access when locked - but yielding during
+DMA consistently corrupted the SPI transaction.
+
+Since 512 bytes at 21 MHz takes only ~24us, yielding provides no meaningful
+benefit. Spin-waiting is the correct approach. The scheduler gets its time
+during the much longer card busy-wait phase (10-250ms).
+
+### SPI bus locking scope
+
+The bus must be locked for the ENTIRE SD card transaction (command + data +
+CRC + response), not just during the DMA transfer. The flow deck sensor
+actor runs at 250 Hz and shares SPI1. If it accesses SPI1 between the DMA
+transfer and the data response read, it corrupts the SD card's response.
 
 ```c
-// In platform.c - hal_flow_read()
-if (spi_ll_is_locked())
-    return false;  // SPI busy with SD DMA, skip this cycle
-pmw3901_read_motion(&s_pmw3901_dev, delta_x, delta_y);
+// Correct - lock covers entire transaction:
+spi_ll_lock();
+spi_ll_cs_low();
+send_cmd(CMD24, addr);
+dma_xfer(buf, 512, TX);    // DMA spin-wait
+spi_ll_xfer(CRC);
+resp = spi_ll_xfer(0xFF);  // data response, still locked
+spi_ll_cs_high();
+spi_ll_unlock();
+
+// WRONG - flow deck can corrupt response:
+send_cmd(CMD24, addr);
+spi_ll_lock();
+dma_xfer(buf, 512, TX);
+spi_ll_unlock();            // flow deck runs here
+resp = spi_ll_xfer(0xFF);  // reads garbage
 ```
 
-No yield, no blocking - just skip. Missing one flow reading every ~120ms
-(once per sector flush, ~195us DMA transfer) is completely harmless for
-the estimator. The cooperative scheduler guarantees no race: if the sensor
-actor is running, the logger has already yielded and the lock state is
-stable.
+### SPI1 peripheral reset (RCC) vs lightweight reconfigure
 
-During the busy-wait phase, CS management is important. The current code
-holds SD CS low for the entire wait_ready() loop. With timer-based polling,
-we deassert CS between polls so the flow deck can use SPI1 freely. SD cards
-track busy state internally - reasserting CS and clocking 0xFF still reads
-the correct busy/ready status. Each poll briefly locks the bus (~0.4us for
-one `spi_ll_xfer()`). Between polls the bus is free for the flow deck.
+Two ways to reconfigure SPI1 after the flow deck has used it:
 
-```
-DMA transfer:  lock -> CS low -> DMA 512 bytes -> CS high -> unlock
-Busy poll:     lock -> CS low -> xfer(0xFF) -> CS high -> unlock -> sleep 1ms
-               ... flow deck reads SPI freely between polls ...
-```
+- **`spi_ll_cs_low()`** - Full RCC peripheral reset. Clears all SPI1
+  registers and FIFOs. Required before DMA transfers (clean slate). Side
+  effect: corrupts MSB of first byte READ (0xFF reads as 0x7F). Callers
+  that poll for exact 0xFF must discard the first byte.
 
-### Typical write flow during flight
+- **`spi_ll_cs_low_poll()`** - Disables SPE, writes CR1, re-enables SPE.
+  No RCC reset, no MSB corruption. Used during busy polling between yields.
+  NOT safe for DMA (stale FIFO state can cause DMA errors).
+
+### Busy-wait CS management
+
+During `wait_ready_yield()`, CS is deasserted between polls so the flow
+deck can use SPI1 freely during the 1ms sleep:
 
 ```
-Logger actor (LOW priority, every 40ms):
-    hive_file_write(csv_line, ~150 bytes)
-        -> f_write() [FatFS buffers in sector cache]
-        -> if sector full:
-            -> disk_write(sector) [diskio.c, unchanged]
-                -> spi_sd_write_blocks() [spi_sd.c]
-                    -> send CMD24 + data token [byte-by-byte, ~10 bytes]
-                    -> spi_ll_lock()                [acquire SPI bus]
-                    -> spi_ll_dma_start(buf, 512)   [starts DMA, ~1 us]
-                    -> hive_event_wait()            [yields to scheduler]
-                        ... sensor_actor runs (CRITICAL) ...
-                        ... flow deck skips SPI (bus locked, ~195us) ...
-                        ... estimator, altitude, rate, motor run ...
-                    -> DMA2 Stream 0 ISR signals event
-                    -> spi_ll_unlock()              [release SPI bus]
-                    -> actor wakes, sends CRC, checks response
-                    -> wait_ready() with hive_timer_every() poll
-                        ... other actors run between 1ms polls ...
-                        ... flow deck reads SPI normally ...
-                    -> card ready, return 0
-        -> return HIVE_SUCCESS
+poll:  lock -> cs_low_poll -> discard byte -> read byte -> cs_high -> unlock
+sleep: hive_sleep(1ms)  [flow deck reads SPI1 here]
+poll:  lock -> cs_low_poll -> discard byte -> read byte -> ...
 ```
 
-The control loop runs uninterrupted at 250Hz. SD card writes happen in the
-background, sector by sector, with the scheduler running other actors between
-each sector transfer. Even SD card latency spikes (100ms+) are harmless -
-the logger actor simply stays yielded longer while flight-critical actors
-keep running.
+The discard byte after `cs_low_poll` is necessary because the SPE toggle
+during reconfigure leaves a stale byte in the SPI receive buffer.
 
-### SD card busy-wait after DMA
+CS high uses `spi_ll_cs_high_no_dummy()` (no dummy clock) to avoid clock
+glitches that cause MSB corruption on the next `cs_low_poll` cycle.
 
-SD cards have two sources of latency:
-1. **SPI transfer** - Moving bytes over the bus. DMA handles this.
-2. **Card-internal write** - After receiving data, the card may take up to
-   250ms to program its internal flash (wear leveling, garbage collection).
-   During this time, the card holds MISO low (busy signal).
+### Pre-scheduler fallback
 
-The current SPI driver clocks 0xFF bytes in a tight loop, checking if the
-response is 0xFF (card ready). With DMA yield, this busy-wait must also
-yield to the scheduler so other actors can run during the wait.
+Before the scheduler starts (FatFS mount, initial f_open), `dma_xfer()`
+checks if DMA has been initialized. If not, it falls back to synchronous
+byte-by-byte. `wait_ready_yield()` checks `in_actor_context()` and falls
+back to tight polling (no yield, no bus locking needed since no other actor
+is running).
 
-Poll every 1ms using `hive_timer_every()`, clocking one byte per poll:
-```c
-#define SD_BUSY_POLL_INTERVAL_US 1000  // 1ms between polls
-#define SD_BUSY_TIMEOUT_MS       500   // 500ms max busy time
+### SD card power cycle requirement
 
-hive_timer_id_t poll_timer;
-hive_timer_every(SD_BUSY_POLL_INTERVAL_US, &poll_timer);
-while (spi_ll_xfer(0xFF) != 0xFF) {
-    hive_status_t s = hive_timer_recv(poll_timer, &msg, SD_BUSY_TIMEOUT_MS);
-    if (HIVE_FAILED(s)) {
-        hive_timer_cancel(poll_timer);
-        return -1;  // Timeout - card stuck
-    }
-}
-hive_timer_cancel(poll_timer);
-```
+The SD card retains state across MCU resets (st-flash). Failed writes can
+put the card in an unrecoverable state. Recovery requires a physical power
+cycle (battery disconnect for 10+ seconds). The init sequence includes an
+aggressive recovery: 2048-byte flush with CS low, CMD12, 1024 clocks with
+CS high, and up to 20 CMD0 retries.
 
-Predictable overhead (~1ms granularity), uses existing timer primitive.
-Worst case during a 250ms spike: 250 polls, each yielding for 1ms while
-other actors run.
+### Data response 0x00
 
-**Alternatives rejected:**
+A data response of 0x00 (all zeros) after a write means the card is pulling
+MISO low. This is NOT a valid data response token (valid tokens have bit 0
+set: 0x05=accepted, 0x0B=CRC error, 0x0D=write error). It indicates the SPI
+bus was corrupted during the transaction, typically from the flow deck
+reconfiguring SPI1 mid-transaction or from yielding during DMA.
 
-*hive_yield() loop* - Polls as fast as the scheduler reschedules. Works for
-the pilot (250Hz = ~4ms between polls) but in applications with few or fast
-actors, spins at a very high rate for up to 250ms. Not appropriate for a
-general-purpose runtime.
+### Write retry logic
 
-*EXTI interrupt on MISO* - The SD busy signal is read by clocking 0xFF
-through SPI, not by passively monitoring the GPIO level. Using EXTI would
-require reconfiguring the pin from SPI alternate function to GPIO input
-mid-transfer, or relying on underdocumented EXTI behavior with AF-mode
-pins. Fragile, board-specific, and unnecessary.
+Single-block writes retry up to 3 times on data response failure. Recovery
+between retries: deassert CS, wait for card ready via `wait_ready_yield()`,
+then re-send the entire command + data block. No extra clocking with CS low
+during recovery (that can put the card in an unrecoverable state).
 
-## Implementation Plan
+## Files
 
-### Step 1 - DMA bulk transfer in spi_ll
-
-Add DMA bulk transfer functions to the SPI low-level interface. These
-replace byte-by-byte `spi_send()`/`spi_recv()` for 512-byte sector data.
-
-Files to modify:
-- `src/hal/stm32/spi_ll.h` - Add `spi_ll_dma_init()`, `spi_ll_dma_start()`,
-  `spi_ll_dma_ok()`, `spi_ll_lock()`, `spi_ll_unlock()` to low-level SPI
-  interface
-- `examples/pilot/hal/crazyflie-2.1plus/spi_ll_sd.c` - Implement DMA
-  using DMA2 Stream 0 (SPI1_RX) and DMA2 Stream 3 (SPI1_TX), add ISR
-
-DMA streams are board-specific (depends on which SPI peripheral the SD card
-is on and which DMA streams are free). On the Crazyflie 2.1+, SD card uses
-SPI1 and syslink already uses DMA2 Stream 2, leaving Stream 0 and Stream 3
-free for SPI1.
-
-### Step 2 - DMA + yield in spi_sd
-
-Replace blocking byte loops with DMA start + yield in the SD protocol layer.
-
-Files to modify:
-- `src/hal/stm32/spi_sd.c` - Replace `spi_send(buf, 512)` and
-  `spi_recv(buf, 512)` with `spi_ll_dma_start()` + `hive_event_wait()`.
-  Replace `wait_ready()` tight loop with `hive_timer_every()` +
-  `hive_timer_recv()` poll loop.
-
-This is the core change. The SD protocol (commands, tokens, CRC) stays
-byte-by-byte. Only the 512-byte sector data transfers use DMA. The
-`wait_ready()` busy loop becomes a periodic timer poll so other actors
-run during card-internal write latency (up to 250ms).
-
-`diskio.c` is unchanged - it calls `spi_sd_write_blocks()` /
-`spi_sd_read_blocks()` which now yield internally.
-
-### Step 3 - Testing
-
-- Bench test: verify DMA transfers complete correctly (ground test mode)
-- Timing test: measure scheduler latency during SD writes with stack
-  watermarking
-- Flight test: FIRST_TEST profile + SD logging, verify no deadman timeouts
-- Stress test: rapid logging at maximum rate, verify no data corruption
-
-### Step 4 - Documentation update
-
-SD card file I/O is no longer blocking. Many places in the documentation
-warn about file I/O stalling the scheduler and recommend LOW priority actors
-for file work. After DMA yield, SD writes on STM32 yield cooperatively like
-any other blocking call (`hive_ipc_recv`, `hive_event_wait`). Linux file I/O
-is still synchronous POSIX but rarely blocks in practice (OS page cache).
-
-The "file I/O is synchronous" framing changes to: file I/O is non-blocking
-on STM32 (DMA + yield for SD, ring buffer for flash) and synchronous on
-Linux (OS-buffered, rarely stalls).
-
-Files to update:
-- `CLAUDE.md` - File subsystem description (line 155: "Synchronous POSIX
-  I/O (briefly pauses scheduler)"), man page description (line 35:
-  "Synchronous file I/O"), platform differences (line 569)
-- `README.md` - File I/O note (line 138: "synchronous and briefly stalls
-  the scheduler"), code example comment (line 369)
-- `docs/spec/api.md` - File API note (line 2062: "synchronous and briefly
-  pauses the scheduler"), STM32 behavior (line 2117), sync description
-  (line 2135)
-- `docs/spec/design.md` - LOW priority recommendation (line 468)
-- `docs/spec/internals.md` - Platform differences table (line 489:
-  "Synchronous POSIX")
-- `man/man3/hive_file.3` - Blocking note (line 23), scheduler stall
-  description (line 163)
-
-## Constraints
-
-- **No heap allocation** - All DMA descriptors and buffers are static
-- **No new runtime primitives** - Uses existing HAL events and
-  `hive_event_wait()`
-- **Backward compatible** - `hive_file_write()` API unchanged
-- **Flash path unchanged** - Already has ring buffer, no modification needed
-- **Linux path unchanged** - OS page cache handles buffering, no DMA needed
-- **Single SPI bus** - Only one actor can do SD I/O at a time (logger owns
-  the SD file descriptors)
-- **FatFS unchanged** - No modifications to FatFS source
-- **diskio unchanged** - All changes are in spi_sd.c and spi_ll_sd.c
+| File | Role |
+|------|------|
+| `src/hal/stm32/spi_sd.c` | SD protocol, DMA spin-wait, busy-wait yield |
+| `src/hal/stm32/spi_ll.h` | Low-level SPI interface (board BSP contract) |
+| `examples/pilot/hal/crazyflie-2.1plus/spi_ll_sd.c` | SPI1 + DMA2 implementation, ISR |
+| `lib/fatfs/diskio.c` | FatFS disk I/O (unchanged, calls spi_sd) |

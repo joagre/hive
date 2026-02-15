@@ -424,7 +424,7 @@ Each blocking TCP request has an implicit state: `PENDING` -> `COMPLETED` or `TI
 - New request from same actor gets fresh epoll state
 
 **Note** - This serialization model does NOT apply to:
-- **File I/O**: On Linux, stalls scheduler synchronously. On STM32, SD card I/O yields via DMA (see [File I/O Behavior](#file-io-behavior))
+- **File I/O**: On Linux, stalls scheduler synchronously. On STM32, SD card DMA uses spin-wait; card busy-wait yields (see [File I/O Behavior](#file-io-behavior))
 
 **Predictability guarantee**
 
@@ -462,16 +462,16 @@ complete immediately by copying to the ring buffer. When the buffer fills up,
 `write()` blocks to flush data to flash. `hive_file_sync()` drains the ring
 buffer (blocking). Flash sector erase on `HIVE_O_TRUNC` blocks for 1-4 seconds.
 
-**STM32 SD card** (`/sd/*`) - Non-blocking via DMA + scheduler yield. Sector
-data transfers (512 bytes) run via DMA on the SPI peripheral while the scheduler
-runs other actors. After each write, the card busy-wait uses periodic timer
-polling (1ms intervals), yielding between polls. Flight-critical actors run
-uninterrupted during SD card writes. See `docs/design/async_file_io.md` for the
-full design.
+**STM32 SD card** (`/sd/*`) - Sector data transfers (512 bytes) use DMA with
+spin-wait (~24us at 21 MHz, too short to benefit from a context switch). After
+each write, the card busy-wait (10-250ms) yields via `hive_sleep()` with 1ms
+polls, allowing other actors to run. The brief DMA spin-wait does not
+meaningfully impact 250 Hz control loops. See `docs/design/async_file_io.md`
+for the full design.
 
 **Best practices**
 - Linux and flash: use `HIVE_PRIORITY_LOW` actors for file work, keep operations short
-- SD card: safe at any priority (yields cooperatively like `hive_ipc_recv`)
+- SD card: safe at any priority (DMA spin-wait is ~24us; card busy-wait yields cooperatively)
 - Initialization/shutdown: file I/O is fine at any priority
 
 **Avoid** - Flash file I/O from `HIVE_PRIORITY_CRITICAL` actors in tight control loops (flash writes can block when the ring buffer is full).

@@ -653,6 +653,9 @@ static hive_status_t sd_open(const hive_mount_t *mount, const char *subpath,
     BYTE mode = hive_flags_to_fatfs(flags);
     FRESULT res = f_open(&s_sd_files[slot], subpath, mode);
     if (res != FR_OK) {
+        extern void platform_debug_printf(const char *fmt, ...);
+        platform_debug_printf("[SD] f_open(%s) = FR_%d mode=0x%02X\n", subpath,
+                              (int)res, mode);
         if (res == FR_NO_FILE || res == FR_NO_PATH) {
             return HIVE_ERROR(HIVE_ERR_INVALID, "file not found");
         }

@@ -45,7 +45,7 @@ hundreds of synchronous SPI writes per second. An SD card latency spike
 The drone flipped and crashed.
 
 The tuning parameters were never tested in actual hover. Retained for next
-flight after fixing the SD card write path (ring buffer + DMA yield).
+flight after fixing the SD card write path (ring buffer + DMA spin-wait).
 
 ---
 

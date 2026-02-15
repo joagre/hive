@@ -49,9 +49,12 @@ make -f Makefile.crazyflie-2.1plus clean
 
 **CRITICAL:** st-flash leaves CPU halted. You MUST run st-trace.sh after every flash.
 
+**ST-Link tools location:** `local/stlink/build/bin/` (st-flash, st-trace, st-info)
+
 ```bash
-# Flash firmware
-make -f Makefile.crazyflie-2.1plus flash
+# Flash firmware (use full path - st-flash is not in PATH)
+local/stlink/build/bin/st-flash --connect-under-reset write \
+  examples/pilot/build_crazyflie-2.1plus/pilot_crazyflie-2.1plus.bin 0x8000000
 
 # MANDATORY: Reset CPU and view debug output
 ./tools/st-trace.sh -t 30    # 30s timeout
@@ -242,6 +245,13 @@ The nRF51 is PRX (receiver), Crazyradio is PTX (transmitter):
 - `0x20` - GO command (start flight)
 - `0x30-0x32` - Parameter tuning (set, get, list)
 - `0x33-0x35` - Parameter responses (ack, value, list chunk)
+
+## Local Dependencies
+
+Paths are relative to repo root (`/home/jocke/projects/hive`):
+
+- `local/stlink/build/bin/` - ST-Link tools (st-flash, st-trace, st-info)
+- `local/crazyflie-firmware/` - Bitcraze firmware source (reference for deck drivers, SPI config)
 
 ## Documentation
 

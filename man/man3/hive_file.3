@@ -25,7 +25,7 @@ Synchronous POSIX I/O. OS page cache buffers writes, rarely stalls scheduler.
 (/log, /config): Ring buffer for writes, blocks when buffer full.
 .IP \(bu 2
 .B STM32 SD card
-(/sd/*): Non-blocking via DMA + scheduler yield. Other actors run during transfers.
+(/sd/*): DMA with spin-wait for sector transfers, scheduler yield for card busy-wait.
 .PP
 .SS Opening and Closing Files
 .BR hive_file_open ()
@@ -170,15 +170,15 @@ page cache buffers writes so stalls are rare. Flash writes block only when the
 ring buffer is full.
 .PP
 .B STM32 SD card:
-SD card I/O is non-blocking. Sector data transfers use DMA with scheduler yield
-(other actors run during the SPI transfer). Card busy-wait uses periodic timer
-polling (1ms intervals), also yielding. SD card file I/O is safe at any actor
-priority.
+SD card sector transfers use DMA with spin-wait (~24us per 512 bytes at 21 MHz).
+Card busy-wait after writes (10-250ms for wear leveling) yields via hive_sleep()
+with 1ms polls, allowing other actors to run. SD card file I/O is safe at any
+actor priority.
 .SS Safety-Critical Usage
 For autopilot and other safety-critical applications:
 .IP \(bu 2
 .B SD card logging:
-Safe during flight (non-blocking DMA yield)
+Safe during flight (brief spin-wait for DMA, yields during card busy)
 .IP \(bu 2
 .B Flash file I/O:
 Restrict to initialization, shutdown, or LOW priority actors
@@ -259,14 +259,14 @@ are accessed through the
 .B /sd
 mount point.
 .PP
-SD card I/O is non-blocking. Sector data transfers use DMA with scheduler yield
-(other actors run during the SPI transfer). Card busy-wait uses periodic timer
-polling (1ms intervals), also yielding. SD card file I/O is safe at any actor
-priority.
+SD card sector transfers use DMA with spin-wait (~24us per 512 bytes at 21 MHz).
+Card busy-wait after writes (10-250ms for wear leveling) yields via hive_sleep()
+with 1ms polls, allowing other actors to run. SD card file I/O is safe at any
+actor priority.
 .PP
 .B SD Card Characteristics:
 .IP \(bu 2
-Non-blocking via DMA + scheduler yield
+DMA spin-wait for sector transfers, scheduler yield for card busy-wait
 .IP \(bu 2
 Full FatFS filesystem support (FAT12/16/32, exFAT)
 .IP \(bu 2
@@ -474,14 +474,15 @@ Call
 periodically (e.g., every 4 seconds from a dedicated actor) to ensure data is
 committed to flash before unexpected power loss.
 .SS SD Card Files (/sd/*)
-SD card I/O uses DMA with scheduler yield. Sector data transfers (512 bytes) are
-performed via DMA while the calling actor yields to the scheduler. Other actors
-run during the transfer. After each write, the card may need internal programming
-time (up to 250ms for wear leveling). This busy-wait also yields, polling every
-1ms via a periodic timer.
+SD card sector transfers (512 bytes) use DMA with spin-wait (~24us at 21 MHz).
+The spin-wait is too short to benefit from a context switch. After each write,
+the card may need internal programming time (10-250ms for wear leveling). This
+busy-wait yields via hive_sleep() with 1ms polls, allowing other actors to run.
 .PP
-SD card file I/O never blocks the scheduler. It is safe at any actor priority,
-including in applications with flight-critical control loops.
+The DMA spin-wait briefly occupies the CPU but at ~24us per sector, it does not
+meaningfully impact flight-critical control loops running at 250 Hz (4ms period).
+The card busy-wait yields cooperatively. SD card file I/O is safe at any actor
+priority.
 .SH SEE ALSO
 .BR hive_tcp (3),
 .BR hive_spawn (3),
