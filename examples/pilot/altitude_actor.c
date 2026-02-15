@@ -171,13 +171,20 @@ void altitude_actor(void *args, const hive_spawn_info_t *siblings,
         pid_set_limits(&alt_pid, p->alt_imax, p->alt_omax);
 
         // Emergency cutoff conditions (use tunable limits)
-        bool attitude_emergency = (fabsf(est.roll) > p->emergency_tilt_limit) ||
-                                  (fabsf(est.pitch) > p->emergency_tilt_limit);
-        bool altitude_emergency = (est.altitude > p->emergency_alt_max);
+        // Only active when in flight (target > 0). On the ground, the
+        // altitude Kalman filter may drift because the rangefinder can't
+        // measure below ~40mm (drone sits at ~20-30mm on surface).
+        // False crash detection on a grounded drone blocks the next flight.
+        if (target_altitude > 0.0f) {
+            bool attitude_emergency =
+                (fabsf(est.roll) > p->emergency_tilt_limit) ||
+                (fabsf(est.pitch) > p->emergency_tilt_limit);
+            bool altitude_emergency = (est.altitude > p->emergency_alt_max);
 
-        // Latch crash condition - once triggered, motors stay off until reboot
-        if (attitude_emergency || altitude_emergency) {
-            crash_detected = true;
+            // Latch crash condition - once triggered, motors stay off
+            if (attitude_emergency || altitude_emergency) {
+                crash_detected = true;
+            }
         }
 
         // Touchdown detection (only in landing mode)
@@ -198,8 +205,12 @@ void altitude_actor(void *args, const hive_spawn_info_t *siblings,
             // Notify flight manager that we've crashed (treat as landed)
             if (!landed) {
                 landed = true;
-                hive_ipc_notify(state->flight_manager, NOTIFY_FLIGHT_LANDED,
-                                NULL, 0);
+                hive_status_t s = hive_ipc_notify(
+                    state->flight_manager, NOTIFY_FLIGHT_LANDED, NULL, 0);
+                if (HIVE_FAILED(s)) {
+                    HIVE_LOG_ERROR("[ALT] LANDED notify failed: %s",
+                                   HIVE_ERR_STR(s));
+                }
             }
         }
 
@@ -215,8 +226,12 @@ void altitude_actor(void *args, const hive_spawn_info_t *siblings,
                 HIVE_LOG_INFO("[ALT] Touchdown at alt=%.3f vvel=%.3f - "
                               "notifying flight manager",
                               est.altitude, est.vertical_velocity);
-                hive_ipc_notify(state->flight_manager, NOTIFY_FLIGHT_LANDED,
-                                NULL, 0);
+                hive_status_t s = hive_ipc_notify(
+                    state->flight_manager, NOTIFY_FLIGHT_LANDED, NULL, 0);
+                if (HIVE_FAILED(s)) {
+                    HIVE_LOG_ERROR("[ALT] LANDED notify failed: %s",
+                                   HIVE_ERR_STR(s));
+                }
             }
         } else if (target_altitude <= 0.0f) {
             // No target yet - stay on ground, keep ramp and PID fresh

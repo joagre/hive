@@ -95,9 +95,10 @@ void motor_actor(void *args, const hive_spawn_info_t *siblings,
     HIVE_LOG_INFO("[MOTOR] Waiting for START command");
 
     // Set up hive_select() sources
-    enum { SEL_TORQUE, SEL_START, SEL_STOP, SEL_RESET };
+    // IPC control messages checked before bus data so START/STOP/RESET
+    // are never starved by continuous 250Hz torque publications.
+    enum { SEL_START, SEL_STOP, SEL_RESET, SEL_TORQUE };
     hive_select_source_t sources[] = {
-        [SEL_TORQUE] = {.type = HIVE_SEL_BUS, .bus = state->torque_bus},
         [SEL_START] = {.type = HIVE_SEL_IPC,
                        .ipc = {.sender = state->flight_manager,
                                .class = HIVE_MSG_NOTIFY,
@@ -110,6 +111,7 @@ void motor_actor(void *args, const hive_spawn_info_t *siblings,
                        .ipc = {.sender = state->flight_manager,
                                .class = HIVE_MSG_NOTIFY,
                                .id = NOTIFY_RESET}},
+        [SEL_TORQUE] = {.type = HIVE_SEL_BUS, .bus = state->torque_bus},
     };
 
     while (true) {

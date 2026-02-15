@@ -78,7 +78,7 @@ python3 tools/ground_station.py --uri radio://0/80/2M -o flight.csv
 # Download flash log after flight
 python3 tools/ground_station.py --download-log flight.log
 
-# Start flight (sends GO command, 60s countdown then flight)
+# Start flight (sends GO command, 10s countdown then flight)
 python3 tools/ground_station.py --go
 ```
 
@@ -221,12 +221,12 @@ ONE_FOR_ALL strategy - if any flight-critical actor crashes, all restart togethe
 
 ### Motor Safety
 
-- **START gate** - Motors stay OFF until flight_manager sends authorization (after 60s startup delay)
-- **Crash latch** - Once attitude exceeds 45 degrees, motors stay OFF until reboot
+- **START gate** - Motors stay OFF until flight_manager sends authorization (after 10s countdown)
+- **Crash latch** - Once attitude exceeds 45 degrees, motors stay OFF until reboot (only active when target altitude > 0)
 - 50ms deadman timeout in motor_actor (zeros motors if no command)
 - Attitude cutoff at 45 degrees
 - Altitude cutoff at 2m
-- Thrust ramp on takeoff (0.5s)
+- Thrust ramp on takeoff (0.75s)
 - 10-second landing timeout (forces shutdown if landing detection fails)
 - Battery monitoring at 2 Hz with 5-second debounce (3.0V critical triggers emergency landing)
 

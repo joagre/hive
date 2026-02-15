@@ -76,8 +76,8 @@ void hal_write_torque(const torque_cmd_t *cmd) {
         }
     }
     if (saturated) {
-        HIVE_LOG_WARN("[MIX] motor saturation: t=%.2f r=%.2f p=%.2f y=%.2f",
-                      cmd->thrust, cmd->roll, cmd->pitch, cmd->yaw);
+        HIVE_LOG_TRACE("[MIX] motor saturation: t=%.2f r=%.2f p=%.2f y=%.2f",
+                       cmd->thrust, cmd->roll, cmd->pitch, cmd->yaw);
     }
 
     // Output to hardware

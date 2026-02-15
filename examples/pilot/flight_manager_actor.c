@@ -68,7 +68,11 @@ static void notify_reset_all(const sibling_ids_t *ids) {
 
     for (size_t i = 0; i < sizeof(actors) / sizeof(actors[0]); i++) {
         if (actors[i] != HIVE_ACTOR_ID_INVALID) {
-            hive_ipc_notify(actors[i], NOTIFY_RESET, NULL, 0);
+            hive_status_t s = hive_ipc_notify(actors[i], NOTIFY_RESET, NULL, 0);
+            if (HIVE_FAILED(s)) {
+                HIVE_LOG_ERROR("[FLM] RESET notify failed for actor %u: %s",
+                               actors[i], HIVE_ERR_STR(s));
+            }
         }
     }
     HIVE_LOG_INFO("[FLM] RESET notifications sent");
@@ -301,9 +305,31 @@ void flight_manager_actor(void *args, const hive_spawn_info_t *siblings,
                 HIVE_LOG_INFO("[FLM] Countdown complete - FLYING");
                 state = FM_STATE_FLYING;
 
+                // Reset estimator so altitude KF starts fresh.
+                // On the ground the rangefinder can't measure (<40mm),
+                // so the KF drifts during the countdown. Only the
+                // estimator needs reset - PIDs were idle (no target)
+                // and motor/waypoint must keep their START state.
+                hive_status_t rs =
+                    hive_ipc_notify(ids.estimator, NOTIFY_RESET, NULL, 0);
+                if (HIVE_FAILED(rs)) {
+                    HIVE_LOG_ERROR("[FLM] estimator RESET failed: %s",
+                                   HIVE_ERR_STR(rs));
+                }
+
                 // Notify motor and waypoint to start
-                hive_ipc_notify(ids.motor, NOTIFY_FLIGHT_START, NULL, 0);
-                hive_ipc_notify(ids.waypoint, NOTIFY_FLIGHT_START, NULL, 0);
+                hive_status_t ms =
+                    hive_ipc_notify(ids.motor, NOTIFY_FLIGHT_START, NULL, 0);
+                if (HIVE_FAILED(ms)) {
+                    HIVE_LOG_ERROR("[FLM] motor START failed: %s",
+                                   HIVE_ERR_STR(ms));
+                }
+                hive_status_t ws =
+                    hive_ipc_notify(ids.waypoint, NOTIFY_FLIGHT_START, NULL, 0);
+                if (HIVE_FAILED(ws)) {
+                    HIVE_LOG_ERROR("[FLM] waypoint START failed: %s",
+                                   HIVE_ERR_STR(ws));
+                }
 
                 // Start flight timer
                 hive_timer_after(FLIGHT_DURATION_US, &flight_timer);
@@ -359,7 +385,12 @@ void flight_manager_actor(void *args, const hive_spawn_info_t *siblings,
                     "[FLM] Flight duration complete - initiating LANDING");
             }
 
-            hive_ipc_notify(ids.altitude, NOTIFY_LANDING, NULL, 0);
+            hive_status_t ls =
+                hive_ipc_notify(ids.altitude, NOTIFY_LANDING, NULL, 0);
+            if (HIVE_FAILED(ls)) {
+                HIVE_LOG_ERROR("[FLM] LANDING notify failed: %s",
+                               HIVE_ERR_STR(ls));
+            }
             hive_timer_after(LANDING_TIMEOUT_US, &landing_timer);
             state = FM_STATE_LANDING;
             break;
@@ -410,7 +441,12 @@ void flight_manager_actor(void *args, const hive_spawn_info_t *siblings,
         case FM_STATE_LANDED: {
             // Stop motors, disarm, return to IDLE
             HIVE_LOG_INFO("[FLM] LANDED - stopping motors");
-            hive_ipc_notify(ids.motor, NOTIFY_FLIGHT_STOP, NULL, 0);
+            hive_status_t ss =
+                hive_ipc_notify(ids.motor, NOTIFY_FLIGHT_STOP, NULL, 0);
+            if (HIVE_FAILED(ss)) {
+                HIVE_LOG_ERROR("[FLM] STOP notify failed: %s",
+                               HIVE_ERR_STR(ss));
+            }
 
             // Disarm motors
             hal_disarm();

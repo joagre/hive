@@ -190,7 +190,6 @@ void estimator_actor(void *args, const hive_spawn_info_t *siblings,
     // Only run KF correction when a genuinely new measurement arrives,
     // otherwise the covariance shrinks too fast (same data treated as
     // independent observations).
-    float prev_measured_altitude = 0.0f;
     bool have_altitude_measurement = false;
 
     // Track sensor state transitions for logging
@@ -236,7 +235,6 @@ void estimator_actor(void *args, const hive_spawn_info_t *siblings,
             last_valid_y = 0.0f;
             rangefinder_mode = false;
             last_valid_rangefinder_alt = 0.0f;
-            prev_measured_altitude = 0.0f;
             have_altitude_measurement = false;
             prev_gps_valid = false;
             prev_velocity_valid = false;
@@ -299,14 +297,15 @@ void estimator_actor(void *args, const hive_spawn_info_t *siblings,
         // -----------------------------------------------------------------
         float measured_altitude = 0.0f;
 
-        // Log GPS state transitions
+        // Log GPS state transitions (TRACE level - toggles at 40Hz normally
+        // because VL53L1x only provides data at 40Hz vs 250Hz control loop)
         if (sensors.gps_valid != prev_gps_valid) {
             if (sensors.gps_valid) {
-                HIVE_LOG_INFO("[EST] GPS valid: pos=(%.2f, %.2f, %.2f)",
-                              sensors.gps_x, sensors.gps_y, sensors.gps_z);
+                HIVE_LOG_TRACE("[EST] GPS valid: pos=(%.2f, %.2f, %.2f)",
+                               sensors.gps_x, sensors.gps_y, sensors.gps_z);
             } else {
-                HIVE_LOG_WARN("[EST] GPS lost - holding position (%.2f, %.2f)",
-                              last_valid_x, last_valid_y);
+                HIVE_LOG_TRACE("[EST] GPS lost - holding position (%.2f, %.2f)",
+                               last_valid_x, last_valid_y);
             }
             prev_gps_valid = sensors.gps_valid;
         }
@@ -329,11 +328,13 @@ void estimator_actor(void *args, const hive_spawn_info_t *siblings,
         // Altitude source: Rangefinder only (like Bitcraze's "surfaceFollowingMode")
         // Once rangefinder works, we stay in rangefinder mode and NEVER use baro.
         // Baro is unreliable at low altitude due to prop wash from motors.
+        bool fresh_rangefinder = false;
         if (sensors.gps_z >= 0.01f && sensors.gps_z <= 1.3f) {
             // Good rangefinder reading - use it
             measured_altitude = sensors.gps_z;
             last_valid_rangefinder_alt = sensors.gps_z;
             rangefinder_mode = true;
+            fresh_rangefinder = true;
         } else if (rangefinder_mode) {
             // Rangefinder invalid but we've used it before - hold last value.
             // The Kalman filter will coast on accelerometer integration.
@@ -366,11 +367,10 @@ void estimator_actor(void *args, const hive_spawn_info_t *siblings,
 
         // Run Kalman filter
         // Predict every cycle (accelerometer integration).
-        // Correct only when a new altitude measurement arrives.
-        // The rangefinder runs at ~40Hz while the control loop runs at
-        // 250Hz. Feeding the same measurement repeatedly would shrink
-        // covariance too fast (Bitcraze solves this with a measurement
-        // queue; we detect new data by value change).
+        // Correct only when a fresh rangefinder sample arrives (~40Hz).
+        // The VL53L1x runs at 40Hz while the control loop runs at 250Hz.
+        // We detect fresh data by checking if gps_z was in valid range
+        // (sensors report gps_z=0 when no new ToF sample is ready).
         if (!alt_kf.initialized) {
             if (!isfinite(measured_altitude)) {
                 HIVE_LOG_ERROR(
@@ -378,15 +378,11 @@ void estimator_actor(void *args, const hive_spawn_info_t *siblings,
                 measured_altitude = 0.0f;
             }
             altitude_kf_reset(&alt_kf, measured_altitude);
-            prev_measured_altitude = measured_altitude;
             have_altitude_measurement = true;
         }
         altitude_kf_predict(&alt_kf, accel_z, dt);
-        bool new_measurement = have_altitude_measurement &&
-                               (measured_altitude != prev_measured_altitude);
-        if (new_measurement) {
+        if (have_altitude_measurement && fresh_rangefinder) {
             altitude_kf_correct(&alt_kf, measured_altitude);
-            prev_measured_altitude = measured_altitude;
         }
 
         // Get estimates from KF
@@ -399,9 +395,9 @@ void estimator_actor(void *args, const hive_spawn_info_t *siblings,
         // Log velocity source transitions
         if (sensors.velocity_valid != prev_velocity_valid) {
             if (sensors.velocity_valid) {
-                HIVE_LOG_INFO("[EST] Velocity source: optical flow");
+                HIVE_LOG_TRACE("[EST] Velocity source: optical flow");
             } else {
-                HIVE_LOG_WARN(
+                HIVE_LOG_TRACE(
                     "[EST] Velocity source: differentiation (flow lost)");
             }
             prev_velocity_valid = sensors.velocity_valid;

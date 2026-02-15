@@ -7,6 +7,95 @@ Hardware: Crazyflie 2.1+ with Flow Deck v2, SD card deck, 3g crash cage.
 
 ---
 
+## Session 5 - 2026-02-15 - Bug fixes and first flight with session 4 tuning
+
+Fixed six bugs preventing flight with session 4 parameters. Achieved first
+successful hover with updated altitude/position gains.
+
+### Bug fixes
+
+1. **False crash detection on ground** - KF altitude drifted to 2m while
+   stationary (VL53L1x can't measure below ~40mm, drone sits at ~20mm).
+   Gated crash detection on `target_altitude > 0` in altitude_actor.
+
+2. **KF drift during countdown** - Estimator accumulated 30m+ drift during
+   the armed countdown. Added estimator-only RESET at FLYING start in
+   flight_manager_actor (just before motor/waypoint START).
+
+3. **Motor START starvation** - motor_actor's hive_select had bus source
+   (250Hz torque) before IPC sources. Bus always had new data, so START
+   message was never checked. Reordered: IPC sources first, bus last.
+
+4. **Mailbox pool exhaustion** - Pool was 32 entries for 12 actors.
+   PREFLIGHT RESET burst (11 messages) plus FLYING start burst (3 messages)
+   could exhaust the pool. Waypoint START silently failed. Increased pool
+   to 48 and added error checking on all flight-critical hive_ipc_notify
+   calls.
+
+5. **Log spam filling SD card** - COMMS wake (every 1500 wakes), velocity
+   source toggling (250Hz), and MIX motor saturation (250Hz) flooded the
+   log. Demoted all to TRACE level.
+
+6. **KF fresh-sample detection** - Changed from value-change detection to
+   fresh-rangefinder detection. The VL53L1x runs at 40Hz vs 250Hz control
+   loop; feeding the same sample repeatedly shrank KF covariance too fast.
+
+### Other changes
+
+| Parameter | Old | New | Reasoning |
+|-----------|-----|-----|-----------|
+| `armed_countdown_s` | 60 | 10 | Faster iteration during testing |
+| `MAILBOX_ENTRY_POOL_SIZE` | 32 | 48 | Prevent IPC pool exhaustion |
+
+### Results (test 17 - first successful hover with session 4 params)
+
+| Metric | Value |
+|--------|-------|
+| Target altitude | 0.50 m |
+| Peak altitude | 0.666 m |
+| Altitude overshoot | 33% |
+| Mean hover thrust | 78.9% |
+| Max tilt | < 11 deg |
+| XY drift | ~1 m (crashed into sofa during landing) |
+| Flight duration | 6s hover + 8.5s landing = 14.5s total |
+| Battery | 3.18V warning during flight |
+
+### Results (test 18 - position hold disabled)
+
+Zeroed pos_kp/pos_kd via radio to isolate altitude control from flow drift.
+
+| Metric | Value |
+|--------|-------|
+| Peak altitude | 0.616 m |
+| Altitude overshoot | 23% |
+| Max tilt | < 8.6 deg (much calmer) |
+| XY drift | ~1 m passive (no position correction) |
+
+### Radio params for next test
+
+Set via radio before GO (these reset on reboot):
+
+```bash
+python3 tools/ground_station.py --set-param pos_kp 0.04
+python3 tools/ground_station.py --set-param pos_kd 0.05
+python3 tools/ground_station.py --set-param vvel_damping 0.55
+```
+
+| Parameter | Compiled default | Radio override | Reasoning |
+|-----------|-----------------|----------------|-----------|
+| `pos_kp` | 0.14 | 0.04 | Gentle position hold, avoid chasing flow drift |
+| `pos_kd` | 0.16 | 0.05 | Gentle velocity damping for XY |
+| `vvel_damping` | 0.45 | 0.55 | More altitude braking, untested (battery died) |
+
+### Issues remaining
+
+1. Altitude overshoot 23-33% (target <10%) - vvel_damping needs more tuning
+2. Altitude oscillation - not settling at 0.5m within 6s flight window
+3. XY drift - position hold at full gains pushes drone sideways (flow drift?)
+4. Landing too slow - 8.5s descent from 0.6m
+
+---
+
 ## Session 4 - 2026-02-12 - Altitude and position tuning
 
 Post-flight analysis of session 3 test 8. Updated defaults for next flight.

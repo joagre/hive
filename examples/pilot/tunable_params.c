@@ -215,7 +215,7 @@ void tunable_params_init(tunable_params_t *params) {
     params->armed_countdown_s = 5.0f; // Short countdown for testing
     params->auto_go_delay_s = 2.0f;   // Auto-GO after 2s in simulation
 #else
-    params->armed_countdown_s = 60.0f; // Full countdown on hardware
+    params->armed_countdown_s = 10.0f; // 10s countdown (tunable via radio)
     params->auto_go_delay_s = 0.0f;    // Require manual GO on hardware
 #endif
 }

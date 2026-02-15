@@ -51,9 +51,11 @@
 #   9 flight actors + battery + optional comms + optional logger
 #   battery/comms/logger: TEMPORARY restart
 #
-# Mailbox entries: ~13 peak, 32 configured
+# Mailbox entries: ~13 peak, 48 configured
 #   IPC: START, LANDING, LANDED, STOP, LOW_BATTERY notifications
 #   Timer messages: up to 7 concurrent
+#   PREFLIGHT RESET burst: 11 notifications to all actors
+#   FLYING start burst: 3 notifications (RESET + START x2)
 #   Buffer for pool_block wake-up latency
 #
 # Message data pool: ~35 peak, 64 configured
@@ -69,7 +71,7 @@ HIVE_CFLAGS += -DHIVE_MAX_ACTORS=14
 HIVE_CFLAGS += -DHIVE_MAX_BUSES=8
 
 # IPC pool sizes - sized for pilot's messaging patterns
-HIVE_CFLAGS += -DHIVE_MAILBOX_ENTRY_POOL_SIZE=32
+HIVE_CFLAGS += -DHIVE_MAILBOX_ENTRY_POOL_SIZE=48
 HIVE_CFLAGS += -DHIVE_MESSAGE_DATA_POOL_SIZE=64
 HIVE_CFLAGS += -DHIVE_LINK_ENTRY_POOL_SIZE=8
 HIVE_CFLAGS += -DHIVE_MONITOR_ENTRY_POOL_SIZE=13

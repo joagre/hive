@@ -447,7 +447,7 @@ void comms_actor(void *args, const hive_spawn_info_t *siblings,
 
         wake_count++;
         if ((wake_count % 500) == 1) {
-            HIVE_LOG_INFO("[COMMS] wake %lu", wake_count);
+            HIVE_LOG_TRACE("[COMMS] wake %lu", wake_count);
         }
 
         // Process any pending RX packets (commands from ground station)
