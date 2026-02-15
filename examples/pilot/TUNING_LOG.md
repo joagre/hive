@@ -7,6 +7,28 @@ Hardware: Crazyflie 2.1+ with Flow Deck v2, SD card deck, 3g crash cage.
 
 ---
 
+## Session 6 - Altitude tuning continued
+
+Continuing from session 5. Set via radio before GO (these reset on reboot):
+
+```bash
+python3 tools/ground_station.py --set-param pos_kp 0.04
+python3 tools/ground_station.py --set-param pos_kd 0.05
+python3 tools/ground_station.py --set-param vvel_damping 0.55
+```
+
+| Parameter | Compiled default | Radio override | Reasoning |
+|-----------|-----------------|----------------|-----------|
+| `pos_kp` | 0.14 | 0.04 | Gentle position hold, avoid chasing flow drift |
+| `pos_kd` | 0.16 | 0.05 | Gentle velocity damping for XY |
+| `vvel_damping` | 0.45 | 0.55 | More altitude braking, untested (battery died) |
+
+### Results
+
+(pending)
+
+---
+
 ## Session 5 - 2026-02-15 - Bug fixes and first flight with session 4 tuning
 
 Fixed six bugs preventing flight with session 4 parameters. Achieved first
@@ -70,22 +92,6 @@ Zeroed pos_kp/pos_kd via radio to isolate altitude control from flow drift.
 | Altitude overshoot | 23% |
 | Max tilt | < 8.6 deg (much calmer) |
 | XY drift | ~1 m passive (no position correction) |
-
-### Radio params for next test
-
-Set via radio before GO (these reset on reboot):
-
-```bash
-python3 tools/ground_station.py --set-param pos_kp 0.04
-python3 tools/ground_station.py --set-param pos_kd 0.05
-python3 tools/ground_station.py --set-param vvel_damping 0.55
-```
-
-| Parameter | Compiled default | Radio override | Reasoning |
-|-----------|-----------------|----------------|-----------|
-| `pos_kp` | 0.14 | 0.04 | Gentle position hold, avoid chasing flow drift |
-| `pos_kd` | 0.16 | 0.05 | Gentle velocity damping for XY |
-| `vvel_damping` | 0.45 | 0.55 | More altitude braking, untested (battery died) |
 
 ### Issues remaining
 
