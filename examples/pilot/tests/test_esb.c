@@ -15,8 +15,8 @@
  *
  * Packet formats (must match comms_actor.c and ground_station.py):
  *   HAL adds protocol framing automatically.
- *   Type 0x01 - Attitude (18 bytes on wire): type + timestamp + gyro_xyz + roll/pitch/yaw
- *   Type 0x02 - Position (18 bytes on wire): type + timestamp + alt + vz/vx/vy + thrust + battery
+ *   Type 0x03 - tlog_state (30 on wire): type + time_ms + rpy + rates + xyz + vel
+ *   Type 0x04 - tlog_sensors (28 on wire): type + time_ms + thrust + targets + gyro + accel
  *
  * Usage:
  *   make PLATFORM=crazyflie TEST=esb
@@ -49,38 +49,49 @@
 #define MAX_TELEMETRY_SIZE 30
 
 // Packet type identifiers
-#define PACKET_TYPE_ATTITUDE 0x01
-#define PACKET_TYPE_POSITION 0x02
+#define PACKET_TYPE_TLOG_STATE 0x03
+#define PACKET_TYPE_TLOG_SENSORS 0x04
 
-// Packet type 0x01: Attitude and rates (17 bytes payload)
+// Packet type 0x03: tlog state - attitude, rates, position, velocity (29 bytes)
 typedef struct __attribute__((packed)) {
-    uint8_t type;          // 0x01
-    uint32_t timestamp_ms; // Milliseconds since boot
-    int16_t gyro_x;        // Raw gyro X (millirad/s)
-    int16_t gyro_y;        // Raw gyro Y (millirad/s)
-    int16_t gyro_z;        // Raw gyro Z (millirad/s)
-    int16_t roll;          // Roll angle (millirad)
-    int16_t pitch;         // Pitch angle (millirad)
-    int16_t yaw;           // Yaw angle (millirad)
-} telemetry_attitude_t;
+    uint8_t type;       // 0x03
+    uint32_t time_ms;   // Milliseconds since boot
+    int16_t roll;       // Roll angle (millirad)
+    int16_t pitch;      // Pitch angle (millirad)
+    int16_t yaw;        // Yaw angle (millirad)
+    int16_t roll_rate;  // Roll rate (millirad/s)
+    int16_t pitch_rate; // Pitch rate (millirad/s)
+    int16_t yaw_rate;   // Yaw rate (millirad/s)
+    int16_t x;          // X position (mm)
+    int16_t y;          // Y position (mm)
+    int16_t altitude;   // Altitude (mm)
+    int16_t vx;         // X velocity (mm/s)
+    int16_t vy;         // Y velocity (mm/s)
+    int16_t vz;         // Vertical velocity (mm/s)
+} tlog_state_packet_t;
 
-// Packet type 0x02: Position and altitude (17 bytes payload)
+// Packet type 0x04: tlog sensors - thrust, targets, gyro, accel (27 bytes)
 typedef struct __attribute__((packed)) {
-    uint8_t type;          // 0x02
-    uint32_t timestamp_ms; // Milliseconds since boot
-    int16_t altitude;      // Altitude (mm)
-    int16_t vz;            // Vertical velocity (mm/s)
-    int16_t vx;            // X velocity (mm/s)
-    int16_t vy;            // Y velocity (mm/s)
-    uint16_t thrust;       // Thrust (0-65535)
-    uint16_t battery_mv;   // Battery voltage (millivolts)
-} telemetry_position_t;
+    uint8_t type;       // 0x04
+    uint32_t time_ms;   // Milliseconds since boot
+    uint16_t thrust;    // Thrust (0-65535)
+    int16_t target_x;   // Target X (mm)
+    int16_t target_y;   // Target Y (mm)
+    int16_t target_z;   // Target Z / altitude (mm)
+    int16_t target_yaw; // Target yaw (millirad)
+    int16_t gyro_x;     // Raw gyro X (millirad/s)
+    int16_t gyro_y;     // Raw gyro Y (millirad/s)
+    int16_t gyro_z;     // Raw gyro Z (millirad/s)
+    int16_t accel_x;    // Accel X (cm/s^2)
+    int16_t accel_y;    // Accel Y (cm/s^2)
+    int16_t accel_z;    // Accel Z (cm/s^2)
+} tlog_sensors_packet_t;
 
 // Verify packet sizes at compile time
-_Static_assert(sizeof(telemetry_attitude_t) <= MAX_TELEMETRY_SIZE,
-               "Attitude packet too large");
-_Static_assert(sizeof(telemetry_position_t) <= MAX_TELEMETRY_SIZE,
-               "Position packet too large");
+_Static_assert(sizeof(tlog_state_packet_t) <= MAX_TELEMETRY_SIZE,
+               "tlog_state packet too large");
+_Static_assert(sizeof(tlog_sensors_packet_t) <= MAX_TELEMETRY_SIZE,
+               "tlog_sensors packet too large");
 
 // ============================================================================
 // Test State
@@ -146,7 +157,7 @@ static void run_telemetry_loop(void) {
     uint32_t last_log = 0;
     uint32_t tx_ok = 0;
     uint32_t tx_busy = 0;
-    bool next_is_attitude = true;
+    bool next_is_state = true;
     uint8_t rx_buf[32];
     size_t rx_len;
 
@@ -163,43 +174,30 @@ static void run_telemetry_loop(void) {
         if (got_packet) {
             if (!hal_esb_tx_ready()) {
                 tx_busy++;
-            } else if (next_is_attitude) {
-                // Send attitude packet with zeros (no sensors in test)
-                telemetry_attitude_t pkt = {
-                    .type = PACKET_TYPE_ATTITUDE,
-                    .timestamp_ms = hal_get_time_ms(),
-                    .gyro_x = 0,
-                    .gyro_y = 0,
-                    .gyro_z = 0,
-                    .roll = 0,
-                    .pitch = 0,
-                    .yaw = 0,
+            } else if (next_is_state) {
+                // Send tlog_state packet with zeros (no sensors in test)
+                tlog_state_packet_t pkt = {
+                    .type = PACKET_TYPE_TLOG_STATE,
+                    .time_ms = hal_get_time_ms(),
                 };
                 if (hal_esb_send(&pkt, sizeof(pkt)) == 0) {
                     tx_ok++;
                     s_tx_count++;
                     hal_led_toggle();
                 }
-                next_is_attitude = false;
+                next_is_state = false;
             } else {
-                // Send position packet with battery voltage
-                float voltage = hal_power_get_battery();
-                telemetry_position_t pkt = {
-                    .type = PACKET_TYPE_POSITION,
-                    .timestamp_ms = hal_get_time_ms(),
-                    .altitude = 0,
-                    .vz = 0,
-                    .vx = 0,
-                    .vy = 0,
-                    .thrust = 0,
-                    .battery_mv = (uint16_t)(voltage * 1000.0f),
+                // Send tlog_sensors packet with zeros
+                tlog_sensors_packet_t pkt = {
+                    .type = PACKET_TYPE_TLOG_SENSORS,
+                    .time_ms = hal_get_time_ms(),
                 };
                 if (hal_esb_send(&pkt, sizeof(pkt)) == 0) {
                     tx_ok++;
                     s_tx_count++;
                     hal_led_toggle();
                 }
-                next_is_attitude = true;
+                next_is_state = true;
             }
         }
 
