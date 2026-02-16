@@ -78,9 +78,72 @@ python3 tools/ground_station.py --uri radio://0/80/2M -o flight.csv
 # Download flash log after flight
 python3 tools/ground_station.py --download-log flight.log
 
-# Start flight (sends GO command, 10s countdown then flight)
+# Start flight (sends GO command, 60s countdown then flight)
 python3 tools/ground_station.py --go
 ```
+
+## Flight Test Checklist
+
+**MANDATORY - Follow every step in order. Do not skip or reorder.**
+
+Only one ground_station.py process can use the radio at a time.
+The GO command connects, sends, and disconnects in under 1 second.
+The 60-second countdown gives time to start the listener after GO.
+
+**Step 1 - Kill lingering processes**
+```bash
+pkill -f ground_station.py; sleep 1
+```
+
+**Step 2 - Flash (only if firmware changed)**
+```bash
+local/stlink/build/bin/st-flash --connect-under-reset write \
+  examples/pilot/build_crazyflie-2.1plus/pilot_crazyflie-2.1plus.bin 0x8000000
+```
+
+**Step 3 - Reset CPU (mandatory after flash)**
+```bash
+./tools/st-trace.sh -t 20
+```
+Wait for `Self-test PASSED` and grace period countdown to finish (15 seconds).
+
+**Step 4 - Wait for grace period**
+
+Wait at least 20 seconds after boot before sending GO. The drone has a
+15-second grace period for sensor calibration. Sending GO during the grace
+period is silently ignored.
+
+**Step 5 - Send GO**
+```bash
+source tests/.venv/bin/activate
+python3 tools/ground_station.py --go
+```
+Verify output says `GO command sent successfully!` before proceeding.
+
+**Step 6 - Immediately start listener**
+
+Start within a few seconds of GO. The 60-second countdown gives plenty of
+margin. Log to a numbered CSV file (flight_testNN.csv).
+```bash
+python3 tools/ground_station.py -o flight_testNN.csv --uri radio://0/80/2M
+```
+Let it run through the entire flight and at least 10 seconds after landing.
+Ctrl+C to stop.
+
+**Timeout** - FIRST_TEST profile flies for 6 seconds. Use a 90-second timeout
+for the listener (60s countdown + 6s flight + 20s post-landing buffer). Do NOT
+listen for 3 minutes.
+
+**Step 7 - Analyze**
+```bash
+python3 tools/flight_summary.py flight_testNN.csv
+python3 tools/flight_summary.py flight_testNN.csv --timeline
+```
+
+**If power cycling (no reflash needed) - skip steps 2-3, just wait 20 seconds
+after power-on, then continue from step 4.**
+
+**If the listener fails with "Resource busy" - go back to step 1.**
 
 ## Runtime Parameter Tuning
 

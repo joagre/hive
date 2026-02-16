@@ -131,6 +131,14 @@ void position_actor(void *args, const hive_spawn_info_t *siblings,
         float pitch_cmd = accel_x * cos_yaw + accel_y * sin_yaw;
         float roll_cmd = -accel_x * sin_yaw + accel_y * cos_yaw;
 
+        // Suppress position control while on the ground. During the
+        // liftoff thrust ramp the flow deck velocity estimates are noisy,
+        // and commanding tilt causes the drone to lift off sideways.
+        if (est.altitude < LIFTOFF_ALT_THRESHOLD) {
+            pitch_cmd = 0.0f;
+            roll_cmd = 0.0f;
+        }
+
         // Clamp to maximum tilt angle for safety (use tunable param)
         pitch_cmd = CLAMPF(pitch_cmd, -p->max_tilt_angle, p->max_tilt_angle);
         roll_cmd = CLAMPF(roll_cmd, -p->max_tilt_angle, p->max_tilt_angle);
