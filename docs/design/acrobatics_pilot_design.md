@@ -188,12 +188,12 @@ words. ASSERT words for pre-maneuver checks. Watchdog timestamp must update
 within 100ms or cascade actors ignore the override. Level 4 override
 requires an active FENCE.
 
-**Altitude actor** - Crash latch (tilt >45 deg or altitude >2m) fires
-regardless of override state. The crash check runs before the override
-skip. A flip that exceeds the tilt limit will cut motors even if the script
-says otherwise. For acrobatics that intentionally exceed 45 degrees, the
-ground station operator must raise `emergency_tilt_limit` via radio before
-flight.
+**Altitude actor** - Crash latch (altitude >2m) fires regardless of
+override state. Tilt-based crash detection (>45 deg) is automatically
+suspended when Level 3+ is active on the override bus - the altitude actor
+already reads it, and tilt exceedance during a rate override is intentional,
+not a control failure. When the override is released, tilt detection
+resumes immediately. No ground station involvement needed.
 
 **Motor actor** - Validates every torque command (NaN, magnitude limits).
 50ms deadman timeout. START/STOP gating. Does not read the override bus.
