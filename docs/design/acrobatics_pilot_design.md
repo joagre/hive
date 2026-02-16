@@ -96,6 +96,17 @@ stored in cells. Flag: -1 = true, 0 = false.
 | `ORBIT` | ( cx cy r rate -- ) | Blocks for one full circle. +rate = CCW from above. |
 | `LAND` | ( -- flag ) | Notifies altitude actor. Blocks until landed or 10s timeout. |
 
+**ORBIT geometry** - Parametric circle in the horizontal plane:
+
+    x(t) = cx + r * cos(theta_0 + omega * t)
+    y(t) = cy + r * sin(theta_0 + omega * t)
+
+where `omega = rate` (rad/s) and `theta_0` is the initial angle from center
+to the vehicle's position at entry: `theta_0 = atan2(y_0 - cy, x_0 - cx)`.
+The yaw target tracks the tangent: `yaw(t) = theta_0 + omega * t + PI/2`
+(velocity vector direction). Period `T = 2*PI / |omega|`. The vehicle first
+flies to the nearest point on the circle, then begins the orbit.
+
 ### Attitude (Level 2)
 
 | Word | Stack | Notes |
@@ -104,6 +115,17 @@ stored in cells. Flag: -1 = true, 0 = false.
 | `LEVEL` | ( -- ) | Roll=0, pitch=0, yaw=current, thrust=hover. Use before RELEASE. |
 | `BANK` | ( angle duration_ms -- ) | Blocks. Roll hold at angle for duration. |
 
+**BANK dynamics** - A banked turn at roll angle `phi` with thrust `T = mg`:
+
+    turn rate:    omega = g * tan(phi) / v
+    turn radius:  R = v^2 / (g * tan(phi))
+    load factor:  n = 1 / cos(phi)
+
+The thrust must increase by the load factor to maintain altitude:
+`T_banked = T_hover / cos(phi)`. BANK applies this correction automatically.
+At 30 degrees, load factor is 1.15 (15% more thrust). At 60 degrees, 2.0
+(double thrust - close to motor limits on a micro quad).
+
 ### Rate (Level 3)
 
 | Word | Stack | Notes |
@@ -111,6 +133,31 @@ stored in cells. Flag: -1 = true, 0 = false.
 | `SPIN` | ( axis rate duration_ms -- ) | Blocks. axis: 0=roll 1=pitch 2=yaw. Other axes zeroed. |
 | `FLIP-ROLL` | ( direction -- ) | Blocks ~600ms. 1=right, -1=left. Full 360. |
 | `FLIP-PITCH` | ( direction -- ) | Blocks ~600ms. 1=forward, -1=backward. Full 360. |
+
+**FLIP kinematics** - A flip is a full-rotation constant-rate maneuver
+with thrust modulation. At rate `omega` (rad/s), the rotation angle:
+
+    theta(t) = omega * t
+
+completes at `t = 2*PI / omega`. At 12 rad/s (~690 deg/s), this takes
+~524ms for the rotation itself.
+
+The thrust vector rotates with the body. Its vertical component is:
+
+    T_vertical(t) = T * cos(theta(t))
+
+which goes negative during the inverted phase (`PI/2 < theta < 3*PI/2`).
+To limit altitude loss, thrust is reduced during the inverted portion
+(where it would push the vehicle downward) and restored in the upright
+portion. The net altitude loss for a flip at hover thrust `T_h`:
+
+    delta_z = integral_0^{2*PI/omega} (T_h * cos(omega*t) - g) dt / m
+            = -g * (2*PI / omega)
+
+At 12 rad/s: `delta_z ~ -9.81 * 0.524 ~ -5.1m` if thrust were constant.
+The thrust modulation (0.3x when inverted) reduces this to roughly 0.5-1.0m
+in practice. The ASSERT-ALT check before the flip ensures sufficient
+altitude margin.
 
 ### Torque (Level 4)
 
