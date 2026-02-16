@@ -18,11 +18,15 @@ Telemetry packet formats (max 31 bytes on wire = 30 payload + CRTP):
   The HAL layer prepends the CRTP header, so wire format is crtp(1) + payload.
   ESB max payload is 32 bytes.
 
-  Type 0x01 - Attitude/Rates (17 bytes payload, 18 on wire):
-    crtp(1) + type(1) + timestamp_ms(4) + gyro_xyz(6) + roll/pitch/yaw(6)
+  Type 0x03 - tlog_state (29 bytes payload, 30 on wire):
+    crtp(1) + type(1) + time_ms(4) + roll(2) + pitch(2) + yaw(2) +
+    roll_rate(2) + pitch_rate(2) + yaw_rate(2) + x(2) + y(2) + altitude(2) +
+    vx(2) + vy(2) + vz(2)
 
-  Type 0x02 - Position/Altitude (17 bytes payload, 18 on wire):
-    crtp(1) + type(1) + timestamp_ms(4) + altitude(2) + vz(2) + vx(2) + vy(2) + thrust(2) + battery_mv(2)
+  Type 0x04 - tlog_sensors (27 bytes payload, 28 on wire):
+    crtp(1) + type(1) + time_ms(4) + thrust(2) + target_x(2) + target_y(2) +
+    target_z(2) + target_yaw(2) + gyro_x(2) + gyro_y(2) + gyro_z(2) +
+    accel_x(2) + accel_y(2) + accel_z(2)
 
 Log download packet formats (must match comms_actor.c):
   Type 0x10 - CMD_REQUEST_LOG (2 bytes): Ground -> Drone to request log
@@ -53,7 +57,6 @@ import csv
 import struct
 import sys
 import time
-from datetime import datetime
 
 try:
     import cflib.crtp
@@ -67,8 +70,9 @@ except ImportError:
 CRTP_HEADER_TELEMETRY = 0xA0  # Port 10, channel 0
 
 # Packet type identifiers - telemetry (byte after CRTP header)
-PACKET_TYPE_ATTITUDE = 0x01
-PACKET_TYPE_POSITION = 0x02
+# 0x03/0x04 carry all 24 tlog.csv columns; old 0x01/0x02 retired.
+PACKET_TYPE_TLOG_STATE = 0x03
+PACKET_TYPE_TLOG_SENSORS = 0x04
 
 # Packet type identifiers - log download (must match comms_actor.c)
 CMD_REQUEST_LOG = 0x10
@@ -145,62 +149,76 @@ PARAM_IDS = {v: k for k, v in PARAM_NAMES.items()}
 # Scale factors (inverse of transmitter)
 SCALE_ANGLE = 1000.0   # millirad -> rad
 SCALE_RATE = 1000.0    # millirad/s -> rad/s
+SCALE_POS = 1000.0     # mm -> m
+SCALE_VEL = 1000.0     # mm/s -> m/s
+SCALE_THRUST = 65535.0 # 0-65535 -> 0.0-1.0
+SCALE_ACCEL = 100.0    # cm/s^2 -> m/s^2
 
 # Poll rate - matches drone's telemetry update rate (comms_actor.c)
 POLL_RATE_HZ = 100
 POLL_INTERVAL = 1.0 / POLL_RATE_HZ
-SCALE_POS = 1000.0     # mm -> m
-SCALE_VEL = 1000.0     # mm/s -> m/s
-SCALE_THRUST = 65535.0 # 0-65535 -> 0.0-1.0
 
 
-def decode_attitude_packet(data: bytes) -> dict:
-    """Decode attitude/rates packet (type 0x01).
+def decode_tlog_state_packet(data: bytes) -> dict:
+    """Decode tlog_state packet (type 0x03).
 
-    Wire format: crtp(1) + type(1) + timestamp(4) + gyro_xyz(6) + roll/pitch/yaw(6) = 18 bytes
-    The CRTP header is prepended by HAL, payload is 17 bytes.
+    Wire format: crtp(1) + type(1) + time_ms(4) + roll(2) + pitch(2) + yaw(2) +
+                 roll_rate(2) + pitch_rate(2) + yaw_rate(2) + x(2) + y(2) +
+                 altitude(2) + vx(2) + vy(2) + vz(2) = 30 bytes
     """
-    if len(data) < 18:
+    if len(data) < 30:
         return None
 
-    _, _, timestamp_ms, gx, gy, gz, roll, pitch, yaw = struct.unpack(
-        "<BBIhhhhhh", data[:18]
-    )
+    fields = struct.unpack("<BBIhhhhhhhhhhhh", data[:30])
+    # fields: crtp, type, time_ms, roll, pitch, yaw, roll_rate, pitch_rate,
+    #         yaw_rate, x, y, altitude, vx, vy, vz
 
     return {
-        "type": "attitude",
-        "timestamp_ms": timestamp_ms,
-        "gyro_x": gx / SCALE_RATE,
-        "gyro_y": gy / SCALE_RATE,
-        "gyro_z": gz / SCALE_RATE,
-        "roll": roll / SCALE_ANGLE,
-        "pitch": pitch / SCALE_ANGLE,
-        "yaw": yaw / SCALE_ANGLE,
+        "type": "tlog_state",
+        "time_ms": fields[2],
+        "roll": fields[3] / SCALE_ANGLE,
+        "pitch": fields[4] / SCALE_ANGLE,
+        "yaw": fields[5] / SCALE_ANGLE,
+        "roll_rate": fields[6] / SCALE_RATE,
+        "pitch_rate": fields[7] / SCALE_RATE,
+        "yaw_rate": fields[8] / SCALE_RATE,
+        "x": fields[9] / SCALE_POS,
+        "y": fields[10] / SCALE_POS,
+        "altitude": fields[11] / SCALE_POS,
+        "vx": fields[12] / SCALE_VEL,
+        "vy": fields[13] / SCALE_VEL,
+        "vz": fields[14] / SCALE_VEL,
     }
 
 
-def decode_position_packet(data: bytes) -> dict:
-    """Decode position/altitude packet (type 0x02).
+def decode_tlog_sensors_packet(data: bytes) -> dict:
+    """Decode tlog_sensors packet (type 0x04).
 
-    Wire format: crtp(1) + type(1) + timestamp(4) + alt(2) + vz(2) + vx(2) + vy(2) + thrust(2) + battery_mv(2) = 18 bytes
-    The CRTP header is prepended by HAL, payload is 17 bytes.
+    Wire format: crtp(1) + type(1) + time_ms(4) + thrust(2) + target_x(2) +
+                 target_y(2) + target_z(2) + target_yaw(2) + gyro_x(2) +
+                 gyro_y(2) + gyro_z(2) + accel_x(2) + accel_y(2) + accel_z(2) = 28 bytes
     """
-    if len(data) < 18:
+    if len(data) < 28:
         return None
 
-    _, _, timestamp_ms, alt, vz, vx, vy, thrust, battery_mv = struct.unpack(
-        "<BBIhhhhHH", data[:18]
-    )
+    fields = struct.unpack("<BBIHhhhhhhhhhh", data[:28])
+    # fields: crtp, type, time_ms, thrust, target_x, target_y, target_z,
+    #         target_yaw, gyro_x, gyro_y, gyro_z, accel_x, accel_y, accel_z
 
     return {
-        "type": "position",
-        "timestamp_ms": timestamp_ms,
-        "altitude": alt / SCALE_POS,
-        "vz": vz / SCALE_VEL,
-        "vx": vx / SCALE_VEL,
-        "vy": vy / SCALE_VEL,
-        "thrust": thrust / SCALE_THRUST,
-        "battery_v": battery_mv / 1000.0,
+        "type": "tlog_sensors",
+        "time_ms": fields[2],
+        "thrust": fields[3] / SCALE_THRUST,
+        "target_x": fields[4] / SCALE_POS,
+        "target_y": fields[5] / SCALE_POS,
+        "target_z": fields[6] / SCALE_POS,
+        "target_yaw": fields[7] / SCALE_ANGLE,
+        "gyro_x": fields[8] / SCALE_RATE,
+        "gyro_y": fields[9] / SCALE_RATE,
+        "gyro_z": fields[10] / SCALE_RATE,
+        "accel_x": fields[11] / SCALE_ACCEL,
+        "accel_y": fields[12] / SCALE_ACCEL,
+        "accel_z": fields[13] / SCALE_ACCEL,
     }
 
 
@@ -221,42 +239,30 @@ def decode_packet(data: bytes) -> dict:
 
     pkt_type = data[1]
 
-    if pkt_type == PACKET_TYPE_ATTITUDE:
-        return decode_attitude_packet(data)
-    elif pkt_type == PACKET_TYPE_POSITION:
-        return decode_position_packet(data)
+    if pkt_type == PACKET_TYPE_TLOG_STATE:
+        return decode_tlog_state_packet(data)
+    elif pkt_type == PACKET_TYPE_TLOG_SENSORS:
+        return decode_tlog_sensors_packet(data)
     else:
         return None
 
 
-def format_attitude(pkt: dict) -> str:
-    """Format attitude packet for display."""
-    t = pkt['timestamp_ms'] / 1000.0
+def format_tlog(pkt: dict, latest_state: dict, latest_sensors: dict) -> str:
+    """Format merged tlog data for display (one-line summary)."""
+    t = pkt['time_ms'] / 1000.0
+
+    roll = latest_state.get('roll', 0)
+    pitch = latest_state.get('pitch', 0)
+    yaw = latest_state.get('yaw', 0)
+    alt = latest_state.get('altitude', 0)
+    thrust = latest_sensors.get('thrust', 0)
+
     return (
-        f"ATT  t={t:8.3f}  "
-        f"gyro=({pkt['gyro_x']:+6.2f}, {pkt['gyro_y']:+6.2f}, {pkt['gyro_z']:+6.2f}) rad/s  "
-        f"rpy=({pkt['roll']:+5.2f}, {pkt['pitch']:+5.2f}, {pkt['yaw']:+5.2f}) rad"
+        f"t={t:8.3f}  "
+        f"rpy=({roll:+5.2f}, {pitch:+5.2f}, {yaw:+5.2f})  "
+        f"alt={alt:+5.2f}m  "
+        f"thrust={thrust:.1%}"
     )
-
-
-def format_position(pkt: dict) -> str:
-    """Format position packet for display."""
-    t = pkt['timestamp_ms'] / 1000.0
-    return (
-        f"POS  t={t:8.3f}  "
-        f"alt={pkt['altitude']:+5.2f}m  vz={pkt['vz']:+5.2f}m/s  "
-        f"vxy=({pkt['vx']:+5.2f}, {pkt['vy']:+5.2f})m/s  "
-        f"thrust={pkt['thrust']:.1%}  bat={pkt['battery_v']:.2f}V"
-    )
-
-
-def format_packet(pkt: dict) -> str:
-    """Format any packet for display."""
-    if pkt["type"] == "attitude":
-        return format_attitude(pkt)
-    elif pkt["type"] == "position":
-        return format_position(pkt)
-    return str(pkt)
 
 
 def parse_uri(uri):
@@ -290,11 +296,15 @@ class TelemetryReceiver:
 
         # Statistics
         self.packets_received = 0
-        self.attitude_count = 0
-        self.position_count = 0
+        self.tlog_state_count = 0
+        self.tlog_sensors_count = 0
         self.unknown_count = 0
         self.errors = 0
         self.start_time = None
+
+        # Latest packet data for merging (packet A + B -> one CSV row)
+        self.latest_state = {}
+        self.latest_sensors = {}
 
     def scan(self):
         """Scan for available Crazyflies."""
@@ -366,15 +376,18 @@ class TelemetryReceiver:
 
                     if pkt:
                         self.packets_received += 1
-                        if pkt["type"] == "attitude":
-                            self.attitude_count += 1
-                        elif pkt["type"] == "position":
-                            self.position_count += 1
+                        if pkt["type"] == "tlog_state":
+                            self.tlog_state_count += 1
+                            self.latest_state = pkt
+                        elif pkt["type"] == "tlog_sensors":
+                            self.tlog_sensors_count += 1
+                            self.latest_sensors = pkt
 
                         callback(pkt)
 
-                        if csv_writer:
-                            self._write_csv_row(csv_writer, pkt)
+                        # Write CSV row on every sensors packet (B)
+                        if csv_writer and pkt["type"] == "tlog_sensors":
+                            self._write_csv_row(csv_writer)
                     else:
                         # Unknown packet - show for debugging
                         self.unknown_count += 1
@@ -394,32 +407,41 @@ class TelemetryReceiver:
             if elapsed < POLL_INTERVAL:
                 time.sleep(POLL_INTERVAL - elapsed)
 
-    def _write_csv_row(self, writer, pkt):
-        """Write packet to CSV file."""
-        row = {
-            "receive_time": datetime.now().isoformat(),
-            "type": pkt["type"],
-            "timestamp_ms": pkt["timestamp_ms"],
-        }
+    def _write_csv_row(self, writer):
+        """Write merged tlog row to CSV (called on each sensors packet).
 
-        if pkt["type"] == "attitude":
-            row.update({
-                "gyro_x": pkt["gyro_x"],
-                "gyro_y": pkt["gyro_y"],
-                "gyro_z": pkt["gyro_z"],
-                "roll": pkt["roll"],
-                "pitch": pkt["pitch"],
-                "yaw": pkt["yaw"],
-            })
-        elif pkt["type"] == "position":
-            row.update({
-                "altitude": pkt["altitude"],
-                "vz": pkt["vz"],
-                "vx": pkt["vx"],
-                "vy": pkt["vy"],
-                "thrust": pkt["thrust"],
-                "battery_v": pkt["battery_v"],
-            })
+        Uses time_ms from sensors packet (B). State fields come from
+        the latest state packet (A), which is at most one poll cycle stale.
+        """
+        s = self.latest_state
+        r = self.latest_sensors
+
+        row = {
+            "time_ms": r.get("time_ms", 0),
+            "roll": s.get("roll", 0),
+            "pitch": s.get("pitch", 0),
+            "yaw": s.get("yaw", 0),
+            "roll_rate": s.get("roll_rate", 0),
+            "pitch_rate": s.get("pitch_rate", 0),
+            "yaw_rate": s.get("yaw_rate", 0),
+            "x": s.get("x", 0),
+            "y": s.get("y", 0),
+            "altitude": s.get("altitude", 0),
+            "vx": s.get("vx", 0),
+            "vy": s.get("vy", 0),
+            "vz": s.get("vz", 0),
+            "thrust": r.get("thrust", 0),
+            "target_x": r.get("target_x", 0),
+            "target_y": r.get("target_y", 0),
+            "target_z": r.get("target_z", 0),
+            "target_yaw": r.get("target_yaw", 0),
+            "gyro_x": r.get("gyro_x", 0),
+            "gyro_y": r.get("gyro_y", 0),
+            "gyro_z": r.get("gyro_z", 0),
+            "accel_x": r.get("accel_x", 0),
+            "accel_y": r.get("accel_y", 0),
+            "accel_z": r.get("accel_z", 0),
+        }
 
         writer.writerow(row)
 
@@ -431,8 +453,8 @@ class TelemetryReceiver:
         print("\n--- Statistics ---", file=sys.stderr)
         print(f"Duration: {elapsed:.1f}s", file=sys.stderr)
         print(f"Packets received: {self.packets_received} ({rate:.1f}/s)", file=sys.stderr)
-        print(f"  Attitude: {self.attitude_count}", file=sys.stderr)
-        print(f"  Position: {self.position_count}", file=sys.stderr)
+        print(f"  tlog_state: {self.tlog_state_count}", file=sys.stderr)
+        print(f"  tlog_sensors: {self.tlog_sensors_count}", file=sys.stderr)
         print(f"  Unknown: {self.unknown_count}", file=sys.stderr)
         print(f"Errors: {self.errors}", file=sys.stderr)
 
@@ -657,7 +679,7 @@ class TelemetryReceiver:
                                   f"{total_bytes} bytes", file=sys.stderr)
                         break
 
-                    elif pkt_type in (PACKET_TYPE_ATTITUDE, PACKET_TYPE_POSITION):
+                    elif pkt_type in (PACKET_TYPE_TLOG_STATE, PACKET_TYPE_TLOG_SENSORS):
                         # Ignore telemetry packets during download
                         pass
 
@@ -719,11 +741,17 @@ def main():
     if args.output:
         csv_file = open(args.output, "w", newline="")
         fieldnames = [
-            "receive_time", "type", "timestamp_ms",
-            "gyro_x", "gyro_y", "gyro_z", "roll", "pitch", "yaw",
-            "altitude", "vz", "vx", "vy", "thrust", "battery_v"
+            "time_ms",
+            "roll", "pitch", "yaw",
+            "roll_rate", "pitch_rate", "yaw_rate",
+            "x", "y", "altitude",
+            "vx", "vy", "vz",
+            "thrust",
+            "target_x", "target_y", "target_z", "target_yaw",
+            "gyro_x", "gyro_y", "gyro_z",
+            "accel_x", "accel_y", "accel_z",
         ]
-        csv_writer = csv.DictWriter(csv_file, fieldnames=fieldnames, extrasaction="ignore")
+        csv_writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
         csv_writer.writeheader()
         print(f"Logging to {args.output}", file=sys.stderr)
 
@@ -767,7 +795,8 @@ def main():
             # Telemetry receive mode
             def on_packet(pkt):
                 if not args.quiet:
-                    print(format_packet(pkt))
+                    print(format_tlog(pkt, receiver.latest_state,
+                                      receiver.latest_sensors))
 
             print("Waiting for telemetry... (Ctrl+C to stop)", file=sys.stderr)
             receiver.receive_loop(on_packet, csv_writer)

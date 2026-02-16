@@ -19,8 +19,8 @@
 // ESB max payload is 32 bytes; HAL uses 1 byte for framing.
 //
 // Packet types (first byte of payload):
-//   0x01: Attitude/rates (17 bytes) - timestamp, gyro xyz, roll/pitch/yaw
-//   0x02: Position/altitude (17 bytes) - timestamp, alt, velocities, thrust, battery
+//   0x03: tlog_state (29 bytes) - timestamp, attitude, rates, position, velocity
+//   0x04: tlog_sensors (27 bytes) - timestamp, thrust, targets, gyro, accel
 //   0x10: CMD_REQUEST_LOG - ground station requests log download
 //   0x11: LOG_CHUNK - drone sends log data chunk
 //   0x12: LOG_COMPLETE - drone signals end of log file
@@ -43,8 +43,10 @@
 #ifdef HAL_HAS_RADIO
 
 // Packet type identifiers - telemetry (first byte of payload)
-#define PACKET_TYPE_ATTITUDE 0x01
-#define PACKET_TYPE_POSITION 0x02
+// 0x03/0x04 carry all 24 tlog.csv columns; old 0x01/0x02 retired so
+// mismatched ground station fails cleanly instead of producing garbage.
+#define PACKET_TYPE_TLOG_STATE 0x03
+#define PACKET_TYPE_TLOG_SENSORS 0x04
 
 // Packet type identifiers - log download
 #define CMD_REQUEST_LOG 0x10  // Ground -> drone: request log download
@@ -88,6 +90,7 @@ typedef enum {
 #define SCALE_POS 1000     // m -> mm
 #define SCALE_VEL 1000     // m/s -> mm/s
 #define SCALE_THRUST 65535 // 0.0-1.0 -> 0-65535
+#define SCALE_ACCEL 100    // m/s^2 -> cm/s^2 (range +/-327 m/s^2)
 
 // Packed structs for wire format.
 // Maximum payload is 30 bytes (HAL uses 1 byte for framing, ESB limit is 32).
@@ -97,29 +100,40 @@ typedef enum {
 // Maximum telemetry packet size (30 bytes payload, HAL adds 1 byte framing)
 #define MAX_TELEMETRY_SIZE 30
 
-// Packet type 0x01: Attitude and rates (17 bytes payload)
+// Packet type 0x03: tlog state - attitude, rates, position, velocity (29 bytes)
 typedef struct __attribute__((packed)) {
-    uint8_t type;          // 0x01
-    uint32_t timestamp_ms; // Milliseconds since boot
-    int16_t gyro_x;        // Raw gyro X (millirad/s)
-    int16_t gyro_y;        // Raw gyro Y (millirad/s)
-    int16_t gyro_z;        // Raw gyro Z (millirad/s)
-    int16_t roll;          // Roll angle (millirad)
-    int16_t pitch;         // Pitch angle (millirad)
-    int16_t yaw;           // Yaw angle (millirad)
-} telemetry_attitude_t;
+    uint8_t type;       // 0x03
+    uint32_t time_ms;   // Milliseconds since boot
+    int16_t roll;       // Roll angle (millirad)
+    int16_t pitch;      // Pitch angle (millirad)
+    int16_t yaw;        // Yaw angle (millirad)
+    int16_t roll_rate;  // Roll rate (millirad/s)
+    int16_t pitch_rate; // Pitch rate (millirad/s)
+    int16_t yaw_rate;   // Yaw rate (millirad/s)
+    int16_t x;          // X position (mm)
+    int16_t y;          // Y position (mm)
+    int16_t altitude;   // Altitude (mm)
+    int16_t vx;         // X velocity (mm/s)
+    int16_t vy;         // Y velocity (mm/s)
+    int16_t vz;         // Vertical velocity (mm/s)
+} tlog_state_packet_t;
 
-// Packet type 0x02: Position and altitude (17 bytes payload)
+// Packet type 0x04: tlog sensors - thrust, targets, gyro, accel (27 bytes)
 typedef struct __attribute__((packed)) {
-    uint8_t type;          // 0x02
-    uint32_t timestamp_ms; // Milliseconds since boot
-    int16_t altitude;      // Altitude (mm)
-    int16_t vz;            // Vertical velocity (mm/s)
-    int16_t vx;            // X velocity (mm/s)
-    int16_t vy;            // Y velocity (mm/s)
-    uint16_t thrust;       // Thrust (0-65535)
-    uint16_t battery_mv;   // Battery voltage (millivolts)
-} telemetry_position_t;
+    uint8_t type;       // 0x04
+    uint32_t time_ms;   // Milliseconds since boot
+    uint16_t thrust;    // Thrust (0-65535)
+    int16_t target_x;   // Target X (mm)
+    int16_t target_y;   // Target Y (mm)
+    int16_t target_z;   // Target Z / altitude (mm)
+    int16_t target_yaw; // Target yaw (millirad)
+    int16_t gyro_x;     // Raw gyro X (millirad/s)
+    int16_t gyro_y;     // Raw gyro Y (millirad/s)
+    int16_t gyro_z;     // Raw gyro Z (millirad/s)
+    int16_t accel_x;    // Accel X (cm/s^2)
+    int16_t accel_y;    // Accel Y (cm/s^2)
+    int16_t accel_z;    // Accel Z (cm/s^2)
+} tlog_sensors_packet_t;
 
 // Packet type 0x11: Log chunk (30 bytes payload)
 typedef struct __attribute__((packed)) {
@@ -136,10 +150,10 @@ typedef struct __attribute__((packed)) {
 
 // Verify packet sizes at compile time
 // All packets must be <= 30 bytes (HAL adds 1 byte framing, ESB limit is 32)
-_Static_assert(sizeof(telemetry_attitude_t) <= MAX_TELEMETRY_SIZE,
-               "Attitude packet too large for nRF51 syslink");
-_Static_assert(sizeof(telemetry_position_t) <= MAX_TELEMETRY_SIZE,
-               "Position packet too large for nRF51 syslink");
+_Static_assert(sizeof(tlog_state_packet_t) <= MAX_TELEMETRY_SIZE,
+               "tlog_state packet too large for nRF51 syslink");
+_Static_assert(sizeof(tlog_sensors_packet_t) <= MAX_TELEMETRY_SIZE,
+               "tlog_sensors packet too large for nRF51 syslink");
 _Static_assert(sizeof(log_chunk_packet_t) <= 30, "Log chunk packet too large");
 _Static_assert(sizeof(log_complete_packet_t) <= 30,
                "Log complete packet too large");
@@ -199,9 +213,10 @@ typedef struct {
     hive_bus_id_t state_bus;
     hive_bus_id_t sensor_bus;
     hive_bus_id_t thrust_bus;
+    hive_bus_id_t position_target_bus;
     hive_actor_id_t flight_manager; // For ARM notification
     tunable_params_t *params;       // Tunable parameters
-    bool next_is_attitude;          // Alternate between packet types
+    bool next_is_state;             // Alternate between packet types
     // Log download state
     comms_mode_t mode;
     int log_fd;
@@ -370,9 +385,10 @@ void *comms_actor_init(void *init_args) {
     state.state_bus = buses->state_bus;
     state.sensor_bus = buses->sensor_bus;
     state.thrust_bus = buses->thrust_bus;
+    state.position_target_bus = buses->position_target_bus;
     state.params = buses->params;
     state.flight_manager = HIVE_ACTOR_ID_INVALID; // Set from siblings in actor
-    state.next_is_attitude = true;
+    state.next_is_state = true;
     state.mode = COMMS_MODE_FLIGHT;
     state.log_fd = -1;
     state.log_offset = 0;
@@ -401,7 +417,8 @@ void comms_actor(void *args, const hive_spawn_info_t *siblings,
     // Subscribe to buses
     if (HIVE_FAILED(hive_bus_subscribe(state->state_bus)) ||
         HIVE_FAILED(hive_bus_subscribe(state->sensor_bus)) ||
-        HIVE_FAILED(hive_bus_subscribe(state->thrust_bus))) {
+        HIVE_FAILED(hive_bus_subscribe(state->thrust_bus)) ||
+        HIVE_FAILED(hive_bus_subscribe(state->position_target_bus))) {
         HIVE_LOG_ERROR("[COMMS] Bus subscribe failed");
         hive_exit(HIVE_EXIT_REASON_CRASH);
     }
@@ -413,13 +430,15 @@ void comms_actor(void *args, const hive_spawn_info_t *siblings,
         hive_exit(HIVE_EXIT_REASON_CRASH);
     }
 
-    HIVE_LOG_INFO("[COMMS] Started (event-driven), pkt sizes: att=%zu pos=%zu",
-                  sizeof(telemetry_attitude_t), sizeof(telemetry_position_t));
+    HIVE_LOG_INFO(
+        "[COMMS] Started (event-driven), pkt sizes: state=%zu sens=%zu",
+        sizeof(tlog_state_packet_t), sizeof(tlog_sensors_packet_t));
 
     // Latest data from buses
     state_estimate_t latest_state = STATE_ESTIMATE_ZERO;
     sensor_data_t latest_sensors = SENSOR_DATA_ZERO;
     thrust_cmd_t latest_thrust = THRUST_CMD_ZERO;
+    position_target_t latest_target = POSITION_TARGET_ZERO;
 
     // Select sources: HAL event (radio RX) + IPC (RESET notification)
     hive_select_source_t sources[] = {
@@ -489,6 +508,15 @@ void comms_actor(void *args, const hive_spawn_info_t *siblings,
             }
         }
 
+        position_target_t tmp_target;
+        if (HIVE_SUCCEEDED(hive_bus_read(
+                state->position_target_bus, &tmp_target, sizeof(tmp_target),
+                &bytes_read, HIVE_TIMEOUT_NONBLOCKING))) {
+            if (bytes_read == sizeof(position_target_t)) {
+                latest_target = tmp_target;
+            }
+        }
+
         // Check hardware flow control before sending
         if (!hal_esb_tx_ready()) {
             if ((wake_count % 1000) == 1) {
@@ -537,38 +565,52 @@ void comms_actor(void *args, const hive_spawn_info_t *siblings,
                 state->log_sequence++;
             }
         } else {
-            // Flight telemetry mode: alternate between attitude and position
-            if (state->next_is_attitude) {
-                // Send attitude packet
-                telemetry_attitude_t pkt = {
-                    .type = PACKET_TYPE_ATTITUDE,
-                    .timestamp_ms = hal_get_time_ms(),
-                    .gyro_x = float_to_i16(latest_sensors.gyro[0], SCALE_RATE),
-                    .gyro_y = float_to_i16(latest_sensors.gyro[1], SCALE_RATE),
-                    .gyro_z = float_to_i16(latest_sensors.gyro[2], SCALE_RATE),
+            // Flight telemetry mode: alternate tlog_state / tlog_sensors
+            if (state->next_is_state) {
+                tlog_state_packet_t pkt = {
+                    .type = PACKET_TYPE_TLOG_STATE,
+                    .time_ms = hal_get_time_ms(),
                     .roll = float_to_i16(latest_state.roll, SCALE_ANGLE),
                     .pitch = float_to_i16(latest_state.pitch, SCALE_ANGLE),
                     .yaw = float_to_i16(latest_state.yaw, SCALE_ANGLE),
+                    .roll_rate =
+                        float_to_i16(latest_state.roll_rate, SCALE_RATE),
+                    .pitch_rate =
+                        float_to_i16(latest_state.pitch_rate, SCALE_RATE),
+                    .yaw_rate = float_to_i16(latest_state.yaw_rate, SCALE_RATE),
+                    .x = float_to_i16(latest_state.x, SCALE_POS),
+                    .y = float_to_i16(latest_state.y, SCALE_POS),
+                    .altitude = float_to_i16(latest_state.altitude, SCALE_POS),
+                    .vx = float_to_i16(latest_state.x_velocity, SCALE_VEL),
+                    .vy = float_to_i16(latest_state.y_velocity, SCALE_VEL),
+                    .vz =
+                        float_to_i16(latest_state.vertical_velocity, SCALE_VEL),
                 };
                 hal_esb_send(&pkt, sizeof(pkt));
             } else {
-                // Send position packet
-                telemetry_position_t pkt = {
-                    .type = PACKET_TYPE_POSITION,
-                    .timestamp_ms = hal_get_time_ms(),
-                    .altitude = float_to_i16(latest_state.altitude, SCALE_POS),
-                    .vz =
-                        float_to_i16(latest_state.vertical_velocity, SCALE_VEL),
-                    .vx = float_to_i16(latest_state.x_velocity, SCALE_VEL),
-                    .vy = float_to_i16(latest_state.y_velocity, SCALE_VEL),
+                tlog_sensors_packet_t pkt = {
+                    .type = PACKET_TYPE_TLOG_SENSORS,
+                    .time_ms = hal_get_time_ms(),
                     .thrust = float_to_u16(latest_thrust.thrust),
-                    .battery_mv = (uint16_t)(hal_power_get_battery() * 1000.0f),
+                    .target_x = float_to_i16(latest_target.x, SCALE_POS),
+                    .target_y = float_to_i16(latest_target.y, SCALE_POS),
+                    .target_z = float_to_i16(latest_target.z, SCALE_POS),
+                    .target_yaw = float_to_i16(latest_target.yaw, SCALE_ANGLE),
+                    .gyro_x = float_to_i16(latest_sensors.gyro[0], SCALE_RATE),
+                    .gyro_y = float_to_i16(latest_sensors.gyro[1], SCALE_RATE),
+                    .gyro_z = float_to_i16(latest_sensors.gyro[2], SCALE_RATE),
+                    .accel_x =
+                        float_to_i16(latest_sensors.accel[0], SCALE_ACCEL),
+                    .accel_y =
+                        float_to_i16(latest_sensors.accel[1], SCALE_ACCEL),
+                    .accel_z =
+                        float_to_i16(latest_sensors.accel[2], SCALE_ACCEL),
                 };
                 hal_esb_send(&pkt, sizeof(pkt));
             }
 
             // Alternate packet type
-            state->next_is_attitude = !state->next_is_attitude;
+            state->next_is_state = !state->next_is_state;
         }
     }
 }

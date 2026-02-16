@@ -132,6 +132,7 @@ graph TB
     SensorBus -.-> Comms[Comms]
     StateBus -.-> Comms
     ThrustBus -.-> Comms
+    PositionTargetBus -.-> Comms
     Comms -.-> Radio[(Radio)]
 
     SensorBus -.-> Logger[Logger]
@@ -416,18 +417,19 @@ The Crazyflie build includes a comms actor that sends flight data over radio
 at 100Hz for real-time ground station logging. This uses the syslink protocol
 to the nRF51822 radio chip, which transmits via ESB to a Crazyradio 2.0 on the ground.
 
-**Packet types** (17 bytes payload each, alternating at 50Hz):
-- Type 0x01: Attitude/rates (timestamp, gyro XYZ, roll/pitch/yaw)
-- Type 0x02: Position (timestamp, altitude, velocities, thrust, battery voltage)
+**Packet types** (alternating at ~50Hz each, all 24 tlog.csv columns):
+- Type 0x03: tlog_state (29 bytes) - timestamp, attitude, rates, position, velocity
+- Type 0x04: tlog_sensors (27 bytes) - timestamp, thrust, targets, gyro, accel
+
+The ground station merges the two packet halves and writes one CSV row per
+packet B arrival, producing output identical to tlog.csv from the SD card
+logger. Radio-captured CSV can be used directly with all analysis tools
+(analyze_pid, plot_telemetry, plot_flight, analyze_hover, flight_debug).
 
 **ESB packet limits** - ESB limit is 32 bytes, HAL uses 1 byte for framing,
 leaving 30 bytes for application payload. Each packet includes a 32-bit
 timestamp (milliseconds since boot) for accurate timing reconstruction.
-
-**Note** - Position targets (waypoints) are not included in radio telemetry to
-keep packets small. Radio telemetry is suitable for tuning altitude, attitude,
-and rate control loops, but not position control. For position control tuning,
-use Webots CSV telemetry which includes full position targets.
+Accel uses scale 100 (cm/s^2) for range; all other fields use scale 1000.
 
 **Ground station receiver**
 ```bash
@@ -505,9 +507,9 @@ flight analysis. Storage is selected automatically based on mount availability:
 - **Webots simulation**: `/tmp/tlog.csv`
 - **Crazyflie without SD**: Telemetry logging disabled (graceful exit)
 
-Unlike radio telemetry, CSV logging includes position targets (waypoints), making it
-the right tool for tuning position control. Use Webots to tune position gains, then
-transfer to hardware with conservative adjustments (see hal_config.h).
+Radio telemetry now carries the same 24 columns as CSV logging. Both are
+suitable for all analysis tools. CSV logging at 25Hz provides a local backup
+on SD card independent of radio link quality.
 
 **CSV columns**
 - `time_ms`: Timestamp since flight start

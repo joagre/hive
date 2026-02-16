@@ -240,7 +240,7 @@ The nRF51 is PRX (receiver), Crazyradio is PTX (transmitter):
 - Protocol framing handled by HAL, not application code
 
 **Command IDs (in comms_actor.c):**
-- `0x01-0x02` - Telemetry packets (attitude, position)
+- `0x03-0x04` - Telemetry packets (tlog_state, tlog_sensors)
 - `0x10-0x12` - Log download commands
 - `0x20` - GO command (start flight)
 - `0x30-0x32` - Parameter tuning (set, get, list)

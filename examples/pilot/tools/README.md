@@ -177,7 +177,7 @@ python3 flight_debug.py /tmp/tlog.csv --interval 1.0
 
 ### ground_station.py
 
-Receive real-time telemetry, tune parameters, and download flight logs from Crazyflie hardware via Crazyradio 2.0. Decodes telemetry packets (attitude/rates and position/altitude) and optionally logs to CSV.
+Receive real-time telemetry, tune parameters, and download flight logs from Crazyflie hardware via Crazyradio 2.0. Decodes telemetry packets carrying all 24 tlog.csv columns and writes tlog.csv-compatible CSV directly. Radio-captured CSV can be used with all analysis tools (analyze_pid, plot_telemetry, plot_flight, analyze_hover, flight_debug) without modification.
 
 ```bash
 # Display real-time telemetry to stdout
@@ -215,8 +215,10 @@ python3 ground_station.py --set-param hover_thrust 0.40
 ```
 
 **Telemetry packet types**
-- Attitude (0x01): timestamp, gyro XYZ, roll/pitch/yaw
-- Position (0x02): timestamp, altitude, vz, vx, vy, thrust, battery_mv
+- tlog_state (0x03): time_ms, roll/pitch/yaw, rates, x/y/altitude, vx/vy/vz (29 bytes)
+- tlog_sensors (0x04): time_ms, thrust, targets, gyro XYZ, accel XYZ (27 bytes)
+
+The two packet types alternate at ~50 Hz each. Ground station merges them into one CSV row per sensors packet, producing output identical to tlog.csv from the SD card logger.
 
 **Log download** - Sends CMD_REQUEST_LOG command to drone, receives log chunks, and saves to file. The log file is plain text and can be viewed directly with `cat`, `less`, etc.
 
