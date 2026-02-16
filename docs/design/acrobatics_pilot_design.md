@@ -107,8 +107,14 @@ Published to a new `maneuver_override_bus` (added to `pilot_buses_t`).
 Cascade actors check it non-blocking each cycle. If stale (>100ms), they
 ignore it and resume normal operation.
 
-On release, the ROM publishes a transition setpoint matching current state
-before clearing the override bit. This avoids PID integral windup transients.
+There is a 1-cycle gap (~4ms) on override and release. On override: the
+cascade actor sees the flag and stops publishing, but the maneuver actor
+hasn't published its first setpoint yet. The downstream actor runs on the
+stale bus value from the previous cycle. On release: the ROM publishes a
+transition setpoint matching current state before clearing the bit, so
+the cascade resumes with near-zero error. The gap is bounded by one
+control period and invisible in practice - the motor actor's 50ms deadman
+is an order of magnitude larger.
 
 ## ROM Word Reference
 
