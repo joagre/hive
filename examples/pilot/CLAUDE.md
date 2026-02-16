@@ -96,7 +96,7 @@ python3 tools/ground_station.py --get-param rate_kp
 # Set a parameter (takes effect immediately on next control loop)
 python3 tools/ground_station.py --set-param rate_kp 0.025
 python3 tools/ground_station.py --set-param att_kp 2.0
-python3 tools/ground_station.py --set-param hover_thrust 0.40
+python3 tools/ground_station.py --set-param vvel_damping 0.50
 ```
 
 **Tunable Parameters (45 total):**
@@ -105,7 +105,7 @@ python3 tools/ground_station.py --set-param hover_thrust 0.40
 |----------|------------|
 | Rate PID | `rate_kp`, `rate_ki`, `rate_kd`, `rate_imax`, `rate_omax_roll`, `rate_omax_pitch`, `rate_omax_yaw` |
 | Attitude PID | `att_kp`, `att_ki`, `att_kd`, `att_imax`, `att_omax` |
-| Altitude PID | `alt_kp`, `alt_ki`, `alt_kd`, `alt_imax`, `alt_omax`, `hover_thrust`, `vvel_damping` |
+| Altitude PID | `alt_kp`, `alt_ki`, `alt_kd`, `alt_imax`, `alt_omax`, `vvel_damping` |
 | Emergency | `emergency_tilt_limit`, `emergency_alt_max` |
 | Landing | `landing_descent_rate`, `landing_velocity_gain` |
 | Position | `pos_kp`, `pos_kd`, `max_tilt_angle` |
@@ -113,7 +113,6 @@ python3 tools/ground_station.py --set-param hover_thrust 0.40
 | Altitude Kalman Filter | `kf_q_altitude`, `kf_q_velocity`, `kf_q_bias`, `kf_r_altitude`, `kf_p0_altitude`, `kf_p0_velocity`, `kf_p0_bias` |
 | Horizontal Velocity | `hvel_filter_alpha` |
 | Waypoints | `wp_tolerance_xy`, `wp_tolerance_z`, `wp_tolerance_yaw`, `wp_tolerance_vel`, `wp_hover_time_s` |
-| Other | `thrust_ramp_ms` |
 
 **Safety:** All values are validated before application. Invalid values (out of range) are rejected.
 

@@ -38,16 +38,15 @@ static const param_meta_t param_meta[TUNABLE_PARAM_COUNT] = {
     [PARAM_ATT_IMAX] = {.name = "att_imax", .min = 0.0f, .max = 2.0f},
     [PARAM_ATT_OMAX] = {.name = "att_omax", .min = 0.0f, .max = 5.0f},
 
-    // Altitude PID (12-18)
+    // Altitude PID (12-17)
     [PARAM_ALT_KP] = {.name = "alt_kp", .min = 0.0f, .max = 1.0f},
     [PARAM_ALT_KI] = {.name = "alt_ki", .min = 0.0f, .max = 0.5f},
     [PARAM_ALT_KD] = {.name = "alt_kd", .min = 0.0f, .max = 0.5f},
     [PARAM_ALT_IMAX] = {.name = "alt_imax", .min = 0.0f, .max = 1.0f},
     [PARAM_ALT_OMAX] = {.name = "alt_omax", .min = 0.0f, .max = 0.5f},
-    [PARAM_HOVER_THRUST] = {.name = "hover_thrust", .min = 0.1f, .max = 0.9f},
     [PARAM_VVEL_DAMPING] = {.name = "vvel_damping", .min = 0.0f, .max = 1.0f},
 
-    // Emergency limits (19-20)
+    // Emergency limits (18-19)
     [PARAM_EMERGENCY_TILT_LIMIT] = {.name = "emergency_tilt_limit",
                                     .min = 0.17f,
                                     .max = 1.57f}, // 10-90 deg
@@ -55,7 +54,7 @@ static const param_meta_t param_meta[TUNABLE_PARAM_COUNT] = {
                                  .min = 0.5f,
                                  .max = 10.0f},
 
-    // Landing (21-22)
+    // Landing (20-21)
     [PARAM_LANDING_DESCENT_RATE] = {.name = "landing_descent_rate",
                                     .min = -1.0f,
                                     .max = 0.0f}, // negative = down
@@ -63,14 +62,14 @@ static const param_meta_t param_meta[TUNABLE_PARAM_COUNT] = {
                                      .min = 0.0f,
                                      .max = 2.0f},
 
-    // Position control (23-25)
+    // Position control (22-24)
     [PARAM_POS_KP] = {.name = "pos_kp", .min = 0.0f, .max = 1.0f},
     [PARAM_POS_KD] = {.name = "pos_kd", .min = 0.0f, .max = 1.0f},
     [PARAM_MAX_TILT_ANGLE] = {.name = "max_tilt_angle",
                               .min = 0.0f,
                               .max = 0.78f}, // 0-45 deg
 
-    // Complementary filter (26-30)
+    // Complementary filter (25-29)
     [PARAM_CF_ALPHA] = {.name = "cf_alpha", .min = 0.5f, .max = 1.0f},
     [PARAM_CF_MAG_ALPHA] = {.name = "cf_mag_alpha", .min = 0.5f, .max = 1.0f},
     [PARAM_CF_USE_MAG] = {.name = "cf_use_mag",
@@ -83,7 +82,7 @@ static const param_meta_t param_meta[TUNABLE_PARAM_COUNT] = {
                                   .min = 1.0f,
                                   .max = 1.5f},
 
-    // Waypoint navigation (31-35)
+    // Waypoint navigation (30-34)
     [PARAM_WP_TOLERANCE_XY] = {.name = "wp_tolerance_xy",
                                .min = 0.01f,
                                .max = 1.0f},
@@ -100,12 +99,7 @@ static const param_meta_t param_meta[TUNABLE_PARAM_COUNT] = {
                                .min = 0.0f,
                                .max = 60.0f},
 
-    // Flight manager (36)
-    [PARAM_THRUST_RAMP_MS] = {.name = "thrust_ramp_ms",
-                              .min = 0.0f,
-                              .max = 5000.0f},
-
-    // Altitude Kalman filter (37-43)
+    // Altitude Kalman filter (35-41)
     // Q (process noise) - how much we trust the model vs measurements
     [PARAM_KF_Q_ALTITUDE] = {.name = "kf_q_altitude",
                              .min = 0.00001f,
@@ -127,12 +121,12 @@ static const param_meta_t param_meta[TUNABLE_PARAM_COUNT] = {
                               .max = 10.0f},
     [PARAM_KF_P0_BIAS] = {.name = "kf_p0_bias", .min = 0.001f, .max = 1.0f},
 
-    // Horizontal velocity filter (44)
+    // Horizontal velocity filter (42)
     [PARAM_HVEL_FILTER_ALPHA] = {.name = "hvel_filter_alpha",
                                  .min = 0.5f,
                                  .max = 0.999f},
 
-    // Flight manager lifecycle (45-46)
+    // Flight manager lifecycle (43-44)
     [PARAM_ARMED_COUNTDOWN_S] = {.name = "armed_countdown_s",
                                  .min = 5.0f,
                                  .max = 300.0f},
@@ -164,7 +158,6 @@ void tunable_params_init(tunable_params_t *params) {
     params->alt_kd = HAL_ALT_PID_KD;
     params->alt_imax = HAL_ALT_PID_IMAX;
     params->alt_omax = HAL_ALT_PID_OMAX;
-    params->hover_thrust = HAL_HOVER_THRUST;
     params->vvel_damping = HAL_VVEL_DAMPING_GAIN;
 
     // Emergency limits - from config.h
@@ -194,9 +187,6 @@ void tunable_params_init(tunable_params_t *params) {
     params->wp_tolerance_vel = WAYPOINT_TOLERANCE_VEL;
     // Default hover time from flight profile (2 seconds)
     params->wp_hover_time_s = 2.0f;
-
-    // Flight manager
-    params->thrust_ramp_ms = 750.0f; // Slower ramp reduces overshoot (was 500)
 
     // Altitude Kalman filter - from config.h
     params->kf_q_altitude = ALT_KF_Q_ALTITUDE;

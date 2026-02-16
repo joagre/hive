@@ -211,7 +211,7 @@ python3 ground_station.py --get-param rate_kp
 # Set a parameter (takes effect immediately)
 python3 ground_station.py --set-param rate_kp 0.025
 python3 ground_station.py --set-param att_kp 2.0
-python3 ground_station.py --set-param hover_thrust 0.40
+python3 ground_station.py --set-param vvel_damping 0.50
 ```
 
 **Telemetry packet types**

@@ -3,10 +3,6 @@
 #ifndef HAL_CONFIG_H
 #define HAL_CONFIG_H
 
-// Calibrated hover thrust (normalized 0.0-1.0)
-// Flight-tested: 0.75 too low (max 0.375m), 0.80 hovers at target, 0.85 overshoots
-#define HAL_HOVER_THRUST 0.80f
-
 /*
  * Motor mapping (Bitcraze standard, viewed from above):
  *

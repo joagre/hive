@@ -13,7 +13,7 @@
 #include "hive_runtime.h"
 
 // Parameter count (must match enum)
-#define TUNABLE_PARAM_COUNT 47
+#define TUNABLE_PARAM_COUNT 45
 
 // Parameter identifiers
 // Grouped by subsystem for easier navigation
@@ -34,60 +34,56 @@ typedef enum {
     PARAM_ATT_IMAX = 10,
     PARAM_ATT_OMAX = 11,
 
-    // Altitude PID (12-18)
+    // Altitude PID (12-17)
     PARAM_ALT_KP = 12,
     PARAM_ALT_KI = 13,
     PARAM_ALT_KD = 14,
     PARAM_ALT_IMAX = 15,
     PARAM_ALT_OMAX = 16,
-    PARAM_HOVER_THRUST = 17,
-    PARAM_VVEL_DAMPING = 18,
+    PARAM_VVEL_DAMPING = 17,
 
-    // Emergency limits (19-20)
-    PARAM_EMERGENCY_TILT_LIMIT = 19,
-    PARAM_EMERGENCY_ALT_MAX = 20,
+    // Emergency limits (18-19)
+    PARAM_EMERGENCY_TILT_LIMIT = 18,
+    PARAM_EMERGENCY_ALT_MAX = 19,
 
-    // Landing (21-22)
-    PARAM_LANDING_DESCENT_RATE = 21,
-    PARAM_LANDING_VELOCITY_GAIN = 22,
+    // Landing (20-21)
+    PARAM_LANDING_DESCENT_RATE = 20,
+    PARAM_LANDING_VELOCITY_GAIN = 21,
 
-    // Position control (23-25)
-    PARAM_POS_KP = 23,
-    PARAM_POS_KD = 24,
-    PARAM_MAX_TILT_ANGLE = 25,
+    // Position control (22-24)
+    PARAM_POS_KP = 22,
+    PARAM_POS_KD = 23,
+    PARAM_MAX_TILT_ANGLE = 24,
 
-    // Complementary filter (26-30)
-    PARAM_CF_ALPHA = 26,
-    PARAM_CF_MAG_ALPHA = 27,
-    PARAM_CF_USE_MAG = 28,
-    PARAM_CF_ACCEL_THRESH_LO = 29,
-    PARAM_CF_ACCEL_THRESH_HI = 30,
+    // Complementary filter (25-29)
+    PARAM_CF_ALPHA = 25,
+    PARAM_CF_MAG_ALPHA = 26,
+    PARAM_CF_USE_MAG = 27,
+    PARAM_CF_ACCEL_THRESH_LO = 28,
+    PARAM_CF_ACCEL_THRESH_HI = 29,
 
-    // Waypoint navigation (31-35)
-    PARAM_WP_TOLERANCE_XY = 31,
-    PARAM_WP_TOLERANCE_Z = 32,
-    PARAM_WP_TOLERANCE_YAW = 33,
-    PARAM_WP_TOLERANCE_VEL = 34,
-    PARAM_WP_HOVER_TIME_S = 35,
+    // Waypoint navigation (30-34)
+    PARAM_WP_TOLERANCE_XY = 30,
+    PARAM_WP_TOLERANCE_Z = 31,
+    PARAM_WP_TOLERANCE_YAW = 32,
+    PARAM_WP_TOLERANCE_VEL = 33,
+    PARAM_WP_HOVER_TIME_S = 34,
 
-    // Flight manager (36)
-    PARAM_THRUST_RAMP_MS = 36,
+    // Altitude Kalman filter (35-41)
+    PARAM_KF_Q_ALTITUDE = 35,
+    PARAM_KF_Q_VELOCITY = 36,
+    PARAM_KF_Q_BIAS = 37,
+    PARAM_KF_R_ALTITUDE = 38,
+    PARAM_KF_P0_ALTITUDE = 39,
+    PARAM_KF_P0_VELOCITY = 40,
+    PARAM_KF_P0_BIAS = 41,
 
-    // Altitude Kalman filter (37-43)
-    PARAM_KF_Q_ALTITUDE = 37,
-    PARAM_KF_Q_VELOCITY = 38,
-    PARAM_KF_Q_BIAS = 39,
-    PARAM_KF_R_ALTITUDE = 40,
-    PARAM_KF_P0_ALTITUDE = 41,
-    PARAM_KF_P0_VELOCITY = 42,
-    PARAM_KF_P0_BIAS = 43,
+    // Horizontal velocity filter (42)
+    PARAM_HVEL_FILTER_ALPHA = 42,
 
-    // Horizontal velocity filter (44)
-    PARAM_HVEL_FILTER_ALPHA = 44,
-
-    // Flight manager lifecycle (45-46)
-    PARAM_ARMED_COUNTDOWN_S = 45,
-    PARAM_AUTO_GO_DELAY_S = 46,
+    // Flight manager lifecycle (43-44)
+    PARAM_ARMED_COUNTDOWN_S = 43,
+    PARAM_AUTO_GO_DELAY_S = 44,
 } tunable_param_id_t;
 
 // All tunable parameters in a single struct
@@ -115,7 +111,6 @@ typedef struct {
     float alt_kd;
     float alt_imax;
     float alt_omax;
-    float hover_thrust;
     float vvel_damping;
 
     // Emergency limits
@@ -144,9 +139,6 @@ typedef struct {
     float wp_tolerance_yaw;
     float wp_tolerance_vel;
     float wp_hover_time_s;
-
-    // Flight manager
-    float thrust_ramp_ms;
 
     // Altitude Kalman filter
     float kf_q_altitude;

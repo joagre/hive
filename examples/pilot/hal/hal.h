@@ -76,12 +76,6 @@ void hal_write_torque(const torque_cmd_t *cmd);
 // Platform-Specific Constants
 // ----------------------------------------------------------------------------
 
-// HAL_HOVER_THRUST is defined in each platform's hal_config.h:
-//   hal/crazyflie-2.1plus/hal_config.h
-//   hal/webots-crazyflie/hal_config.h
-// The appropriate file is included via the platform-specific Makefile.
-// This keeps platform constants in platform directories (no #ifdefs here).
-
 // ----------------------------------------------------------------------------
 // Platform Utilities
 // ----------------------------------------------------------------------------

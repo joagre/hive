@@ -248,9 +248,6 @@ void altitude_actor(void *args, const hive_spawn_info_t *siblings,
             ramp_thrust = 0.0f;
         } else if (landing_mode) {
             // Landing mode: control descent rate, not altitude
-            // Use discovered hover thrust if available, else tunable fallback
-            float base =
-                liftoff_detected ? discovered_hover_thrust : p->hover_thrust;
             if (!isfinite(est.vertical_velocity)) {
                 HIVE_LOG_ERROR(
                     "[ALT] NaN velocity in landing - estimator failure!");
@@ -258,7 +255,8 @@ void altitude_actor(void *args, const hive_spawn_info_t *siblings,
             } else {
                 float velocity_error =
                     p->landing_descent_rate - est.vertical_velocity;
-                thrust = base + p->landing_velocity_gain * velocity_error;
+                thrust = discovered_hover_thrust +
+                         p->landing_velocity_gain * velocity_error;
                 thrust = CLAMPF(thrust, 0.0f, 1.0f);
             }
         } else if (!liftoff_detected) {

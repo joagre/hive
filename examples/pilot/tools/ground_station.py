@@ -109,38 +109,35 @@ PARAM_NAMES = {
     9: "att_kd",
     10: "att_imax",
     11: "att_omax",
-    # Altitude PID (12-18)
+    # Altitude PID (12-17)
     12: "alt_kp",
     13: "alt_ki",
     14: "alt_kd",
     15: "alt_imax",
     16: "alt_omax",
-    17: "hover_thrust",
-    18: "vvel_damping",
-    # Emergency limits (19-20)
-    19: "emergency_tilt_limit",
-    20: "emergency_alt_max",
-    # Landing (21-22)
-    21: "landing_descent_rate",
-    22: "landing_velocity_gain",
-    # Position control (23-25)
-    23: "pos_kp",
-    24: "pos_kd",
-    25: "max_tilt_angle",
-    # Complementary filter (26-30)
-    26: "cf_alpha",
-    27: "cf_mag_alpha",
-    28: "cf_use_mag",
-    29: "cf_accel_thresh_lo",
-    30: "cf_accel_thresh_hi",
-    # Waypoint navigation (31-35)
-    31: "wp_tolerance_xy",
-    32: "wp_tolerance_z",
-    33: "wp_tolerance_yaw",
-    34: "wp_tolerance_vel",
-    35: "wp_hover_time_s",
-    # Flight manager (36)
-    36: "thrust_ramp_ms",
+    17: "vvel_damping",
+    # Emergency limits (18-19)
+    18: "emergency_tilt_limit",
+    19: "emergency_alt_max",
+    # Landing (20-21)
+    20: "landing_descent_rate",
+    21: "landing_velocity_gain",
+    # Position control (22-24)
+    22: "pos_kp",
+    23: "pos_kd",
+    24: "max_tilt_angle",
+    # Complementary filter (25-29)
+    25: "cf_alpha",
+    26: "cf_mag_alpha",
+    27: "cf_use_mag",
+    28: "cf_accel_thresh_lo",
+    29: "cf_accel_thresh_hi",
+    # Waypoint navigation (30-34)
+    30: "wp_tolerance_xy",
+    31: "wp_tolerance_z",
+    32: "wp_tolerance_yaw",
+    33: "wp_tolerance_vel",
+    34: "wp_hover_time_s",
 }
 
 # Reverse lookup: name to ID
