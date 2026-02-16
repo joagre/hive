@@ -18,10 +18,10 @@ They publish setpoints to the same buses the cascade uses. An override
 bitmask tells cascade actors when to stop publishing.
 
 ```
-                        ┌──────────────────────┐
-                        │   maneuver_actor      │
-                        │   (Forth VM + ROM)    │
-                        └──────────┬───────────┘
+                        ┌────────────────────┐
+                        │   maneuver_actor   │
+                        │   (Forth VM + ROM) │
+                        └─────────┬──────────┘
                                    │
                       publishes override + setpoints
                                    │
