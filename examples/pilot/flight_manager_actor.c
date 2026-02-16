@@ -338,14 +338,30 @@ void flight_manager_actor(void *args, const hive_spawn_info_t *siblings,
         }
 
         case FM_STATE_FLYING: {
-            // Wait for flight timer, low battery, or STATUS request
-            hive_select_source_t flying_sources[3];
+            // Wait for flight timer, crash, abort, low battery, or STATUS
+            hive_select_source_t flying_sources[5];
             size_t num_flying_sources = 0;
 
             // Flight timer
             flying_sources[num_flying_sources++] = (hive_select_source_t){
                 .type = HIVE_SEL_IPC,
                 .ipc = {.class = HIVE_MSG_TIMER, .tag = flight_timer}};
+
+            // Crash notification from altitude actor (immediate landing)
+            flying_sources[num_flying_sources++] =
+                (hive_select_source_t){.type = HIVE_SEL_IPC,
+                                       .ipc = {.sender = ids.altitude,
+                                               .class = HIVE_MSG_NOTIFY,
+                                               .id = NOTIFY_FLIGHT_LANDED}};
+
+            // ABORT from comms (if available)
+            if (ids.comms != HIVE_ACTOR_ID_INVALID) {
+                flying_sources[num_flying_sources++] =
+                    (hive_select_source_t){.type = HIVE_SEL_IPC,
+                                           .ipc = {.sender = ids.comms,
+                                                   .class = HIVE_MSG_NOTIFY,
+                                                   .id = NOTIFY_ABORT}};
+            }
 
             // Low battery from battery actor
             if (ids.battery != HIVE_ACTOR_ID_INVALID) {
@@ -376,8 +392,21 @@ void flight_manager_actor(void *args, const hive_spawn_info_t *siblings,
                 continue;
             }
 
-            // Low battery or flight timer - both initiate landing
-            if (result.ipc.id == NOTIFY_LOW_BATTERY) {
+            // Crash - altitude actor detected emergency, drone already down.
+            // Skip LANDING (no descent needed) and go straight to LANDED.
+            if (result.ipc.id == NOTIFY_FLIGHT_LANDED) {
+                HIVE_LOG_WARN("[FLM] CRASH - altitude actor reports landed");
+                hive_timer_cancel(flight_timer);
+                state = FM_STATE_LANDED;
+                break;
+            }
+
+            // ABORT from ground station - initiate immediate landing
+            if (result.ipc.id == NOTIFY_ABORT) {
+                HIVE_LOG_INFO("[FLM] ABORT during flight - landing");
+                hive_timer_cancel(flight_timer);
+            } else if (result.ipc.id == NOTIFY_LOW_BATTERY) {
+                // Low battery - emergency landing
                 HIVE_LOG_WARN("[FLM] LOW BATTERY - emergency landing");
                 hive_timer_cancel(flight_timer);
             } else {

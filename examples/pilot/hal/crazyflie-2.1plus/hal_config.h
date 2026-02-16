@@ -4,8 +4,8 @@
 #define HAL_CONFIG_H
 
 // Calibrated hover thrust (normalized 0.0-1.0)
-// Flight-tested: 0.65 barely lifts, 0.80 hovers ~10cm, 0.85 reaches 0.5m
-#define HAL_HOVER_THRUST 0.85f
+// Flight-tested: 0.65 barely lifts, 0.80 hovers ~10cm, 0.85 overshoots to 1.5m
+#define HAL_HOVER_THRUST 0.75f
 
 /*
  * Motor mapping (Bitcraze standard, viewed from above):

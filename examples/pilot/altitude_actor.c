@@ -197,7 +197,7 @@ void altitude_actor(void *args, const hive_spawn_info_t *siblings,
         // Log emergency conditions (once per event)
         if (crash_detected && !logged_crash) {
             HIVE_LOG_ERROR(
-                "[ALT] CRASH DETECTED - motors disabled until reboot! "
+                "[ALT] CRASH DETECTED - motors disabled until RESET! "
                 "roll=%.1f pitch=%.1f alt=%.2f",
                 est.roll * RAD_TO_DEG, est.pitch * RAD_TO_DEG, est.altitude);
             logged_crash = true;

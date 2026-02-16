@@ -184,6 +184,7 @@ void estimator_actor(void *args, const hive_spawn_info_t *siblings,
     // fall back to baro (which is unreliable due to prop wash)
     bool rangefinder_mode = false;
     float last_valid_rangefinder_alt = 0.0f;
+    uint64_t last_rangefinder_time = 0; // For ground-level drift prevention
 
     // Track previous altitude measurement to detect new data.
     // The rangefinder updates at ~40Hz while the control loop runs at 250Hz.
@@ -235,6 +236,7 @@ void estimator_actor(void *args, const hive_spawn_info_t *siblings,
             last_valid_y = 0.0f;
             rangefinder_mode = false;
             last_valid_rangefinder_alt = 0.0f;
+            last_rangefinder_time = 0;
             have_altitude_measurement = false;
             prev_gps_valid = false;
             prev_velocity_valid = false;
@@ -333,12 +335,25 @@ void estimator_actor(void *args, const hive_spawn_info_t *siblings,
             // Good rangefinder reading - use it
             measured_altitude = sensors.gps_z;
             last_valid_rangefinder_alt = sensors.gps_z;
+            last_rangefinder_time = now;
             rangefinder_mode = true;
             fresh_rangefinder = true;
         } else if (rangefinder_mode) {
             // Rangefinder invalid but we've used it before - hold last value.
             // The Kalman filter will coast on accelerometer integration.
             measured_altitude = last_valid_rangefinder_alt;
+
+            // Ground-level drift prevention: VL53L1x reads 0 below its
+            // ~40mm minimum range (drone sits at ~20-30mm on ground).
+            // Without correction the KF drifts on accel bias (observed
+            // 3.5 m/s drift to -21m in 6 seconds post-landing).
+            // If last valid reading was near ground and rangefinder has
+            // been absent >500ms, apply ground-level correction.
+            if (last_valid_rangefinder_alt < 0.1f &&
+                last_rangefinder_time > 0 &&
+                (now - last_rangefinder_time) > 500000) {
+                fresh_rangefinder = true;
+            }
         }
         // No baro fallback - rangefinder is our only altitude source.
         // Before first rangefinder reading, Kalman filter coasts at 0.
