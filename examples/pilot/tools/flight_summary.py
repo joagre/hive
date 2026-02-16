@@ -1,0 +1,286 @@
+#!/usr/bin/env python3
+"""
+Flight summary - quick post-flight analysis.
+
+Prints key metrics from a telemetry CSV without needing an LLM to sift
+through data. Covers liftoff detection, hover stability, crash analysis,
+drift, and post-landing estimator health.
+
+Usage:
+    python3 flight_summary.py flight_test23.csv
+    python3 flight_summary.py flight_test23.csv --timeline
+"""
+
+import argparse
+import csv
+import math
+import sys
+
+
+def load(path):
+    """Load telemetry CSV. Returns list of dicts with numeric values."""
+    rows = []
+    with open(path) as f:
+        for row in csv.DictReader(f):
+            rows.append({k: float(v) for k, v in row.items()})
+    return rows
+
+
+def analyze(data):
+    """Compute all flight metrics."""
+    r = {}
+    if not data:
+        return {'error': 'No data'}
+
+    r['total_samples'] = len(data)
+    r['time_span_s'] = (data[-1]['time_ms'] - data[0]['time_ms']) / 1000
+
+    # Find flight window (thrust > 0)
+    flight = [d for d in data if d['thrust'] > 0.001]
+    if not flight:
+        r['flew'] = False
+        return r
+    r['flew'] = True
+
+    t0 = flight[0]['time_ms']
+    t1 = flight[-1]['time_ms']
+    r['flight_start_s'] = t0 / 1000
+    r['flight_end_s'] = t1 / 1000
+    r['flight_duration_s'] = (t1 - t0) / 1000
+
+    # Target altitude
+    targets = [d['target_z'] for d in data if d['target_z'] > 0.01]
+    r['target_alt'] = targets[0] if targets else 0.0
+
+    # --- Liftoff detection ---
+    # Find ramp phase: thrust increasing monotonically from first > 0
+    ramp_end_idx = 0
+    for i in range(1, len(flight)):
+        if flight[i]['thrust'] < flight[i-1]['thrust'] - 0.01:
+            ramp_end_idx = i
+            break
+
+    if ramp_end_idx > 0:
+        ramp = flight[:ramp_end_idx]
+        r['ramp_duration_s'] = (ramp[-1]['time_ms'] - ramp[0]['time_ms']) / 1000
+        r['discovered_hover_thrust'] = ramp[-1]['thrust']
+        r['liftoff_alt'] = ramp[-1]['altitude']
+        r['ramp_start_thrust'] = ramp[0]['thrust']
+    else:
+        r['ramp_duration_s'] = 0
+        r['discovered_hover_thrust'] = flight[0]['thrust']
+        r['liftoff_alt'] = flight[0]['altitude']
+
+    # --- Altitude metrics ---
+    r['max_alt'] = max(d['altitude'] for d in flight)
+    r['max_alt_time_s'] = next(
+        d['time_ms'] / 1000 for d in flight if d['altitude'] == r['max_alt']
+    )
+    r['min_alt_in_flight'] = min(d['altitude'] for d in flight)
+
+    # --- Thrust metrics ---
+    thrusts = [d['thrust'] for d in flight]
+    r['thrust_mean'] = sum(thrusts) / len(thrusts)
+    r['thrust_min'] = min(thrusts)
+    r['thrust_max'] = max(thrusts)
+    r['thrust_std'] = (sum((t - r['thrust_mean'])**2 for t in thrusts) / len(thrusts)) ** 0.5
+    r['thrust_saturated_pct'] = 100 * sum(1 for t in thrusts if t >= 0.99) / len(thrusts)
+
+    # Thrust oscillation: count direction changes
+    direction_changes = 0
+    for i in range(2, len(thrusts)):
+        d1 = thrusts[i-1] - thrusts[i-2]
+        d2 = thrusts[i] - thrusts[i-1]
+        if d1 * d2 < 0 and abs(d1) > 0.02 and abs(d2) > 0.02:
+            direction_changes += 1
+    r['thrust_oscillations'] = direction_changes
+    r['thrust_osc_per_sec'] = direction_changes / max(r['flight_duration_s'], 0.1)
+
+    # --- Attitude metrics ---
+    r['max_roll_deg'] = max(abs(d['roll']) for d in flight) * 57.3
+    r['max_pitch_deg'] = max(abs(d['pitch']) for d in flight) * 57.3
+    r['max_tilt_deg'] = max(
+        math.sqrt(d['roll']**2 + d['pitch']**2) * 57.3 for d in flight
+    )
+
+    # --- Crash detection ---
+    crash_threshold = 0.78  # 45 degrees in radians
+    r['crashed'] = False
+    for d in flight:
+        if abs(d['roll']) > crash_threshold or abs(d['pitch']) > crash_threshold:
+            r['crashed'] = True
+            r['crash_time_s'] = d['time_ms'] / 1000
+            r['crash_roll_deg'] = d['roll'] * 57.3
+            r['crash_pitch_deg'] = d['pitch'] * 57.3
+            break
+
+    # --- XY drift ---
+    r['x_start'] = flight[0]['x']
+    r['y_start'] = flight[0]['y']
+    r['x_end'] = flight[-1]['x']
+    r['y_end'] = flight[-1]['y']
+    r['max_xy_drift'] = max(
+        math.sqrt((d['x'] - flight[0]['x'])**2 + (d['y'] - flight[0]['y'])**2)
+        for d in flight
+    )
+
+    # --- Post-landing estimator health ---
+    post = [d for d in data if d['time_ms'] > t1 and d['thrust'] < 0.001]
+    if len(post) > 10:
+        post_alts = [d['altitude'] for d in post]
+        r['post_alt_mean'] = sum(post_alts) / len(post_alts)
+        r['post_alt_min'] = min(post_alts)
+        r['post_alt_max'] = max(post_alts)
+        r['post_alt_drift'] = post_alts[-1] - post_alts[0]
+        r['post_duration_s'] = (post[-1]['time_ms'] - post[0]['time_ms']) / 1000
+
+        # Check for upside-down (roll near +/- pi)
+        post_rolls = [d['roll'] for d in post[-10:]]
+        avg_roll = sum(post_rolls) / len(post_rolls)
+        r['post_upside_down'] = abs(abs(avg_roll) - math.pi) < 0.3
+    else:
+        r['post_alt_mean'] = None
+
+    return r
+
+
+def print_summary(r, path):
+    """Print formatted flight summary."""
+    print(f"=== Flight Summary: {path} ===\n")
+
+    if r.get('error'):
+        print(f"Error: {r['error']}")
+        return
+
+    if not r.get('flew'):
+        print("No flight detected (thrust never exceeded 0)")
+        return
+
+    # Flight basics
+    print(f"Flight:    {r['flight_start_s']:.1f}s - {r['flight_end_s']:.1f}s "
+          f"({r['flight_duration_s']:.1f}s)")
+    print(f"Target:    {r['target_alt']:.2f}m")
+
+    # Liftoff
+    print(f"\nLiftoff detection:")
+    print(f"  Discovered hover thrust: {r['discovered_hover_thrust']:.3f} "
+          f"({r['discovered_hover_thrust']*100:.1f}%)")
+    print(f"  Altitude at detection:   {r['liftoff_alt']:.3f}m")
+    if r['ramp_duration_s'] > 0:
+        print(f"  Ramp duration:           {r['ramp_duration_s']:.2f}s")
+
+    # Altitude
+    print(f"\nAltitude:")
+    print(f"  Max: {r['max_alt']:.3f}m at t={r['max_alt_time_s']:.1f}s")
+    print(f"  Min (in flight): {r['min_alt_in_flight']:.3f}m")
+    if r['target_alt'] > 0:
+        overshoot = (r['max_alt'] - r['target_alt']) / r['target_alt'] * 100
+        print(f"  Overshoot: {overshoot:+.0f}%")
+
+    # Thrust
+    print(f"\nThrust:")
+    print(f"  Mean: {r['thrust_mean']*100:.1f}%  "
+          f"Range: [{r['thrust_min']*100:.1f}%, {r['thrust_max']*100:.1f}%]  "
+          f"Std: {r['thrust_std']*100:.1f}%")
+    print(f"  Saturation (>=99%%): {r['thrust_saturated_pct']:.0f}% of flight")
+    print(f"  Oscillations: {r['thrust_oscillations']} "
+          f"({r['thrust_osc_per_sec']:.1f}/s)")
+    if r['thrust_osc_per_sec'] > 5:
+        print(f"  ** WARNING: High oscillation rate - PID may be unstable **")
+
+    # Attitude
+    print(f"\nAttitude:")
+    print(f"  Max roll: {r['max_roll_deg']:.1f} deg  "
+          f"Max pitch: {r['max_pitch_deg']:.1f} deg  "
+          f"Max tilt: {r['max_tilt_deg']:.1f} deg")
+
+    # Crash
+    if r['crashed']:
+        print(f"\n** CRASH at t={r['crash_time_s']:.1f}s **")
+        print(f"  Roll: {r['crash_roll_deg']:.1f} deg  "
+              f"Pitch: {r['crash_pitch_deg']:.1f} deg")
+
+    # XY drift
+    print(f"\nPosition drift:")
+    print(f"  Max XY: {r['max_xy_drift']:.3f}m")
+    print(f"  End: ({r['x_end']:.3f}, {r['y_end']:.3f})m")
+
+    # Post-landing
+    if r.get('post_alt_mean') is not None:
+        print(f"\nPost-landing ({r['post_duration_s']:.1f}s):")
+        print(f"  Altitude: mean={r['post_alt_mean']:.3f}m  "
+              f"range=[{r['post_alt_min']:.3f}, {r['post_alt_max']:.3f}]m  "
+              f"drift={r['post_alt_drift']:+.3f}m")
+        if r.get('post_upside_down'):
+            print(f"  ** Drone is UPSIDE DOWN **")
+
+    # Overall verdict
+    print(f"\nVerdict: ", end='')
+    issues = []
+    if r['crashed']:
+        issues.append("CRASHED")
+    if r.get('post_upside_down'):
+        issues.append("FLIPPED")
+    if r['thrust_osc_per_sec'] > 5:
+        issues.append("UNSTABLE THRUST")
+    if r['thrust_saturated_pct'] > 30:
+        issues.append("THRUST SATURATED")
+    if r['max_xy_drift'] > 1.0:
+        issues.append(f"DRIFT {r['max_xy_drift']:.1f}m")
+    if r.get('post_alt_mean') is not None and abs(r['post_alt_drift']) > 0.5:
+        issues.append("KF DRIFT")
+
+    if issues:
+        print(", ".join(issues))
+    else:
+        print("OK")
+
+
+def print_timeline(data, interval=0.5):
+    """Print sampled timeline during flight."""
+    flight = [d for d in data if d['thrust'] > 0.001]
+    if not flight:
+        return
+
+    print(f"\nTimeline (every {interval}s during flight):")
+    print(f"{'Time':>7} {'Alt':>6} {'Vz':>6} {'Thrust':>7} "
+          f"{'Roll':>6} {'Pitch':>6} {'X':>6} {'Y':>6}")
+    print("-" * 62)
+
+    t0 = flight[0]['time_ms']
+    next_print = t0
+
+    for d in flight:
+        if d['time_ms'] >= next_print:
+            elapsed = (d['time_ms'] - t0) / 1000
+            print(f"{elapsed:6.2f}s {d['altitude']:6.3f} {d['vz']:+6.2f} "
+                  f"{d['thrust']*100:6.1f}% "
+                  f"{d['roll']*57.3:+6.1f} {d['pitch']*57.3:+6.1f} "
+                  f"{d['x']:+6.3f} {d['y']:+6.3f}")
+            next_print = d['time_ms'] + interval * 1000
+
+
+def main():
+    p = argparse.ArgumentParser(description='Flight summary analysis')
+    p.add_argument('file', help='Telemetry CSV file')
+    p.add_argument('--timeline', '-t', action='store_true',
+                   help='Show flight timeline')
+    p.add_argument('--interval', type=float, default=0.5,
+                   help='Timeline interval in seconds (default: 0.5)')
+    args = p.parse_args()
+
+    try:
+        data = load(args.file)
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    r = analyze(data)
+    print_summary(r, args.file)
+
+    if args.timeline:
+        print_timeline(data, args.interval)
+
+
+if __name__ == '__main__':
+    main()
