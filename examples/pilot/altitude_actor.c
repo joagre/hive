@@ -1,7 +1,10 @@
-// Altitude actor - Altitude hold control with controlled landing
+// Altitude actor - Altitude hold with liftoff detection and controlled landing
 //
-// Normal mode: PID altitude control with velocity damping
-// Landing mode: Fixed descent rate until touchdown
+// Takeoff: Ramp thrust linearly until rangefinder detects liftoff,
+//   then capture thrust as discovered hover baseline. Self-calibrates
+//   each flight for current battery state.
+// Hold: PID altitude control with velocity damping around discovered thrust.
+// Landing: Fixed descent rate until touchdown.
 //
 // Landing is triggered by NOTIFY_LANDING message. When complete,
 // notifies NOTIFY_FLIGHT_LANDED to flight manager.
@@ -70,11 +73,15 @@ void altitude_actor(void *args, const hive_spawn_info_t *siblings,
 
     // State
     float target_altitude = 0.0f;
-    uint64_t ramp_start_time = 0;
     bool landing_mode = false;
     bool landed = false;
     bool crash_detected = false; // Latched - once true, motors stay off
     int count = 0;
+
+    // Liftoff detection state
+    bool liftoff_detected = false;
+    float discovered_hover_thrust = 0.0f;
+    float ramp_thrust = 0.0f;
 
     HIVE_LOG_INFO("[ALT] Started, waiting for target altitude");
 
@@ -115,11 +122,13 @@ void altitude_actor(void *args, const hive_spawn_info_t *siblings,
             HIVE_LOG_INFO("[ALT] RESET - clearing PID and landing state");
             pid_reset(&alt_pid);
             target_altitude = 0.0f;
-            ramp_start_time = 0;
             landing_mode = false;
             landed = false;
             crash_detected = false;
             logged_crash = false;
+            liftoff_detected = false;
+            discovered_hover_thrust = 0.0f;
+            ramp_thrust = 0.0f;
             count = 0;
             prev_time = hive_get_time();
             continue;
@@ -218,7 +227,6 @@ void altitude_actor(void *args, const hive_spawn_info_t *siblings,
         if (cutoff) {
             thrust = 0.0f;
             pid_reset(&alt_pid);
-            ramp_start_time = 0;
 
             // Notify flight manager once when landed
             if (touchdown && !landed) {
@@ -234,13 +242,15 @@ void altitude_actor(void *args, const hive_spawn_info_t *siblings,
                 }
             }
         } else if (target_altitude <= 0.0f) {
-            // No target yet - stay on ground, keep ramp and PID fresh
+            // No target yet - stay on ground
             thrust = 0.0f;
-            ramp_start_time = 0;
             pid_reset(&alt_pid);
+            ramp_thrust = 0.0f;
         } else if (landing_mode) {
             // Landing mode: control descent rate, not altitude
-            // Target velocity = landing_descent_rate, adjust thrust to achieve it
+            // Use discovered hover thrust if available, else tunable fallback
+            float base =
+                liftoff_detected ? discovered_hover_thrust : p->hover_thrust;
             if (!isfinite(est.vertical_velocity)) {
                 HIVE_LOG_ERROR(
                     "[ALT] NaN velocity in landing - estimator failure!");
@@ -248,37 +258,46 @@ void altitude_actor(void *args, const hive_spawn_info_t *siblings,
             } else {
                 float velocity_error =
                     p->landing_descent_rate - est.vertical_velocity;
-                thrust =
-                    p->hover_thrust + p->landing_velocity_gain * velocity_error;
+                thrust = base + p->landing_velocity_gain * velocity_error;
                 thrust = CLAMPF(thrust, 0.0f, 1.0f);
             }
-        } else {
-            // Normal altitude hold mode
-            uint64_t thrust_ramp_us = (uint64_t)(p->thrust_ramp_ms * 1000.0f);
-            if (ramp_start_time == 0) {
-                ramp_start_time = hive_get_time();
-                HIVE_LOG_INFO("[ALT] Takeoff ramp start: roll=%.1f pitch=%.1f "
-                              "yaw=%.1f alt=%.2f",
-                              est.roll * RAD_TO_DEG, est.pitch * RAD_TO_DEG,
-                              est.yaw * RAD_TO_DEG, est.altitude);
-            }
+        } else if (!liftoff_detected) {
+            // Liftoff detection: ramp thrust until rangefinder sees altitude
+            ramp_thrust += LIFTOFF_RAMP_RATE * dt;
 
-            // PID altitude control
+            if (ramp_thrust > LIFTOFF_MAX_THRUST) {
+                // Failed to lift off at max thrust - something is wrong
+                HIVE_LOG_ERROR("[ALT] Liftoff failed at thrust=%.2f - "
+                               "check propellers/battery",
+                               ramp_thrust);
+                ramp_thrust = 0.0f;
+                crash_detected = true;
+                thrust = 0.0f;
+            } else if (est.altitude > LIFTOFF_ALT_THRESHOLD) {
+                // Liftoff detected - capture hover thrust
+                discovered_hover_thrust = ramp_thrust;
+                liftoff_detected = true;
+                HIVE_LOG_INFO("[ALT] Liftoff at thrust=%.3f alt=%.3f - "
+                              "hover thrust discovered",
+                              discovered_hover_thrust, est.altitude);
+                // Start PID control from here
+                float pos_correction =
+                    pid_update(&alt_pid, target_altitude, est.altitude, dt);
+                float vel_damping = -p->vvel_damping * est.vertical_velocity;
+                thrust = CLAMPF(discovered_hover_thrust + pos_correction +
+                                    vel_damping,
+                                0.0f, 1.0f);
+            } else {
+                thrust = ramp_thrust;
+            }
+        } else {
+            // Normal altitude hold using discovered hover thrust
             float pos_correction =
                 pid_update(&alt_pid, target_altitude, est.altitude, dt);
-
-            // Velocity damping (use tunable param)
             float vel_damping = -p->vvel_damping * est.vertical_velocity;
-
-            // Thrust ramp for gentle takeoff (use tunable ramp duration)
-            uint64_t elapsed_us = hive_get_time() - ramp_start_time;
-            float ramp = (elapsed_us < thrust_ramp_us)
-                             ? (float)elapsed_us / (float)thrust_ramp_us
-                             : 1.0f;
-
             thrust =
-                ramp * CLAMPF(p->hover_thrust + pos_correction + vel_damping,
-                              0.0f, 1.0f);
+                CLAMPF(discovered_hover_thrust + pos_correction + vel_damping,
+                       0.0f, 1.0f);
         }
 
         thrust_cmd_t cmd = {.thrust = thrust};

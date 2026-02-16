@@ -80,6 +80,17 @@
 #define HVEL_FILTER_ALPHA 0.95f
 
 // ----------------------------------------------------------------------------
+// Liftoff detection (altitude_actor)
+// ----------------------------------------------------------------------------
+
+// Instead of a fixed hover thrust, ramp thrust linearly until the rangefinder
+// detects liftoff. The thrust at liftoff is the hover thrust for this battery
+// state. Self-calibrates every flight.
+#define LIFTOFF_RAMP_RATE 0.4f      // thrust/second during detection ramp
+#define LIFTOFF_ALT_THRESHOLD 0.05f // meters - altitude indicating liftoff
+#define LIFTOFF_MAX_THRUST 0.95f    // safety cap during ramp
+
+// ----------------------------------------------------------------------------
 // Safety thresholds (altitude_actor emergency detection)
 // ----------------------------------------------------------------------------
 
