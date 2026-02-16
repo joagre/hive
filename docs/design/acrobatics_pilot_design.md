@@ -20,8 +20,8 @@ bitmask tells cascade actors when to stop publishing.
 ```
                         ┌────────────────────┐
                         │   maneuver_actor   │
-                        │   (Forth VM + ROM) │
-                        └─────────┬──────────┘
+                        │  (Forth VM + ROM)  │
+                        └──────────┬─────────┘
                                    │
                       publishes override + setpoints
                                    │
@@ -40,7 +40,7 @@ bitmask tells cascade actors when to stop publishing.
                                                              │
                                                              v
                                                         motor_actor
-                                                   (always validates)
+                                                    (always validates)
 ```
 
 Existing actors gain ~10 lines each: subscribe to override bus, non-blocking
