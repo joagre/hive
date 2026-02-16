@@ -271,8 +271,8 @@ ESB max payload is 32 bytes. HAL uses 1 byte for framing, so max payload is 30 b
 
 | Type | Name | Payload | Contents |
 |------|------|---------|----------|
-| 0x01 | Attitude | 17 bytes | type + timestamp_ms + gyro_xyz + roll/pitch/yaw |
-| 0x02 | Position | 17 bytes | type + timestamp_ms + alt + vz/vx/vy + thrust + battery_mv |
+| 0x03 | tlog_state | 29 bytes | type + time_ms + roll/pitch/yaw + rates + x/y/alt + vx/vy/vz |
+| 0x04 | tlog_sensors | 27 bytes | type + time_ms + thrust + targets + gyro_xyz + accel_xyz |
 
 **LED feedback:**
 | Pattern | Meaning |
@@ -288,15 +288,12 @@ ESB max payload is 32 bytes. HAL uses 1 byte for framing, so max payload is 30 b
 Connecting to channel 80, 2M...
 Connected!
 Waiting for telemetry... (Ctrl+C to stop)
-ATT  gyro=( +0.00,  +0.00,  +0.00) rad/s  rpy=(+0.00, +0.00, +0.00) rad
-POS  alt=+0.00m  vz=+0.00m/s  vxy=(+0.00, +0.00)m/s  thrust=0.0%  bat=4.15V
-ATT  gyro=( +0.00,  +0.00,  +0.00) rad/s  rpy=(+0.00, +0.00, +0.00) rad
-POS  alt=+0.00m  vz=+0.00m/s  vxy=(+0.00, +0.00)m/s  thrust=0.0%  bat=4.15V
+t=   0.010  rpy=(+0.00, +0.00, +0.00)  alt=+0.00m  thrust=0.0%
+t=   0.020  rpy=(+0.00, +0.00, +0.00)  alt=+0.00m  thrust=0.0%
 ...
 ```
 
-**Note:** Test sends zeros for sensor values since no sensors are read. Battery
-voltage in position packets shows the actual nRF51-reported battery level.
+**Note:** Test sends zeros for sensor values since no sensors are read.
 
 ### main (Combined Test Runner)
 

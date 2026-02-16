@@ -426,15 +426,16 @@ Thrust Bus ─┘
 **Packet limits** - ESB max payload is 32 bytes. HAL uses 1 byte for framing,
 so max application payload is 30 bytes.
 
-**Design choice** - Prioritize attitude, rates, and thrust in telemetry packets. Position
-targets are omitted to keep packets small - use Webots CSV telemetry for position
-control tuning. Each packet includes a 32-bit timestamp (ms since boot).
+**Design choice** - Send all 24 tlog.csv columns over radio so ground station
+produces CSV identical to SD card logger. Two packet types alternate, merged
+on receive. Each packet includes a 32-bit timestamp (ms since boot).
+Accel uses scale 100 (cm/s^2) for range; all other fields use scale 1000.
 - Two operating modes:
   - Flight mode: Sends telemetry packets at 100Hz (alternating types at 50Hz each)
   - Download mode: Transfers flash log file to ground station on request
-- Telemetry packet types (17 bytes payload each):
-  - Type 0x01: Attitude/rates (timestamp, gyro XYZ, roll/pitch/yaw)
-  - Type 0x02: Position (timestamp, altitude, velocities, thrust, battery voltage)
+- Telemetry packet types (carry all 24 tlog.csv columns):
+  - Type 0x03: tlog_state (29 bytes) - attitude, rates, position, velocity
+  - Type 0x04: tlog_sensors (27 bytes) - thrust, targets, gyro, accel
 - Log download packet types:
   - Type 0x10: CMD_REQUEST_LOG (ground -> drone)
   - Type 0x11: LOG_CHUNK (drone -> ground, 27 bytes data)
