@@ -223,7 +223,12 @@ void estimator_actor(void *args, const hive_spawn_info_t *siblings,
         }
 
         if (result.index == SEL_RESET) {
-            // Reinitialize filters
+            // Reinitialize filters but preserve rangefinder metadata.
+            // The KF state resets (altitude, velocity, covariance) but we
+            // keep rangefinder_mode and last reading so the ground-level
+            // drift prevention stays active between consecutive flights.
+            // Without this, the KF drifts negative for ~5s after RESET
+            // (no rangefinder corrections) causing blind max-thrust flight.
             HIVE_LOG_INFO("[EST] RESET - reinitializing filters");
             cf_init(&filter, &cf_config);
             altitude_kf_init(&alt_kf, &kf_config);
@@ -234,9 +239,8 @@ void estimator_actor(void *args, const hive_spawn_info_t *siblings,
             first_sample = true;
             last_valid_x = 0.0f;
             last_valid_y = 0.0f;
-            rangefinder_mode = false;
-            last_valid_rangefinder_alt = 0.0f;
-            last_rangefinder_time = 0;
+            // rangefinder_mode, last_valid_rangefinder_alt, and
+            // last_rangefinder_time intentionally preserved across RESET
             have_altitude_measurement = false;
             prev_gps_valid = false;
             prev_velocity_valid = false;
