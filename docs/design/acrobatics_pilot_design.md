@@ -44,6 +44,39 @@ Existing actors gain ~10 lines each: subscribe to override bus, non-blocking
 read at top of loop, `continue` if their level is overridden. No other
 changes to the cascade.
 
+## Script Lifecycle
+
+Scripts are uploaded to flash before flight (4 slots, 1KB each, see
+`forth_actor_spec.md` upload protocol). The maneuver actor loads a
+script at boot and waits for `NOTIFY_FLIGHT_START` from the flight
+manager - the same signal the waypoint actor uses.
+
+The script IS the mission. A scripted flight does not use the waypoint
+actor. The script handles everything: takeoff via GOTO, navigation via
+GOTO/ORBIT, acrobatics via FLIP-ROLL/SPIN, and landing via LAND. The
+waypoint actor and maneuver actor are alternatives, not collaborators.
+
+```
+Normal flight:   flight_manager -> NOTIFY_FLIGHT_START -> waypoint_actor
+Scripted flight: flight_manager -> NOTIFY_FLIGHT_START -> maneuver_actor
+```
+
+Which actor receives the start signal depends on which is spawned. The
+supervisor child list selects the mission type at build time (or at
+script upload time if the comms actor can swap child specs - future work).
+
+When the script completes (returns from its main word or calls LAND),
+the maneuver actor exits normally. The flight manager sees the exit and
+proceeds to shutdown, same as when the waypoint actor finishes its
+sequence.
+
+If the script crashes (stack overflow, fence violation, ABORT), the
+maneuver actor exits with `HIVE_EXIT_REASON_CRASH`. It is TEMPORARY,
+so the supervisor does not restart it. All overrides go stale within
+100ms (watchdog), the cascade resumes, and the vehicle holds position
+on its last Level 1 target. The flight manager's existing landing
+timeout handles the rest.
+
 ## Injection Levels
 
 | Level | Bus | Bypasses | Still active | Use case |
