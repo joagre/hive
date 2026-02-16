@@ -89,6 +89,7 @@
 #define LIFTOFF_RAMP_RATE 0.4f      // thrust/second during detection ramp
 #define LIFTOFF_ALT_THRESHOLD 0.05f // meters - altitude indicating liftoff
 #define LIFTOFF_MAX_THRUST 0.95f    // safety cap during ramp
+#define LIFTOFF_PID_RAMP_MS 750     // ms to ramp PID authority after liftoff
 
 // ----------------------------------------------------------------------------
 // Safety thresholds (altitude_actor emergency detection)

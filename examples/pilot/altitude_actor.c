@@ -82,6 +82,7 @@ void altitude_actor(void *args, const hive_spawn_info_t *siblings,
     bool liftoff_detected = false;
     float discovered_hover_thrust = 0.0f;
     float ramp_thrust = 0.0f;
+    uint64_t liftoff_time = 0; // For PID authority ramp after liftoff
 
     HIVE_LOG_INFO("[ALT] Started, waiting for target altitude");
 
@@ -129,6 +130,7 @@ void altitude_actor(void *args, const hive_spawn_info_t *siblings,
             liftoff_detected = false;
             discovered_hover_thrust = 0.0f;
             ramp_thrust = 0.0f;
+            liftoff_time = 0;
             count = 0;
             prev_time = hive_get_time();
             continue;
@@ -275,27 +277,32 @@ void altitude_actor(void *args, const hive_spawn_info_t *siblings,
                 // Liftoff detected - capture hover thrust
                 discovered_hover_thrust = ramp_thrust;
                 liftoff_detected = true;
+                liftoff_time = now;
                 HIVE_LOG_INFO("[ALT] Liftoff at thrust=%.3f alt=%.3f - "
                               "hover thrust discovered",
                               discovered_hover_thrust, est.altitude);
-                // Start PID control from here
-                float pos_correction =
-                    pid_update(&alt_pid, target_altitude, est.altitude, dt);
-                float vel_damping = -p->vvel_damping * est.vertical_velocity;
-                thrust = CLAMPF(discovered_hover_thrust + pos_correction +
-                                    vel_damping,
-                                0.0f, 1.0f);
+                // Hold discovered thrust - PID ramps in over next cycles
+                thrust = discovered_hover_thrust;
             } else {
                 thrust = ramp_thrust;
             }
         } else {
-            // Normal altitude hold using discovered hover thrust
+            // Normal altitude hold using discovered hover thrust.
+            // PID authority ramps from 0 to 100% over LIFTOFF_PID_RAMP_MS
+            // after detection to prevent violent thrust oscillation from
+            // velocity damping acting on upward velocity from liftoff ramp.
             float pos_correction =
                 pid_update(&alt_pid, target_altitude, est.altitude, dt);
             float vel_damping = -p->vvel_damping * est.vertical_velocity;
-            thrust =
-                CLAMPF(discovered_hover_thrust + pos_correction + vel_damping,
-                       0.0f, 1.0f);
+            float correction = pos_correction + vel_damping;
+
+            uint64_t since_liftoff = now - liftoff_time;
+            uint64_t ramp_us = LIFTOFF_PID_RAMP_MS * 1000ULL;
+            if (since_liftoff < ramp_us) {
+                correction *= (float)since_liftoff / (float)ramp_us;
+            }
+
+            thrust = CLAMPF(discovered_hover_thrust + correction, 0.0f, 1.0f);
         }
 
         thrust_cmd_t cmd = {.thrust = thrust};
