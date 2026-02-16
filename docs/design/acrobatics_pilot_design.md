@@ -9,6 +9,9 @@ run in C at control-loop rate, the Forth script only sequences them.
 
 ## How It Fits
 
+For the full pipeline diagram (all 12-13 actors and 7 buses), see
+[examples/pilot/README.md - Architecture](../../examples/pilot/README.md#architecture).
+
 The Forth VM runs inside a new `maneuver_actor` (TEMPORARY, NORMAL
 priority). ROM words are C functions called from the inner interpreter.
 They publish setpoints to the same buses the cascade uses. An override
@@ -47,7 +50,7 @@ changes to the cascade.
 ## Script Lifecycle
 
 Scripts are uploaded to flash before flight (4 slots, 1KB each, see
-`forth_actor_spec.md` upload protocol). The maneuver actor loads a
+[forth_actor_spec.md](../../examples/pilot/docs/forth_actor_spec.md) upload protocol). The maneuver actor loads a
 script at boot and waits for `NOTIFY_FLIGHT_START` from the flight
 manager - the same signal the waypoint actor uses.
 

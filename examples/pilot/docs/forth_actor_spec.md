@@ -1,13 +1,21 @@
 # Forth Actor Specification
 
-Minimal Forth interpreter running as a Hive actor for user scripting.
+Bytecode Forth VM running as a Hive actor. Scripts uploaded over radio
+compose native maneuver primitives into aerial acrobatics - flips, orbits,
+barrel rolls.
+
+The VM executes the script. The hard real-time work (publishing setpoints
+at 250Hz, thrust modulation during flips) happens in native C ROM words
+that the script calls. See
+[acrobatics_pilot_design.md](../../../docs/design/acrobatics_pilot_design.md)
+for the ROM word contract.
 
 ## Goals
 
 1. **Extreme minimalism** - Interpreter under 2KB flash, under 512 bytes RAM overhead
 2. **Actor integration** - Scripts are actors with full bus/IPC access
 3. **Safe** - Script crash triggers supervisor restart, doesn't affect flight
-4. **Uploadable** - Scripts sent over radio, stored in flash
+4. **Uploadable** - Scripts compiled on ground station, uploaded as bytecode over radio, stored in flash
 5. **No time-sharing complexity** - Hive scheduler provides cooperative multitasking
 
 ## Architecture
@@ -33,6 +41,12 @@ Minimal Forth interpreter running as a Hive actor for user scripting.
 │  ┌──────────────────────────────────────────────────────┐   │
 │  │              Hive Primitive Words                     │   │
 │  │  BUS-READ  BUS-PUB  IPC-NOTIFY  SLEEP  PARAM@  YIELD │   │
+│  └──────────────────────────────────────────────────────┘   │
+│                           │                                  │
+│                           v                                  │
+│  ┌──────────────────────────────────────────────────────┐   │
+│  │              ROM Words (native C, 0x60-0x7F)         │   │
+│  │  GOTO  HOVER  ORBIT  FLIP-ROLL  BANK  FENCE  LAND   │   │
 │  └──────────────────────────────────────────────────────┘   │
 └──────────────────────────────────────────────────────────────┘
 ```
@@ -88,12 +102,13 @@ Also yield explicitly via `YIELD` word for event waiting.
 
 **Built-in dictionary only** - No `:` definitions, no `CREATE`, no `VARIABLE`.
 
-Rationale:
-- Saves ~500 bytes (dictionary management, `FIND`, compilation)
-- Scripts are simple sequences of primitives
-- Complex logic compiled on ground station
+The ground station compiler handles all abstraction. The on-device VM is
+a pure bytecode executor - no dictionary management, no `FIND`, no
+compilation state. This saves ~500 bytes and eliminates an entire class
+of runtime errors.
 
-If needed later: allow bytecode to define secondary words as subroutines.
+If needed later: allow bytecode to define secondary words as subroutines
+(call/return using the return stack, no dictionary needed).
 
 ## Primitive Words
 
@@ -227,8 +242,19 @@ typedef struct {
 
 ### Opcodes
 
-Single-byte opcodes 0x00-0x7F for primitives (~60 used).
-0x80+ reserved for literals and extensions.
+Single-byte opcodes. Three ranges:
+
+| Range | Purpose | Count |
+|-------|---------|-------|
+| 0x00-0x5F | VM primitives (stack, arithmetic, control, hive) | ~60 |
+| 0x60-0x7F | ROM words (native C maneuver primitives) | 32 slots |
+| 0x80+ | Literals and extended encodings | variable |
+
+ROM words are registered by the maneuver actor at init. The VM's inner
+interpreter dispatches them through a function pointer table - no
+special handling needed beyond the table lookup. See
+[acrobatics_pilot_design.md](../../../docs/design/acrobatics_pilot_design.md)
+for the complete ROM word reference.
 
 ```c
 enum {
@@ -253,7 +279,10 @@ enum {
     OP_YIELD = 0x40,
     OP_SLEEP = 0x41,
     OP_BUS_READ = 0x42,
-    // ... hive integration 0x40-0x4F
+    // ... hive integration 0x40-0x5F
+
+    // ROM words 0x60-0x7F (see acrobatics_pilot_design.md)
+    OP_ROM_BASE = 0x60,
 
     OP_LIT = 0x80,      // followed by 4 bytes
     OP_SLIT = 0x81,     // followed by 1 byte (signed)
@@ -365,43 +394,55 @@ Scripts stored in flash (up to 4 slots, 1KB each).
 
 ## Example Scripts
 
-### Hover at 1m for 10 seconds
+These use ROM words from
+[acrobatics_pilot_design.md](../../../docs/design/acrobatics_pilot_design.md).
+The VM executes the sequencing; ROM words handle the real-time control.
+
+### Orbit Mission
 
 ```forth
-( Push target altitude to position target bus )
-1000 S>F              ( 1.0m as float )
-0 S>F 0 S>F           ( x=0, y=0 )
-0 S>F                 ( yaw=0 )
-( ... pack into struct, publish to pos_target_bus ... )
+-5 S>F -5 S>F 0 S>F 5 S>F 5 S>F 3 S>F FENCE
+1 OVERRIDE
+HOVER
 
-( Wait 10 seconds )
-10000 SLEEP
+( Takeoff to 1m )
+0 S>F 0 S>F 1 S>F 0 S>F GOTO
+2 WAIT-UNTIL DROP
 
-( Land by setting target to 0 )
-0 S>F 0 S>F 0 S>F 0 S>F
-( ... publish ... )
+( Orbit: 2m diameter, 0.5 rad/s )
+POS-X@ POS-Y@ 1 S>F 500 1000 */ S>F ORBIT
+
+( Land )
+HOVER 0 WAIT-UNTIL DROP
+1 RELEASE
+LAND DROP
 ```
 
-Bytecode: ~40 bytes
-
-### Monitor altitude, print if > 1.5m
+### Barrel Roll Mission
 
 ```forth
-BEGIN
-    STATE-BUS BUS-READ IF
-        ( ptr on stack, altitude at offset 16 )
-        16 + F@           ( get altitude )
-        DUP 1500 S>F F> IF
-            PRINT-F       ( print altitude )
-        ELSE
-            DROP
-        THEN
-    THEN
-    100 SLEEP             ( check every 100ms )
-AGAIN
+-3 S>F -3 S>F 0 S>F 3 S>F 3 S>F 3 S>F FENCE
+1 OVERRIDE
+HOVER
+
+( Takeoff to 1.5m - need margin for altitude loss during flip )
+0 S>F 0 S>F 1500 1000 */ S>F 0 S>F GOTO
+2 WAIT-UNTIL DROP
+
+( Flip )
+200 S>F 1800 S>F ASSERT-ALT
+4 OVERRIDE
+1 FLIP-ROLL
+4 RELEASE
+
+( Stabilize and land )
+HOVER 1000 WAIT-MS
+1 RELEASE
+LAND DROP
 ```
 
-Bytecode: ~50 bytes
+See the acrobatics design doc for two more examples (flip with recovery,
+figure-8) and the full ROM word reference with stack effects.
 
 ## Implementation Estimate
 
@@ -421,8 +462,8 @@ Plus forth_actor.c wrapper: ~100 lines, ~300B flash.
 
 ## Future Extensions
 
-1. **User definitions** - Allow `: name ... ;` in bytecode (adds ~300B)
-2. **String support** - `." text"` for debug output
+1. **User definitions** - Allow `: name ... ;` in bytecode (call/return via return stack, adds ~300B)
+2. **Watchdog** - Kill script if it doesn't yield within timeout
 3. **Multiple scripts** - Run several forth_actors concurrently
-4. **Watchdog** - Kill script if it doesn't yield within timeout
-5. **Resource limits** - Max instructions per script lifetime
+4. **String support** - `." text"` for debug output
+5. **Ground station compiler** - Forth source to bytecode, with validation
