@@ -51,31 +51,29 @@ Scripts are uploaded to flash before flight (4 slots, 1KB each, see
 script at boot and waits for `NOTIFY_FLIGHT_START` from the flight
 manager - the same signal the waypoint actor uses.
 
-The script IS the mission. A scripted flight does not use the waypoint
-actor. The script handles everything: takeoff via GOTO, navigation via
-GOTO/ORBIT, acrobatics via FLIP-ROLL/SPIN, and landing via LAND. The
-waypoint actor and maneuver actor are alternatives, not collaborators.
+The script IS the mission. The waypoint actor and maneuver actor are
+alternatives, not collaborators. Which one is spawned selects the
+mission type:
 
 ```
 Normal flight:   flight_manager -> NOTIFY_FLIGHT_START -> waypoint_actor
 Scripted flight: flight_manager -> NOTIFY_FLIGHT_START -> maneuver_actor
 ```
 
-Which actor receives the start signal depends on which is spawned. The
-supervisor child list selects the mission type at build time (or at
-script upload time if the comms actor can swap child specs - future work).
+When the script completes or calls LAND, the maneuver actor exits
+normally. The flight manager proceeds to shutdown.
 
-When the script completes (returns from its main word or calls LAND),
-the maneuver actor exits normally. The flight manager sees the exit and
-proceeds to shutdown, same as when the waypoint actor finishes its
-sequence.
+If the script crashes (stack overflow, fence violation, ABORT), all
+overrides go stale (100ms watchdog) and the cascade resumes on the
+last Level 1 position target. If no target was published before the
+crash, the vehicle drifts until the altitude ceiling or the flight
+manager's landing timeout.
 
-If the script crashes (stack overflow, fence violation, ABORT), the
-maneuver actor exits with `HIVE_EXIT_REASON_CRASH`. It is TEMPORARY,
-so the supervisor does not restart it. All overrides go stale within
-100ms (watchdog), the cascade resumes, and the vehicle holds position
-on its last Level 1 target. The flight manager's existing landing
-timeout handles the rest.
+Every script should therefore establish a safety baseline early:
+
+    FENCE ... HOVER 1 OVERRIDE
+
+before escalating to higher levels. Convention, not enforced by the ROM.
 
 ## Injection Levels
 
@@ -86,10 +84,8 @@ timeout handles the rest.
 | 3 | rate_setpoint_bus + thrust_bus | Position + attitude | Rate PID | Flips, rolls, spins |
 | 4 | torque_bus | All PIDs | Motor validation only | Raw torque |
 
-Level 2+ must also publish to `thrust_bus` because the altitude actor is
-bypassed. Levels are a bitmask - a script can override multiple levels at
-once (e.g., Level 1 for position hold + Level 3 for yaw spin). Level 5
-(HAL direct, no motor validation) is deliberately not implemented.
+Levels are a bitmask - a script can override multiple simultaneously.
+Level 5 (HAL direct, no motor validation) is deliberately not implemented.
 
 ## Override Mechanism
 
@@ -180,9 +176,8 @@ The thrust vector rotates with the body. Its vertical component is:
     T_vertical(t) = T * cos(theta(t))
 
 which goes negative during the inverted phase (`PI/2 < theta < 3*PI/2`).
-To limit altitude loss, thrust is reduced during the inverted portion
-(where it would push the vehicle downward) and restored in the upright
-portion. The net altitude loss for a flip at hover thrust `T_h`:
+Thrust is reduced during this portion and restored upright. The net
+altitude loss for a flip at hover thrust `T_h`:
 
     delta_z = integral_0^{2*PI/omega} (T_h * cos(omega*t) - g) dt / m
             = -g * (2*PI / omega)
@@ -239,15 +234,15 @@ All non-blocking. Push 0.0 if no state available.
 
 ## Blocking Words and the VM
 
-ROM words that block (ORBIT, BANK, SPIN, FLIP-ROLL, FLIP-PITCH, LAND,
-WAIT-MS, WAIT-UNTIL) call `hive_yield()` internally in a C loop, publishing
-to the appropriate bus at 250Hz. From the VM's perspective, one opcode
-takes many milliseconds. The yield interval resumes counting after the
-word returns.
+Blocking ROM words (ORBIT, BANK, SPIN, FLIP-ROLL, FLIP-PITCH, LAND,
+WAIT-MS, WAIT-UNTIL) call `hive_yield()` internally, publishing to the
+appropriate bus every 4ms. From the VM's perspective, one opcode takes
+many milliseconds. The yield interval resumes counting after the word
+returns.
 
-This is why flips are ROM words and not Forth loops - a flip needs
-sub-10ms timing. The VM yields every 100 instructions (~4ms jitter).
-The C state machine publishes deterministically every 4ms.
+This is why flips are ROM words and not Forth loops - the VM's 100-
+instruction yield interval introduces ~4ms jitter. The C state machine
+is deterministic.
 
 ROM word C signature:
 
@@ -264,61 +259,106 @@ fence bounds. ROM opcodes occupy 0x60-0x7F (32 slots).
 Three independent layers. Each knows nothing about the others.
 
 **ROM layer** (maneuver actor) - Geofence checked every cycle in blocking
-words. ASSERT words for pre-maneuver checks. Watchdog timestamp must update
-within 100ms or cascade actors ignore the override. Level 4 override
-requires an active FENCE.
+words. ASSERT words for pre-maneuver checks. Level 4 requires FENCE.
 
 **Altitude actor** - Crash latch (altitude >2m) fires regardless of
 override state. Tilt-based crash detection (>45 deg) is automatically
-suspended when Level 3+ is active on the override bus - the altitude actor
-already reads it, and tilt exceedance during a rate override is intentional,
-not a control failure. When the override is released, tilt detection
-resumes immediately. No ground station involvement needed.
+suspended when Level 3+ is active - tilt exceedance during a rate
+override is intentional. Resumes on release.
 
 **Motor actor** - Validates every torque command (NaN, magnitude limits).
 50ms deadman timeout. START/STOP gating. Does not read the override bus.
-Does not know maneuvers exist. Cannot be bypassed.
+Cannot be bypassed.
 
 ## Examples
 
-### Orbit
+Each example is a complete mission: fence, takeoff, maneuver, land.
+
+### Orbit Mission
 
 ```forth
+( Safety baseline )
 -5 S>F -5 S>F 0 S>F 5 S>F 5 S>F 3 S>F FENCE
 1 OVERRIDE
+HOVER
+
+( Takeoff to 1m )
+0 S>F 0 S>F 1 S>F 0 S>F GOTO
+2 WAIT-UNTIL DROP              ( wait for altitude )
+
+( Orbit: 2m diameter, 0.5 rad/s )
 POS-X@ POS-Y@ 1 S>F 500 1000 */ S>F ORBIT
+
+( Land )
 HOVER 0 WAIT-UNTIL DROP
 1 RELEASE
+LAND DROP
 ```
 
-### Barrel Roll
+### Barrel Roll Mission
 
 ```forth
 -3 S>F -3 S>F 0 S>F 3 S>F 3 S>F 3 S>F FENCE
+1 OVERRIDE
+HOVER
+
+( Takeoff to 1.5m - need margin for altitude loss during flip )
+0 S>F 0 S>F 1500 1000 */ S>F 0 S>F GOTO
+2 WAIT-UNTIL DROP
+
+( Flip )
 200 S>F 1800 S>F ASSERT-ALT
 4 OVERRIDE
 1 FLIP-ROLL
 4 RELEASE
+
+( Stabilize and land )
+HOVER 1000 WAIT-MS
+1 RELEASE
+LAND DROP
 ```
 
-### Flip with Recovery
+### Flip with Recovery Mission
 
 ```forth
 -3 S>F -3 S>F 0 S>F 3 S>F 3 S>F 3 S>F FENCE
+1 OVERRIDE
+HOVER
+
+( Takeoff to 1.5m )
+0 S>F 0 S>F 1500 1000 */ S>F 0 S>F GOTO
+2 WAIT-UNTIL DROP
+
+( Forward flip )
 300 S>F 1500 S>F ASSERT-ALT
 4 OVERRIDE
 1 FLIP-PITCH
 LEVEL 1000 WAIT-MS
 4 RELEASE
+
+( Return to start and land )
+HOVER 0 WAIT-UNTIL DROP
+1 RELEASE
+LAND DROP
 ```
 
-### Figure-8
+### Figure-8 Mission
 
 ```forth
 -6 S>F -6 S>F 0 S>F 6 S>F 6 S>F 3 S>F FENCE
 1 OVERRIDE
+HOVER
+
+( Takeoff to 1m )
+0 S>F 0 S>F 1 S>F 0 S>F GOTO
+2 WAIT-UNTIL DROP
+
+( Two orbits forming figure-8 )
 POS-X@ 2 S>F F+ POS-Y@ 2 S>F 500 1000 */ S>F ORBIT
 POS-X@ 2 S>F F- POS-Y@ 2 S>F -500 1000 */ S>F ORBIT
+
+( Land )
 HOVER 0 WAIT-UNTIL DROP
 1 RELEASE
+LAND DROP
 ```
