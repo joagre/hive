@@ -11,14 +11,21 @@
 // ----------------------------------------------------------------------------
 
 // Altitude PID gains (position error -> thrust correction)
-#define HAL_ALT_PID_KP 0.18f   // Reduced from 0.25 to decrease overshoot
-#define HAL_ALT_PID_KI 0.03f   // Reduced from 0.05 to decrease integral windup
-#define HAL_ALT_PID_KD 0.0f    // Using velocity feedback instead
-#define HAL_ALT_PID_IMAX 0.2f  // Integral limit
-#define HAL_ALT_PID_OMAX 0.15f // Output limit
+// KP and damping match original Webots-tuned values (commit 50cdb64).
+// Hardware values (KP=0.18, damping=0.35) were tuned for real Crazyflie
+// with different thrust dynamics; Webots needs stronger P and weaker damping.
+#define HAL_ALT_PID_KP 0.30f  // Original Webots value
+#define HAL_ALT_PID_KI 0.03f  // Small integral for steady-state
+#define HAL_ALT_PID_KD 0.0f   // Using velocity feedback instead
+#define HAL_ALT_PID_IMAX 0.2f // Integral limit
+#define HAL_ALT_PID_OMAX                                  \
+    0.50f // Larger than hardware (0.15) - 20ms motor lag \
+          // needs stronger correction authority
 
 // Vertical velocity damping (measured velocity -> thrust correction)
-#define HAL_VVEL_DAMPING_GAIN 0.35f // Increased from 0.25 for better damping
+// Must be weaker than KP to avoid oscillation where damping fights PID
+// correction during descent (see altitude overshoot analysis).
+#define HAL_VVEL_DAMPING_GAIN 0.15f // Original Webots value
 
 // ----------------------------------------------------------------------------
 // Attitude Control

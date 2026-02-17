@@ -24,15 +24,21 @@
 // Motor rotation: M1(CCW), M2(CW), M3(CCW), M4(CW)
 
 void hal_write_torque(const torque_cmd_t *cmd) {
-    // Platform-specific adjustment: negate pitch for Crazyflie coordinate frame
+    // Platform-specific sign corrections for Webots coordinate frame.
+    // Pitch: Webots front/rear motor mapping is transposed vs Crazyflie.
+    // Yaw: Compensates for rate_actor yaw negation (added in 3035967 for
+    // Crazyflie hardware). The original Webots sim worked without any yaw
+    // negation; the rate_actor change broke the sim. This restores the
+    // correct net sign for Webots motor control.
     float pitch = -cmd->pitch;
+    float yaw = -cmd->yaw;
 
     // Apply mixer: convert torque to individual motor commands
     float motors[NUM_MOTORS];
-    motors[0] = cmd->thrust - cmd->roll + pitch + cmd->yaw; // M1 (rear-left)
-    motors[1] = cmd->thrust - cmd->roll - pitch - cmd->yaw; // M2 (front-left)
-    motors[2] = cmd->thrust + cmd->roll - pitch + cmd->yaw; // M3 (front-right)
-    motors[3] = cmd->thrust + cmd->roll + pitch - cmd->yaw; // M4 (rear-right)
+    motors[0] = cmd->thrust - cmd->roll + pitch + yaw; // M1 (rear-left)
+    motors[1] = cmd->thrust - cmd->roll - pitch - yaw; // M2 (front-left)
+    motors[2] = cmd->thrust + cmd->roll - pitch + yaw; // M3 (front-right)
+    motors[3] = cmd->thrust + cmd->roll + pitch - yaw; // M4 (rear-right)
 
     // Apply motor response lag (first-order filter)
     float dt = TIME_STEP_MS;

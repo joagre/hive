@@ -86,9 +86,13 @@
 // Instead of a fixed hover thrust, ramp thrust linearly until the rangefinder
 // detects liftoff. The thrust at liftoff is the hover thrust for this battery
 // state. Self-calibrates every flight.
-#define LIFTOFF_RAMP_RATE 0.4f      // thrust/second during detection ramp
+#ifndef LIFTOFF_RAMP_RATE
+#define LIFTOFF_RAMP_RATE 0.4f // thrust/second during detection ramp
+#endif
+#ifndef LIFTOFF_ALT_THRESHOLD
 #define LIFTOFF_ALT_THRESHOLD 0.05f // meters - altitude indicating liftoff
-#define LIFTOFF_MAX_THRUST 0.95f    // safety cap during ramp
+#endif
+#define LIFTOFF_MAX_THRUST 0.95f // safety cap during ramp
 
 // After liftoff, the altitude target ramps from current altitude toward the
 // waypoint target at this rate. Prevents step-change overshoot by giving
@@ -127,7 +131,10 @@
 
 // Maximum reliable range in short-distance mode (configured at 40Hz).
 // Beyond this the sensor returns invalid readings or times out.
+// Overridable by HAL: Webots GPS has no physical range limit.
+#ifndef RANGEFINDER_MAX_M
 #define RANGEFINDER_MAX_M 1.3f // 1300mm - VL53L1x short mode max
+#endif
 
 // Altitude below which the drone is considered ground-level.
 // Used for drift prevention: when the last valid reading was below
