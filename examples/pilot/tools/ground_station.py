@@ -42,7 +42,8 @@ Requirements:
 Usage:
   sudo ./ground_station.py                         # Display telemetry to stdout
   sudo ./ground_station.py -o flight.csv           # Log telemetry to CSV file
-  sudo ./ground_station.py --go                    # Start flight (60s countdown)
+  sudo ./ground_station.py --go                    # Start flight (10s countdown)
+  sudo ./ground_station.py --go -o flight.csv      # GO + record telemetry (single connection)
   sudo ./ground_station.py --download-log flight.log  # Download log file
   sudo ./ground_station.py --uri radio://0/80/2M   # Custom radio URI
   sudo ./ground_station.py --list-params           # List all tunable parameters
@@ -795,10 +796,23 @@ def main():
     try:
         receiver.connect()
 
-        if args.go:
-            # GO mode - send go command and exit
+        if args.go and not args.output:
+            # GO-only mode - send go command and exit
             success = receiver.send_go()
             sys.exit(0 if success else 1)
+        elif args.go and args.output:
+            # GO + listen mode - send GO then record telemetry
+            success = receiver.send_go()
+            if not success:
+                sys.exit(1)
+
+            def on_packet(pkt):
+                if not args.quiet:
+                    print(format_tlog(pkt, receiver.latest_state,
+                                      receiver.latest_sensors))
+
+            print("Recording telemetry... (Ctrl+C to stop)", file=sys.stderr)
+            receiver.receive_loop(on_packet, csv_writer)
         elif args.status:
             # Status mode - query flight manager state
             success = receiver.request_status()
