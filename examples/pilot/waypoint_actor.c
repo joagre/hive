@@ -83,8 +83,6 @@ void waypoint_actor(void *args, const hive_spawn_info_t *siblings,
     HIVE_LOG_INFO("[WPT] Flight profile: %s (%d waypoints, %.0fs hover)",
                   FLIGHT_PROFILE_NAME, (int)NUM_WAYPOINTS,
                   WAYPOINT_HOVER_TIME_US / 1000000.0f);
-    HIVE_LOG_INFO("[WPT] Waiting for flight manager START signal");
-
     // Wait for START or RESET using hive_select
     enum { SEL_START, SEL_RESET_WAIT };
     hive_select_source_t wait_sources[] = {
@@ -98,146 +96,159 @@ void waypoint_actor(void *args, const hive_spawn_info_t *siblings,
                                     .id = NOTIFY_RESET}},
     };
 
+    // Outer loop - supports consecutive flights without restart.
+    // Each iteration: wait for START (Phase 1), fly (Phase 2).
+    // RESET during Phase 2 returns to Phase 1 so the waypoint actor
+    // doesn't publish targets before the flight manager says GO.
     while (true) {
-        hive_select_result_t wait_result;
-        status = hive_select(wait_sources, 2, &wait_result, -1);
-        if (HIVE_FAILED(status)) {
-            HIVE_LOG_ERROR("[WPT] select failed: %s", HIVE_ERR_STR(status));
-            hive_exit(HIVE_EXIT_REASON_CRASH);
+
+        HIVE_LOG_INFO("[WPT] Waiting for flight manager START signal");
+
+        while (true) {
+            hive_select_result_t wait_result;
+            status = hive_select(wait_sources, 2, &wait_result, -1);
+            if (HIVE_FAILED(status)) {
+                HIVE_LOG_ERROR("[WPT] select failed: %s", HIVE_ERR_STR(status));
+                hive_exit(HIVE_EXIT_REASON_CRASH);
+            }
+
+            if (wait_result.index == SEL_RESET_WAIT) {
+                HIVE_LOG_INFO("[WPT] RESET (while waiting for START)");
+                continue; // Keep waiting for START
+            }
+
+            // SEL_START: START signal received
+            break;
         }
 
-        if (wait_result.index == SEL_RESET_WAIT) {
-            HIVE_LOG_INFO("[WPT] RESET (while waiting for START)");
-            continue; // Keep waiting for START
-        }
+        HIVE_LOG_INFO("[WPT] START received - beginning flight sequence");
+        HIVE_LOG_INFO("[WPT] First waypoint: (%.1f, %.1f, %.1f) yaw=%.0f",
+                      waypoints[0].x, waypoints[0].y, waypoints[0].z,
+                      waypoints[0].yaw * RAD_TO_DEG);
 
-        // SEL_START: START signal received
-        break;
-    }
+        int waypoint_index = 0;
+        hive_timer_id_t hover_timer = HIVE_TIMER_ID_INVALID;
+        bool hovering = false;
+        bool first_publish = true;
+        bool flight_active = true;
 
-    HIVE_LOG_INFO("[WPT] START received - beginning flight sequence");
-    HIVE_LOG_INFO("[WPT] First waypoint: (%.1f, %.1f, %.1f) yaw=%.0f",
-                  waypoints[0].x, waypoints[0].y, waypoints[0].z,
-                  waypoints[0].yaw * RAD_TO_DEG);
+        // Set up hive_select() sources (dynamically adjust count based on hovering)
+        enum { SEL_STATE, SEL_HOVER_TIMER, SEL_RESET };
 
-    int waypoint_index = 0;
-    hive_timer_id_t hover_timer = HIVE_TIMER_ID_INVALID;
-    bool hovering = false;
-    bool first_publish = true;
+        while (flight_active) {
+            const waypoint_t *wp = &waypoints[waypoint_index];
 
-    // Set up hive_select() sources (dynamically adjust count based on hovering)
-    enum { SEL_STATE, SEL_HOVER_TIMER, SEL_RESET };
+            // Publish current target
+            position_target_t target = {
+                .x = wp->x, .y = wp->y, .z = wp->z, .yaw = wp->yaw};
+            status = hive_bus_publish(state->position_target_bus, &target,
+                                      sizeof(target));
+            if (HIVE_FAILED(status)) {
+                HIVE_LOG_WARN("[WPT] bus publish failed: %s",
+                              HIVE_ERR_STR(status));
+            }
 
-    while (true) {
-        const waypoint_t *wp = &waypoints[waypoint_index];
+            // Log first publish only
+            if (first_publish) {
+                HIVE_LOG_INFO("[WPT] Published target z=%.2f", target.z);
+                first_publish = false;
+            }
 
-        // Publish current target
-        position_target_t target = {
-            .x = wp->x, .y = wp->y, .z = wp->z, .yaw = wp->yaw};
-        status = hive_bus_publish(state->position_target_bus, &target,
-                                  sizeof(target));
-        if (HIVE_FAILED(status)) {
-            HIVE_LOG_WARN("[WPT] bus publish failed: %s", HIVE_ERR_STR(status));
-        }
+            // Wait for state update OR hover timer OR RESET
+            hive_select_source_t sources[] = {
+                [SEL_STATE] = {.type = HIVE_SEL_BUS, .bus = state->state_bus},
+                [SEL_HOVER_TIMER] = {.type = HIVE_SEL_IPC,
+                                     .ipc = {.class = HIVE_MSG_TIMER,
+                                             .tag = hover_timer}},
+                [SEL_RESET] = {.type = HIVE_SEL_IPC,
+                               .ipc = {.sender = state->flight_manager,
+                                       .class = HIVE_MSG_NOTIFY,
+                                       .id = NOTIFY_RESET}},
+            };
 
-        // Log first publish only
-        if (first_publish) {
-            HIVE_LOG_INFO("[WPT] Published target z=%.2f", target.z);
-            first_publish = false;
-        }
-
-        // Wait for state update OR hover timer OR RESET
-        hive_select_source_t sources[] = {
-            [SEL_STATE] = {.type = HIVE_SEL_BUS, .bus = state->state_bus},
-            [SEL_HOVER_TIMER] = {.type = HIVE_SEL_IPC,
-                                 .ipc = {.class = HIVE_MSG_TIMER,
-                                         .tag = hover_timer}},
-            [SEL_RESET] = {.type = HIVE_SEL_IPC,
+            hive_select_result_t result;
+            // If not hovering, use only state bus and RESET (skip hover timer)
+            if (!hovering) {
+                // Reorder sources to [SEL_STATE, SEL_RESET]
+                hive_select_source_t sources_no_timer[] = {
+                    [0] = {.type = HIVE_SEL_BUS, .bus = state->state_bus},
+                    [1] = {.type = HIVE_SEL_IPC,
                            .ipc = {.sender = state->flight_manager,
                                    .class = HIVE_MSG_NOTIFY,
                                    .id = NOTIFY_RESET}},
-        };
-
-        hive_select_result_t result;
-        // If not hovering, use only state bus and RESET (skip hover timer)
-        if (!hovering) {
-            // Reorder sources to [SEL_STATE, SEL_RESET]
-            hive_select_source_t sources_no_timer[] = {
-                [0] = {.type = HIVE_SEL_BUS, .bus = state->state_bus},
-                [1] = {.type = HIVE_SEL_IPC,
-                       .ipc = {.sender = state->flight_manager,
-                               .class = HIVE_MSG_NOTIFY,
-                               .id = NOTIFY_RESET}},
-            };
-            status = hive_select(sources_no_timer, 2, &result, -1);
-            if (HIVE_FAILED(status)) {
-                HIVE_LOG_ERROR("[WPT] select failed: %s", HIVE_ERR_STR(status));
-                hive_exit(HIVE_EXIT_REASON_CRASH);
+                };
+                status = hive_select(sources_no_timer, 2, &result, -1);
+                if (HIVE_FAILED(status)) {
+                    HIVE_LOG_ERROR("[WPT] select failed: %s",
+                                   HIVE_ERR_STR(status));
+                    hive_exit(HIVE_EXIT_REASON_CRASH);
+                }
+                // Map result index back to SEL_* enum
+                if (result.index == 1) {
+                    result.index = SEL_RESET;
+                }
+            } else {
+                status = hive_select(sources, 3, &result, -1);
+                if (HIVE_FAILED(status)) {
+                    HIVE_LOG_ERROR("[WPT] select failed: %s",
+                                   HIVE_ERR_STR(status));
+                    hive_exit(HIVE_EXIT_REASON_CRASH);
+                }
             }
-            // Map result index back to SEL_* enum
-            if (result.index == 1) {
-                result.index = SEL_RESET;
-            }
-        } else {
-            status = hive_select(sources, 3, &result, -1);
-            if (HIVE_FAILED(status)) {
-                HIVE_LOG_ERROR("[WPT] select failed: %s", HIVE_ERR_STR(status));
-                hive_exit(HIVE_EXIT_REASON_CRASH);
-            }
-        }
 
-        if (result.index == SEL_RESET) {
-            HIVE_LOG_INFO("[WPT] RESET - resetting to waypoint 0");
-            waypoint_index = 0;
-            if (hover_timer != HIVE_TIMER_ID_INVALID) {
-                hive_timer_cancel(hover_timer);
-                hover_timer = HIVE_TIMER_ID_INVALID;
-            }
-            hovering = false;
-            first_publish = true;
-            continue;
-        }
-
-        if (result.index == SEL_HOVER_TIMER) {
-            // Hover timer fired - advance to next waypoint (loops back to 0)
-            hovering = false;
-            hover_timer = HIVE_TIMER_ID_INVALID;
-            waypoint_index = (waypoint_index + 1) % (int)NUM_WAYPOINTS;
-            HIVE_LOG_INFO("[WPT] Advancing to waypoint %d: (%.1f, %.1f, "
-                          "%.1f) yaw=%.0f deg",
-                          waypoint_index, waypoints[waypoint_index].x,
-                          waypoints[waypoint_index].y,
-                          waypoints[waypoint_index].z,
-                          waypoints[waypoint_index].yaw * RAD_TO_DEG);
-            continue; // Loop back to publish new target
-        }
-
-        // SEL_STATE: Copy state data from select result
-        state_estimate_t est;
-        if (result.bus.len != sizeof(est)) {
-            HIVE_LOG_ERROR("[WPT] State bus corrupted: size=%zu expected=%zu",
-                           result.bus.len, sizeof(est));
-            continue;
-        }
-        memcpy(&est, result.bus.data, sizeof(est));
-
-        // Check arrival and start hover timer (use tunable params)
-        tunable_params_t *p = state->params;
-        if (!hovering && check_arrival(wp, &est, p)) {
-            HIVE_LOG_INFO("[WPT] Arrived at waypoint %d - hovering",
-                          waypoint_index);
-            // Convert hover time from seconds to microseconds
-            uint64_t hover_time_us =
-                (uint64_t)(p->wp_hover_time_s * 1000000.0f);
-            hive_status_t timer_status =
-                hive_timer_after(hover_time_us, &hover_timer);
-            if (HIVE_FAILED(timer_status)) {
-                HIVE_LOG_ERROR("[WPT] timer_after failed: %s - cannot hover",
-                               HIVE_ERR_STR(timer_status));
-                // Don't set hovering=true without a timer, or we'd hang forever
+            if (result.index == SEL_RESET) {
+                HIVE_LOG_INFO("[WPT] RESET - returning to wait for START");
+                if (hover_timer != HIVE_TIMER_ID_INVALID) {
+                    hive_timer_cancel(hover_timer);
+                }
+                flight_active = false;
                 continue;
             }
-            hovering = true;
+
+            if (result.index == SEL_HOVER_TIMER) {
+                // Hover timer fired - advance to next waypoint (loops back to 0)
+                hovering = false;
+                hover_timer = HIVE_TIMER_ID_INVALID;
+                waypoint_index = (waypoint_index + 1) % (int)NUM_WAYPOINTS;
+                HIVE_LOG_INFO("[WPT] Advancing to waypoint %d: (%.1f, %.1f, "
+                              "%.1f) yaw=%.0f deg",
+                              waypoint_index, waypoints[waypoint_index].x,
+                              waypoints[waypoint_index].y,
+                              waypoints[waypoint_index].z,
+                              waypoints[waypoint_index].yaw * RAD_TO_DEG);
+                continue; // Loop back to publish new target
+            }
+
+            // SEL_STATE: Copy state data from select result
+            state_estimate_t est;
+            if (result.bus.len != sizeof(est)) {
+                HIVE_LOG_ERROR(
+                    "[WPT] State bus corrupted: size=%zu expected=%zu",
+                    result.bus.len, sizeof(est));
+                continue;
+            }
+            memcpy(&est, result.bus.data, sizeof(est));
+
+            // Check arrival and start hover timer (use tunable params)
+            tunable_params_t *p = state->params;
+            if (!hovering && check_arrival(wp, &est, p)) {
+                HIVE_LOG_INFO("[WPT] Arrived at waypoint %d - hovering",
+                              waypoint_index);
+                // Convert hover time from seconds to microseconds
+                uint64_t hover_time_us =
+                    (uint64_t)(p->wp_hover_time_s * 1000000.0f);
+                hive_status_t timer_status =
+                    hive_timer_after(hover_time_us, &hover_timer);
+                if (HIVE_FAILED(timer_status)) {
+                    HIVE_LOG_ERROR(
+                        "[WPT] timer_after failed: %s - cannot hover",
+                        HIVE_ERR_STR(timer_status));
+                    // Don't set hovering=true without a timer, or we'd hang forever
+                    continue;
+                }
+                hovering = true;
+            }
         }
-    }
+
+    } // End outer loop - returns to Phase 1 (wait for START)
 }
