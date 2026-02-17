@@ -18,7 +18,7 @@
 #define HAL_ALT_PID_KI 0.03f  // Small integral for steady-state
 #define HAL_ALT_PID_KD 0.0f   // Using velocity feedback instead
 #define HAL_ALT_PID_IMAX 0.2f // Integral limit
-#define HAL_ALT_PID_OMAX \
+#define HAL_ALT_PID_OMAX                                  \
     0.50f // Larger than hardware (0.15) - 20ms motor lag \
           // needs stronger correction authority
 
