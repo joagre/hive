@@ -88,7 +88,7 @@ python3 tools/ground_station.py --go
 
 Only one ground_station.py process can use the radio at a time.
 The GO command connects, sends, and disconnects in under 1 second.
-The 60-second countdown gives time to start the listener after GO.
+The 10-second armed countdown gives time to start the listener after GO.
 
 **Step 1 - Kill lingering processes**
 ```bash
@@ -125,19 +125,16 @@ python3 tools/ground_station.py --go
 ```
 Verify output says `GO command sent successfully!` before proceeding.
 
-**Step 6 - Immediately start listener**
+**Step 6 - Immediately start listener (20 second timeout)**
 
-Start within a few seconds of GO. The 60-second countdown gives plenty of
-margin. Log to a numbered CSV file (flight_testNN.csv).
+Start within a few seconds of GO. The 10-second armed countdown gives time.
+Log to a numbered CSV file (flight_testNN.csv).
+
+**ALWAYS use `timeout 20` for FIRST_TEST** (6s flight + post-landing data).
+Never listen longer than needed - the flight is short.
 ```bash
-python3 tools/ground_station.py -o flight_testNN.csv --uri radio://0/80/2M
+timeout 20 python3 tools/ground_station.py -o flight_testNN.csv --uri radio://0/80/2M
 ```
-Let it run through the entire flight and at least 10 seconds after landing.
-Ctrl+C to stop.
-
-**Timeout** - FIRST_TEST profile flies for 6 seconds. Use a 20-second timeout
-for the listener (enough for 6s flight + post-landing data). The 60-second
-countdown happens before telemetry starts, so no need to wait for it.
 
 **Step 7 - Analyze**
 ```bash
@@ -167,11 +164,11 @@ python3 tools/ground_station.py --set-param att_kp 2.0
 python3 tools/ground_station.py --set-param vvel_damping 0.50
 ```
 
-**Tunable Parameters (45 total):**
+**Tunable Parameters (48 total):**
 
 | Category | Parameters |
 |----------|------------|
-| Rate PID | `rate_kp`, `rate_ki`, `rate_kd`, `rate_imax`, `rate_omax_roll`, `rate_omax_pitch`, `rate_omax_yaw` |
+| Rate PID | `rate_kp`, `rate_ki`, `rate_kd`, `rate_imax`, `rate_omax_roll`, `rate_omax_pitch`, `rate_omax_yaw`, `rate_yaw_kp`, `rate_yaw_ki`, `rate_yaw_kd` |
 | Attitude PID | `att_kp`, `att_ki`, `att_kd`, `att_imax`, `att_omax` |
 | Altitude PID | `alt_kp`, `alt_ki`, `alt_kd`, `alt_imax`, `alt_omax`, `vvel_damping` |
 | Emergency | `emergency_tilt_limit`, `emergency_alt_max` |

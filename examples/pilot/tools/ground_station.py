@@ -79,8 +79,10 @@ CMD_REQUEST_LOG = 0x10
 PACKET_LOG_CHUNK = 0x11
 PACKET_LOG_DONE = 0x12
 
-# Packet type identifiers - flight go command (must match comms_actor.c)
+# Packet type identifiers - flight commands (must match comms_actor.c)
 CMD_GO = 0x20
+CMD_STATUS = 0x22
+RESP_STATUS = 0x23
 
 # Packet type identifiers - parameter tuning (must match comms_actor.c)
 CMD_SET_PARAM = 0x30
@@ -459,7 +461,7 @@ class TelemetryReceiver:
         """Send GO command to drone.
 
         This command tells the drone to start its flight sequence.
-        The drone will then begin a 60-second countdown before flight.
+        The drone will then begin a armed countdown (default 10s) before flight.
         Returns True if ACK received.
         """
         print("Sending GO command...", file=sys.stderr)
@@ -469,12 +471,43 @@ class TelemetryReceiver:
 
         if response and response.ack:
             print("GO command sent successfully!", file=sys.stderr)
-            print("*** DRONE WILL START 60-SECOND COUNTDOWN ***", file=sys.stderr)
+            print("*** DRONE WILL START ARMED COUNTDOWN (default 10s) ***", file=sys.stderr)
             print("*** STEP BACK TO SAFE DISTANCE NOW ***", file=sys.stderr)
             return True
         else:
             print("Error: No ACK for GO command", file=sys.stderr)
             return False
+
+    def request_status(self) -> bool:
+        """Request flight manager status from drone.
+
+        Sends CMD_STATUS, waits for RESP_STATUS response with state and
+        countdown. Returns True if status received.
+        """
+        FM_STATES = {
+            0: "IDLE", 1: "PREFLIGHT", 2: "ARMED",
+            3: "FLYING", 4: "LANDING", 5: "LANDED",
+        }
+        print("Requesting status...", file=sys.stderr)
+        response = self.radio.send_packet((CRTP_HEADER_TELEMETRY, CMD_STATUS))
+        if not response or not response.ack:
+            print("Error: No ACK for STATUS command", file=sys.stderr)
+            return False
+        # Poll for response packet
+        for _ in range(50):
+            response = self.radio.send_packet((CRTP_HEADER_TELEMETRY,))
+            if response and response.ack and len(response.data) >= 3:
+                if response.data[0] == RESP_STATUS:
+                    state_num = response.data[1]
+                    countdown = response.data[2]
+                    state_name = FM_STATES.get(state_num, f"UNKNOWN({state_num})")
+                    print(f"Flight manager state: {state_name}", file=sys.stderr)
+                    if countdown > 0:
+                        print(f"Countdown: {countdown}s", file=sys.stderr)
+                    return True
+            time.sleep(0.02)
+        print("No status response received", file=sys.stderr)
+        return False
 
     def set_param(self, name: str, value: float) -> bool:
         """Set a parameter on the drone.
@@ -715,7 +748,11 @@ def main():
     )
     parser.add_argument(
         "--go", action="store_true",
-        help="Send GO command to drone (starts 60-second countdown, then flight)"
+        help="Send GO command to drone (starts armed countdown (default 10s), then flight)"
+    )
+    parser.add_argument(
+        "--status", action="store_true",
+        help="Query flight manager state (IDLE, PREFLIGHT, ARMED, FLYING, LANDING, LANDED)"
     )
     parser.add_argument(
         "--set-param", nargs=2, metavar=("NAME", "VALUE"),
@@ -761,6 +798,10 @@ def main():
         if args.go:
             # GO mode - send go command and exit
             success = receiver.send_go()
+            sys.exit(0 if success else 1)
+        elif args.status:
+            # Status mode - query flight manager state
+            success = receiver.request_status()
             sys.exit(0 if success else 1)
         elif args.set_param:
             # Set param mode

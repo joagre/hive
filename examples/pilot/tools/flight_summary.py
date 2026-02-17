@@ -52,6 +52,39 @@ def analyze(data):
     targets = [d['target_z'] for d in data if d['target_z'] > 0.01]
     r['target_alt'] = targets[0] if targets else 0.0
 
+    # --- Liftoff validation ---
+    # Detect KF drift: if altitude was already elevated before thrust started,
+    # the altitude data is unreliable (propwash, baro noise, etc.)
+    pre_flight = [d for d in data if d['time_ms'] < t0 and d['thrust'] < 0.001]
+    if len(pre_flight) > 1:
+        initial_alt = pre_flight[0]['altitude']
+        pre_thrust_alt = pre_flight[-1]['altitude']
+        r['pre_flight_drift'] = pre_thrust_alt - initial_alt
+    else:
+        initial_alt = flight[0]['altitude']
+        r['pre_flight_drift'] = 0.0
+
+    # Altitude gain above pre-thrust baseline during the thrust phase.
+    # Real liftoff produces >0.15m gain; KF drift on the ground is smaller
+    # or was already present before thrust.
+    baseline = pre_flight[-1]['altitude'] if pre_flight else flight[0]['altitude']
+    flight_alts = [d['altitude'] for d in flight]
+    altitude_gain = max(flight_alts) - baseline
+    r['altitude_gain'] = altitude_gain
+    r['baseline_alt'] = baseline
+
+    # Cross-check with vertical velocity: real liftoff produces >0.1 m/s upward
+    max_vz = max(d['vz'] for d in flight)
+    r['max_vz_in_flight'] = max_vz
+
+    # Liftoff validation. If KF drifted >0.1m before thrust even started,
+    # altitude and velocity data are unreliable (propwash, baro noise,
+    # rangefinder blocked). Cannot trust them for liftoff detection.
+    if abs(r.get('pre_flight_drift', 0)) > 0.1:
+        r['liftoff_validated'] = False
+    else:
+        r['liftoff_validated'] = (altitude_gain > 0.15 and max_vz > 0.1)
+
     # --- Liftoff detection ---
     # Find ramp phase: thrust increasing monotonically from first > 0
     ramp_end_idx = 0
@@ -160,6 +193,19 @@ def print_summary(r, path):
     print(f"Flight:    {r['flight_start_s']:.1f}s - {r['flight_end_s']:.1f}s "
           f"({r['flight_duration_s']:.1f}s)")
     print(f"Target:    {r['target_alt']:.2f}m")
+
+    # Liftoff validation
+    if not r.get('liftoff_validated'):
+        print(f"\n** NO LIFTOFF - motors ran but drone stayed on ground **")
+        print(f"  Thrust commanded but altitude gain: {r['altitude_gain']:.3f}m "
+              f"(need >0.15m)")
+        print(f"  Max vertical velocity: {r['max_vz_in_flight']:.3f} m/s "
+              f"(need >0.1)")
+        if abs(r.get('pre_flight_drift', 0)) > 0.05:
+            print(f"  KF drift before thrust: {r['pre_flight_drift']:+.3f}m "
+                  f"(altitude data unreliable)")
+        print(f"\nVerdict: NO LIFTOFF")
+        return
 
     # Liftoff
     print(f"\nLiftoff detection:")
