@@ -150,11 +150,11 @@ typedef struct {
 
 // PID controller state. Each axis (roll, pitch, yaw, altitude) has its own.
 typedef struct {
-    float kp, ki, kd;   // PID gains (proportional, integral, derivative)
-    float integral;     // Accumulated integral term
-    float prev_error;   // Previous error (for derivative calculation)
-    float integral_max; // Anti-windup: max absolute value of integral
-    float output_max;   // Output clamping: max absolute value of output
+    float kp, ki, kd;       // PID gains (proportional, integral, derivative)
+    float integral;         // Accumulated integral term
+    float prev_measurement; // Previous measurement (derivative-on-measurement)
+    float integral_max;     // Anti-windup: max absolute value of integral
+    float output_max;       // Output clamping: max absolute value of output
 } pid_state_t;
 
 #endif // PILOT_TYPES_H

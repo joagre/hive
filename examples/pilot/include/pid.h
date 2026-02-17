@@ -15,7 +15,7 @@ void pid_init(pid_state_t *pid, float kp, float ki, float kd);
 void pid_init_full(pid_state_t *pid, float kp, float ki, float kd,
                    float integral_max, float output_max);
 
-// Reset PID state (integral and previous error).
+// Reset PID state (integral and previous measurement).
 void pid_reset(pid_state_t *pid);
 
 // Update PID controller and return control output.
