@@ -16,6 +16,7 @@
 #include "hive_select.h"
 #include "hive_log.h"
 #include "hive_timer.h"
+#include <math.h>
 #include <string.h>
 #include <stdbool.h>
 
@@ -120,6 +121,13 @@ void rate_actor(void *args, const hive_spawn_info_t *siblings,
             continue;
         }
         memcpy(&est, result.bus.data, sizeof(est));
+
+        // Skip cycle if estimator produced NaN (sensor failure)
+        if (!isfinite(est.roll_rate) || !isfinite(est.pitch_rate) ||
+            !isfinite(est.yaw_rate)) {
+            HIVE_LOG_WARN("[RATE] NaN in state estimate - skipping cycle");
+            continue;
+        }
 
         // Measure actual dt
         uint64_t now = hive_get_time();

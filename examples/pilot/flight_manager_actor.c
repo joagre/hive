@@ -59,8 +59,8 @@ static void notify_reset_all(const sibling_ids_t *ids) {
         if (actors[i] != HIVE_ACTOR_ID_INVALID) {
             hive_status_t s = hive_ipc_notify(actors[i], NOTIFY_RESET, NULL, 0);
             if (HIVE_FAILED(s)) {
-                HIVE_LOG_ERROR("[FLM] RESET notify failed for actor %u: %s",
-                               actors[i], HIVE_ERR_STR(s));
+                HIVE_LOG_ERROR("[FLM] RESET notify failed for actor %lu: %s",
+                               (unsigned long)actors[i], HIVE_ERR_STR(s));
             }
         }
     }
@@ -213,7 +213,14 @@ void flight_manager_actor(void *args, const hive_spawn_info_t *siblings,
             state = FM_STATE_ARMED;
 
             // Start 1-second countdown tick timer
-            hive_timer_every(1 * 1000000, &countdown_timer); // 1s ticks
+            hive_status_t ts = hive_timer_every(1 * 1000000, &countdown_timer);
+            if (HIVE_FAILED(ts)) {
+                HIVE_LOG_ERROR("[FLM] countdown timer failed: %s",
+                               HIVE_ERR_STR(ts));
+                hive_exit(HIVE_EXIT_REASON_CRASH);
+            }
+            HIVE_LOG_INFO("[FLM] countdown timer=%lu",
+                          (unsigned long)countdown_timer);
             break;
         }
 
@@ -283,11 +290,7 @@ void flight_manager_actor(void *args, const hive_spawn_info_t *siblings,
             // Countdown tick
             if (countdown_s > 1) {
                 countdown_s -= 1;
-                // Log every 10 seconds to avoid spam
-                if (countdown_s % 10 == 0) {
-                    HIVE_LOG_INFO("[FLM] Countdown: %us remaining",
-                                  countdown_s);
-                }
+                HIVE_LOG_INFO("[FLM] Countdown: %us remaining", countdown_s);
             } else {
                 // Countdown complete
                 hive_timer_cancel(countdown_timer);
@@ -321,7 +324,13 @@ void flight_manager_actor(void *args, const hive_spawn_info_t *siblings,
                 }
 
                 // Start flight timer
-                hive_timer_after(FLIGHT_DURATION_US, &flight_timer);
+                hive_status_t ft =
+                    hive_timer_after(FLIGHT_DURATION_US, &flight_timer);
+                if (HIVE_FAILED(ft)) {
+                    HIVE_LOG_ERROR("[FLM] flight timer failed: %s",
+                                   HIVE_ERR_STR(ft));
+                    hive_exit(HIVE_EXIT_REASON_CRASH);
+                }
             }
             break;
         }
@@ -409,7 +418,12 @@ void flight_manager_actor(void *args, const hive_spawn_info_t *siblings,
                 HIVE_LOG_ERROR("[FLM] LANDING notify failed: %s",
                                HIVE_ERR_STR(ls));
             }
-            hive_timer_after(LANDING_TIMEOUT_US, &landing_timer);
+            hive_status_t lt =
+                hive_timer_after(LANDING_TIMEOUT_US, &landing_timer);
+            if (HIVE_FAILED(lt)) {
+                HIVE_LOG_ERROR("[FLM] landing timer failed: %s",
+                               HIVE_ERR_STR(lt));
+            }
             state = FM_STATE_LANDING;
             break;
         }

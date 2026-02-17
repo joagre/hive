@@ -104,6 +104,14 @@ void position_actor(void *args, const hive_spawn_info_t *siblings,
         }
         memcpy(&est, result.bus.data, sizeof(est));
 
+        // Skip cycle if estimator produced NaN (sensor failure)
+        if (!isfinite(est.x) || !isfinite(est.y) || !isfinite(est.x_velocity) ||
+            !isfinite(est.y_velocity) || !isfinite(est.yaw) ||
+            !isfinite(est.altitude)) {
+            HIVE_LOG_WARN("[POS] NaN in state estimate - skipping cycle");
+            continue;
+        }
+
         // Read target from waypoint actor (non-blocking, use last known)
         if (hive_bus_read(state->position_target_bus, &new_target,
                           sizeof(new_target), &len, HIVE_TIMEOUT_NONBLOCKING)
