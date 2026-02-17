@@ -78,6 +78,15 @@
 // Header: type(1) + sequence(2) = 3 bytes
 #define LOG_CHUNK_DATA_SIZE 27
 
+// RX packet layout: HAL prepends 1 framing byte to all received packets.
+// [0] = HAL frame header, [1] = command byte, [2..] = command payload.
+#define RX_CMD_OFFSET 1         // Command byte position
+#define RX_PAYLOAD_OFFSET 2     // First payload byte (e.g., param ID)
+#define RX_PARAM_VALUE_OFFSET 3 // Float value position in SET_PARAM
+// Minimum packet lengths for command validation
+#define RX_MIN_SET_PARAM_LEN 7 // frame(1) + cmd(1) + id(1) + value(4)
+#define RX_MIN_GET_PARAM_LEN 3 // frame(1) + cmd(1) + id(1)
+
 // Operating modes
 typedef enum {
     COMMS_MODE_FLIGHT,      // Normal telemetry transmission
@@ -234,8 +243,7 @@ static void handle_rx_command(comms_state_t *state, const uint8_t *data,
         return;
     }
 
-    // Skip HAL frame header (byte 0), command is in byte 1
-    uint8_t cmd = data[1];
+    uint8_t cmd = data[RX_CMD_OFFSET];
 
     if (cmd == CMD_GO) {
         // Ground station sends GO to start flight sequence
@@ -320,14 +328,13 @@ static void handle_rx_command(comms_state_t *state, const uint8_t *data,
     }
 
     if (cmd == CMD_SET_PARAM) {
-        // Set parameter: [id:u8][value:f32] - need 6 bytes total (header + id + value)
-        if (len < 7) {
+        if (len < RX_MIN_SET_PARAM_LEN) {
             HIVE_LOG_WARN("[COMMS] SET_PARAM too short: %zu", len);
             return;
         }
-        uint8_t param_id = data[2];
+        uint8_t param_id = data[RX_PAYLOAD_OFFSET];
         float value;
-        memcpy(&value, &data[3], sizeof(float));
+        memcpy(&value, &data[RX_PARAM_VALUE_OFFSET], sizeof(float));
 
         hive_status_t s = tunable_params_set(
             state->params, (tunable_param_id_t)param_id, value);
@@ -340,12 +347,11 @@ static void handle_rx_command(comms_state_t *state, const uint8_t *data,
     }
 
     if (cmd == CMD_GET_PARAM) {
-        // Get parameter: [id:u8] - need 3 bytes total (header + id)
-        if (len < 3) {
+        if (len < RX_MIN_GET_PARAM_LEN) {
             HIVE_LOG_WARN("[COMMS] GET_PARAM too short: %zu", len);
             return;
         }
-        uint8_t param_id = data[2];
+        uint8_t param_id = data[RX_PAYLOAD_OFFSET];
         float value =
             tunable_params_get(state->params, (tunable_param_id_t)param_id);
         param_value_packet_t resp = {
@@ -465,7 +471,7 @@ void comms_actor(void *args, const hive_spawn_info_t *siblings,
         }
 
         wake_count++;
-        if ((wake_count % 500) == 1) {
+        if ((wake_count % COMMS_TRACE_INTERVAL) == 1) {
             HIVE_LOG_TRACE("[COMMS] wake %lu", wake_count);
         }
 
@@ -519,7 +525,7 @@ void comms_actor(void *args, const hive_spawn_info_t *siblings,
 
         // Check hardware flow control before sending
         if (!hal_esb_tx_ready()) {
-            if ((wake_count % 1000) == 1) {
+            if ((wake_count % COMMS_TRACE_INTERVAL) == 1) {
                 HIVE_LOG_WARN("[COMMS] TX not ready");
             }
             continue;

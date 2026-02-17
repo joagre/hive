@@ -30,10 +30,8 @@
 #include <math.h>
 #include <stdbool.h>
 
-// Torque validation limits
-// These are sanity checks - values outside indicate control system failure
-#define MAX_THRUST 1.5f     // Allow some headroom above 1.0
-#define MAX_TORQUE_MAG 2.0f // Roll/pitch/yaw torque magnitude limit
+// Torque validation limits defined in config.h:
+// MOTOR_MAX_THRUST, MOTOR_MAX_TORQUE, MOTOR_THRUST_NEGATIVE_TOLERANCE
 
 // Validate torque command, return true if sane
 // Checks for NaN/Inf and reasonable magnitude
@@ -44,12 +42,13 @@ static bool validate_torque(const torque_cmd_t *cmd) {
         return false;
     }
     // Check magnitude limits
-    if (cmd->thrust < -0.1f || cmd->thrust > MAX_THRUST) {
+    if (cmd->thrust < -MOTOR_THRUST_NEGATIVE_TOLERANCE ||
+        cmd->thrust > MOTOR_MAX_THRUST) {
         return false;
     }
-    if (fabsf(cmd->roll) > MAX_TORQUE_MAG ||
-        fabsf(cmd->pitch) > MAX_TORQUE_MAG ||
-        fabsf(cmd->yaw) > MAX_TORQUE_MAG) {
+    if (fabsf(cmd->roll) > MOTOR_MAX_TORQUE ||
+        fabsf(cmd->pitch) > MOTOR_MAX_TORQUE ||
+        fabsf(cmd->yaw) > MOTOR_MAX_TORQUE) {
         return false;
     }
     return true;
@@ -189,7 +188,8 @@ void motor_actor(void *args, const hive_spawn_info_t *siblings,
             }
 
             // Log first non-zero thrust (takeoff moment)
-            if (!first_thrust_logged && torque.thrust > 0.01f) {
+            if (!first_thrust_logged &&
+                torque.thrust > MOTOR_ENGAGED_THRESHOLD) {
                 HIVE_LOG_INFO("[MOTOR] First thrust: %.3f - MOTORS ENGAGED",
                               torque.thrust);
                 first_thrust_logged = true;

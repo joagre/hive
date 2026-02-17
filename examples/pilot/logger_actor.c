@@ -27,8 +27,8 @@
 // Logging interval in microseconds (25Hz = 40ms)
 #define LOG_INTERVAL_US (1000000 / TELEMETRY_LOG_RATE_HZ)
 
-// Hive log sync interval (4 seconds, matches flight_manager's old interval)
-#define HIVE_LOG_SYNC_INTERVAL 100 // Every 100 CSV samples = 4 seconds
+// Sync intervals defined in config.h:
+// HIVE_LOG_SYNC_SAMPLES, CSV_SYNC_SAMPLES
 
 // Line buffer size (enough for one CSV row)
 #define LINE_BUF_SIZE 512
@@ -295,13 +295,13 @@ void logger_actor(void *args, const hive_spawn_info_t *siblings,
 
         log_count++;
 
-        // Sync CSV every 25 samples (once per second)
-        if (state->csv_fd >= 0 && log_count % TELEMETRY_LOG_RATE_HZ == 0) {
+        // Sync CSV at configured interval
+        if (state->csv_fd >= 0 && log_count % CSV_SYNC_SAMPLES == 0) {
             hive_file_sync(state->csv_fd);
         }
 
-        // Sync hive log every 100 samples (4 seconds)
-        if (state->hive_log_open && log_count % HIVE_LOG_SYNC_INTERVAL == 0) {
+        // Sync hive log at configured interval
+        if (state->hive_log_open && log_count % HIVE_LOG_SYNC_SAMPLES == 0) {
             hive_log_file_sync();
         }
     }

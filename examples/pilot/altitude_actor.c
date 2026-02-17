@@ -199,9 +199,9 @@ void altitude_actor(void *args, const hive_spawn_info_t *siblings,
         }
 
         // Touchdown detection (only in landing mode)
-        bool touchdown = landing_mode &&
-                         (est.altitude < LANDED_ACTUAL_THRESHOLD) &&
-                         (fabsf(est.vertical_velocity) < 0.1f);
+        bool touchdown =
+            landing_mode && (est.altitude < LANDED_ACTUAL_THRESHOLD) &&
+            (fabsf(est.vertical_velocity) < LANDED_VELOCITY_THRESHOLD);
 
         bool cutoff = crash_detected || touchdown;
 

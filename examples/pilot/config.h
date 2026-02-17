@@ -110,7 +110,62 @@
 #define LANDED_TARGET_THRESHOLD \
     0.05f // meters - target altitude indicating land command
 #define LANDED_ACTUAL_THRESHOLD \
-    0.08f // meters - actual altitude confirming landed (tight!)
+    0.08f // meters - actual altitude confirming landed
+// Touchdown requires near-zero vertical velocity. Threshold set above
+// the rangefinder noise floor (~0.03 m/s) with margin for KF lag.
+#define LANDED_VELOCITY_THRESHOLD 0.1f // m/s
+
+// ----------------------------------------------------------------------------
+// Rangefinder (VL53L1x) characteristics
+// ----------------------------------------------------------------------------
+// From VL53L1x datasheet and observed behavior on Crazyflie flow deck.
+
+// Minimum measurable distance. Below this the sensor returns 0.
+// Drone chassis sits ~20-30mm above ground, so readings below this
+// threshold on the ground are noise.
+#define RANGEFINDER_MIN_M 0.01f // 10mm - VL53L1x minimum range
+
+// Maximum reliable range in short-distance mode (configured at 40Hz).
+// Beyond this the sensor returns invalid readings or times out.
+#define RANGEFINDER_MAX_M 1.3f // 1300mm - VL53L1x short mode max
+
+// Altitude below which the drone is considered ground-level.
+// Used for drift prevention: when the last valid reading was below
+// this and the rangefinder goes silent (below its minimum range),
+// we inject a ground-level measurement to prevent KF drift.
+// Set above chassis height (~30mm) with margin.
+#define RANGEFINDER_GROUND_ALT_M 0.1f // 100mm
+
+// How long to wait before injecting ground-level correction.
+// The rangefinder updates at 40Hz (25ms). If no valid reading for
+// 500ms (20 missed samples), the drone is likely on the ground
+// below the sensor's minimum range.
+#define RANGEFINDER_GROUND_TIMEOUT_US \
+    500000 // 500ms = 20 missed samples at 40Hz
+
+// ----------------------------------------------------------------------------
+// Motor validation (motor_actor sanity checks)
+// ----------------------------------------------------------------------------
+// Last line of defense - values outside these indicate control failure.
+// Derived from motor operating envelope, not control tuning.
+
+// Thrust can slightly exceed 1.0 due to floating-point PID output.
+// Allow headroom so minor overshoot isn't falsely rejected.
+#define MOTOR_MAX_THRUST 1.5f
+
+// Maximum torque magnitude for roll/pitch/yaw axes.
+// Bounded by motor differential thrust capability. At max tilt
+// the mixer produces ~1.5 on the torque axes; 2.0 provides margin.
+#define MOTOR_MAX_TORQUE 2.0f
+
+// Tolerance for small negative thrust from floating-point jitter.
+// The PID can output slightly below zero; this is harmless and
+// clamped to 0 by the mixer. Larger negatives indicate failure.
+#define MOTOR_THRUST_NEGATIVE_TOLERANCE 0.1f
+
+// Threshold for detecting first non-zero thrust (takeoff moment).
+// Set above the PID output noise floor for clean detection.
+#define MOTOR_ENGAGED_THRESHOLD 0.01f
 
 // ----------------------------------------------------------------------------
 // Waypoint navigation (mission parameters)
@@ -121,6 +176,47 @@
     0.08f // meters - altitude tolerance (tight for landing)
 #define WAYPOINT_TOLERANCE_YAW 0.1f  // radians (~6 degrees)
 #define WAYPOINT_TOLERANCE_VEL 0.05f // m/s - must be nearly stopped
+
+// ----------------------------------------------------------------------------
+// Flight manager timing
+// ----------------------------------------------------------------------------
+
+// Flight duration per profile. These are safety limits - the waypoint actor
+// controls actual flight behavior. Duration should exceed expected mission
+// time with margin for position settling.
+#if FLIGHT_PROFILE == FLIGHT_PROFILE_FIRST_TEST
+#define FLIGHT_DURATION_S 6 // Short for safety during initial testing
+#elif FLIGHT_PROFILE == FLIGHT_PROFILE_ALTITUDE
+#define FLIGHT_DURATION_S 40 // ~8 waypoints at ~5s each
+#elif FLIGHT_PROFILE == FLIGHT_PROFILE_FULL_3D
+#define FLIGHT_DURATION_S 60 // ~10 waypoints at ~5s each + margin
+#else
+#define FLIGHT_DURATION_S 20 // Default
+#endif
+#define FLIGHT_DURATION_US ((uint64_t)FLIGHT_DURATION_S * 1000000)
+
+// Landing timeout. Derived from worst case: maximum altitude (2m) divided
+// by minimum descent rate (0.2 m/s) = 10s, plus margin for ground effect.
+#define LANDING_TIMEOUT_S 10
+#define LANDING_TIMEOUT_US ((uint64_t)LANDING_TIMEOUT_S * 1000000)
+
+// ----------------------------------------------------------------------------
+// Telemetry and logging
+// ----------------------------------------------------------------------------
+
+#define TELEMETRY_LOG_RATE_HZ 25 // CSV telemetry logging rate
+
+// Hive log sync interval. Syncing flushes the ring buffer to flash/disk.
+// 4 seconds balances data safety with flash write wear.
+#define HIVE_LOG_SYNC_SAMPLES (TELEMETRY_LOG_RATE_HZ * 4) // 100 samples = 4s
+
+// CSV sync interval. More frequent than hive log because CSV data is
+// the primary flight record. 1 second keeps at most 25 rows at risk.
+#define CSV_SYNC_SAMPLES TELEMETRY_LOG_RATE_HZ // 25 samples = 1s
+
+// Comms actor trace logging interval. Produces ~1 log line per second
+// at the typical ~500Hz ESB poll rate.
+#define COMMS_TRACE_INTERVAL 500
 
 // ----------------------------------------------------------------------------
 // Position control
@@ -134,9 +230,9 @@
 #define MAX_TILT_ANGLE 0.20f // ~11 degrees - limit for noise tolerance
 #else
 // Flight-tested gains - flow deck tracks well, tighter position hold
-#define POS_KP 0.14f         // Stronger hold (was 0.08, Webots: 0.12)
-#define POS_KD 0.16f         // More velocity damping (was 0.10, Webots: 0.18)
-#define MAX_TILT_ANGLE 0.25f // ~14 degrees (safer limit)
+#define POS_KP 0.14f
+#define POS_KD 0.16f
+#define MAX_TILT_ANGLE 0.25f // ~14 degrees
 #endif
 
 // ----------------------------------------------------------------------------

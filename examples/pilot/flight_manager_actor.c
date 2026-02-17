@@ -19,19 +19,8 @@
 #include "stack_profile.h"
 #include <stdbool.h>
 
-// Flight duration per profile (flight manager decides when to land)
-#if FLIGHT_PROFILE == FLIGHT_PROFILE_FIRST_TEST
-#define FLIGHT_DURATION_US (6 * 1000000) // 6 seconds - short for safety
-#elif FLIGHT_PROFILE == FLIGHT_PROFILE_ALTITUDE
-#define FLIGHT_DURATION_US (40 * 1000000) // 40 seconds
-#elif FLIGHT_PROFILE == FLIGHT_PROFILE_FULL_3D
-#define FLIGHT_DURATION_US (60 * 1000000) // 60 seconds
-#else
-#define FLIGHT_DURATION_US (20 * 1000000) // Default: 20 seconds
-#endif
-
-// Landing timeout (10 seconds)
-#define LANDING_TIMEOUT_US (10 * 1000000)
+// Flight duration and landing timeout defined in config.h:
+// FLIGHT_DURATION_US, LANDING_TIMEOUT_US
 
 // Flight manager state
 typedef enum {

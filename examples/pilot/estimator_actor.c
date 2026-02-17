@@ -335,7 +335,8 @@ void estimator_actor(void *args, const hive_spawn_info_t *siblings,
         // Once rangefinder works, we stay in rangefinder mode and NEVER use baro.
         // Baro is unreliable at low altitude due to prop wash from motors.
         bool fresh_rangefinder = false;
-        if (sensors.gps_z >= 0.01f && sensors.gps_z <= 1.3f) {
+        if (sensors.gps_z >= RANGEFINDER_MIN_M &&
+            sensors.gps_z <= RANGEFINDER_MAX_M) {
             // Good rangefinder reading - use it
             measured_altitude = sensors.gps_z;
             last_valid_rangefinder_alt = sensors.gps_z;
@@ -353,9 +354,9 @@ void estimator_actor(void *args, const hive_spawn_info_t *siblings,
             // 3.5 m/s drift to -21m in 6 seconds post-landing).
             // If last valid reading was near ground and rangefinder has
             // been absent >500ms, apply ground-level correction.
-            if (last_valid_rangefinder_alt < 0.1f &&
+            if (last_valid_rangefinder_alt < RANGEFINDER_GROUND_ALT_M &&
                 last_rangefinder_time > 0 &&
-                (now - last_rangefinder_time) > 500000) {
+                (now - last_rangefinder_time) > RANGEFINDER_GROUND_TIMEOUT_US) {
                 fresh_rangefinder = true;
             }
         }

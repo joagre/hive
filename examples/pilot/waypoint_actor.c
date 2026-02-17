@@ -118,7 +118,7 @@ void waypoint_actor(void *args, const hive_spawn_info_t *siblings,
     HIVE_LOG_INFO("[WPT] START received - beginning flight sequence");
     HIVE_LOG_INFO("[WPT] First waypoint: (%.1f, %.1f, %.1f) yaw=%.0f",
                   waypoints[0].x, waypoints[0].y, waypoints[0].z,
-                  waypoints[0].yaw * 57.3f);
+                  waypoints[0].yaw * RAD_TO_DEG);
 
     int waypoint_index = 0;
     hive_timer_id_t hover_timer = HIVE_TIMER_ID_INVALID;

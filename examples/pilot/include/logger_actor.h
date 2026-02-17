@@ -15,8 +15,7 @@
 #include "hive_types.h"
 #include "pilot_buses.h"
 
-// Logging rate in Hz (25Hz = 40ms interval)
-#define TELEMETRY_LOG_RATE_HZ 25
+// TELEMETRY_LOG_RATE_HZ defined in config.h
 
 // Configuration for logger actor
 typedef struct {
