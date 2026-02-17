@@ -35,7 +35,7 @@
 // Sign conventions (matching Bitcraze):
 //   +roll  = right wing down (right motors less, left motors more)
 //   +pitch = nose up (front motors more, back motors less)
-//   +yaw   = CCW rotation (CW motors more, CCW motors less)
+//   +yaw   = CW rotation (CCW motors more, CW motors less)
 //
 // Mixer equations (from Bitcraze power_distribution_quadrotor.c):
 //   M1 = thrust - roll + pitch + yaw  (front-right, CCW)
@@ -66,18 +66,27 @@ void hal_write_torque(const torque_cmd_t *cmd) {
     motors.motor[3] =
         cmd->thrust + cmd->roll + cmd->pitch - cmd->yaw; // M4 (front-left, CW)
 
-    // Clamp motor values and detect saturation
-    bool saturated = false;
-    for (int i = 0; i < 4; i++) {
-        float orig = motors.motor[i];
-        motors.motor[i] = clampf(motors.motor[i], 0.0f, 1.0f);
-        if (orig != motors.motor[i]) {
-            saturated = true;
+    // Attitude-priority mixing: if any motor exceeds 1.0, reduce base
+    // thrust for all motors equally so attitude differentials (roll, pitch,
+    // yaw) are preserved. Better to lose altitude than lose attitude control.
+    float max_motor = motors.motor[0];
+    for (int i = 1; i < 4; i++) {
+        if (motors.motor[i] > max_motor) {
+            max_motor = motors.motor[i];
         }
     }
-    if (saturated) {
-        HIVE_LOG_TRACE("[MIX] motor saturation: t=%.2f r=%.2f p=%.2f y=%.2f",
-                       cmd->thrust, cmd->roll, cmd->pitch, cmd->yaw);
+    if (max_motor > 1.0f) {
+        float reduction = max_motor - 1.0f;
+        for (int i = 0; i < 4; i++) {
+            motors.motor[i] -= reduction;
+        }
+        HIVE_LOG_DEBUG("[MIX] attitude priority: thrust reduced by %.3f",
+                       reduction);
+    }
+
+    // Clamp to [0, 1] - lower bound only after attitude-priority reduction
+    for (int i = 0; i < 4; i++) {
+        motors.motor[i] = clampf(motors.motor[i], 0.0f, 1.0f);
     }
 
     // Output to hardware

@@ -64,6 +64,14 @@
 #define HAL_RATE_PID_OMAX_PITCH 0.12f
 #define HAL_RATE_PID_OMAX_YAW 0.15f
 
+// Yaw rate gains - separate from roll/pitch because yaw has no aerodynamic
+// restoring force and faces constant CW/CCW motor torque imbalance.
+// At 35 deg/s spin, roll/pitch kp=0.020 only produces 8% of yaw authority.
+// Higher kp for faster response, much higher ki for torque imbalance.
+#define HAL_RATE_YAW_PID_KP 0.08f  // 4x roll/pitch - yaw needs authority
+#define HAL_RATE_YAW_PID_KI 0.02f  // 20x roll/pitch - compensates torque bias
+#define HAL_RATE_YAW_PID_KD 0.001f // Light derivative for damping
+
 // ----------------------------------------------------------------------------
 // Flow Deck Configuration
 // ----------------------------------------------------------------------------
