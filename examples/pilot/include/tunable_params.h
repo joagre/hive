@@ -13,7 +13,7 @@
 #include "hive_runtime.h"
 
 // Parameter count (must match enum)
-#define TUNABLE_PARAM_COUNT 45
+#define TUNABLE_PARAM_COUNT 48
 
 // Parameter identifiers
 // Grouped by subsystem for easier navigation
@@ -84,6 +84,13 @@ typedef enum {
     // Flight manager lifecycle (43-44)
     PARAM_ARMED_COUNTDOWN_S = 43,
     PARAM_AUTO_GO_DELAY_S = 44,
+
+    // Yaw rate PID - separate from roll/pitch (45-47)
+    // Yaw needs higher gains: no aerodynamic restoring force,
+    // constant motor torque imbalance requires integral action.
+    PARAM_RATE_YAW_KP = 45,
+    PARAM_RATE_YAW_KI = 46,
+    PARAM_RATE_YAW_KD = 47,
 } tunable_param_id_t;
 
 // All tunable parameters in a single struct
@@ -155,6 +162,11 @@ typedef struct {
     // Flight manager lifecycle
     float armed_countdown_s;
     float auto_go_delay_s;
+
+    // Yaw rate PID (separate from roll/pitch)
+    float rate_yaw_kp;
+    float rate_yaw_ki;
+    float rate_yaw_kd;
 } tunable_params_t;
 
 // Initialize parameters with platform defaults from HAL_* defines

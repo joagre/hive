@@ -18,7 +18,7 @@
 #define HAL_ALT_PID_KI 0.03f  // Small integral for steady-state
 #define HAL_ALT_PID_KD 0.0f   // Using velocity feedback instead
 #define HAL_ALT_PID_IMAX 0.2f // Integral limit
-#define HAL_ALT_PID_OMAX                                  \
+#define HAL_ALT_PID_OMAX \
     0.50f // Larger than hardware (0.15) - 20ms motor lag \
           // needs stronger correction authority
 
@@ -52,5 +52,13 @@
     0.12f // Increased - motor lag limits actual response
 #define HAL_RATE_PID_OMAX_PITCH 0.12f
 #define HAL_RATE_PID_OMAX_YAW 0.15f
+
+// Yaw rate gains - match roll/pitch for simulation. The Webots motor model
+// has no CW/CCW torque imbalance, so aggressive yaw gains are unnecessary
+// and exceed the gain margin due to the 20ms motor time constant, causing
+// yaw instability. Real hardware uses higher gains (see crazyflie hal_config.h).
+#define HAL_RATE_YAW_PID_KP 0.028f // Same as roll/pitch - no torque bias in sim
+#define HAL_RATE_YAW_PID_KI 0.002f // Same as roll/pitch
+#define HAL_RATE_YAW_PID_KD 0.003f // Same as roll/pitch
 
 #endif // HAL_CONFIG_H

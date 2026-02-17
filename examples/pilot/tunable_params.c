@@ -133,6 +133,11 @@ static const param_meta_t param_meta[TUNABLE_PARAM_COUNT] = {
     [PARAM_AUTO_GO_DELAY_S] = {.name = "auto_go_delay_s",
                                .min = 0.0f,
                                .max = 60.0f},
+
+    // Yaw rate PID (45-47)
+    [PARAM_RATE_YAW_KP] = {.name = "rate_yaw_kp", .min = 0.0f, .max = 0.5f},
+    [PARAM_RATE_YAW_KI] = {.name = "rate_yaw_ki", .min = 0.0f, .max = 0.2f},
+    [PARAM_RATE_YAW_KD] = {.name = "rate_yaw_kd", .min = 0.0f, .max = 0.05f},
 };
 
 void tunable_params_init(tunable_params_t *params) {
@@ -199,6 +204,11 @@ void tunable_params_init(tunable_params_t *params) {
 
     // Horizontal velocity filter - from config.h
     params->hvel_filter_alpha = HVEL_FILTER_ALPHA;
+
+    // Yaw rate PID - from HAL (separate from roll/pitch)
+    params->rate_yaw_kp = HAL_RATE_YAW_PID_KP;
+    params->rate_yaw_ki = HAL_RATE_YAW_PID_KI;
+    params->rate_yaw_kd = HAL_RATE_YAW_PID_KD;
 
     // Flight manager lifecycle
 #ifdef SIMULATED_TIME

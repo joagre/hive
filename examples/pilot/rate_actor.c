@@ -62,15 +62,17 @@ void rate_actor(void *args, const hive_spawn_info_t *siblings,
     }
 
     pid_state_t roll_pid, pitch_pid, yaw_pid;
-    // Note: Different output limits per axis (yaw needs more authority)
-    // Use tunable params for initial values
+    // Note: Different output limits per axis, and yaw uses separate gains.
+    // Yaw has no aerodynamic restoring force and faces constant motor
+    // torque imbalance, so it needs higher P and much higher I than
+    // roll/pitch.
     tunable_params_t *p = state->params;
     pid_init_full(&roll_pid, p->rate_kp, p->rate_ki, p->rate_kd, p->rate_imax,
                   p->rate_omax_roll);
     pid_init_full(&pitch_pid, p->rate_kp, p->rate_ki, p->rate_kd, p->rate_imax,
                   p->rate_omax_pitch);
-    pid_init_full(&yaw_pid, p->rate_kp, p->rate_ki, p->rate_kd, p->rate_imax,
-                  p->rate_omax_yaw);
+    pid_init_full(&yaw_pid, p->rate_yaw_kp, p->rate_yaw_ki, p->rate_yaw_kd,
+                  p->rate_imax, p->rate_omax_yaw);
 
     float thrust = 0.0f;
     rate_setpoint_t rate_sp = RATE_SETPOINT_ZERO;
@@ -156,7 +158,7 @@ void rate_actor(void *args, const hive_spawn_info_t *siblings,
         // Update PID gains from tunable params (allows live tuning)
         pid_set_gains(&roll_pid, p->rate_kp, p->rate_ki, p->rate_kd);
         pid_set_gains(&pitch_pid, p->rate_kp, p->rate_ki, p->rate_kd);
-        pid_set_gains(&yaw_pid, p->rate_kp, p->rate_ki, p->rate_kd);
+        pid_set_gains(&yaw_pid, p->rate_yaw_kp, p->rate_yaw_ki, p->rate_yaw_kd);
         pid_set_limits(&roll_pid, p->rate_imax, p->rate_omax_roll);
         pid_set_limits(&pitch_pid, p->rate_imax, p->rate_omax_pitch);
         pid_set_limits(&yaw_pid, p->rate_imax, p->rate_omax_yaw);
