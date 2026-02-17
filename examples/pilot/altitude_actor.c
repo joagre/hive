@@ -82,7 +82,7 @@ void altitude_actor(void *args, const hive_spawn_info_t *siblings,
     bool liftoff_detected = false;
     float discovered_hover_thrust = 0.0f;
     float ramp_thrust = 0.0f;
-    uint64_t liftoff_time = 0; // For PID authority ramp after liftoff
+    float climb_target = 0.0f; // Smooth reference trajectory after liftoff
 
     HIVE_LOG_INFO("[ALT] Started, waiting for target altitude");
 
@@ -130,7 +130,7 @@ void altitude_actor(void *args, const hive_spawn_info_t *siblings,
             liftoff_detected = false;
             discovered_hover_thrust = 0.0f;
             ramp_thrust = 0.0f;
-            liftoff_time = 0;
+            climb_target = 0.0f;
             count = 0;
             prev_time = hive_get_time();
             continue;
@@ -274,34 +274,39 @@ void altitude_actor(void *args, const hive_spawn_info_t *siblings,
                 crash_detected = true;
                 thrust = 0.0f;
             } else if (est.altitude > LIFTOFF_ALT_THRESHOLD) {
-                // Liftoff detected - capture hover thrust
+                // Liftoff detected - capture hover thrust and start
+                // reference trajectory from current altitude
                 discovered_hover_thrust = ramp_thrust;
                 liftoff_detected = true;
-                liftoff_time = now;
+                climb_target = est.altitude;
                 HIVE_LOG_INFO("[ALT] Liftoff at thrust=%.3f alt=%.3f - "
                               "hover thrust discovered",
                               discovered_hover_thrust, est.altitude);
-                // Hold discovered thrust - PID ramps in over next cycles
                 thrust = discovered_hover_thrust;
             } else {
                 thrust = ramp_thrust;
             }
         } else {
             // Normal altitude hold using discovered hover thrust.
-            // Position PID ramps from 0 to 100% over LIFTOFF_PID_RAMP_MS
-            // after detection. Velocity damping acts at full strength
-            // immediately to brake the upward momentum from the ramp.
-            float pos_correction =
-                pid_update(&alt_pid, target_altitude, est.altitude, dt);
-            float vel_damping = -p->vvel_damping * est.vertical_velocity;
-
-            uint64_t since_liftoff = now - liftoff_time;
-            uint64_t ramp_us = LIFTOFF_PID_RAMP_MS * 1000ULL;
-            if (since_liftoff < ramp_us) {
-                float ramp = (float)since_liftoff / (float)ramp_us;
-                pos_correction *= ramp;
+            // Instead of tracking target_altitude directly (step change
+            // causes overshoot), ramp a smooth reference trajectory from
+            // liftoff altitude toward the target at LIFTOFF_CLIMB_RATE.
+            // PID runs at full authority tracking the moving reference.
+            if (climb_target < target_altitude) {
+                climb_target += LIFTOFF_CLIMB_RATE * dt;
+                if (climb_target > target_altitude) {
+                    climb_target = target_altitude;
+                }
+            } else if (climb_target > target_altitude) {
+                climb_target -= LIFTOFF_CLIMB_RATE * dt;
+                if (climb_target < target_altitude) {
+                    climb_target = target_altitude;
+                }
             }
 
+            float pos_correction =
+                pid_update(&alt_pid, climb_target, est.altitude, dt);
+            float vel_damping = -p->vvel_damping * est.vertical_velocity;
             float correction = pos_correction + vel_damping;
             thrust = CLAMPF(discovered_hover_thrust + correction, 0.0f, 1.0f);
         }

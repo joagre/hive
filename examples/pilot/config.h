@@ -89,7 +89,17 @@
 #define LIFTOFF_RAMP_RATE 0.4f      // thrust/second during detection ramp
 #define LIFTOFF_ALT_THRESHOLD 0.05f // meters - altitude indicating liftoff
 #define LIFTOFF_MAX_THRUST 0.95f    // safety cap during ramp
-#define LIFTOFF_PID_RAMP_MS 750     // ms to ramp PID authority after liftoff
+
+// After liftoff, the altitude target ramps from current altitude toward the
+// waypoint target at this rate. Prevents step-change overshoot by giving
+// the PID a smooth reference to track at full authority.
+#define LIFTOFF_CLIMB_RATE 0.3f // m/s - climb rate after liftoff detection
+
+// Position control authority scales linearly from 0 to 1 between the
+// liftoff threshold and this height above it. Below threshold: no tilt.
+// Above threshold + transition: full authority. Tied to the altitude
+// where flow deck velocity estimates become reliable (~10-15cm AGL).
+#define POSITION_AUTHORITY_TRANSITION 0.15f // meters above liftoff threshold
 
 // ----------------------------------------------------------------------------
 // Safety thresholds (altitude_actor emergency detection)
