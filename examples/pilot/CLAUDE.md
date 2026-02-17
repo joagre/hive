@@ -210,10 +210,10 @@ Build-time selection via `FLIGHT_PROFILE=`:
 
 | Profile | Motors | Duration | Use Case |
 |---------|--------|----------|----------|
-| `FLIGHT_PROFILE_GROUND_TEST` | Disabled | 60s | ESB/telemetry testing |
+| `FLIGHT_PROFILE_GROUND_TEST` | Disabled | 20s | ESB/telemetry testing |
 | `FLIGHT_PROFILE_FIRST_TEST` | Enabled | 6s | First flight (hover at 0.5m) |
-| `FLIGHT_PROFILE_ALTITUDE` | Enabled | 20s | Altitude waypoints (0.5-1.0m) |
-| `FLIGHT_PROFILE_FULL_3D` | Enabled | 10s | Full 3D waypoint navigation |
+| `FLIGHT_PROFILE_ALTITUDE` | Enabled | 40s | Altitude waypoints (0.5-1.0m) |
+| `FLIGHT_PROFILE_FULL_3D` | Enabled | 60s | Full 3D waypoint navigation |
 
 ## Key Files
 
@@ -290,7 +290,7 @@ ONE_FOR_ALL strategy - if any flight-critical actor crashes, all restart togethe
 - 50ms deadman timeout in motor_actor (zeros motors if no command)
 - Attitude cutoff at 45 degrees
 - Altitude cutoff at 2m
-- Thrust ramp on takeoff (0.75s)
+- Physics-based liftoff ramp (0.4 thrust/sec until rangefinder detects altitude)
 - 10-second landing timeout (forces shutdown if landing detection fails)
 - Battery monitoring at 2 Hz with 5-second debounce (3.0V critical triggers emergency landing)
 

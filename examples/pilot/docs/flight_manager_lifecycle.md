@@ -35,7 +35,7 @@ Flight manager becomes a looping state machine. After landing, it returns to IDL
                           v
     ┌──────────────────────────────────────────────────────────────┐
     │                        ARMED                                 │
-    │  - 60 second countdown (tunable: armed_countdown_s)          │
+    │  - 10 second countdown (tunable: armed_countdown_s)          │
     │  - ABORT returns to IDLE                                     │
     └──────────────────────────────────────────────────────────────┘
                           │
@@ -145,7 +145,7 @@ typedef struct {
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| `armed_countdown_s` | 60.0 | Seconds in ARMED before flight |
+| `armed_countdown_s` | 10.0 | Seconds in ARMED before flight (5.0 in sim) |
 | `auto_go_delay_s` | 0.0 | Auto-GO delay (0 = wait for command) |
 
 Simulation mode: `auto_go_delay_s = 2.0` in Webots (no radio available).

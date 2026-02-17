@@ -36,7 +36,7 @@ The following safety features run on all platforms (Webots and STM32):
 | Attitude cutoff | altitude_actor.c | Motors off if roll or pitch >45 deg |
 | Altitude cutoff | altitude_actor.c | Motors off if altitude >2m |
 | Landed detection | altitude_actor.c | Motors off when target <5cm and altitude <15cm |
-| Thrust ramp | altitude_actor.c | Gradual thrust increase over 0.5 seconds on takeoff |
+| Liftoff ramp | altitude_actor.c | Physics-based thrust ramp until rangefinder detects liftoff |
 | Motor deadman | motor_actor.c | Motors zeroed if no torque command within 50ms |
 | Flight duration | flight_manager_actor.c | Controlled landing after timeout (6-60s depending on flight profile) |
 | Landing timeout | flight_manager_actor.c | Forces shutdown if landing detection fails (10s max) |
@@ -47,7 +47,7 @@ The following safety features are STM32-only (disabled in Webots):
 
 | Feature | Location | Behavior |
 |---------|----------|----------|
-| Startup delay | flight_manager_actor.c | Flight blocked for 60 seconds after boot (motors OFF) |
+| Startup delay | flight_manager_actor.c | Flight blocked by 15s grace period + 10s armed countdown (motors OFF) |
 
 ### Future Safety Features
 
@@ -385,12 +385,12 @@ Flight Manager ──► START ──► Motor Actor (enables output)
 ```
 
 **Implementation**
-- Handles 60-second startup delay (hardware only, motors stay OFF)
+- Handles 15s grace period + 10s armed countdown (motors stay OFF)
 - Opens log file (erases flash sector on STM32)
 - Sends START notification to motor actor (enables motor output)
 - Sends START notification to waypoint actor to begin flight
 - Periodic log sync every 4 seconds
-- Flight duration per profile (10s/40s/60s)
+- Flight duration per profile (6s/40s/60s)
 - Sends LANDING notification to altitude actor
 - Waits for LANDED notification (touchdown detected)
 - Sends STOP notification to motor actor

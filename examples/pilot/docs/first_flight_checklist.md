@@ -109,10 +109,10 @@ First powered test with propellers installed.
 | 80-86s | Hover at 0.5m | ON |
 | 86s+ | Landing | OFF |
 
-**Motors stay OFF for the first ~80 seconds.** Use this time to step back safely.
+**Motors stay OFF during the grace period and countdown.** Use this time to step back safely.
 
 The drone will automatically:
-1. Wait for flight authorization (60s countdown)
+1. Wait for flight authorization (10s armed countdown)
 2. Ramp up thrust
 3. Attempt to hover at 0.5m for 6 seconds
 4. Land and disarm
@@ -250,7 +250,7 @@ parameter tuning (see below) for faster iteration.
 ```bash
 python3 tools/ground_station.py --set-param rate_kp 0.022
 python3 tools/ground_station.py --set-param att_kp 1.8
-python3 tools/ground_station.py --set-param hover_thrust 0.40
+python3 tools/ground_station.py --set-param vvel_damping 0.40
 ```
 Once satisfied, update `hal_config.h` with final values for persistent defaults.
 

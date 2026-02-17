@@ -52,7 +52,7 @@ Demonstrates waypoint navigation with a quadcopter using 12-13 actors (8 flight-
 6. **Attitude actor** runs attitude PIDs, publishes rate setpoints
 7. **Rate actor** runs rate PIDs, publishes torque commands
 8. **Motor actor** reads torque bus, writes to hardware via HAL (checks for STOP signal)
-9. **Flight manager actor** handles startup delay (60s), landing coordination, log file management
+9. **Flight manager actor** handles arming countdown (10s), landing coordination, log file management
 10. **Battery actor** monitors voltage at 2 Hz, debounced emergency landing on critical low (3.0V)
 11. **Comms actor** (Crazyflie only) sends flight data over radio at 100Hz for ground station logging
 12. **Logger actor** syncs hive runtime log periodically, writes CSV telemetry at 25Hz (to /sd or /tmp)
@@ -64,14 +64,14 @@ by the supervisor at spawn time.
 **Webots** - Flies a square pattern with altitude changes at each waypoint (full 3D navigation with GPS).
 
 **Crazyflie 2.1+** - With Flow deck v2, uses optical flow for XY positioning and ToF for altitude.
-Without Flow deck, hovers and changes altitude only. 60-second startup delay before flight.
+Without Flow deck, hovers and changes altitude only. 15s grace period + 10s armed countdown before flight.
 Radio telemetry enabled via Crazyradio 2.0 for real-time ground station logging.
 Optional SD card logging with Micro SD Card Deck (build with `ENABLE_SD=1`).
 
 **Safety features (all platforms)** - Emergency cutoff on excessive tilt (>45 deg), excessive
 altitude (>2m), or touchdown. Motor deadman watchdog zeros motors if no command received
 within 50ms (protects against controller crash). Flight duration limited by flight manager
-(10s/40s/60s per profile). Battery monitoring with two-tier thresholds (3.2V warning, 3.0V
+(6s/40s/60s per profile). Battery monitoring with two-tier thresholds (3.2V warning, 3.0V
 critical) and 5-second debouncing triggers emergency landing on critical low voltage.
 
 ## Prerequisites
