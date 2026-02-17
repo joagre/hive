@@ -129,6 +129,7 @@ void flight_manager_actor(void *args, const hive_spawn_info_t *siblings,
     uint8_t countdown_s = 0;
     hive_timer_id_t countdown_timer = HIVE_TIMER_ID_INVALID;
     hive_timer_id_t flight_timer = HIVE_TIMER_ID_INVALID;
+    hive_timer_id_t liftoff_timer = HIVE_TIMER_ID_INVALID;
     hive_timer_id_t landing_timer = HIVE_TIMER_ID_INVALID;
 
     // Auto-GO timer for simulation
@@ -323,12 +324,13 @@ void flight_manager_actor(void *args, const hive_spawn_info_t *siblings,
                                    HIVE_ERR_STR(ws));
                 }
 
-                // Start flight timer
-                hive_status_t ft =
-                    hive_timer_after(FLIGHT_DURATION_US, &flight_timer);
-                if (HIVE_FAILED(ft)) {
-                    HIVE_LOG_ERROR("[FLM] flight timer failed: %s",
-                                   HIVE_ERR_STR(ft));
+                // Start liftoff timeout (flight timer starts after
+                // liftoff confirmed by altitude actor)
+                hive_status_t lt =
+                    hive_timer_after(LIFTOFF_TIMEOUT_US, &liftoff_timer);
+                if (HIVE_FAILED(lt)) {
+                    HIVE_LOG_ERROR("[FLM] liftoff timer failed: %s",
+                                   HIVE_ERR_STR(lt));
                     hive_exit(HIVE_EXIT_REASON_CRASH);
                 }
             }
@@ -336,14 +338,29 @@ void flight_manager_actor(void *args, const hive_spawn_info_t *siblings,
         }
 
         case FM_STATE_FLYING: {
-            // Wait for flight timer, crash, abort, low battery, or STATUS
-            hive_select_source_t flying_sources[5];
+            // Wait for liftoff/flight timer, crash, abort, low battery,
+            // or STATUS. Flight timer starts only after liftoff is
+            // confirmed by the altitude actor. Before liftoff, we wait
+            // for NOTIFY_LIFTOFF with a safety timeout.
+            hive_select_source_t flying_sources[6];
             size_t num_flying_sources = 0;
 
-            // Flight timer
-            flying_sources[num_flying_sources++] = (hive_select_source_t){
-                .type = HIVE_SEL_IPC,
-                .ipc = {.class = HIVE_MSG_TIMER, .tag = flight_timer}};
+            if (flight_timer != HIVE_TIMER_ID_INVALID) {
+                // Liftoff confirmed - wait for flight duration timer
+                flying_sources[num_flying_sources++] = (hive_select_source_t){
+                    .type = HIVE_SEL_IPC,
+                    .ipc = {.class = HIVE_MSG_TIMER, .tag = flight_timer}};
+            } else {
+                // Waiting for liftoff
+                flying_sources[num_flying_sources++] =
+                    (hive_select_source_t){.type = HIVE_SEL_IPC,
+                                           .ipc = {.sender = ids.altitude,
+                                                   .class = HIVE_MSG_NOTIFY,
+                                                   .id = NOTIFY_LIFTOFF}};
+                flying_sources[num_flying_sources++] = (hive_select_source_t){
+                    .type = HIVE_SEL_IPC,
+                    .ipc = {.class = HIVE_MSG_TIMER, .tag = liftoff_timer}};
+            }
 
             // Crash notification from altitude actor (immediate landing)
             flying_sources[num_flying_sources++] =
@@ -390,11 +407,45 @@ void flight_manager_actor(void *args, const hive_spawn_info_t *siblings,
                 continue;
             }
 
-            // Crash - altitude actor detected emergency, drone already down.
-            // Skip LANDING (no descent needed) and go straight to LANDED.
+            // Liftoff confirmed - start the real flight timer
+            if (result.ipc.id == NOTIFY_LIFTOFF) {
+                hive_timer_cancel(liftoff_timer);
+                liftoff_timer = HIVE_TIMER_ID_INVALID;
+                hive_status_t ft =
+                    hive_timer_after(FLIGHT_DURATION_US, &flight_timer);
+                if (HIVE_FAILED(ft)) {
+                    HIVE_LOG_ERROR("[FLM] flight timer failed: %s",
+                                   HIVE_ERR_STR(ft));
+                    hive_exit(HIVE_EXIT_REASON_CRASH);
+                }
+                HIVE_LOG_INFO("[FLM] Liftoff confirmed - flight timer "
+                              "started (%ds)",
+                              FLIGHT_DURATION_S);
+                continue; // Stay in FLYING, now with flight timer
+            }
+
+            // Liftoff timeout - failed to lift off
+            if (result.ipc.class == HIVE_MSG_TIMER &&
+                result.ipc.tag == (uint32_t)liftoff_timer) {
+                HIVE_LOG_ERROR("[FLM] Liftoff timeout (%ds) - aborting",
+                               LIFTOFF_TIMEOUT_S);
+                liftoff_timer = HIVE_TIMER_ID_INVALID;
+                state = FM_STATE_LANDED;
+                break;
+            }
+
+            // Crash - altitude actor detected emergency, drone already
+            // down. Skip LANDING and go straight to LANDED.
             if (result.ipc.id == NOTIFY_FLIGHT_LANDED) {
                 HIVE_LOG_WARN("[FLM] CRASH - altitude actor reports landed");
-                hive_timer_cancel(flight_timer);
+                if (flight_timer != HIVE_TIMER_ID_INVALID) {
+                    hive_timer_cancel(flight_timer);
+                    flight_timer = HIVE_TIMER_ID_INVALID;
+                }
+                if (liftoff_timer != HIVE_TIMER_ID_INVALID) {
+                    hive_timer_cancel(liftoff_timer);
+                    liftoff_timer = HIVE_TIMER_ID_INVALID;
+                }
                 state = FM_STATE_LANDED;
                 break;
             }
@@ -402,14 +453,21 @@ void flight_manager_actor(void *args, const hive_spawn_info_t *siblings,
             // ABORT from ground station - initiate immediate landing
             if (result.ipc.id == NOTIFY_ABORT) {
                 HIVE_LOG_INFO("[FLM] ABORT during flight - landing");
-                hive_timer_cancel(flight_timer);
             } else if (result.ipc.id == NOTIFY_LOW_BATTERY) {
-                // Low battery - emergency landing
                 HIVE_LOG_WARN("[FLM] LOW BATTERY - emergency landing");
-                hive_timer_cancel(flight_timer);
             } else {
                 HIVE_LOG_INFO(
                     "[FLM] Flight duration complete - initiating LANDING");
+            }
+
+            // Cancel whichever timer is active
+            if (flight_timer != HIVE_TIMER_ID_INVALID) {
+                hive_timer_cancel(flight_timer);
+                flight_timer = HIVE_TIMER_ID_INVALID;
+            }
+            if (liftoff_timer != HIVE_TIMER_ID_INVALID) {
+                hive_timer_cancel(liftoff_timer);
+                liftoff_timer = HIVE_TIMER_ID_INVALID;
             }
 
             hive_status_t ls =
@@ -418,11 +476,11 @@ void flight_manager_actor(void *args, const hive_spawn_info_t *siblings,
                 HIVE_LOG_ERROR("[FLM] LANDING notify failed: %s",
                                HIVE_ERR_STR(ls));
             }
-            hive_status_t lt =
+            hive_status_t lts =
                 hive_timer_after(LANDING_TIMEOUT_US, &landing_timer);
-            if (HIVE_FAILED(lt)) {
+            if (HIVE_FAILED(lts)) {
                 HIVE_LOG_ERROR("[FLM] landing timer failed: %s",
-                               HIVE_ERR_STR(lt));
+                               HIVE_ERR_STR(lts));
             }
             state = FM_STATE_LANDING;
             break;
@@ -488,9 +546,11 @@ void flight_manager_actor(void *args, const hive_spawn_info_t *siblings,
             stack_profile_capture("flight_mgr");
             stack_profile_request();
 
-            // Return to IDLE
+            // Return to IDLE - reset timers for next flight
             HIVE_LOG_INFO("[FLM] Flight complete - returning to IDLE");
             countdown_s = 0;
+            flight_timer = HIVE_TIMER_ID_INVALID;
+            liftoff_timer = HIVE_TIMER_ID_INVALID;
             state = FM_STATE_IDLE;
             break;
         }

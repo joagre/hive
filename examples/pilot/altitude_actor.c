@@ -280,15 +280,21 @@ void altitude_actor(void *args, const hive_spawn_info_t *siblings,
                 crash_detected = true;
                 thrust = 0.0f;
             } else if (est.altitude > LIFTOFF_ALT_THRESHOLD) {
-                // Liftoff detected - capture hover thrust and start
-                // reference trajectory from current altitude
-                discovered_hover_thrust = ramp_thrust;
+                // Liftoff detected - capture hover thrust with correction.
+                // The ramp continues past actual hover because detection
+                // has physical lag (drone must rise LIFTOFF_ALT_THRESHOLD).
+                discovered_hover_thrust =
+                    ramp_thrust * LIFTOFF_THRUST_CORRECTION;
                 liftoff_detected = true;
                 climb_target = est.altitude;
-                HIVE_LOG_INFO("[ALT] Liftoff at thrust=%.3f alt=%.3f - "
-                              "hover thrust discovered",
-                              discovered_hover_thrust, est.altitude);
+                HIVE_LOG_INFO("[ALT] Liftoff at thrust=%.3f corrected=%.3f "
+                              "alt=%.3f",
+                              ramp_thrust, discovered_hover_thrust,
+                              est.altitude);
                 thrust = discovered_hover_thrust;
+
+                // Notify flight manager to start flight duration timer
+                hive_ipc_notify(state->flight_manager, NOTIFY_LIFTOFF, NULL, 0);
             } else {
                 thrust = ramp_thrust;
             }

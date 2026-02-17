@@ -141,6 +141,23 @@ PARAM_NAMES = {
     32: "wp_tolerance_yaw",
     33: "wp_tolerance_vel",
     34: "wp_hover_time_s",
+    # Altitude Kalman filter (35-41)
+    35: "kf_q_altitude",
+    36: "kf_q_velocity",
+    37: "kf_q_bias",
+    38: "kf_r_altitude",
+    39: "kf_p0_altitude",
+    40: "kf_p0_velocity",
+    41: "kf_p0_bias",
+    # Horizontal velocity filter (42)
+    42: "hvel_filter_alpha",
+    # Flight manager lifecycle (43-44)
+    43: "armed_countdown_s",
+    44: "auto_go_delay_s",
+    # Yaw rate PID (45-47)
+    45: "rate_yaw_kp",
+    46: "rate_yaw_ki",
+    47: "rate_yaw_kd",
 }
 
 # Reverse lookup: name to ID

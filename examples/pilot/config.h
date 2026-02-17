@@ -94,6 +94,13 @@
 #endif
 #define LIFTOFF_MAX_THRUST 0.95f // safety cap during ramp
 
+// Correction factor for discovered hover thrust. The ramp continues
+// past actual hover because altitude takes time to reach the detection
+// threshold. From flight data: discovered=0.91, actual=0.80 (12% excess).
+// Apply 8% reduction to compensate for detection lag while staying
+// slightly above hover for reliable initial climb.
+#define LIFTOFF_THRUST_CORRECTION 0.92f
+
 // After liftoff, the altitude target ramps from current altitude toward the
 // waypoint target at this rate. Prevents step-change overshoot by giving
 // the PID a smooth reference to track at full authority.
@@ -219,6 +226,12 @@
 #endif
 #define FLIGHT_DURATION_US ((uint64_t)FLIGHT_DURATION_S * 1000000)
 
+// Liftoff timeout. If altitude actor doesn't detect liftoff within this
+// time, abort the flight. Max ramp time is LIFTOFF_MAX_THRUST / RAMP_RATE
+// = 0.95 / 0.4 = 2.4s; 8s gives generous margin for sensor delays.
+#define LIFTOFF_TIMEOUT_S 8
+#define LIFTOFF_TIMEOUT_US ((uint64_t)LIFTOFF_TIMEOUT_S * 1000000)
+
 // Landing timeout. Derived from worst case: maximum altitude (2m) divided
 // by minimum descent rate (0.2 m/s) = 10s, plus margin for ground effect.
 #define LANDING_TIMEOUT_S 10
@@ -243,21 +256,8 @@
 #define COMMS_TRACE_INTERVAL 500
 
 // ----------------------------------------------------------------------------
-// Position control
+// Position control (gains in hal/*/hal_config.h)
 // ----------------------------------------------------------------------------
-
-#ifdef SIMULATED_TIME
-// Webots with sensor noise - reduced gains for stability
-// D term especially sensitive to noisy velocity estimates
-#define POS_KP 0.08f
-#define POS_KD 0.06f         // Low D - noisy velocity
-#define MAX_TILT_ANGLE 0.20f // ~11 degrees - limit for noise tolerance
-#else
-// Flight-tested gains - flow deck tracks well, tighter position hold
-#define POS_KP 0.14f
-#define POS_KD 0.16f
-#define MAX_TILT_ANGLE 0.25f // ~14 degrees
-#endif
 
 // ----------------------------------------------------------------------------
 // Platform-specific control parameters

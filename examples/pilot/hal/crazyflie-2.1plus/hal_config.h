@@ -30,14 +30,14 @@
 // ----------------------------------------------------------------------------
 
 // Altitude PID gains (position error -> thrust correction)
-#define HAL_ALT_PID_KP 0.18f   // Flight-tested (was 0.12, matched Webots)
+#define HAL_ALT_PID_KP 0.12f   // Reduced overshoot (was 0.18, overshot 100%)
 #define HAL_ALT_PID_KI 0.005f  // Halved to reduce windup overshoot (was 0.01)
 #define HAL_ALT_PID_KD 0.0f    // Using velocity feedback instead
 #define HAL_ALT_PID_IMAX 0.2f  // Integral limit
 #define HAL_ALT_PID_OMAX 0.20f // Allow stronger corrections (was 0.15)
 
 // Vertical velocity damping (measured velocity -> thrust correction)
-#define HAL_VVEL_DAMPING_GAIN 0.45f // 1.8x braking (was 0.25, Webots: 0.35)
+#define HAL_VVEL_DAMPING_GAIN 0.55f // Stronger braking for overshoot (was 0.45)
 
 // ----------------------------------------------------------------------------
 // Attitude Control (tuned - between old weak and new oscillating values)
@@ -59,7 +59,7 @@
 #define HAL_RATE_PID_KI \
     0.001f // Back to original (integral can cause overshoot)
 #define HAL_RATE_PID_KD 0.0015f // Tuned (was 0.001 weak, 0.002 oscillated)
-#define HAL_RATE_PID_IMAX 0.3f  // Integral limit
+#define HAL_RATE_PID_IMAX 1.0f // Increased for yaw integral authority (was 0.3)
 #define HAL_RATE_PID_OMAX_ROLL 0.12f
 #define HAL_RATE_PID_OMAX_PITCH 0.12f
 #define HAL_RATE_PID_OMAX_YAW 0.15f
@@ -68,8 +68,10 @@
 // restoring force and faces constant CW/CCW motor torque imbalance.
 // At 35 deg/s spin, roll/pitch kp=0.020 only produces 8% of yaw authority.
 // Higher kp for faster response, much higher ki for torque imbalance.
-#define HAL_RATE_YAW_PID_KP 0.08f  // 4x roll/pitch - yaw needs authority
-#define HAL_RATE_YAW_PID_KI 0.02f  // 20x roll/pitch - compensates torque bias
+#define HAL_RATE_YAW_PID_KP \
+    0.12f // Bitcraze equiv ~0.105 (was 0.08, yaw drifted 57 deg)
+#define HAL_RATE_YAW_PID_KI \
+    0.05f // Faster torque compensation (was 0.02, too slow)
 #define HAL_RATE_YAW_PID_KD 0.001f // Light derivative for damping
 
 // ----------------------------------------------------------------------------
@@ -83,5 +85,16 @@
 // ToF sensor max range (mm) - readings above this are considered invalid
 // VL53L1x in short distance mode is reliable up to ~1.3m
 #define HAL_TOF_MAX_RANGE_MM 1300
+
+// ----------------------------------------------------------------------------
+// Position Control
+// ----------------------------------------------------------------------------
+
+// Position control disabled until altitude hold is proven stable.
+// Flow deck velocity is available but active position hold caused
+// aggressive tilts into walls during early flight tests (34-36).
+#define HAL_POS_KP 0.0f
+#define HAL_POS_KD 0.0f
+#define HAL_MAX_TILT_ANGLE 0.25f // ~14 degrees
 
 #endif // HAL_CONFIG_H

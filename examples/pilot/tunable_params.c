@@ -173,10 +173,10 @@ void tunable_params_init(tunable_params_t *params) {
     params->landing_descent_rate = -0.15f;
     params->landing_velocity_gain = 0.5f;
 
-    // Position control - from config.h
-    params->pos_kp = POS_KP;
-    params->pos_kd = POS_KD;
-    params->max_tilt_angle = MAX_TILT_ANGLE;
+    // Position control - from HAL
+    params->pos_kp = HAL_POS_KP;
+    params->pos_kd = HAL_POS_KD;
+    params->max_tilt_angle = HAL_MAX_TILT_ANGLE;
 
     // Complementary filter - from CF_CONFIG_DEFAULT
     params->cf_alpha = 0.995f;

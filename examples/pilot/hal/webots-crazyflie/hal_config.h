@@ -18,7 +18,7 @@
 #define HAL_ALT_PID_KI 0.03f  // Small integral for steady-state
 #define HAL_ALT_PID_KD 0.0f   // Using velocity feedback instead
 #define HAL_ALT_PID_IMAX 0.2f // Integral limit
-#define HAL_ALT_PID_OMAX                                  \
+#define HAL_ALT_PID_OMAX \
     0.50f // Larger than hardware (0.15) - 20ms motor lag \
           // needs stronger correction authority
 
@@ -60,5 +60,14 @@
 #define HAL_RATE_YAW_PID_KP 0.028f // Same as roll/pitch - no torque bias in sim
 #define HAL_RATE_YAW_PID_KI 0.002f // Same as roll/pitch
 #define HAL_RATE_YAW_PID_KD 0.003f // Same as roll/pitch
+
+// ----------------------------------------------------------------------------
+// Position Control
+// ----------------------------------------------------------------------------
+
+// Position PD gains - reduced for noisy Webots velocity estimates
+#define HAL_POS_KP 0.08f
+#define HAL_POS_KD 0.06f         // Low D - noisy velocity
+#define HAL_MAX_TILT_ANGLE 0.20f // ~11 degrees - noise tolerance limit
 
 #endif // HAL_CONFIG_H
