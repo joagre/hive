@@ -141,6 +141,7 @@ void altitude_actor(void *args, const hive_spawn_info_t *siblings,
             if (!landing_mode) {
                 HIVE_LOG_INFO("[ALT] Landing initiated");
                 landing_mode = true;
+                pid_reset(&alt_pid); // Clear stale integral from hover
             }
             continue; // Loop back to wait for next event
         }
@@ -257,9 +258,14 @@ void altitude_actor(void *args, const hive_spawn_info_t *siblings,
             } else {
                 float velocity_error =
                     p->landing_descent_rate - est.vertical_velocity;
-                thrust = discovered_hover_thrust +
-                         p->landing_velocity_gain * velocity_error;
-                thrust = CLAMPF(thrust, 0.0f, 1.0f);
+                float vel_correction =
+                    p->landing_velocity_gain * velocity_error;
+                // Clamp velocity correction to prevent corrupted velocity
+                // estimates from causing violent thrust swings
+                vel_correction =
+                    CLAMPF(vel_correction, -p->alt_omax, p->alt_omax);
+                thrust = discovered_hover_thrust + vel_correction;
+                thrust = CLAMPF(thrust, MIN_AIRBORNE_THRUST, 1.0f);
             }
         } else if (!liftoff_detected) {
             // Liftoff detection: ramp thrust until rangefinder sees altitude
@@ -307,8 +313,26 @@ void altitude_actor(void *args, const hive_spawn_info_t *siblings,
             float pos_correction =
                 pid_update(&alt_pid, climb_target, est.altitude, dt);
             float vel_damping = -p->vvel_damping * est.vertical_velocity;
-            float correction = pos_correction + vel_damping;
-            thrust = CLAMPF(discovered_hover_thrust + correction, 0.0f, 1.0f);
+            // Clamp velocity damping to same magnitude as PID output limit.
+            // Without this, corrupted velocity estimates (from rangefinder
+            // glitches) produce huge damping values that saturate thrust
+            // and cause unrecoverable oscillations.
+            vel_damping = CLAMPF(vel_damping, -p->alt_omax, p->alt_omax);
+
+            // Feedforward: cancel the velocity damping penalty during
+            // active climb/descent ramp. Without this, the damping term
+            // fights the expected ramp velocity, forcing the PID integral
+            // to wind up to compensate, then overshoot when the ramp stops.
+            float feedforward = 0.0f;
+            if (climb_target < target_altitude) {
+                feedforward = LIFTOFF_CLIMB_RATE * p->vvel_damping;
+            } else if (climb_target > target_altitude) {
+                feedforward = -LIFTOFF_CLIMB_RATE * p->vvel_damping;
+            }
+
+            float correction = pos_correction + vel_damping + feedforward;
+            thrust = CLAMPF(discovered_hover_thrust + correction,
+                            MIN_AIRBORNE_THRUST, 1.0f);
         }
 
         thrust_cmd_t cmd = {.thrust = thrust};

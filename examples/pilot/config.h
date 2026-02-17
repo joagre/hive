@@ -111,6 +111,14 @@
 
 #define EMERGENCY_TILT_LIMIT 0.78f  // ~45 degrees in radians
 #define EMERGENCY_ALTITUDE_MAX 2.0f // meters - cut motors if exceeded
+
+// Minimum thrust when airborne. Keeps enough base thrust for the mixer
+// to produce some attitude corrections. Without this, the altitude PID
+// can drive thrust to zero during overshoot, leaving the attitude PIDs
+// with no motor authority (motors off = no differential possible).
+// Low value (0.05) preserves downward correction authority while still
+// providing enough base for partial roll/pitch differentials.
+#define MIN_AIRBORNE_THRUST 0.05f
 #define LANDED_TARGET_THRESHOLD \
     0.05f // meters - target altitude indicating land command
 #define LANDED_ACTUAL_THRESHOLD \
@@ -135,6 +143,15 @@
 #ifndef RANGEFINDER_MAX_M
 #define RANGEFINDER_MAX_M 1.3f // 1300mm - VL53L1x short mode max
 #endif
+
+// Innovation gating for altitude Kalman filter. Reject rangefinder
+// measurements where |measured - predicted| exceeds this threshold.
+// Prevents single spurious readings from corrupting the KF state and
+// velocity estimate (which then causes violent thrust oscillations
+// via the velocity damping term). At 3 m/s vertical and 40Hz
+// rangefinder rate (25ms), real change is at most 0.075m. 0.3m gives
+// generous margin while catching the >0.5m glitches from flight test 32.
+#define KF_MAX_INNOVATION 0.3f
 
 // Altitude below which the drone is considered ground-level.
 // Used for drift prevention: when the last valid reading was below

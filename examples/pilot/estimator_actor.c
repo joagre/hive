@@ -402,7 +402,18 @@ void estimator_actor(void *args, const hive_spawn_info_t *siblings,
         }
         altitude_kf_predict(&alt_kf, accel_z, dt);
         if (have_altitude_measurement && fresh_rangefinder) {
-            altitude_kf_correct(&alt_kf, measured_altitude);
+            // Innovation gating: reject rangefinder outliers that would
+            // corrupt the Kalman filter state and velocity estimate.
+            // The VL53L1x can give spurious readings from multipath or
+            // SNR issues at longer ranges.
+            float innovation = measured_altitude - alt_kf.altitude;
+            if (fabsf(innovation) > KF_MAX_INNOVATION) {
+                HIVE_LOG_WARN("[EST] Rangefinder outlier: meas=%.3f pred=%.3f "
+                              "innov=%.3f",
+                              measured_altitude, alt_kf.altitude, innovation);
+            } else {
+                altitude_kf_correct(&alt_kf, measured_altitude);
+            }
         }
 
         // Get estimates from KF
