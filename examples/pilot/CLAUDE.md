@@ -114,6 +114,11 @@ Wait at least 20 seconds after boot before sending GO. The drone has a
 period is silently ignored.
 
 **Step 5 - Send GO**
+
+**NEVER send GO without asking the user first.** The user must confirm the
+drone is in a safe position and the area is clear before GO is sent. Always
+ask and wait for explicit approval.
+
 ```bash
 source tests/.venv/bin/activate
 python3 tools/ground_station.py --go
@@ -130,9 +135,9 @@ python3 tools/ground_station.py -o flight_testNN.csv --uri radio://0/80/2M
 Let it run through the entire flight and at least 10 seconds after landing.
 Ctrl+C to stop.
 
-**Timeout** - FIRST_TEST profile flies for 6 seconds. Use a 90-second timeout
-for the listener (60s countdown + 6s flight + 20s post-landing buffer). Do NOT
-listen for 3 minutes.
+**Timeout** - FIRST_TEST profile flies for 6 seconds. Use a 20-second timeout
+for the listener (enough for 6s flight + post-landing data). The 60-second
+countdown happens before telemetry starts, so no need to wait for it.
 
 **Step 7 - Analyze**
 ```bash

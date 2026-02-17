@@ -288,20 +288,21 @@ void altitude_actor(void *args, const hive_spawn_info_t *siblings,
             }
         } else {
             // Normal altitude hold using discovered hover thrust.
-            // PID authority ramps from 0 to 100% over LIFTOFF_PID_RAMP_MS
-            // after detection to prevent violent thrust oscillation from
-            // velocity damping acting on upward velocity from liftoff ramp.
+            // Position PID ramps from 0 to 100% over LIFTOFF_PID_RAMP_MS
+            // after detection. Velocity damping acts at full strength
+            // immediately to brake the upward momentum from the ramp.
             float pos_correction =
                 pid_update(&alt_pid, target_altitude, est.altitude, dt);
             float vel_damping = -p->vvel_damping * est.vertical_velocity;
-            float correction = pos_correction + vel_damping;
 
             uint64_t since_liftoff = now - liftoff_time;
             uint64_t ramp_us = LIFTOFF_PID_RAMP_MS * 1000ULL;
             if (since_liftoff < ramp_us) {
-                correction *= (float)since_liftoff / (float)ramp_us;
+                float ramp = (float)since_liftoff / (float)ramp_us;
+                pos_correction *= ramp;
             }
 
+            float correction = pos_correction + vel_damping;
             thrust = CLAMPF(discovered_hover_thrust + correction, 0.0f, 1.0f);
         }
 

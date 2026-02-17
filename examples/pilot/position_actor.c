@@ -66,6 +66,12 @@ void position_actor(void *args, const hive_spawn_info_t *siblings,
     // Current target (updated from waypoint actor)
     position_target_t target = POSITION_TARGET_DEFAULT;
 
+    // Liftoff authority ramp - suppress position control on the ground
+    // and ramp in smoothly after liftoff to avoid noisy flow deck
+    // velocity estimates causing sideways drift.
+    bool liftoff_detected = false;
+    uint64_t liftoff_time = 0;
+
     // Set up hive_select() sources: state bus + RESET notification
     enum { SEL_STATE, SEL_RESET };
     hive_select_source_t sources[] = {
@@ -93,6 +99,8 @@ void position_actor(void *args, const hive_spawn_info_t *siblings,
         if (result.index == SEL_RESET) {
             HIVE_LOG_INFO("[POS] RESET - clearing state");
             target = (position_target_t)POSITION_TARGET_DEFAULT;
+            liftoff_detected = false;
+            liftoff_time = 0;
             continue;
         }
 
@@ -131,12 +139,26 @@ void position_actor(void *args, const hive_spawn_info_t *siblings,
         float pitch_cmd = accel_x * cos_yaw + accel_y * sin_yaw;
         float roll_cmd = -accel_x * sin_yaw + accel_y * cos_yaw;
 
-        // Suppress position control while on the ground. During the
-        // liftoff thrust ramp the flow deck velocity estimates are noisy,
-        // and commanding tilt causes the drone to lift off sideways.
+        // Suppress position control while on the ground and ramp in
+        // smoothly after liftoff. Flow deck velocity estimates are noisy
+        // near the ground, and commanding tilt immediately at liftoff
+        // causes sideways drift.
         if (est.altitude < LIFTOFF_ALT_THRESHOLD) {
             pitch_cmd = 0.0f;
             roll_cmd = 0.0f;
+            liftoff_detected = false;
+        } else {
+            if (!liftoff_detected) {
+                liftoff_detected = true;
+                liftoff_time = hive_get_time();
+            }
+            uint64_t since_liftoff = hive_get_time() - liftoff_time;
+            uint64_t ramp_us = LIFTOFF_PID_RAMP_MS * 1000ULL;
+            if (since_liftoff < ramp_us) {
+                float ramp = (float)since_liftoff / (float)ramp_us;
+                pitch_cmd *= ramp;
+                roll_cmd *= ramp;
+            }
         }
 
         // Clamp to maximum tilt angle for safety (use tunable param)
