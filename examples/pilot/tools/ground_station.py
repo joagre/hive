@@ -372,7 +372,11 @@ class TelemetryReceiver:
         ESB protocol: we send a packet, drone responds with ACK + telemetry.
         Using Crazyradio direct: response.data contains raw bytes.
         """
-        response = self.radio.send_packet((0xFF,))
+        # Use our CRTP telemetry port (0xA0) so the nRF51 forwards the
+        # packet to the STM32 via syslink. Using 0xFF (link/null port)
+        # is handled internally by the nRF51 and never reaches the STM32,
+        # so the comms_actor never wakes up to refresh telemetry.
+        response = self.radio.send_packet((CRTP_HEADER_TELEMETRY,))
 
         if response and response.ack and response.data:
             return bytes(response.data)
