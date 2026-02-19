@@ -1,6 +1,8 @@
 # Acrobatics Pilot - Maneuver ROM Design
 
 Contract between the Forth VM and the native C maneuver primitives.
+See [forth_actor_spec.md](forth_actor_spec.md) for the VM internals
+(bytecode format, primitives, upload protocol, safety constraints).
 
 For prior art, see
 [ArduPilot scripted aerobatics](https://ardupilot.org/plane/docs/common-scripting-aerobatics.html)

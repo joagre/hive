@@ -7,7 +7,7 @@ Each drone runs a Forth script that composes native maneuver primitives
 into a strategy. The script is the strategy layer (when to attack, evade,
 feint). The ROM words are the control layer (how to flip, orbit, pursue).
 See [acrobatics_pilot_design.md](acrobatics_pilot_design.md) for the ROM
-contract and [forth_actor_spec.md](../../examples/pilot/docs/forth_actor_spec.md)
+contract and [forth_actor_spec.md](forth_actor_spec.md)
 for the VM.
 
 ## 1. Agile Flight Control

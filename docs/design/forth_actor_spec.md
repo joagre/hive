@@ -7,7 +7,7 @@ barrel rolls.
 The VM executes the script. The hard real-time work (publishing setpoints
 at 250Hz, thrust modulation during flips) happens in native C ROM words
 that the script calls. See
-[acrobatics_pilot_design.md](../../../docs/design/acrobatics_pilot_design.md)
+[acrobatics_pilot_design.md](acrobatics_pilot_design.md)
 for the ROM word contract.
 
 ## Goals
@@ -253,7 +253,7 @@ Single-byte opcodes. Three ranges:
 ROM words are registered by the maneuver actor at init. The VM's inner
 interpreter dispatches them through a function pointer table - no
 special handling needed beyond the table lookup. See
-[acrobatics_pilot_design.md](../../../docs/design/acrobatics_pilot_design.md)
+[acrobatics_pilot_design.md](acrobatics_pilot_design.md)
 for the complete ROM word reference.
 
 ```c
@@ -395,7 +395,7 @@ Scripts stored in flash (up to 4 slots, 1KB each).
 ## Example Scripts
 
 These use ROM words from
-[acrobatics_pilot_design.md](../../../docs/design/acrobatics_pilot_design.md).
+[acrobatics_pilot_design.md](acrobatics_pilot_design.md).
 The VM executes the sequencing; ROM words handle the real-time control.
 
 ### Orbit Mission
