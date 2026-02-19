@@ -7,25 +7,423 @@ Hardware: Crazyflie 2.1+ with Flow Deck v2, SD card deck, 3g crash cage.
 
 ---
 
-## Session 6 - Altitude tuning continued
+## Tuning Plan
 
-Continuing from session 5. Set via radio before GO (these reset on reboot):
+### Goal
 
-```bash
-python3 tools/ground_station.py --set-param pos_kp 0.04
-python3 tools/ground_station.py --set-param pos_kd 0.05
-python3 tools/ground_station.py --set-param vvel_damping 0.55
+Precise XY position hold (< 0.10m drift), clean altitude (< 10% overshoot,
+no oscillation), and stable attitude. In that priority order.
+
+### Current state (compiled defaults in hal_config.h)
+
+| Parameter | Value | Status |
+|-----------|-------|--------|
+| `att_kp` | 1.8 | Stable (session 2) |
+| `att_kd` | 0.10 | Stable (session 2) |
+| `rate_kp` | 0.020 | Stable (session 2) |
+| `rate_ki` | 0.001 | Stable (session 2) |
+| `rate_kd` | 0.0015 | Stable (session 2) |
+| `rate_yaw_kp` | 0.12 | Stable (session 7) |
+| `rate_yaw_ki` | 0.05 | Stable (session 7) |
+| `alt_kp` | 0.12 | Needs work (43-56% overshoot) |
+| `alt_ki` | 0.005 | Needs work |
+| `vvel_damping` | 0.55 | Needs work |
+| `pos_kp` | **0.0** | **Disabled** - root cause of XY drift |
+| `pos_kd` | 0.20 | Tuned session 8, damping-only |
+| `max_tilt_angle` | 0.25 (14 deg) | OK |
+
+### Architectural analysis - why we drift
+
+The fundamental problem is not PID gains. It is the asymmetry between
+vertical and horizontal state estimation.
+
+**Altitude** has a proper 3-state Kalman filter:
+- States: [altitude, velocity, accel_bias]
+- Predict: accelerometer (250 Hz)
+- Correct: rangefinder (40 Hz)
+- Result: smooth velocity, bias-compensated, handles sensor dropouts
+
+**Horizontal** has nothing:
+- Position: raw dead-reckoned flow integration (drifts unboundedly)
+- Velocity: raw optical flow passed straight through (no filtering)
+- No accelerometer fusion, no bias estimation, no dropout handling
+
+At 0.5m hover, a single PMW3901 pixel delta = 0.25 m/s. That noise
+goes directly into the pos_kd damping term, producing 2.9 deg tilt
+jitter per pixel. The position estimate drifts because it is just
+accumulated noisy velocity with no correction source.
+
+Additionally, the flow deck rotates body-frame velocity to world-frame
+using gyro-integrated yaw (platform.c:1372). Yaw drifts ~5 deg/s, so
+after 6 seconds the world-frame X axis is rotated 30 degrees. Position
+corrections via pos_kp would push in the wrong direction.
+
+### Phase 1 - Horizontal Kalman filter (code change, then tune)
+
+**Goal** - Give horizontal the same quality estimation as altitude.
+
+Create `horizontal_kf.c` mirroring `altitude_kf.c`. Two independent
+1D filters (X and Y), each with states [position, velocity, accel_bias].
+
+```
+Predict (every cycle, 250 Hz):
+  pos += vel * dt + 0.5 * (accel_world - bias) * dt^2
+  vel += (accel_world - bias) * dt
+  bias += 0  (random walk)
+
+Correct (when flow valid, ~100 Hz):
+  Velocity measurement: z = flow_velocity
+  Innovation: y = z - predicted_velocity
+  Standard KF update on velocity row
 ```
 
-| Parameter | Compiled default | Radio override | Reasoning |
-|-----------|-----------------|----------------|-----------|
-| `pos_kp` | 0.14 | 0.04 | Gentle position hold, avoid chasing flow drift |
-| `pos_kd` | 0.16 | 0.05 | Gentle velocity damping for XY |
-| `vvel_damping` | 0.45 | 0.55 | More altitude braking, untested (battery died) |
+**Key difference from altitude KF** - The measurement is velocity (from
+optical flow), not position. There is no absolute position sensor indoors.
+The KF still estimates position by integrating bias-corrected velocity,
+which drifts slower than raw flow integration.
+
+**What this gives us:**
+1. Smooth, filtered velocity for pos_kd (removes pixel-level noise)
+2. Accelerometer bias estimation (reduces systematic drift)
+3. Accelerometer-based prediction during flow dropouts (coasting)
+4. Better position estimate (bias-corrected integration drifts slower)
+
+**Implementation** - New files:
+- `fusion/horizontal_kf.h` - Same API pattern as altitude_kf.h
+- `fusion/horizontal_kf.c` - Same math as altitude_kf.c, velocity measurement
+- Changes to `estimator_actor.c` - Replace raw flow pass-through with KF
+
+The horizontal accel input requires rotating body-frame accelerometer to
+world-frame XY. The estimator already computes accel_world_z for the
+altitude KF; extend to compute accel_world_x and accel_world_y using
+the same attitude rotation matrix.
+
+**Tuning parameters** (initial values, tune via radio):
+- `hkf_q_position` = 0.001 - Trust model for position
+- `hkf_q_velocity` = 1.0 - Allow velocity to change fast
+- `hkf_q_bias` = 0.0001 - Slow accel bias drift
+- `hkf_r_velocity` = 0.1 - Flow deck velocity noise (~0.3 m/s std)
+
+### Phase 2 - Enable position hold and tune
+
+**Goal** - XY drift < 0.10m during 6s FIRST_TEST flight.
+
+With filtered velocity from the horizontal KF, re-enable pos_kp.
+The control law is: `accel = pos_kp * error - pos_kd * velocity`.
+
+**Approach** - Tune via radio, no reflash needed.
+
+| Step | pos_kp | pos_kd | Rationale |
+|------|--------|--------|-----------|
+| 1 | 0.03 | 0.20 | Very gentle. At 0.3m drift: 0.5 deg tilt |
+| 2 | 0.05 | 0.20 | If step 1 shows drift reduction |
+| 3 | 0.08 | 0.20 | Moderate hold. At 0.3m drift: 1.4 deg tilt |
+| 4 | 0.10 | 0.15 | Stronger hold if step 3 is good |
+
+**Stop condition** - If max tilt exceeds 35 deg, back off pos_kp.
+If drift < 0.10m, lock in the value and move to phase 3.
+
+**Why position control failed before (tests 34-36)** - Two compounding
+problems: altitude was wildly overshooting (up to 263%) creating large
+attitude disturbances, AND the velocity fed into pos_kd was unfiltered
+pixel noise. The horizontal KF fixes the second problem. The altitude
+work in phase 3 addresses the first.
+
+### Phase 3 - Tame altitude overshoot
+
+**Goal** - Altitude overshoot < 10%, thrust oscillation < 1/s.
+
+Current: alt_kp=0.12, alt_ki=0.005, vvel_damping=0.55, alt_omax=0.20.
+Overshoot of 43-56% suggests the system cannot brake fast enough.
+
+**Tuning steps** (via radio):
+
+| Step | Parameter | Value | Rationale |
+|------|-----------|-------|-----------|
+| 1 | `vvel_damping` | 0.70 | Stronger altitude braking |
+| 2 | `alt_omax` | 0.25 | Allow PID to brake harder (was clamped) |
+| 3 | `alt_kp` | 0.08 | Softer correction if oscillation persists |
+
+**Code change to consider** - Reduce LIFTOFF_CLIMB_RATE from 0.3 to
+0.2 m/s. Slower climb ramp means less momentum to brake at target.
+Requires reflash. Try tuning-only first.
+
+### Phase 4 - Position integral for steady-state hold
+
+**Goal** - Zero steady-state position error under persistent disturbance.
+
+The PD position controller (pos_kp + pos_kd) has zero steady-state
+error only if the position estimate is perfect. In practice, small
+persistent forces (CG offset, asymmetric prop wash, flow bias) cause
+constant drift that the P term can track but never fully cancel.
+
+Add integral term to position controller with anti-windup:
+```
+x_integral += x_error * dt
+x_integral = clamp(x_integral, -pos_imax, pos_imax)
+accel_x = pos_kp * x_error + pos_ki * x_integral - pos_kd * velocity
+```
+
+Start with pos_ki=0.01, pos_imax=0.05 (limits integral authority to
+~3 deg tilt). Tune via radio.
+
+### Phase 5 - Precision and longer missions
+
+With stable hover in all axes, push toward perfection:
+
+1. **Extend to ALTITUDE profile** (40s, altitude waypoints 0.3-1.0m).
+   Validate waypoint transitions, altitude tracking accuracy.
+
+2. **Validate consecutive flights** - Multi-GO on same power cycle.
+   The RESET race condition is fixed; verify in flight.
+
+3. **Landing optimization** - Landing takes 8.5s from 0.6m. Consider
+   increasing landing_descent_rate or switching to a proportional
+   descent (faster from higher, slower near ground).
+
+4. **Yaw hold** - Yaw drifted 51 deg/10s in session 3. The improved
+   yaw PID (session 7) should be better. Measure and tune if needed.
+   Yaw drift corrupts the horizontal KF's world-frame rotation.
+
+5. **Full 3D waypoints** - FULL_3D profile with XY waypoints.
+   Requires position control to be solid before attempting.
+
+### Architecture notes
+
+**What we have vs what Bitcraze has:**
+
+| Component | Hive pilot | Bitcraze firmware |
+|-----------|-----------|-------------------|
+| Attitude | Complementary filter | Extended Kalman Filter |
+| Altitude | 3-state KF (good) | Part of full EKF |
+| Horizontal velocity | Raw flow (bad) | EKF-fused with accel |
+| Horizontal position | Dead reckoning (bad) | EKF-fused |
+| Position control | PD (no integral) | PID with feedforward |
+
+The horizontal KF (phase 1) closes the biggest gap. Adding an integral
+to position control (phase 4) closes the next. A full EKF fusing all
+sensors would be ideal but is a much larger project.
+
+**Estimation data flow after phase 1:**
+
+```
+                     Accelerometer (250 Hz)
+                            |
+                   Rotate to world frame
+                     /      |      \
+                    X       Y       Z
+                    |       |       |
+              ┌─────v─┐ ┌──v────┐ ┌v────────┐
+              | Horiz  | | Horiz | | Altitude |
+              | KF (X) | | KF(Y) | | KF       |
+              └────┬───┘ └──┬────┘ └┬────────┘
+  Flow vel ------->|------->|       |<------- Rangefinder
+  (100 Hz)    position  position  altitude
+              velocity  velocity  velocity
+              bias      bias      bias
+```
+
+---
+
+## Session 10 - 2026-02-19 - Fix altitude overshoot metric bug
+
+The +65% altitude overshoot reported in session 9 (and +63% in earlier
+analysis) was a **metric bug in flight_summary.py**, not real overshoot.
+
+### The bug
+
+`flight_summary.py` compared the global max altitude against the first
+waypoint's target_z. For FULL_3D flights, the first waypoint is 0.60m but
+the drone later climbs to 1.0m (WP3). The metric computed
+`(0.98 - 0.60) / 0.60 = +63%` - measuring intentional navigation as
+overshoot.
+
+### The fix
+
+Replaced global overshoot with per-waypoint phase detection. The tool now
+tracks `(target_x, target_y, target_z)` changes to identify waypoint
+phases and computes overshoot, steady-state error, and XY tracking error
+per phase. Also fixed XY drift metric to measure distance from current
+waypoint target instead of from origin.
+
+### Verification (Webots, original gains)
+
+| Profile | Noise | Per-WP Overshoot | Hover Alt | Thrust Osc |
+|---------|-------|------------------|-----------|------------|
+| FIRST_TEST | 0 | -6% (0.469m vs 0.50m) | 0.431m | 0 (0.0/s) |
+| FIRST_TEST | 3 | -5% (0.475m vs 0.50m) | ~0.43m | 111 (7.9/s) |
+| FULL_3D | 0 | -6% to -4% ascending | 0.53-0.93m | 0 (0.0/s) |
+| FULL_3D | 3 | -4% to -0% ascending | variable | 975 (13.8/s) |
+
+**There is no altitude overshoot in Webots.** Every ascending waypoint
+undershoots by 4-12%. The 6-12% steady-state undershoot is real - the
+integral term (KI=0.03) is too weak to fully close the gap against
+velocity damping resistance.
+
+### Impact on tuning plan
+
+The 43-56% overshoot on hardware (sessions 7-8) is from single-waypoint
+FIRST_TEST flights where the old metric was correct. Those numbers are
+real and phase 3 still needs to address them. The metric fix only affects
+multi-waypoint analysis (FULL_3D, ALTITUDE profiles).
+
+A Webots gain retuning attempt (KP 0.30->0.20, KI 0.03->0.05,
+damping 0.15->0.35) was tested and reverted - stronger damping caused
+thrust oscillation at noise 3 (7.9/s FIRST_TEST, 13.8/s FULL_3D) and
+worse steady-state hover (0.43m vs 0.47m). Original Webots gains retained.
+
+---
+
+## Session 9 - 2026-02-19 - Horizontal Kalman filter (simulation)
+
+Implemented the horizontal KF from phase 1 of the tuning plan and validated
+in Webots simulation (`tools/run_webots_sim.sh`).
+
+### Code changes
+
+- **Horizontal Kalman filter** - `fusion/horizontal_kf.c` / `.h`. Two
+  independent 1D filters (X and Y), each with states [position, velocity,
+  accel_bias]. Prediction uses world-frame acceleration (full rotation
+  including yaw). Correction uses optical flow velocity (H=[0,1,0]).
+  Innovation gating at 1.0 m/s rejects flow outliers.
+- **Full rotation matrix** - estimator_actor.c now computes accel_world_x
+  and accel_world_y in addition to accel_world_z. Requires cos/sin of yaw.
+- **7 new tunable params** (IDs 48-54) - `hkf_q_position`, `hkf_q_velocity`,
+  `hkf_q_bias`, `hkf_r_velocity`, `hkf_p0_position`, `hkf_p0_velocity`,
+  `hkf_p0_bias`. Total param count: 55.
+- **run_webots_sim.sh** - Automated Webots simulation: build, launch in
+  fast mode, wait for flight, print hive log and flight analysis.
+
+### Default HKF parameters (config.h)
+
+| Parameter | Value | Rationale |
+|-----------|-------|-----------|
+| `hkf_q_position` | 0.0001 | Trust position model (slow drift OK) |
+| `hkf_q_velocity` | 1.0 | Allow velocity to change fast |
+| `hkf_q_bias` | 0.0001 | Slow accel bias drift |
+| `hkf_r_velocity` | 0.01 | Flow velocity noise variance |
+| `hkf_p0_position` | 1.0 | Start uncertain on position |
+| `hkf_p0_velocity` | 1.0 | Start uncertain on velocity |
+| `hkf_p0_bias` | 0.1 | Start uncertain on bias |
+
+### Webots results (FULL_3D, noise=3, motor_lag=20ms)
+
+| Metric | Value |
+|--------|-------|
+| Flight duration | 68s (60s flight + liftoff ramp) |
+| Waypoints completed | 5/5 (1m x 1m box at 0.6-1.0m) |
+| Position settle time | 5-9s per waypoint |
+| Hover position RMS | X=0.076m, Y=0.066m |
+| Hover velocity RMS | X=0.19 m/s, Y=0.14 m/s |
+| Velocity jitter (sample-to-sample) | 0.005-0.006 m/s |
+| Max XY from target | 1.9m (during 1m waypoint transitions) |
+| Altitude overshoot | 65% global (metric bug - see session 10) |
+| Max tilt | 4-5 deg |
+
+### Assessment
+
+The horizontal KF provides smooth velocity (jitter reduced to 0.005 m/s
+from raw pixel noise). Position hold is 7-8 cm RMS at hover with pos_kp=0
+and pos_kd=0.20 (damping only). The KF integrates position from
+bias-corrected acceleration, so position drifts slower than raw flow
+integration.
+
+**Ready for hardware testing.** The simulation validates the filter math
+and integration. Real-world flow deck noise characteristics differ from
+Webots, so HKF_R_VELOCITY will likely need tuning via radio on the
+Crazyflie. Next step is phase 2: enable pos_kp with filtered velocity.
+
+---
+
+## Session 8 - 2026-02-18 - Velocity damping tuning (tests 38-42)
+
+Tuned pos_kd via radio while keeping pos_kp=0 (position correction disabled).
+Test 42 was the 4th consecutive GO on the same power cycle - failed with
+thrust=0 due to RESET race condition (fixed in commit f88103f).
+
+### Compiled defaults
+
+| Parameter | Value | Changed from |
+|-----------|-------|-------------|
+| `alt_kp` | 0.12 | 0.18 (session 7) |
+| `vvel_damping` | 0.55 | 0.45 (session 7) |
+| `pos_kp` | 0.0 | 0.14 (session 7 - disabled) |
+| `pos_kd` | 0.20 | 0.16 (tuned via radio tests 40-41) |
 
 ### Results
 
-(pending)
+| Test | Duration | Overshoot | Max tilt | XY drift | Thrust osc | Notes |
+|------|----------|-----------|----------|----------|------------|-------|
+| 38 | 11.2s | +56% | 28 deg | 0.33m | 6.3/s | KF drift +32m post-landing |
+| 39 | 3.5s | -10% | 46 deg | 0.25m | 2.0/s | Short, near-crash tilt |
+| 40 | 21.0s | +51% | 51 deg | 0.45m | 2.0/s | Longest flight, end drift 1.9m |
+| 41 | 5.4s | +43% | 44 deg | 1.39m | 3.9/s | Worst drift |
+| 42 | - | - | - | - | - | RESET race: 4th GO failed |
+
+### Key observations
+
+- **XY drift is bad and getting worse** across consecutive flights (0.25 -> 1.4m).
+  Without pos_kp, drift accumulates unchecked. Velocity damping alone is
+  insufficient.
+- **Altitude overshoot consistent at 43-56%**, except test 39 (short flight,
+  -10% - didn't reach target before crash detection).
+- **Max tilt 44-51 deg** - near crash threshold. Driven by altitude
+  oscillations, not position control (which is disabled).
+- **Test 38 thrust oscillation** (6.3/s) indicates altitude PID at edge of
+  stability. Tests 39-41 are calmer (2-4/s).
+- **Test 42 RESET race** confirmed the bug fixed in today's commit.
+
+---
+
+## Session 7 - 2026-02-17 - Robustness fixes and altitude retuning (tests 19-37)
+
+Major refactoring session. Replaced fixed hover thrust with liftoff
+detection, added altitude robustness features, and retuned after
+discovering altitude overshoot was much worse than session 4 predicted.
+
+### Code changes (not tuning)
+
+- **Liftoff detection** - Replaced fixed hover_thrust with auto-calibrating
+  ramp (LIFTOFF_RAMP_RATE=0.4/s). Self-calibrates every flight.
+- **Innovation gating** - Reject rangefinder readings > 0.3m from KF
+  prediction. Prevents velocity spikes from sensor glitches.
+- **Minimum airborne thrust** - 5% floor prevents attitude PIDs from
+  losing authority during altitude PID undershoot.
+- **Derivative-on-measurement** - PID refactored to avoid setpoint kick.
+- **Separate yaw PID** - Yaw rate gains separated from roll/pitch
+  (yaw_kp=0.12, yaw_ki=0.05 vs roll/pitch kp=0.020).
+- **Attitude-priority mixing** - Motor mixer prioritizes attitude over
+  thrust to prevent tumble during saturation.
+- **Consecutive flight support** - Waypoint actor outer loop, multi-GO.
+
+### Tuning changes
+
+| Parameter | Old (session 4) | New | Reasoning |
+|-----------|-----------------|-----|-----------|
+| `alt_kp` | 0.18 | 0.12 | 0.18 caused 100-263% overshoot (tests 34-35) |
+| `vvel_damping` | 0.45 | 0.55 | More braking but still overshoots 43-56% |
+| `pos_kp` | 0.14 | **0.0** | Disabled - caused aggressive tilts (tests 34-36) |
+| `pos_kd` | 0.16 | 0.20 | Velocity-only damping while pos_kp disabled |
+
+### Results (tests 34-37 - altitude retuning)
+
+| Test | Duration | Overshoot | Max tilt | XY drift | Notes |
+|------|----------|-----------|----------|----------|-------|
+| 34 | 5.6s | +103% | 22 deg | 0.49m | alt_kp=0.18 (too strong) |
+| 35 | 11.3s | +263% | 39 deg | 0.23m | Went to 1.8m! |
+| 36 | 3.1s | +6% | 47 deg | 0.30m | Near-crash, best altitude |
+| 37 | 16.2s | +211% | 25 deg | 0.34m | Went to 1.6m |
+
+Tests 34-37 led to reducing alt_kp from 0.18 to 0.12 and disabling
+position control (pos_kp=0) as a safety measure.
+
+---
+
+## Session 6 - Cancelled (battery died)
+
+Planned radio overrides (pos_kp=0.04, pos_kd=0.05, vvel_damping=0.55)
+were never tested. Battery died before GO. Parameters were later updated
+in compiled defaults during session 7-8.
 
 ---
 
