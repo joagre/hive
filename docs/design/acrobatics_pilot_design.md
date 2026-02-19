@@ -50,7 +50,7 @@ changes to the cascade.
 ## Script Lifecycle
 
 Scripts are uploaded to flash before flight (4 slots, 1KB each, see
-[forth_actor_spec.md](../../examples/pilot/docs/forth_actor_spec.md) upload protocol). The maneuver actor loads a
+[forth_actor_spec.md](forth_actor_spec.md) upload protocol). The maneuver actor loads a
 script at boot and waits for `NOTIFY_FLIGHT_START` from the flight
 manager - the same signal the waypoint actor uses.
 
