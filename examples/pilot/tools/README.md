@@ -207,33 +207,9 @@ python3 analyze_hover.py /tmp/tlog.csv --json
 python3 analyze_hover.py /tmp/tlog.csv --tolerance 0.3
 ```
 
-### flight_debug.py
-
-Debug flight telemetry - show timeline and detect issues:
-
-- Failed takeoff detection
-- Crash/flip detection (tilt > 45deg)
-- Position drift analysis
-- Thrust saturation warnings
-- Stable hover period identification
-
-```bash
-# Quick flight analysis
-python3 flight_debug.py /tmp/tlog.csv
-
-# Verbose timeline (0.5s intervals)
-python3 flight_debug.py /tmp/tlog.csv --verbose
-
-# Analyze specific time window
-python3 flight_debug.py /tmp/tlog.csv --time 0 10
-
-# Custom timeline interval
-python3 flight_debug.py /tmp/tlog.csv --interval 1.0
-```
-
 ### ground_station.py
 
-Receive real-time telemetry, tune parameters, and download flight logs from Crazyflie hardware via Crazyradio 2.0. Decodes telemetry packets carrying all 24 tlog.csv columns and writes tlog.csv-compatible CSV directly. Radio-captured CSV can be used with all analysis tools (analyze_pid, plot_telemetry, plot_flight, analyze_hover, flight_debug) without modification.
+Receive real-time telemetry, tune parameters, and download flight logs from Crazyflie hardware via Crazyradio 2.0. Decodes telemetry packets carrying all 24 tlog.csv columns and writes tlog.csv-compatible CSV directly. Radio-captured CSV can be used with all analysis tools (analyze_pid, plot_telemetry, plot_flight, analyze_hover) without modification.
 
 ```bash
 # Display real-time telemetry to stdout

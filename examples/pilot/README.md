@@ -368,7 +368,7 @@ to the nRF51822 radio chip, which transmits via ESB to a Crazyradio 2.0 on the g
 The ground station merges the two packet halves and writes one CSV row per
 packet B arrival, producing output identical to tlog.csv from the SD card
 logger. Radio-captured CSV can be used directly with all analysis tools
-(analyze_pid, plot_telemetry, plot_flight, analyze_hover, flight_debug).
+(analyze_pid, plot_telemetry, plot_flight, analyze_hover).
 
 **ESB packet limits** - ESB limit is 32 bytes, HAL uses 1 byte for framing,
 leaving 30 bytes for application payload. Each packet includes a 32-bit
@@ -538,7 +538,6 @@ doesn't affect flight-critical control loops and won't trigger restarts if it fa
 | `tools/run_webots_sim.sh` | Automated Webots simulation (build, run, analyze) |
 | `tools/analyze_pid.py` | PID metrics analysis (overshoot, rise time, settling time) |
 | `tools/analyze_hover.py` | Hover stability analysis (altitude std dev, drift) |
-| `tools/flight_debug.py` | Flight debugging (timeline, crash detection) |
 | `tools/plot_telemetry.py` | 6-panel telemetry visualization |
 | `tools/plot_flight.py` | Full flight summary with 3D trajectory |
 | `tools/repair_sd_deck_ow.py` | SD card deck one-wire EEPROM repair |

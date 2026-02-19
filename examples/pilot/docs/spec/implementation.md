@@ -149,7 +149,6 @@ examples/pilot/
         run_webots_sim.sh    # Automated Webots simulation (build, run, analyze)
         analyze_pid.py       # PID metrics analysis (overshoot, settling time)
         analyze_hover.py     # Hover stability analysis
-        flight_debug.py      # Flight debugging utilities
         plot_telemetry.py    # 6-panel telemetry visualization
         plot_flight.py       # Full flight summary with 3D trajectory
         repair_sd_deck_ow.py # SD card deck one-wire repair

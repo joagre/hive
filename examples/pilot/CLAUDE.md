@@ -221,9 +221,6 @@ python3 tools/plot_flight.py /tmp/tlog.csv
 
 # Hover stability analysis
 python3 tools/analyze_hover.py /tmp/tlog.csv
-
-# Flight debugging (timeline, crash detection)
-python3 tools/flight_debug.py /tmp/tlog.csv
 ```
 
 ## Flight Profiles
