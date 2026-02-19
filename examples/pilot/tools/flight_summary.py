@@ -48,9 +48,84 @@ def analyze(data):
     r['flight_end_s'] = t1 / 1000
     r['flight_duration_s'] = (t1 - t0) / 1000
 
-    # Target altitude
+    # Target altitude (first non-zero target for display)
     targets = [d['target_z'] for d in data if d['target_z'] > 0.01]
     r['target_alt'] = targets[0] if targets else 0.0
+
+    # --- Per-waypoint phase detection ---
+    # Detect phases by tracking target changes (target_x, target_y, target_z)
+    phases = []
+    cur_target = None
+    phase_start = 0
+    for i, d in enumerate(flight):
+        t = (d['target_x'], d['target_y'], d['target_z'])
+        if cur_target is None or t != cur_target:
+            if cur_target is not None and cur_target[2] > 0.01:
+                phases.append({
+                    'start': phase_start, 'end': i,
+                    'target_x': cur_target[0], 'target_y': cur_target[1],
+                    'target_z': cur_target[2],
+                })
+            cur_target = t
+            phase_start = i
+    # Close final phase
+    if cur_target is not None and cur_target[2] > 0.01:
+        phases.append({
+            'start': phase_start, 'end': len(flight),
+            'target_x': cur_target[0], 'target_y': cur_target[1],
+            'target_z': cur_target[2],
+        })
+
+    # Analyze each waypoint phase
+    wp_metrics = []
+    for ph in phases:
+        seg = flight[ph['start']:ph['end']]
+        if len(seg) < 5:
+            continue
+        tz = ph['target_z']
+        alts = [d['altitude'] for d in seg]
+        max_alt = max(alts)
+        overshoot_pct = (max_alt - tz) / tz * 100 if tz > 0.01 else 0.0
+
+        # Steady-state: last 40% of phase (after settling)
+        ss_start = len(seg) * 6 // 10
+        ss_seg = seg[ss_start:]
+        if len(ss_seg) > 2:
+            ss_alts = [d['altitude'] for d in ss_seg]
+            ss_mean = sum(ss_alts) / len(ss_alts)
+            ss_err_pct = (ss_mean - tz) / tz * 100 if tz > 0.01 else 0.0
+        else:
+            ss_mean = 0.0
+            ss_err_pct = 0.0
+
+        # Per-waypoint XY tracking error
+        tx, ty = ph['target_x'], ph['target_y']
+        xy_errs = [math.sqrt((d['x'] - tx)**2 + (d['y'] - ty)**2)
+                    for d in seg]
+        max_xy_err = max(xy_errs)
+
+        # Steady-state XY error
+        ss_xy_errs = [math.sqrt((d['x'] - tx)**2 + (d['y'] - ty)**2)
+                       for d in ss_seg] if len(ss_seg) > 2 else [0.0]
+        ss_xy_mean = sum(ss_xy_errs) / len(ss_xy_errs)
+
+        wp_metrics.append({
+            'target_x': tx, 'target_y': ty, 'target_z': tz,
+            'max_alt': max_alt, 'overshoot_pct': overshoot_pct,
+            'ss_mean_alt': ss_mean, 'ss_err_pct': ss_err_pct,
+            'max_xy_err': max_xy_err, 'ss_xy_mean': ss_xy_mean,
+            'duration_s': (seg[-1]['time_ms'] - seg[0]['time_ms']) / 1000,
+        })
+
+    r['waypoint_metrics'] = wp_metrics
+    if wp_metrics:
+        r['worst_overshoot_pct'] = max(m['overshoot_pct'] for m in wp_metrics)
+        r['worst_ss_err_pct'] = max(abs(m['ss_err_pct']) for m in wp_metrics)
+        r['worst_xy_err'] = max(m['max_xy_err'] for m in wp_metrics)
+    else:
+        r['worst_overshoot_pct'] = 0.0
+        r['worst_ss_err_pct'] = 0.0
+        r['worst_xy_err'] = 0.0
 
     # --- Liftoff validation ---
     # Detect KF drift: if altitude was already elevated before thrust started,
@@ -147,13 +222,14 @@ def analyze(data):
             r['crash_pitch_deg'] = d['pitch'] * 57.3
             break
 
-    # --- XY drift ---
+    # --- XY tracking error (per-waypoint) ---
     r['x_start'] = flight[0]['x']
     r['y_start'] = flight[0]['y']
     r['x_end'] = flight[-1]['x']
     r['y_end'] = flight[-1]['y']
-    r['max_xy_drift'] = max(
-        math.sqrt((d['x'] - flight[0]['x'])**2 + (d['y'] - flight[0]['y'])**2)
+    # Max tracking error from current waypoint target (not from origin)
+    r['max_xy_tracking_err'] = max(
+        math.sqrt((d['x'] - d['target_x'])**2 + (d['y'] - d['target_y'])**2)
         for d in flight
     )
 
@@ -215,11 +291,28 @@ def print_summary(r, path):
     if r['ramp_duration_s'] > 0:
         print(f"  Ramp duration:           {r['ramp_duration_s']:.2f}s")
 
-    # Altitude
+    # Altitude (per-waypoint)
     print(f"\nAltitude:")
     print(f"  Max: {r['max_alt']:.3f}m at t={r['max_alt_time_s']:.1f}s")
     print(f"  Min (in flight): {r['min_alt_in_flight']:.3f}m")
-    if r['target_alt'] > 0:
+    wp_metrics = r.get('waypoint_metrics', [])
+    if len(wp_metrics) == 1:
+        m = wp_metrics[0]
+        print(f"  Overshoot: {m['overshoot_pct']:+.0f}% "
+              f"(peak {m['max_alt']:.3f}m vs target {m['target_z']:.2f}m)")
+        print(f"  Steady-state error: {m['ss_err_pct']:+.1f}% "
+              f"(mean {m['ss_mean_alt']:.3f}m)")
+    elif len(wp_metrics) > 1:
+        print(f"  Per-waypoint analysis ({len(wp_metrics)} waypoints):")
+        for i, m in enumerate(wp_metrics):
+            label = f"WP{i+1}"
+            pos = f"({m['target_x']:.1f},{m['target_y']:.1f},{m['target_z']:.1f})"
+            print(f"    {label} {pos}: overshoot {m['overshoot_pct']:+.0f}%, "
+                  f"SS err {m['ss_err_pct']:+.1f}%, "
+                  f"XY err {m['max_xy_err']:.3f}m")
+        print(f"  Worst overshoot: {r['worst_overshoot_pct']:+.0f}%")
+        print(f"  Worst SS error: {r['worst_ss_err_pct']:.1f}%")
+    elif r['target_alt'] > 0:
         overshoot = (r['max_alt'] - r['target_alt']) / r['target_alt'] * 100
         print(f"  Overshoot: {overshoot:+.0f}%")
 
@@ -246,10 +339,12 @@ def print_summary(r, path):
         print(f"  Roll: {r['crash_roll_deg']:.1f} deg  "
               f"Pitch: {r['crash_pitch_deg']:.1f} deg")
 
-    # XY drift
-    print(f"\nPosition drift:")
-    print(f"  Max XY: {r['max_xy_drift']:.3f}m")
-    print(f"  End: ({r['x_end']:.3f}, {r['y_end']:.3f})m")
+    # XY tracking error
+    print(f"\nPosition tracking:")
+    print(f"  Max XY error: {r['max_xy_tracking_err']:.3f}m")
+    if wp_metrics:
+        print(f"  Worst per-WP XY error: {r['worst_xy_err']:.3f}m")
+    print(f"  End pos: ({r['x_end']:.3f}, {r['y_end']:.3f})m")
 
     # Post-landing
     if r.get('post_alt_mean') is not None:
@@ -271,8 +366,8 @@ def print_summary(r, path):
         issues.append("UNSTABLE THRUST")
     if r['thrust_saturated_pct'] > 30:
         issues.append("THRUST SATURATED")
-    if r['max_xy_drift'] > 1.0:
-        issues.append(f"DRIFT {r['max_xy_drift']:.1f}m")
+    if r['max_xy_tracking_err'] > 1.0:
+        issues.append(f"XY ERR {r['max_xy_tracking_err']:.1f}m")
     if r.get('post_alt_mean') is not None and abs(r['post_alt_drift']) > 0.5:
         issues.append("KF DRIFT")
 
