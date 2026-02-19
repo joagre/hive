@@ -2,9 +2,15 @@
 *.o
 *.d
 pilot
+build_*/
 
 # Installed controller (copied to Webots)
 controllers/pilot/pilot
+
+# Flight data (CSVs, logs, SD dumps)
+*.csv
+*.log
+sd_log.txt
 
 # Editor backups
 *~
