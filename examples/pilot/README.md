@@ -142,7 +142,8 @@ graph TB
     Logger -.-> CSV[(CSV)]
 ```
 
-IPC notifications coordinate flight state transitions (all fire-and-forget):
+IPC messages coordinate flight state transitions. Solid arrows are
+fire-and-forget notifications, dashed arrows are request/reply:
 
 ```mermaid
 graph LR
@@ -170,17 +171,18 @@ graph LR
     Comms -->|GO| FlightMgr
     Comms -->|ABORT| FlightMgr
     Battery -->|LOW_BATTERY| FlightMgr
+    Altitude -->|LIFTOFF| FlightMgr
     Altitude -->|FLIGHT_LANDED| FlightMgr
 
-    FlightMgr -->|RESET| Sensor
-    FlightMgr -->|RESET| Estimator
-    FlightMgr -->|RESET| Waypoint
-    FlightMgr -->|RESET| Position
-    FlightMgr -->|RESET| Attitude
-    FlightMgr -->|RESET| Rate
-    FlightMgr -->|RESET| Motor
-    FlightMgr -->|RESET| Logger
-    FlightMgr -->|RESET| Battery
+    FlightMgr -.->|RESET| Sensor
+    FlightMgr -.->|RESET| Estimator
+    FlightMgr -.->|RESET| Waypoint
+    FlightMgr -.->|RESET| Position
+    FlightMgr -.->|RESET| Attitude
+    FlightMgr -.->|RESET| Rate
+    FlightMgr -.->|RESET| Motor
+    FlightMgr -.->|RESET| Logger
+    FlightMgr -.->|RESET| Battery
 
     FlightMgr -->|FLIGHT_START| Motor
     FlightMgr -->|FLIGHT_START| Waypoint
