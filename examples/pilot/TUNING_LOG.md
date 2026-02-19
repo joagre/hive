@@ -66,14 +66,34 @@ estimator_actor.c provides world-frame acceleration for all three axes.
 Sim-validated in Webots: 7-8 cm hover RMS, velocity jitter 0.005 m/s.
 See session 9 for full results and default parameters.
 
-### Phase 2 - Enable position hold and tune
+### Phase 2 - Validate HKF on hardware, then enable position hold
 
 **Goal** - XY drift < 0.10m during 6s FIRST_TEST flight.
 
-With filtered velocity from the horizontal KF, re-enable pos_kp.
-The control law is: `accel = pos_kp * error - pos_kd * velocity`.
+Two sub-phases: first validate the horizontal KF produces clean velocity
+on real hardware, then re-enable pos_kp.
 
-**Approach** - Tune via radio, no reflash needed.
+**Phase 2a - HKF validation (pos_kp=0, damping only)**
+
+Fly with pos_kp=0 (current default) and observe HKF velocity quality.
+The key parameter is `hkf_r_velocity` - measurement noise variance for
+optical flow. Webots default is 0.01 but real PMW3901 noise differs.
+
+| Symptom | Diagnosis | Fix |
+|---------|-----------|-----|
+| Jerky velocity, tilt jitter | R too low (trusts noisy flow) | Increase `hkf_r_velocity` |
+| Sluggish response, slow to stop | R too high (ignores flow) | Decrease `hkf_r_velocity` |
+| Steady drift in one direction | Bias not converging | Increase `hkf_q_bias` |
+
+Start with compiled defaults. Fly 1-2 FIRST_TEST flights with pos_kp=0
+and check telemetry for velocity smoothness. Compare tilt jitter against
+session 8 (pre-HKF) flights. If velocity looks clean, proceed to 2b.
+If not, tune `hkf_r_velocity` via radio (try 0.05, 0.1, 0.5).
+
+**Phase 2b - Position hold (re-enable pos_kp)**
+
+With validated HKF velocity, re-enable pos_kp. Tune via radio.
+The control law is: `accel = pos_kp * error - pos_kd * velocity`.
 
 | Step | pos_kp | pos_kd | Rationale |
 |------|--------|--------|-----------|
