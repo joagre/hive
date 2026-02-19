@@ -206,7 +206,7 @@ void estimator_actor(void *args, const hive_spawn_info_t *siblings,
         [SEL_SENSOR] = {.type = HIVE_SEL_BUS, .bus = state->sensor_bus},
         [SEL_RESET] = {.type = HIVE_SEL_IPC,
                        .ipc = {.sender = state->flight_manager,
-                               .class = HIVE_MSG_NOTIFY,
+                               .class = HIVE_MSG_REQUEST,
                                .id = NOTIFY_RESET}},
     };
 
@@ -245,6 +245,11 @@ void estimator_actor(void *args, const hive_spawn_info_t *siblings,
             prev_gps_valid = false;
             prev_velocity_valid = false;
             prev_time = hive_get_time();
+            hive_status_t rs = hive_ipc_reply(&result.ipc, NULL, 0);
+            if (HIVE_FAILED(rs)) {
+                HIVE_LOG_ERROR("[EST] RESET reply failed: %s",
+                               HIVE_ERR_STR(rs));
+            }
             continue;
         }
 

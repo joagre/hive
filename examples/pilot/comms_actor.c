@@ -252,10 +252,7 @@ static void handle_rx_command(comms_state_t *state, const uint8_t *data,
             hive_status_t s =
                 hive_ipc_notify(state->flight_manager, NOTIFY_GO, NULL, 0);
             if (HIVE_FAILED(s)) {
-                HIVE_LOG_WARN(
-                    "[COMMS] GO notify failed: %s - retrying via name",
-                    HIVE_ERR_STR(s));
-                hive_ipc_named_notify("flight_manager", NOTIFY_GO, NULL, 0);
+                HIVE_LOG_ERROR("[COMMS] GO notify failed: %s", HIVE_ERR_STR(s));
             }
         }
         return;
@@ -265,7 +262,12 @@ static void handle_rx_command(comms_state_t *state, const uint8_t *data,
         // Ground station sends ABORT to stop countdown/flight
         HIVE_LOG_INFO("[COMMS] ABORT command received from ground station");
         if (state->flight_manager != HIVE_ACTOR_ID_INVALID) {
-            hive_ipc_notify(state->flight_manager, NOTIFY_ABORT, NULL, 0);
+            hive_status_t s =
+                hive_ipc_notify(state->flight_manager, NOTIFY_ABORT, NULL, 0);
+            if (HIVE_FAILED(s)) {
+                HIVE_LOG_ERROR("[COMMS] ABORT notify failed: %s",
+                               HIVE_ERR_STR(s));
+            }
         }
         return;
     }
@@ -450,7 +452,7 @@ void comms_actor(void *args, const hive_spawn_info_t *siblings,
     hive_select_source_t sources[] = {
         {.type = HIVE_SEL_HAL_EVENT, .event = rx_event},
         {.type = HIVE_SEL_IPC,
-         .ipc = {.class = HIVE_MSG_NOTIFY, .id = NOTIFY_RESET}},
+         .ipc = {.class = HIVE_MSG_REQUEST, .id = NOTIFY_RESET}},
     };
 
     static uint32_t wake_count = 0;
@@ -467,6 +469,13 @@ void comms_actor(void *args, const hive_spawn_info_t *siblings,
         if (result.index == 1) {
             hal_esb_flush_rx();
             HIVE_LOG_INFO("[COMMS] RESET - syslink flushed");
+            {
+                hive_status_t rs = hive_ipc_reply(&result.ipc, NULL, 0);
+                if (HIVE_FAILED(rs)) {
+                    HIVE_LOG_ERROR("[COMMS] RESET reply failed: %s",
+                                   HIVE_ERR_STR(rs));
+                }
+            }
             continue;
         }
 

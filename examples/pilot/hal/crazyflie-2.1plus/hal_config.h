@@ -94,7 +94,8 @@
 // Flow deck velocity is available but active position hold caused
 // aggressive tilts into walls during early flight tests (34-36).
 #define HAL_POS_KP 0.0f
-#define HAL_POS_KD 0.0f
+#define HAL_POS_KD \
+    0.20f // Velocity damping to resist drift (tuned flight 40-41)
 #define HAL_MAX_TILT_ANGLE 0.25f // ~14 degrees
 
 #endif // HAL_CONFIG_H

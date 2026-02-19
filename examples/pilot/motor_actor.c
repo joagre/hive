@@ -108,7 +108,7 @@ void motor_actor(void *args, const hive_spawn_info_t *siblings,
                               .id = NOTIFY_FLIGHT_STOP}},
         [SEL_RESET] = {.type = HIVE_SEL_IPC,
                        .ipc = {.sender = state->flight_manager,
-                               .class = HIVE_MSG_NOTIFY,
+                               .class = HIVE_MSG_REQUEST,
                                .id = NOTIFY_RESET}},
         [SEL_TORQUE] = {.type = HIVE_SEL_BUS, .bus = state->torque_bus},
     };
@@ -136,12 +136,19 @@ void motor_actor(void *args, const hive_spawn_info_t *siblings,
 
         switch (result.index) {
         case SEL_RESET: {
-            // RESET notification - clear state for new flight
+            // RESET request - clear state for new flight
             HIVE_LOG_INFO("[MOTOR] RESET - clearing state");
             started = false;
             stopped = false;
             first_thrust_logged = false;
             hal_write_torque(&torque); // Zero motors
+            {
+                hive_status_t rs = hive_ipc_reply(&result.ipc, NULL, 0);
+                if (HIVE_FAILED(rs)) {
+                    HIVE_LOG_ERROR("[MOTOR] RESET reply failed: %s",
+                                   HIVE_ERR_STR(rs));
+                }
+            }
             continue;
         }
 

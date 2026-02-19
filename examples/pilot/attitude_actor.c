@@ -80,7 +80,7 @@ void attitude_actor(void *args, const hive_spawn_info_t *siblings,
         [SEL_STATE] = {.type = HIVE_SEL_BUS, .bus = state->state_bus},
         [SEL_RESET] = {.type = HIVE_SEL_IPC,
                        .ipc = {.sender = state->flight_manager,
-                               .class = HIVE_MSG_NOTIFY,
+                               .class = HIVE_MSG_REQUEST,
                                .id = NOTIFY_RESET}},
     };
 
@@ -105,6 +105,11 @@ void attitude_actor(void *args, const hive_spawn_info_t *siblings,
             pid_reset(&yaw_pid);
             attitude_sp = (attitude_setpoint_t)ATTITUDE_SETPOINT_ZERO;
             prev_time = hive_get_time();
+            hive_status_t rs = hive_ipc_reply(&result.ipc, NULL, 0);
+            if (HIVE_FAILED(rs)) {
+                HIVE_LOG_ERROR("[ATT] RESET reply failed: %s",
+                               HIVE_ERR_STR(rs));
+            }
             continue;
         }
 

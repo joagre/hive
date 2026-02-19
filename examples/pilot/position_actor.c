@@ -72,7 +72,7 @@ void position_actor(void *args, const hive_spawn_info_t *siblings,
         [SEL_STATE] = {.type = HIVE_SEL_BUS, .bus = state->state_bus},
         [SEL_RESET] = {.type = HIVE_SEL_IPC,
                        .ipc = {.sender = state->flight_manager,
-                               .class = HIVE_MSG_NOTIFY,
+                               .class = HIVE_MSG_REQUEST,
                                .id = NOTIFY_RESET}},
     };
 
@@ -93,6 +93,11 @@ void position_actor(void *args, const hive_spawn_info_t *siblings,
         if (result.index == SEL_RESET) {
             HIVE_LOG_INFO("[POS] RESET - clearing state");
             target = (position_target_t)POSITION_TARGET_DEFAULT;
+            hive_status_t rs = hive_ipc_reply(&result.ipc, NULL, 0);
+            if (HIVE_FAILED(rs)) {
+                HIVE_LOG_ERROR("[POS] RESET reply failed: %s",
+                               HIVE_ERR_STR(rs));
+            }
             continue;
         }
 

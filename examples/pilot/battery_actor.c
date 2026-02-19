@@ -58,7 +58,13 @@ void battery_actor(void *args, const hive_spawn_info_t *siblings,
 
     // Start periodic sampling timer
     hive_timer_id_t sample_timer;
-    hive_timer_every(BATTERY_SAMPLE_INTERVAL_US, &sample_timer);
+    hive_status_t ts =
+        hive_timer_every(BATTERY_SAMPLE_INTERVAL_US, &sample_timer);
+    if (HIVE_FAILED(ts)) {
+        HIVE_LOG_ERROR("[BAT] Failed to create sample timer: %s",
+                       HIVE_ERR_STR(ts));
+        hive_exit(HIVE_EXIT_REASON_CRASH);
+    }
 
     // State
     uint32_t critical_count = 0;
@@ -76,7 +82,7 @@ void battery_actor(void *args, const hive_spawn_info_t *siblings,
                            .ipc = {.class = HIVE_MSG_TIMER,
                                    .tag = sample_timer}},
             [SEL_RESET] = {.type = HIVE_SEL_IPC,
-                           .ipc = {.class = HIVE_MSG_NOTIFY,
+                           .ipc = {.class = HIVE_MSG_REQUEST,
                                    .id = NOTIFY_RESET}},
         };
 
@@ -88,12 +94,19 @@ void battery_actor(void *args, const hive_spawn_info_t *siblings,
         }
 
         // Handle RESET from flight_manager
-        if (result.ipc.id == NOTIFY_RESET) {
+        if (result.index == SEL_RESET) {
             critical_count = 0;
             warning_logged = false;
             critical_notified = false;
             stack_profile_capture("battery");
             HIVE_LOG_DEBUG("[BAT] State reset");
+            {
+                hive_status_t rs = hive_ipc_reply(&result.ipc, NULL, 0);
+                if (HIVE_FAILED(rs)) {
+                    HIVE_LOG_ERROR("[BAT] RESET reply failed: %s",
+                                   HIVE_ERR_STR(rs));
+                }
+            }
             continue;
         }
 
@@ -107,7 +120,14 @@ void battery_actor(void *args, const hive_spawn_info_t *siblings,
                 !critical_notified) {
                 HIVE_LOG_WARN("[BAT] CRITICAL: %.2fV (debounced %lu readings)",
                               voltage, (unsigned long)critical_count);
-                hive_ipc_notify(flight_mgr, NOTIFY_LOW_BATTERY, NULL, 0);
+                {
+                    hive_status_t ns = hive_ipc_notify(
+                        flight_mgr, NOTIFY_LOW_BATTERY, NULL, 0);
+                    if (HIVE_FAILED(ns)) {
+                        HIVE_LOG_ERROR("[BAT] LOW_BATTERY notify failed: %s",
+                                       HIVE_ERR_STR(ns));
+                    }
+                }
                 critical_notified = true;
             }
         } else {

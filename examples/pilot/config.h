@@ -226,6 +226,9 @@
 #endif
 #define FLIGHT_DURATION_US ((uint64_t)FLIGHT_DURATION_S * 1000000)
 
+// Timeout for request/reply RESET to each actor during preflight
+#define RESET_TIMEOUT_MS 1000
+
 // Liftoff timeout. If altitude actor doesn't detect liftoff within this
 // time, abort the flight. Max ramp time is LIFTOFF_MAX_THRUST / RAMP_RATE
 // = 0.95 / 0.4 = 2.4s; 8s gives generous margin for sensor delays.

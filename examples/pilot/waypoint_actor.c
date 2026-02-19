@@ -92,7 +92,7 @@ void waypoint_actor(void *args, const hive_spawn_info_t *siblings,
                                .id = NOTIFY_FLIGHT_START}},
         [SEL_RESET_WAIT] = {.type = HIVE_SEL_IPC,
                             .ipc = {.sender = state->flight_manager,
-                                    .class = HIVE_MSG_NOTIFY,
+                                    .class = HIVE_MSG_REQUEST,
                                     .id = NOTIFY_RESET}},
     };
 
@@ -114,6 +114,11 @@ void waypoint_actor(void *args, const hive_spawn_info_t *siblings,
 
             if (wait_result.index == SEL_RESET_WAIT) {
                 HIVE_LOG_INFO("[WPT] RESET (while waiting for START)");
+                hive_status_t rs = hive_ipc_reply(&wait_result.ipc, NULL, 0);
+                if (HIVE_FAILED(rs)) {
+                    HIVE_LOG_ERROR("[WPT] RESET reply failed: %s",
+                                   HIVE_ERR_STR(rs));
+                }
                 continue; // Keep waiting for START
             }
 
@@ -162,7 +167,7 @@ void waypoint_actor(void *args, const hive_spawn_info_t *siblings,
                                              .tag = hover_timer}},
                 [SEL_RESET] = {.type = HIVE_SEL_IPC,
                                .ipc = {.sender = state->flight_manager,
-                                       .class = HIVE_MSG_NOTIFY,
+                                       .class = HIVE_MSG_REQUEST,
                                        .id = NOTIFY_RESET}},
             };
 
@@ -174,7 +179,7 @@ void waypoint_actor(void *args, const hive_spawn_info_t *siblings,
                     [0] = {.type = HIVE_SEL_BUS, .bus = state->state_bus},
                     [1] = {.type = HIVE_SEL_IPC,
                            .ipc = {.sender = state->flight_manager,
-                                   .class = HIVE_MSG_NOTIFY,
+                                   .class = HIVE_MSG_REQUEST,
                                    .id = NOTIFY_RESET}},
                 };
                 status = hive_select(sources_no_timer, 2, &result, -1);
@@ -200,6 +205,11 @@ void waypoint_actor(void *args, const hive_spawn_info_t *siblings,
                 HIVE_LOG_INFO("[WPT] RESET - returning to wait for START");
                 if (hover_timer != HIVE_TIMER_ID_INVALID) {
                     hive_timer_cancel(hover_timer);
+                }
+                hive_status_t rs = hive_ipc_reply(&result.ipc, NULL, 0);
+                if (HIVE_FAILED(rs)) {
+                    HIVE_LOG_ERROR("[WPT] RESET reply failed: %s",
+                                   HIVE_ERR_STR(rs));
                 }
                 flight_active = false;
                 continue;

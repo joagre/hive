@@ -101,7 +101,7 @@ void altitude_actor(void *args, const hive_spawn_info_t *siblings,
                                  .id = NOTIFY_LANDING}},
         [SEL_RESET] = {.type = HIVE_SEL_IPC,
                        .ipc = {.sender = state->flight_manager,
-                               .class = HIVE_MSG_NOTIFY,
+                               .class = HIVE_MSG_REQUEST,
                                .id = NOTIFY_RESET}},
     };
 
@@ -133,6 +133,13 @@ void altitude_actor(void *args, const hive_spawn_info_t *siblings,
             climb_target = 0.0f;
             count = 0;
             prev_time = hive_get_time();
+            {
+                hive_status_t rs = hive_ipc_reply(&result.ipc, NULL, 0);
+                if (HIVE_FAILED(rs)) {
+                    HIVE_LOG_ERROR("[ALT] RESET reply failed: %s",
+                                   HIVE_ERR_STR(rs));
+                }
+            }
             continue;
         }
 
@@ -294,7 +301,14 @@ void altitude_actor(void *args, const hive_spawn_info_t *siblings,
                 thrust = discovered_hover_thrust;
 
                 // Notify flight manager to start flight duration timer
-                hive_ipc_notify(state->flight_manager, NOTIFY_LIFTOFF, NULL, 0);
+                {
+                    hive_status_t ls = hive_ipc_notify(state->flight_manager,
+                                                       NOTIFY_LIFTOFF, NULL, 0);
+                    if (HIVE_FAILED(ls)) {
+                        HIVE_LOG_ERROR("[ALT] LIFTOFF notify failed: %s",
+                                       HIVE_ERR_STR(ls));
+                    }
+                }
             } else {
                 thrust = ramp_thrust;
             }

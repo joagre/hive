@@ -30,3 +30,8 @@ HIVE_CFLAGS += -DFLOW_MAX_HEIGHT=4.0f
 # Slow the ramp so discovered hover thrust is closer to the true value.
 HIVE_CFLAGS += -DLIFTOFF_RAMP_RATE=0.10f
 HIVE_CFLAGS += -DLIFTOFF_ALT_THRESHOLD=0.02f
+
+# =============================================================================
+# Storage
+# =============================================================================
+HIVE_CFLAGS += '-DPILOT_CSV_DIR="/tmp"'

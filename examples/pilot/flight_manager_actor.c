@@ -47,24 +47,32 @@ typedef struct {
     hive_actor_id_t battery;
 } sibling_ids_t;
 
-// Notify all siblings to reset their internal state (fire-and-forget)
-static void notify_reset_all(const sibling_ids_t *ids) {
+// Request all siblings to reset their internal state (request/reply).
+// Waits for each actor to acknowledge before moving to the next.
+// Order: waypoint first (stops publishing), altitude second (clears
+// crash latch), then the rest. Deterministic ordering eliminates the
+// race where waypoint publishes a stale target after altitude has
+// already cleared its state.
+static void request_reset_all(const sibling_ids_t *ids) {
+    // Ordered: waypoint, altitude, then remaining actors
     hive_actor_id_t actors[] = {
-        ids->sensor,   ids->estimator, ids->waypoint, ids->altitude,
-        ids->position, ids->attitude,  ids->rate,     ids->motor,
-        ids->logger,   ids->battery,   ids->comms,
+        ids->waypoint, ids->altitude, ids->sensor, ids->estimator,
+        ids->position, ids->attitude, ids->rate,   ids->motor,
+        ids->logger,   ids->battery,  ids->comms,
     };
 
     for (size_t i = 0; i < sizeof(actors) / sizeof(actors[0]); i++) {
         if (actors[i] != HIVE_ACTOR_ID_INVALID) {
-            hive_status_t s = hive_ipc_notify(actors[i], NOTIFY_RESET, NULL, 0);
+            hive_message_t reply;
+            hive_status_t s = hive_ipc_request(actors[i], NOTIFY_RESET, NULL, 0,
+                                               &reply, RESET_TIMEOUT_MS);
             if (HIVE_FAILED(s)) {
-                HIVE_LOG_ERROR("[FLM] RESET notify failed for actor %lu: %s",
+                HIVE_LOG_ERROR("[FLM] RESET request failed for actor %lu: %s",
                                (unsigned long)actors[i], HIVE_ERR_STR(s));
             }
         }
     }
-    HIVE_LOG_INFO("[FLM] RESET notifications sent");
+    HIVE_LOG_INFO("[FLM] All actors RESET (request/reply)");
 }
 
 // Actor state
@@ -136,7 +144,11 @@ void flight_manager_actor(void *args, const hive_spawn_info_t *siblings,
     hive_timer_id_t auto_go_timer = HIVE_TIMER_ID_INVALID;
     if (params->auto_go_delay_s > 0.0f) {
         uint64_t delay_us = (uint64_t)(params->auto_go_delay_s * 1000000.0f);
-        hive_timer_after(delay_us, &auto_go_timer);
+        hive_status_t ts = hive_timer_after(delay_us, &auto_go_timer);
+        if (HIVE_FAILED(ts)) {
+            HIVE_LOG_ERROR("[FLM] Auto-GO timer failed: %s", HIVE_ERR_STR(ts));
+            hive_exit(HIVE_EXIT_REASON_CRASH);
+        }
         HIVE_LOG_INFO("[FLM] Auto-GO timer set for %.1fs",
                       params->auto_go_delay_s);
     }
@@ -184,7 +196,12 @@ void flight_manager_actor(void *args, const hive_spawn_info_t *siblings,
             if (result.ipc.class == HIVE_MSG_REQUEST) {
                 // Reply with status
                 uint8_t status_reply[2] = {(uint8_t)state, countdown_s};
-                hive_ipc_reply(&result.ipc, status_reply, sizeof(status_reply));
+                hive_status_t rs = hive_ipc_reply(&result.ipc, status_reply,
+                                                  sizeof(status_reply));
+                if (HIVE_FAILED(rs)) {
+                    HIVE_LOG_ERROR("[FLM] STATUS reply failed: %s",
+                                   HIVE_ERR_STR(rs));
+                }
                 continue;
             }
 
@@ -200,8 +217,8 @@ void flight_manager_actor(void *args, const hive_spawn_info_t *siblings,
             HIVE_LOG_INFO("[FLM] PREFLIGHT - calibrating sensors");
             hal_calibrate();
 
-            // Notify all actors to reset their internal state
-            notify_reset_all(&ids);
+            // Reset all actors (request/reply - deterministic ordering)
+            request_reset_all(&ids);
 
             // ARM motors
             HIVE_LOG_INFO("[FLM] Arming motors");
@@ -269,7 +286,12 @@ void flight_manager_actor(void *args, const hive_spawn_info_t *siblings,
             // Handle STATUS request
             if (result.ipc.class == HIVE_MSG_REQUEST) {
                 uint8_t status_reply[2] = {(uint8_t)state, countdown_s};
-                hive_ipc_reply(&result.ipc, status_reply, sizeof(status_reply));
+                hive_status_t rs = hive_ipc_reply(&result.ipc, status_reply,
+                                                  sizeof(status_reply));
+                if (HIVE_FAILED(rs)) {
+                    HIVE_LOG_ERROR("[FLM] STATUS reply failed: %s",
+                                   HIVE_ERR_STR(rs));
+                }
                 continue;
             }
 
@@ -300,14 +322,16 @@ void flight_manager_actor(void *args, const hive_spawn_info_t *siblings,
 
                 // Reset estimator so altitude KF starts fresh.
                 // On the ground the rangefinder can't measure (<40mm),
-                // so the KF drifts during the countdown. Only the
-                // estimator needs reset - PIDs were idle (no target)
-                // and motor/waypoint must keep their START state.
-                hive_status_t rs =
-                    hive_ipc_notify(ids.estimator, NOTIFY_RESET, NULL, 0);
-                if (HIVE_FAILED(rs)) {
-                    HIVE_LOG_ERROR("[FLM] estimator RESET failed: %s",
-                                   HIVE_ERR_STR(rs));
+                // so the KF drifts during the countdown.
+                {
+                    hive_message_t reply;
+                    hive_status_t rs =
+                        hive_ipc_request(ids.estimator, NOTIFY_RESET, NULL, 0,
+                                         &reply, RESET_TIMEOUT_MS);
+                    if (HIVE_FAILED(rs)) {
+                        HIVE_LOG_ERROR("[FLM] estimator RESET failed: %s",
+                                       HIVE_ERR_STR(rs));
+                    }
                 }
 
                 // Notify motor and waypoint to start
@@ -403,7 +427,12 @@ void flight_manager_actor(void *args, const hive_spawn_info_t *siblings,
             // Handle STATUS request
             if (result.ipc.class == HIVE_MSG_REQUEST) {
                 uint8_t status_reply[2] = {(uint8_t)state, 0};
-                hive_ipc_reply(&result.ipc, status_reply, sizeof(status_reply));
+                hive_status_t rs = hive_ipc_reply(&result.ipc, status_reply,
+                                                  sizeof(status_reply));
+                if (HIVE_FAILED(rs)) {
+                    HIVE_LOG_ERROR("[FLM] STATUS reply failed: %s",
+                                   HIVE_ERR_STR(rs));
+                }
                 continue;
             }
 
@@ -512,7 +541,12 @@ void flight_manager_actor(void *args, const hive_spawn_info_t *siblings,
             // Handle STATUS request
             if (result.ipc.class == HIVE_MSG_REQUEST) {
                 uint8_t status_reply[2] = {(uint8_t)state, 0};
-                hive_ipc_reply(&result.ipc, status_reply, sizeof(status_reply));
+                hive_status_t rs = hive_ipc_reply(&result.ipc, status_reply,
+                                                  sizeof(status_reply));
+                if (HIVE_FAILED(rs)) {
+                    HIVE_LOG_ERROR("[FLM] STATUS reply failed: %s",
+                                   HIVE_ERR_STR(rs));
+                }
                 continue;
             }
 

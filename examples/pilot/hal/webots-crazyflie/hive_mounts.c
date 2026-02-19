@@ -17,6 +17,11 @@ static const hive_mount_t g_mounts[] = {
         .backend = HIVE_BACKEND_POSIX,
         .root = "/tmp",
     },
+    {
+        .prefix = "/var/tmp",
+        .backend = HIVE_BACKEND_POSIX,
+        .root = "/var/tmp",
+    },
     // Sentinel to avoid empty array
     {.prefix = NULL, .backend = HIVE_BACKEND_POSIX, .root = NULL},
 };

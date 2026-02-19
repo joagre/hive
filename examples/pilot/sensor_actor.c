@@ -59,7 +59,7 @@ void sensor_actor(void *args, const hive_spawn_info_t *siblings,
                        .ipc = {.class = HIVE_MSG_TIMER, .tag = timer}},
         [SEL_RESET] = {.type = HIVE_SEL_IPC,
                        .ipc = {.sender = state->flight_manager,
-                               .class = HIVE_MSG_NOTIFY,
+                               .class = HIVE_MSG_REQUEST,
                                .id = NOTIFY_RESET}},
     };
 
@@ -74,6 +74,11 @@ void sensor_actor(void *args, const hive_spawn_info_t *siblings,
         if (result.index == SEL_RESET) {
             // No internal state to reset - just acknowledge
             HIVE_LOG_INFO("[SENSOR] RESET received");
+            hive_status_t rs = hive_ipc_reply(&result.ipc, NULL, 0);
+            if (HIVE_FAILED(rs)) {
+                HIVE_LOG_ERROR("[SENSOR] RESET reply failed: %s",
+                               HIVE_ERR_STR(rs));
+            }
             continue;
         }
 

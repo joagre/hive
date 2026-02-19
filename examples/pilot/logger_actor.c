@@ -75,8 +75,15 @@ static void write_csv_header(int fd, char *line_buf, size_t buf_size) {
                         "gyro_x,gyro_y,gyro_z,"
                         "accel_x,accel_y,accel_z\n");
     size_t bytes_written;
-    hive_file_write(fd, line_buf, (size_t)len, &bytes_written);
-    hive_file_sync(fd);
+    hive_status_t ws =
+        hive_file_write(fd, line_buf, (size_t)len, &bytes_written);
+    if (HIVE_FAILED(ws)) {
+        HIVE_LOG_WARN("[LOG] CSV header write failed: %s", HIVE_ERR_STR(ws));
+    }
+    hive_status_t ss = hive_file_sync(fd);
+    if (HIVE_FAILED(ss)) {
+        HIVE_LOG_WARN("[LOG] CSV header sync failed: %s", HIVE_ERR_STR(ss));
+    }
 }
 
 void logger_actor(void *args, const hive_spawn_info_t *siblings,
@@ -92,25 +99,17 @@ void logger_actor(void *args, const hive_spawn_info_t *siblings,
             "[LOG] flight_manager sibling not found - RESET disabled");
     }
 
-    // Select storage path based on mount availability
-    // Prefer SD card, fall back to /tmp (simulation)
-    const char *storage_base = NULL;
-    if (HIVE_SUCCEEDED(hive_file_mount_available("/sd"))) {
-        storage_base = "/sd";
-    } else if (HIVE_SUCCEEDED(hive_file_mount_available("/tmp"))) {
-        storage_base = "/tmp";
-    } else {
-        HIVE_LOG_WARN("[LOG] No storage available (/sd or /tmp) - "
-                      "logging disabled");
-        return;
-    }
+#ifndef PILOT_CSV_DIR
+    HIVE_LOG_WARN("[LOG] PILOT_CSV_DIR not defined - CSV logging disabled");
+    return;
+#endif
 
     // Hive log is opened by pilot.c before actors start
     // We just sync it periodically
     state->hive_log_open = true;
 
     // Build CSV path
-    snprintf_(state->csv_path, sizeof(state->csv_path), "%s/%s", storage_base,
+    snprintf_(state->csv_path, sizeof(state->csv_path), "%s/%s", PILOT_CSV_DIR,
               TLOG_FILENAME);
 
     // Open CSV file
@@ -175,7 +174,7 @@ void logger_actor(void *args, const hive_spawn_info_t *siblings,
                        .ipc = {.class = HIVE_MSG_TIMER, .tag = timer}},
         [SEL_RESET] = {.type = HIVE_SEL_IPC,
                        .ipc = {.sender = state->flight_manager,
-                               .class = HIVE_MSG_NOTIFY,
+                               .class = HIVE_MSG_REQUEST,
                                .id = NOTIFY_RESET}},
     };
     // Only include RESET source if flight_manager is valid
@@ -213,6 +212,13 @@ void logger_actor(void *args, const hive_spawn_info_t *siblings,
             latest_sensors = (sensor_data_t)SENSOR_DATA_ZERO;
             latest_thrust = (thrust_cmd_t)THRUST_CMD_ZERO;
             latest_target = (position_target_t)POSITION_TARGET_ZERO;
+            {
+                hive_status_t rs = hive_ipc_reply(&result.ipc, NULL, 0);
+                if (HIVE_FAILED(rs)) {
+                    HIVE_LOG_ERROR("[LOG] RESET reply failed: %s",
+                                   HIVE_ERR_STR(rs));
+                }
+            }
             continue;
         }
 
