@@ -323,6 +323,12 @@ class TelemetryReceiver:
         self.latest_state = {}
         self.latest_sensors = {}
 
+        # Flight phase tracking for auto-stop
+        self.auto_stop = False
+        self.flight_phase = "IDLE"  # IDLE -> FLYING -> LANDED
+        self.thrust_seen = False    # Have we ever seen thrust > 0?
+        self.landed_time = None     # When thrust dropped to 0 after flight
+
     def scan(self):
         """Scan for available Crazyflies."""
         print("Scanning for Crazyflie...", file=sys.stderr)
@@ -382,6 +388,41 @@ class TelemetryReceiver:
             return bytes(response.data)
         return None
 
+    def _update_flight_phase(self, pkt):
+        """Track flight phase transitions for auto-stop.
+
+        IDLE -> FLYING (thrust > 0) -> LANDED (thrust = 0 for 3s after flight).
+        Returns True when recording should stop.
+        """
+        if not self.auto_stop:
+            return False
+        if pkt["type"] != "tlog_sensors":
+            return False
+
+        thrust = pkt.get("thrust", 0)
+        now = time.time()
+
+        if self.flight_phase == "IDLE":
+            if thrust > 0.01:
+                self.flight_phase = "FLYING"
+                self.thrust_seen = True
+                self.landed_time = None
+                print("\n*** FLYING - thrust detected ***", file=sys.stderr)
+
+        elif self.flight_phase == "FLYING":
+            if thrust < 0.01:
+                if self.landed_time is None:
+                    self.landed_time = now
+                elif now - self.landed_time > 3.0:
+                    self.flight_phase = "LANDED"
+                    print("\n*** LANDED - auto-stopping ***",
+                          file=sys.stderr)
+                    return True
+            else:
+                self.landed_time = None
+
+        return False
+
     def receive_loop(self, callback, csv_writer=None):
         """Main receive loop. Calls callback for each decoded packet."""
         self.running = True
@@ -409,13 +450,12 @@ class TelemetryReceiver:
                         # Write CSV row on every sensors packet (B)
                         if csv_writer and pkt["type"] == "tlog_sensors":
                             self._write_csv_row(csv_writer)
+
+                        # Check for auto-stop (landing detection)
+                        if self._update_flight_phase(pkt):
+                            self.running = False
                     else:
-                        # Unknown packet - show for debugging
                         self.unknown_count += 1
-                        pkt_type = data[0] if data else 0
-                        hex_dump = ' '.join(f'{b:02x}' for b in data[:min(len(data), 16)])
-                        print(f"\nUnknown: type=0x{pkt_type:02x} len={len(data)} hex=[{hex_dump}]",
-                              file=sys.stderr)
 
             except KeyboardInterrupt:
                 self.running = False
@@ -822,17 +862,20 @@ def main():
             success = receiver.send_go()
             sys.exit(0 if success else 1)
         elif args.go and args.output:
-            # GO + listen mode - send GO then record telemetry
+            # GO + listen mode - send GO, record telemetry, auto-stop on landing
             success = receiver.send_go()
             if not success:
                 sys.exit(1)
+
+            receiver.auto_stop = True
 
             def on_packet(pkt):
                 if not args.quiet:
                     print(format_tlog(pkt, receiver.latest_state,
                                       receiver.latest_sensors))
 
-            print("Recording telemetry... (Ctrl+C to stop)", file=sys.stderr)
+            print("Recording telemetry... (auto-stops on landing, Ctrl+C to abort)",
+                  file=sys.stderr)
             receiver.receive_loop(on_packet, csv_writer)
         elif args.status:
             # Status mode - query flight manager state

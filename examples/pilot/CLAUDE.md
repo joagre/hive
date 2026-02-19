@@ -99,7 +99,10 @@ python3 tools/ground_station.py --uri radio://0/80/2M -o flight.csv
 # Download flash log after flight
 python3 tools/ground_station.py --download-log flight.log
 
-# Start flight (sends GO command, 60s countdown then flight)
+# Send GO + record telemetry (auto-stops on landing)
+python3 tools/ground_station.py --go -o flight.csv
+
+# Send GO only (no recording)
 python3 tools/ground_station.py --go
 ```
 
@@ -134,30 +137,19 @@ Wait at least 20 seconds after boot before sending GO. The drone has a
 15-second grace period for sensor calibration. Sending GO during the grace
 period is silently ignored.
 
-**Step 5 - Send GO**
+**Step 5 - Send GO and record**
 
 **NEVER send GO without asking the user first.** The user must confirm the
 drone is in a safe position and the area is clear before GO is sent. Always
 ask and wait for explicit approval.
 
+Single command: sends GO, records telemetry, auto-stops on landing.
 ```bash
 source tests/.venv/bin/activate
-python3 tools/ground_station.py --go
-```
-Verify output says `GO command sent successfully!` before proceeding.
-
-**Step 6 - Immediately start listener (20 second timeout)**
-
-Start within a few seconds of GO. The 10-second armed countdown gives time.
-Log to a numbered CSV file (flight_testNN.csv).
-
-**ALWAYS use `timeout 20` for FIRST_TEST** (6s flight + post-landing data).
-Never listen longer than needed - the flight is short.
-```bash
-timeout 20 python3 tools/ground_station.py -o flight_testNN.csv --uri radio://0/80/2M
+python3 tools/ground_station.py --go -o flight_testNN.csv
 ```
 
-**Step 7 - Analyze**
+**Step 6 - Analyze**
 ```bash
 python3 tools/flight_summary.py flight_testNN.csv
 python3 tools/flight_summary.py flight_testNN.csv --timeline
