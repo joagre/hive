@@ -336,7 +336,7 @@ This table documents the scheduling design for audit and latency analysis.
 |-------|-------|--------|----------|---------|----------------|
 | **Supervisor** | Child exit notifications | (internal) | CRITICAL | - | Monitors workers, ONE_FOR_ALL restart |
 | **Sensor** | Hardware | Sensor Bus | CRITICAL | PERMANENT | Read raw sensors, publish |
-| **Estimator** | Sensor Bus | State Bus | CRITICAL | PERMANENT | Altitude Kalman filter + attitude complementary filter |
+| **Estimator** | Sensor Bus | State Bus | CRITICAL | PERMANENT | Complementary filter (attitude) + altitude KF + horizontal KF |
 | **Waypoint** | State Bus + START notification | Position Target Bus | CRITICAL | PERMANENT | Waypoint navigation (3D on Webots, altitude-only on STM32) |
 | **Altitude** | State + Position Target Bus + LANDING | Thrust Bus + LANDED | CRITICAL | PERMANENT | Altitude PID, landing detection |
 | **Position** | Position Target + State Bus | Attitude Setpoint Bus | CRITICAL | PERMANENT | Position PD |

@@ -4,7 +4,6 @@ Implementation details, control algorithms, portability, and reference informati
 
 ## Table of Contents
 
-- [Implementation Details](#implementation-details)
 - [Control Algorithms](#control-algorithms)
 - [Main Loop](#main-loop)
 - [Portability](#portability)
@@ -13,36 +12,6 @@ Implementation details, control algorithms, portability, and reference informati
 - [Memory Requirements](#memory-requirements)
 
 ---
-
-## Implementation Details
-
-### Multi-File Design
-
-Code is split into focused modules:
-
-| File | Purpose |
-|------|---------|
-| `pilot.c` | Main loop, bus setup, actor spawn |
-| `sensor_actor.c/h` | Reads sensors via HAL, publishes to sensor bus |
-| `estimator_actor.c/h` | Sensor fusion -> state bus |
-| `altitude_actor.c/h` | Altitude PID -> thrust |
-| `waypoint_actor.c/h` | Waypoint navigation -> position target bus |
-| `position_actor.c/h` | Position PD -> attitude setpoints |
-| `attitude_actor.c/h` | Attitude PIDs -> rate setpoints |
-| `rate_actor.c/h` | Rate PIDs -> torque commands |
-| `motor_actor.c/h` | Output: torque -> HAL -> motors |
-| `flight_manager_actor.c/h` | Startup delay, flight window cutoff |
-| `battery_actor.c/h` | Battery voltage monitoring, emergency landing |
-| `comms_actor.c/h` | Radio telemetry (Crazyflie only) |
-| `logger_actor.c/h` | Hive log sync + CSV telemetry (to /sd or /tmp) |
-| `pid.c/h` | Reusable PID controller |
-| `tunable_params.c/h` | Runtime-tunable parameter definitions |
-| `types.h` | Portable data types |
-| `config.h` | Configuration constants (timing, thresholds) |
-| `math_utils.h` | Math utilities (CLAMPF, LPF macros, normalize_angle) |
-| `notifications.h` | IPC notification tags (NOTIFY_FLIGHT_START, etc.) |
-| `flight_profiles.h` | Waypoint definitions per flight profile |
-| `tools/*.py` | PID tuning, telemetry analysis, and ground station tools |
 
 ## Control Algorithms
 
@@ -74,8 +43,8 @@ The control cascade uses:
 
 - **Altitude** - PI + velocity damping (Kv) for smooth response
 - **Position** - PD with velocity damping, max tilt limited
-- **Attitude** - P controller for roll/pitch/yaw angles
-- **Rate** - PD controller for angular rates
+- **Attitude** - PD controller for roll/pitch/yaw angles
+- **Rate** - PID controller for angular rates
 
 ### Mixer
 
@@ -243,7 +212,9 @@ examples/pilot/
         pilot_buses.h    # Bus handle struct
         stack_profile.h  # Stack profiling interface
     fusion/
-        complementary_filter.c/h  # Portable attitude estimation
+        complementary_filter.c/h  # Attitude estimation (gyro + accel)
+        altitude_kf.c/h           # Altitude Kalman filter (3-state)
+        horizontal_kf.c/h         # Horizontal Kalman filter (3-state x2)
     tools/
         analyze_pid.py       # PID metrics analysis (overshoot, settling time)
         analyze_hover.py     # Hover stability analysis
@@ -278,26 +249,8 @@ examples/pilot/
 
 ## Testing Results
 
-### Hover Behavior
-
-1. Drone starts at 0.5m altitude (world file setting)
-2. Altitude PID commands increased thrust
-3. Drone rises with some initial oscillation
-4. Settles at 1.0m within ~3 seconds
-5. Maintains stable hover at 1.0m +/- 0.05m
-
-### Console Output
-
-```
-11-12 actors spawned (see Actor Counts table)
-[ALT] tgt=1.00 alt=0.01 vvel=0.00 thrust=0.750
-[ALT] tgt=1.00 alt=0.05 vvel=0.12 thrust=0.720
-...
-[WPT] Advancing to waypoint 1: (1.0, 0.0, 1.2) yaw=0 deg
-[ALT] tgt=1.20 alt=1.02 vvel=0.05 thrust=0.560
-[POS] tgt=(1.0,0.0) x=0.12 y=0.00 pitch=5.2 roll=0.0
-...
-```
+See `TUNING_LOG.md` for hardware flight test results (sessions 1-10) and
+`tools/flight_summary.py` for automated per-flight analysis.
 
 ## Memory Requirements
 

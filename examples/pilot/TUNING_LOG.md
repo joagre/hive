@@ -32,28 +32,15 @@ no oscillation), and stable attitude. In that priority order.
 | `pos_kd` | 0.20 | Tuned session 8, damping-only |
 | `max_tilt_angle` | 0.25 (14 deg) | OK |
 
-### Architectural analysis - why we drifted
+### Architectural analysis
 
-The fundamental problem was the asymmetry between vertical and horizontal
-state estimation. Session 9 closed this gap with a horizontal KF.
+The fundamental problem was asymmetry between vertical and horizontal
+estimation. Altitude had a 3-state KF; horizontal had raw flow (no
+filtering, no bias estimation). Session 9 closed this gap with a
+horizontal KF mirroring the altitude KF.
 
-**Altitude** has a proper 3-state Kalman filter:
-- States: [altitude, velocity, accel_bias]
-- Predict: accelerometer (250 Hz)
-- Correct: rangefinder (40 Hz)
-- Result: smooth velocity, bias-compensated, handles sensor dropouts
-
-**Horizontal** now has a 3-state Kalman filter (session 9):
-- States: [position, velocity, accel_bias] (same as altitude KF)
-- Predict: world-frame accelerometer (250 Hz)
-- Correct: optical flow velocity (100 Hz)
-- Result: smooth velocity, bias-compensated, handles flow dropouts
-- Sim-validated in Webots (session 9), awaiting hardware testing
-
-Before session 9, horizontal had raw flow only (no filtering, no bias
-estimation). At 0.5m hover, a single PMW3901 pixel delta = 0.25 m/s
-went directly into the pos_kd damping term, producing 2.9 deg tilt
-jitter per pixel. The horizontal KF eliminates this noise path.
+See [Estimator Evolution](docs/spec/evolution.md#estimator-evolution)
+for architecture details and the EKF roadmap.
 
 ### Phase 1 - Horizontal Kalman filter - DONE (session 9)
 
@@ -169,41 +156,6 @@ With stable hover in all axes, push toward perfection:
 
 5. **Full 3D waypoints** - FULL_3D profile with XY waypoints.
    Requires position control to be solid before attempting.
-
-### Architecture notes
-
-**What we have vs what Bitcraze has:**
-
-| Component | Hive pilot | Bitcraze firmware |
-|-----------|-----------|-------------------|
-| Attitude | Complementary filter | Extended Kalman Filter |
-| Altitude | 3-state KF | Part of full EKF |
-| Horizontal velocity | 3-state KF (session 9) | EKF-fused with accel |
-| Horizontal position | KF-integrated (session 9) | EKF-fused |
-| Position control | PD (no integral) | PID with feedforward |
-
-The horizontal KF (phase 1, done) closed the biggest gap. Adding an
-integral to position control (phase 4) closes the next. A full EKF
-fusing all sensors would be ideal but is a much larger project.
-
-**Current estimation data flow:**
-
-```
-                     Accelerometer (250 Hz)
-                            |
-                   Rotate to world frame
-                     /      |      \
-                    X       Y       Z
-                    |       |       |
-              ┌─────v─┐ ┌──v────┐ ┌v────────┐
-              | Horiz  | | Horiz | | Altitude |
-              | KF (X) | | KF(Y) | | KF       |
-              └────┬───┘ └──┬────┘ └┬────────┘
-  Flow vel ------->|------->|       |<------- Rangefinder
-  (100 Hz)    position  position  altitude
-              velocity  velocity  velocity
-              bias      bias      bias
-```
 
 ---
 

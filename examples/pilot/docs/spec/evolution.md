@@ -7,6 +7,7 @@ Production gaps, architecture evolution roadmap, and future extensions.
 - [Production Gaps](#production-gaps)
 - [Deferred Features](#deferred-features)
 - [Architecture Evolution Roadmap](#architecture-evolution-roadmap)
+- [Estimator Evolution](#estimator-evolution)
 - [Future Extensions](#future-extensions)
 
 ---
@@ -57,77 +58,20 @@ The following may be added after initial flight testing:
 - **Accelerometer sanity check**: Motors off if acceleration readings are implausible
 - **Sensor timeout**: Motors off if no sensor updates within expected interval
 
-#### Bitcraze Supervisor Features (Reference)
+#### Bitcraze Supervisor (Reference)
 
-The [Bitcraze crazyflie-firmware supervisor](https://github.com/bitcraze/crazyflie-firmware/blob/master/src/modules/src/supervisor.c)
-implements a comprehensive state machine with safety features. Local copy at `local/crazyflie-firmware/`.
+The [Bitcraze supervisor](https://github.com/bitcraze/crazyflie-firmware/blob/master/src/modules/src/supervisor.c)
+(local copy at `local/crazyflie-firmware/`) implements a comprehensive
+11-state safety state machine. Key features worth adopting:
 
-**State Machine (11 states)**
+- **Tumble detection** - Z-accel < 0.5g for 1000ms, or < -0.2g for 100ms (upside-down)
+- **Free fall exception** - Suspends tumble check when all axes < 0.1g
+- **Commander watchdog** - Stale setpoint detection (500ms warning, 2s shutdown)
+- **Warning Level Out** - On excessive tilt: disables XY, locks roll/pitch to zero, keeps Z
 
-```
-NotInitialized → PreFlChecksNotPassed → PreFlChecksPassed → ReadyToFly
-                                                               ↓
-                     Locked ← Reset ← Landed ← Flying ← (armed)
-                       ↑                ↓         ↓
-                       └──── Crashed ←──┴── WarningLevelOut
-                                              (excessive tilt)
-```
-
-| State | Description |
-|-------|-------------|
-| PreFlChecksNotPassed | Waiting for system initialization |
-| PreFlChecksPassed | Ready to arm (sensors OK) |
-| ReadyToFly | Armed, motors can spin |
-| Flying | Thrust above idle threshold |
-| Landed | Thrust below idle for >2s |
-| WarningLevelOut | Excessive tilt - XY disabled, roll/pitch locked to zero |
-| Crashed | Crash detected, requires explicit recovery |
-| Locked | Emergency stop triggered, reboot required |
-| Reset | Transitional state back to PreFlChecksPassed |
-
-**Safety Features**
-
-| Feature | Description | Thresholds/Timeouts | Priority |
-|---------|-------------|---------------------|----------|
-| **Commander watchdog** | Stale setpoint detection | Warning 500ms, shutdown 2000ms | High |
-| **Emergency stop** | Multiple trigger sources | Parameter, localization watchdog (1000ms), external request | High |
-| **Tumble detection** | Tilt angle + duration | 0.5g Z-accel (~60°) for 1000ms, or -0.2g (upside-down) for 100ms | High |
-| **Free fall exception** | Suspends tumble check | All axes < 0.1g | Medium |
-| **Is Flying detection** | Motor thrust monitoring | Any motor > idle thrust, 2000ms hysteresis | Medium |
-| **Preflight timeout** | Armed-but-not-flying limit | 30s default (configurable) | Medium |
-| **Landing timeout** | Landed state duration | 3s default (configurable) | Low |
-| **Crash recovery** | Explicit recovery required | Blocked if still tumbled | Low |
-| **Warning Level Out** | Excessive tilt handling | Disables XY, locks roll/pitch to zero, keeps Z control | Medium |
-
-**Configurable Parameters**
-
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `supervisor.tmblChckEn` | 1 | Enable/disable tumble check |
-| `supervisor.prefltTimeout` | 30000ms | Preflight timeout duration |
-| `supervisor.landedTimeout` | 3000ms | Landing timeout duration |
-| `stabilizer.stop` | 0 | Emergency stop (non-zero = stop) |
-
-**Tumble Detection Details**
-
-The tumble check uses accelerometer Z-axis to detect unsafe orientations:
-- **Tilt threshold**: Z-accel < 0.5g (~60° from vertical) for 1000ms → tumbled
-- **Upside-down threshold**: Z-accel < -0.2g for 100ms → tumbled immediately
-- **Free fall exception**: If |X|, |Y|, |Z| all < 0.1g, tumble timer resets (valid flight)
-
-**NOT in Bitcraze supervisor** (was incorrectly listed):
-- Estimator health / Kalman covariance checking - not implemented in supervisor.c
-
-**Implementation approach**: These would be implemented in a dedicated supervisor
-actor (not in HAL) that:
-1. Subscribes to sensor_bus and state_bus
-2. Monitors attitude, thrust, and flight state
-3. Can override motor commands via motor_bus or direct IPC
-4. Manages arming state transitions
-5. Implements tumble detection using accelerometer data
-
-The current pilot has basic cutoffs in altitude_actor.c (attitude >45°, altitude >2m).
-A supervisor actor would centralize these checks and add the additional features above.
+The current pilot has basic cutoffs in altitude_actor.c (attitude >45 deg,
+altitude >2m). A dedicated supervisor actor could centralize these checks
+and add the Bitcraze-style features above.
 
 ### Missing Safety Features (Production Requirements)
 
@@ -166,11 +110,12 @@ The following instrumentation should be added for production flight software:
 
 ## Deferred Features
 
-Features intentionally omitted from this demonstration:
+Features intentionally omitted or deferred:
 
-- Unified EKF (single filter for position/velocity/attitude) - separate estimators used instead: altitude Kalman filter + complementary filter for attitude
-- Failsafe handling (return-to-home, auto-land) - requires GPS and mission planning
-- Multiple vehicle types - single X-configuration quadcopter
+- **Unified EKF** - See [Estimator Evolution](#estimator-evolution) below for the planned path from current 3-filter architecture to a full EKF
+- **Failsafe handling** (return-to-home, auto-land) - requires GPS and mission planning
+- **Multiple vehicle types** - single X-configuration quadcopter
+- **Acrobatic flight modes** - requires EKF (complementary filter breaks at high angles)
 
 **Note:** Runtime parameter tuning is now implemented. See `docs/tunable_radio_params.md`.
 
@@ -282,10 +227,15 @@ Sensor Actor ──► Sensor Bus ──► Estimator Actor ──► State Bus 
 ```
 
 **Implementation**
-- Altitude Kalman filter (`fusion/altitude_kf.c`) for altitude/velocity estimation
 - Complementary filter (`fusion/complementary_filter.c`) for attitude estimation
-- Fuses accelerometer and gyroscope for roll/pitch estimation
-- Fuses magnetometer for yaw (when available)
+  - Fuses accelerometer and gyroscope for roll/pitch
+  - Fuses magnetometer for yaw (when available)
+- Altitude Kalman filter (`fusion/altitude_kf.c`) - 3-state [altitude, velocity, accel_bias]
+  - Prediction: accelerometer (250 Hz), correction: rangefinder (~40 Hz)
+- Horizontal Kalman filter (`fusion/horizontal_kf.c`) - 3-state per axis (X and Y)
+  - Prediction: world-frame accelerometer (250 Hz), correction: optical flow velocity
+  - Full rotation matrix (roll, pitch, yaw) for body-to-world acceleration
+  - Innovation gating rejects flow outliers
 - Webots: synthesizes accelerometer from gravity + inertial_unit angles
 
 **Benefits**
@@ -566,18 +516,115 @@ affecting simulation behavior.
 
 ### Step 12 (Future): RC Input / Mode Switching
 
-**Future extensions**
-- RC input handling (manual override)
-- Takeoff/landing sequences
-- Mode switching (hover, land, follow-me, etc.)
-- Dynamic waypoint updates via telemetry
+Replace the waypoint actor's fixed route with a setpoint source that supports
+multiple input modes:
+
+- **RC input** - Manual control override via CPPM/SBUS receiver
+- **Mode switching** - Hover, land, return-to-home, follow-me
+- **Dynamic waypoints** - Upload waypoints via radio during flight
+- **Takeoff/landing sequences** - Automated sequences triggered by RC switch
+
+This would evolve the waypoint actor into a "setpoint actor" (shown in the
+Future Architecture diagram above).
+
+---
+
+## Estimator Evolution
+
+The current estimator uses three independent filters. This section documents
+the path toward a unified EKF for acrobatic flight.
+
+### Current Architecture (3 filters)
+
+```
+Accelerometer ──► Complementary Filter ──► roll, pitch, yaw
+Gyroscope     ──┘
+
+Accelerometer ──► Altitude KF (3-state) ──► altitude, vz, accel_bias_z
+Rangefinder   ──┘
+
+Accelerometer ──► Horizontal KF (3-state x2) ──► x, y, vx, vy, bias_x, bias_y
+Optical Flow  ──┘
+```
+
+Total: 9 states across 3 filters, ~20 lines of matrix math each.
+
+**Strengths**
+- Simple, debuggable, each filter tuneable independently
+- Complementary filter is computationally cheap (~10us per update)
+- Adequate for gentle hover and slow waypoint navigation
+
+**Comparison with Bitcraze firmware**
+
+| Component | Hive pilot | Bitcraze firmware |
+|-----------|-----------|-------------------|
+| Attitude | Complementary filter | Extended Kalman Filter |
+| Altitude | 3-state KF | Part of full EKF |
+| Horizontal velocity | 3-state KF | EKF-fused with accel |
+| Horizontal position | KF-integrated | EKF-fused |
+| Position control | PD (no integral) | PID with feedforward |
+
+**Limitation** - The complementary filter computes roll and pitch from the
+gravity vector in accelerometer data. This assumes acceleration is dominated
+by gravity, which breaks during aggressive maneuvers (>30 deg tilt, rapid
+translation). The horizontal KF also uses a small-angle rotation matrix
+that degrades at high tilt.
+
+### Future Architecture (unified EKF)
+
+A full Extended Kalman Filter would fuse all sensors in a single ~15-state
+model:
+
+```
+State vector (15-16 states):
+  Attitude:  quaternion (4) or rotation matrix
+  Position:  x, y, z (3)
+  Velocity:  vx, vy, vz (3)
+  Gyro bias: bwx, bwy, bwz (3)
+  Accel bias: bax, bay, baz (3)
+
+Measurements:
+  Accelerometer (250 Hz) - gravity + linear acceleration
+  Gyroscope (250 Hz)     - angular rate (prediction step)
+  Rangefinder (~40 Hz)   - altitude
+  Optical flow (~100 Hz) - horizontal velocity
+  Magnetometer (future)  - heading
+```
+
+**Why EKF matters for acrobatics** - The quaternion state tracks orientation
+through arbitrary rotations (flips, rolls, inverted flight). No singularity
+at 90 deg pitch, no gravity assumption for tilt estimation. Gyro bias
+estimation compensates for sensor drift that would accumulate during extended
+maneuvers.
+
+### Implementation Plan
+
+**Compile-time switch** - Add `ESTIMATOR_MODE` build flag:
+- `ESTIMATOR_3FILTER` (default) - Current complementary + altitude KF + horizontal KF
+- `ESTIMATOR_EKF` - Unified EKF
+
+Both modes use the same actor interface (read sensor bus, publish state bus).
+No changes to any other actor. The estimator actor already isolates all
+fusion logic behind the state bus abstraction.
+
+**What carries forward** - Inner loop tuning (rate PID, attitude PID) is
+independent of the estimator. The PIDs consume the same state bus fields
+regardless of which estimator produced them. Only the outer loops (position,
+altitude) may need gain adjustments because EKF velocity estimates will have
+different noise characteristics.
+
+**Effort estimate** - 2-4 weeks for a working EKF:
+- Quaternion math library (~200 lines)
+- EKF predict/update with 15x15 covariance (~400 lines)
+- Sensor measurement models (~100 lines each)
+- Tuning Q/R matrices (iterative, data-driven)
 
 ---
 
 ## Future Extensions
 
 1. **Mission planning** - Load waypoints from file, complex routes
-2. **Sensor fusion** - [DONE] Altitude Kalman filter + attitude complementary filter (estimator actor)
+2. **Sensor fusion** - [DONE] Complementary filter (attitude) + altitude KF + horizontal KF. See [Estimator Evolution](#estimator-evolution) for EKF path
 3. **Failsafe** - Motor failure detection, emergency landing
 4. **Telemetry** - [DONE] Radio telemetry implemented (Crazyflie only)
 5. **RC input** - Manual control override
