@@ -39,7 +39,7 @@ estimation. Altitude had a 3-state KF; horizontal had raw flow (no
 filtering, no bias estimation). Session 9 closed this gap with a
 horizontal KF mirroring the altitude KF.
 
-See [Estimator Evolution](docs/spec/evolution.md#estimator-evolution)
+See [Estimator Evolution](docs/spec/future.md#estimator-evolution)
 for architecture details and the EKF roadmap.
 
 ### Phase 1 - Horizontal Kalman filter - DONE (session 9)

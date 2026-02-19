@@ -29,6 +29,27 @@ make clean              # Clean build
 make STACK_PROFILE=1    # Build with stack profiling
 ```
 
+**Automated simulation** - Use `run_webots_sim.sh` to build, run, and analyze in one step:
+
+```bash
+# Full 3D waypoint flight (default)
+tools/run_webots_sim.sh
+
+# Quick 6s hover test
+tools/run_webots_sim.sh --profile FIRST_TEST
+
+# Clean sensors, show timeline
+tools/run_webots_sim.sh --noise 0 --timeline
+
+# Skip rebuild (reuse last binary)
+tools/run_webots_sim.sh --no-build
+```
+
+The script launches Webots in fast/headless mode (no GUI), waits for the flight to
+complete by watching `/var/tmp/hive.log`, kills Webots, then prints the hive runtime
+log and runs `flight_summary.py` on `/tmp/tlog.csv`. A 75s flight completes in ~5s
+wall-clock. See `tools/README.md` for all options.
+
 ### Crazyflie 2.1+
 
 ```bash
@@ -164,7 +185,7 @@ python3 tools/ground_station.py --set-param att_kp 2.0
 python3 tools/ground_station.py --set-param vvel_damping 0.50
 ```
 
-**Tunable Parameters (48 total):**
+**Tunable Parameters (55 total):**
 
 | Category | Parameters |
 |----------|------------|
@@ -176,6 +197,7 @@ python3 tools/ground_station.py --set-param vvel_damping 0.50
 | Position | `pos_kp`, `pos_kd`, `max_tilt_angle` |
 | Complementary Filter | `cf_alpha`, `cf_mag_alpha`, `cf_use_mag`, `cf_accel_thresh_lo`, `cf_accel_thresh_hi` |
 | Altitude Kalman Filter | `kf_q_altitude`, `kf_q_velocity`, `kf_q_bias`, `kf_r_altitude`, `kf_p0_altitude`, `kf_p0_velocity`, `kf_p0_bias` |
+| Horizontal Kalman Filter | `hkf_q_position`, `hkf_q_velocity`, `hkf_q_bias`, `hkf_r_velocity`, `hkf_p0_position`, `hkf_p0_velocity`, `hkf_p0_bias` |
 | Horizontal Velocity | `hvel_filter_alpha` |
 | Waypoints | `wp_tolerance_xy`, `wp_tolerance_z`, `wp_tolerance_yaw`, `wp_tolerance_vel`, `wp_hover_time_s` |
 
@@ -240,6 +262,10 @@ Build-time selection via `FLIGHT_PROFILE=`:
 - `hal/crazyflie-2.1plus/early_log.c` - Captures hal_printf() before hive log ready
 - `hal/webots-crazyflie/` - Webots simulation HAL
 
+### Fusion
+- `fusion/altitude_kf.c` - Altitude Kalman filter (3-state: position, velocity, bias)
+- `fusion/horizontal_kf.c` - Horizontal Kalman filter (same model, velocity measurement)
+
 ### Configuration
 - `config.h` - Timing constants, thresholds
 - `hal/*/hal_config.h` - Platform-specific PID gains, thrust (compile-time defaults)
@@ -249,10 +275,12 @@ Build-time selection via `FLIGHT_PROFILE=`:
 - `tunable_params.c` - Parameter validation and initialization
 
 ### Tools
+- `tools/run_webots_sim.sh` - Automated Webots simulation (build, run, analyze)
 - `tools/ground_station.py` - Radio telemetry receiver
 - `tools/st-trace.sh` - SWO trace viewer
 - `tools/analyze_pid.py` - PID metrics analysis
 - `tools/plot_telemetry.py` - Telemetry visualization
+- `tools/flight_summary.py` - Flight summary with timeline
 
 ## Architecture Notes
 
@@ -320,7 +348,7 @@ Paths are relative to repo root (`/home/jocke/projects/hive`):
 ## Documentation
 
 - `README.md` - Usage instructions
-- `docs/spec/` - Design specification (design.md, implementation.md, evolution.md)
+- `docs/spec/` - Design specification (design.md, implementation.md, future.md)
 - `docs/tunable_radio_params.md` - Runtime parameter tuning specification
 - `docs/first_flight_checklist.md` - Hardware bring-up guide
 - `hal/*/README.md` - Platform-specific details

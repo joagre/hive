@@ -232,7 +232,7 @@ examples/pilot/
             README.md        # Specification overview
             design.md        # Design decisions
             implementation.md # This file
-            evolution.md     # Architecture evolution
+            future.md        # Production gaps, deferred features, estimator roadmap
         first_flight_checklist.md  # Hardware bring-up and flight checklist
         tunable_radio_params.md    # Runtime parameter tuning specification
     worlds/

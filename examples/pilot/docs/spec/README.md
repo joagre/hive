@@ -13,7 +13,7 @@ and fail-safe supervision. Supports Webots simulation (default) and STM32 hardwa
 |----------|-------------|
 | [design.md](design.md) | Goals, design decisions, architecture overview |
 | [implementation.md](implementation.md) | Implementation details, control algorithms, portability |
-| [evolution.md](evolution.md) | Production gaps, architecture evolution roadmap, future work |
+| [future.md](future.md) | Production gaps, deferred features, estimator roadmap |
 | [../tunable_radio_params.md](../tunable_radio_params.md) | Runtime parameter tuning specification |
 
 ## Quick Reference
@@ -51,4 +51,4 @@ and fail-safe supervision. Supports Webots simulation (default) and STM32 hardwa
 
 **Clock source** - The sensor_actor runs a 4ms periodic timer and is the only actor with a timer. All other actors are event-driven; they block on bus reads and wake when new data arrives. This creates a natural data-flow pipeline: sensor publishes -> estimator reacts -> controllers react -> motor reacts, all within one tick.
 
-> **Disclaimer** - This is a demonstration autopilot, not production-ready flight software. See [Production Gaps](evolution.md#production-gaps) for what a real flight controller would need.
+> **Disclaimer** - This is a demonstration autopilot, not production-ready flight software. See [Production Gaps](future.md#production-gaps) for what a real flight controller would need.
