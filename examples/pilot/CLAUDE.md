@@ -275,9 +275,12 @@ Build-time selection via `FLIGHT_PROFILE=`:
 - `tools/run_webots_sim.sh` - Automated Webots simulation (build, run, analyze)
 - `tools/ground_station.py` - Radio telemetry receiver
 - `tools/st-trace.sh` - SWO trace viewer
-- `tools/analyze_pid.py` - PID metrics analysis
-- `tools/plot_telemetry.py` - Telemetry visualization
 - `tools/flight_summary.py` - Flight summary with timeline
+- `tools/analyze_pid.py` - PID metrics analysis
+- `tools/analyze_hover.py` - Hover stability analysis
+- `tools/plot_telemetry.py` - 6-panel telemetry visualization
+- `tools/plot_flight.py` - Full flight summary with 3D trajectory
+- `tools/repair_sd_deck_ow.py` - SD card deck one-wire repair
 
 ## Architecture Notes
 
