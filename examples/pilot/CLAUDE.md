@@ -111,8 +111,6 @@ python3 tools/ground_station.py --go
 **MANDATORY - Follow every step in order. Do not skip or reorder.**
 
 Only one ground_station.py process can use the radio at a time.
-The GO command connects, sends, and disconnects in under 1 second.
-The 10-second armed countdown gives time to start the listener after GO.
 
 **Step 1 - Kill lingering processes**
 ```bash
@@ -155,10 +153,13 @@ python3 tools/flight_summary.py flight_testNN.csv
 python3 tools/flight_summary.py flight_testNN.csv --timeline
 ```
 
-**If power cycling (no reflash needed) - skip steps 2-3, just wait 20 seconds
-after power-on, then continue from step 4.**
+**For subsequent flights (no reflash)** - The drone returns to IDLE after
+landing. Just repeat from step 5. No power cycle or reflash needed.
 
-**If the listener fails with "Resource busy" - go back to step 1.**
+**If power cycling (no reflash needed)** - Skip steps 2-3, wait 20 seconds
+after power-on for grace period, then continue from step 5.
+
+**If the listener fails with "Resource busy"** - Go back to step 1.
 
 ## Runtime Parameter Tuning
 
