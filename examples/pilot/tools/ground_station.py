@@ -158,6 +158,14 @@ PARAM_NAMES = {
     45: "rate_yaw_kp",
     46: "rate_yaw_ki",
     47: "rate_yaw_kd",
+    # Horizontal Kalman filter (48-54)
+    48: "hkf_q_position",
+    49: "hkf_q_velocity",
+    50: "hkf_q_bias",
+    51: "hkf_r_velocity",
+    52: "hkf_p0_position",
+    53: "hkf_p0_velocity",
+    54: "hkf_p0_bias",
 }
 
 # Reverse lookup: name to ID
@@ -384,9 +392,14 @@ class TelemetryReceiver:
         # so the comms_actor never wakes up to refresh telemetry.
         response = self.radio.send_packet((CRTP_HEADER_TELEMETRY,))
 
-        if response and response.ack and response.data:
-            return bytes(response.data)
-        return None
+        if response is None:
+            return None
+        if not response.ack:
+            return None
+        if not response.data:
+            return None
+
+        return bytes(response.data)
 
     def _update_flight_phase(self, pkt):
         """Track flight phase transitions for auto-stop.
@@ -428,6 +441,16 @@ class TelemetryReceiver:
         self.running = True
         self.start_time = time.time()
 
+        # Stale data filter - the nRF51 resends old ACK payloads from
+        # previous boots/sessions until the comms_actor loads fresh data.
+        # Buffer packets for the first second and discard any before a
+        # large time discontinuity.
+        STALE_WINDOW_S = 1.0       # Buffer packets for this long
+        STALE_JUMP_MS = 2000       # Time jump threshold for discontinuity
+        stale_done = False         # True once stale window has closed
+        stale_buffer = []          # Buffered packets
+        stale_prev_time_ms = None  # Previous packet time_ms
+
         while self.running:
             loop_start = time.time()
             try:
@@ -445,6 +468,35 @@ class TelemetryReceiver:
                             self.tlog_sensors_count += 1
                             self.latest_sensors = pkt
 
+                        # Stale data filter - buffer during window
+                        if not stale_done:
+                            t_ms = pkt.get("time_ms", 0)
+                            if stale_prev_time_ms is not None and \
+                               abs(t_ms - stale_prev_time_ms) > STALE_JUMP_MS:
+                                n = len(stale_buffer)
+                                stale_buffer.clear()
+                                print(
+                                    f"  [STALE] Discarded {n} stale packets "
+                                    f"(time jump: {stale_prev_time_ms} -> "
+                                    f"{t_ms}ms)",
+                                    file=sys.stderr, flush=True)
+                            stale_prev_time_ms = t_ms
+                            stale_buffer.append(pkt)
+
+                            # Close window after STALE_WINDOW_S
+                            elapsed = time.time() - self.start_time
+                            if elapsed >= STALE_WINDOW_S:
+                                stale_done = True
+                                for buf_pkt in stale_buffer:
+                                    callback(buf_pkt)
+                                    if csv_writer and \
+                                       buf_pkt["type"] == "tlog_sensors":
+                                        self._write_csv_row(csv_writer)
+                                    if self._update_flight_phase(buf_pkt):
+                                        self.running = False
+                                stale_buffer.clear()
+                            continue
+
                         callback(pkt)
 
                         # Write CSV row on every sensors packet (B)
@@ -460,7 +512,7 @@ class TelemetryReceiver:
             except KeyboardInterrupt:
                 self.running = False
             except Exception as e:
-                print(f"Error: {e}", file=sys.stderr)
+                print(f"Error: {e}", file=sys.stderr, flush=True)
                 self.errors += 1
 
             # Rate limit to match drone's telemetry update rate
@@ -556,18 +608,21 @@ class TelemetryReceiver:
             print("Error: No ACK for STATUS command", file=sys.stderr)
             return False
         # Poll for response packet
+        # ACK payload: [CRTP_HEADER(0xA0), RESP_STATUS, state, countdown]
         for _ in range(50):
             response = self.radio.send_packet((CRTP_HEADER_TELEMETRY,))
-            if response and response.ack and len(response.data) >= 3:
-                if response.data[0] == RESP_STATUS:
-                    state_num = response.data[1]
-                    countdown = response.data[2]
+            if response and response.ack and response.data:
+                d = bytes(response.data)
+                if len(d) >= 4 and d[0] == CRTP_HEADER_TELEMETRY and \
+                   d[1] == RESP_STATUS:
+                    state_num = d[2]
+                    countdown = d[3]
                     state_name = FM_STATES.get(state_num, f"UNKNOWN({state_num})")
                     print(f"Flight manager state: {state_name}", file=sys.stderr)
                     if countdown > 0:
                         print(f"Countdown: {countdown}s", file=sys.stderr)
                     return True
-            time.sleep(0.02)
+            time.sleep(0.01)
         print("No status response received", file=sys.stderr)
         return False
 
