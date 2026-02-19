@@ -121,7 +121,7 @@ def analyze(data):
     if wp_metrics:
         r['worst_overshoot_pct'] = max(m['overshoot_pct'] for m in wp_metrics)
         r['worst_ss_err_pct'] = max(abs(m['ss_err_pct']) for m in wp_metrics)
-        r['worst_xy_err'] = max(m['max_xy_err'] for m in wp_metrics)
+        r['worst_xy_err'] = max(m['ss_xy_mean'] for m in wp_metrics)
     else:
         r['worst_overshoot_pct'] = 0.0
         r['worst_ss_err_pct'] = 0.0
@@ -227,11 +227,16 @@ def analyze(data):
     r['y_start'] = flight[0]['y']
     r['x_end'] = flight[-1]['x']
     r['y_end'] = flight[-1]['y']
-    # Max tracking error from current waypoint target (not from origin)
+    # Max instantaneous tracking error from current waypoint target
     r['max_xy_tracking_err'] = max(
         math.sqrt((d['x'] - d['target_x'])**2 + (d['y'] - d['target_y'])**2)
         for d in flight
     )
+    # Steady-state XY error (used for verdict)
+    if r.get('worst_xy_err', 0) > 0:
+        r['ss_xy_tracking_err'] = r['worst_xy_err']
+    else:
+        r['ss_xy_tracking_err'] = r['max_xy_tracking_err']
 
     # --- Post-landing estimator health ---
     post = [d for d in data if d['time_ms'] > t1 and d['thrust'] < 0.001]
@@ -309,7 +314,7 @@ def print_summary(r, path):
             pos = f"({m['target_x']:.1f},{m['target_y']:.1f},{m['target_z']:.1f})"
             print(f"    {label} {pos}: overshoot {m['overshoot_pct']:+.0f}%, "
                   f"SS err {m['ss_err_pct']:+.1f}%, "
-                  f"XY err {m['max_xy_err']:.3f}m")
+                  f"XY err {m['ss_xy_mean']:.3f}m")
         print(f"  Worst overshoot: {r['worst_overshoot_pct']:+.0f}%")
         print(f"  Worst SS error: {r['worst_ss_err_pct']:.1f}%")
     elif r['target_alt'] > 0:
@@ -341,9 +346,10 @@ def print_summary(r, path):
 
     # XY tracking error
     print(f"\nPosition tracking:")
-    print(f"  Max XY error: {r['max_xy_tracking_err']:.3f}m")
     if wp_metrics:
         print(f"  Worst per-WP XY error: {r['worst_xy_err']:.3f}m")
+    else:
+        print(f"  Max XY error: {r['max_xy_tracking_err']:.3f}m")
     print(f"  End pos: ({r['x_end']:.3f}, {r['y_end']:.3f})m")
 
     # Post-landing
@@ -366,8 +372,8 @@ def print_summary(r, path):
         issues.append("UNSTABLE THRUST")
     if r['thrust_saturated_pct'] > 30:
         issues.append("THRUST SATURATED")
-    if r['max_xy_tracking_err'] > 1.0:
-        issues.append(f"XY ERR {r['max_xy_tracking_err']:.1f}m")
+    if r['ss_xy_tracking_err'] > 0.5:
+        issues.append(f"XY ERR {r['ss_xy_tracking_err']:.1f}m")
     if r.get('post_alt_mean') is not None and abs(r['post_alt_drift']) > 0.5:
         issues.append("KF DRIFT")
 
