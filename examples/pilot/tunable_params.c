@@ -138,6 +138,28 @@ static const param_meta_t param_meta[TUNABLE_PARAM_COUNT] = {
     [PARAM_RATE_YAW_KP] = {.name = "rate_yaw_kp", .min = 0.0f, .max = 0.5f},
     [PARAM_RATE_YAW_KI] = {.name = "rate_yaw_ki", .min = 0.0f, .max = 0.2f},
     [PARAM_RATE_YAW_KD] = {.name = "rate_yaw_kd", .min = 0.0f, .max = 0.05f},
+
+    // Horizontal Kalman filter (48-54)
+    // Q (process noise) - same ranges as altitude KF
+    [PARAM_HKF_Q_POSITION] = {.name = "hkf_q_position",
+                              .min = 0.00001f,
+                              .max = 0.01f},
+    [PARAM_HKF_Q_VELOCITY] = {.name = "hkf_q_velocity",
+                              .min = 0.001f,
+                              .max = 10.0f},
+    [PARAM_HKF_Q_BIAS] = {.name = "hkf_q_bias", .min = 0.000001f, .max = 0.01f},
+    // R (measurement noise) - flow velocity noise variance
+    [PARAM_HKF_R_VELOCITY] = {.name = "hkf_r_velocity",
+                              .min = 0.0001f,
+                              .max = 0.1f},
+    // P0 (initial covariance)
+    [PARAM_HKF_P0_POSITION] = {.name = "hkf_p0_position",
+                               .min = 0.01f,
+                               .max = 10.0f},
+    [PARAM_HKF_P0_VELOCITY] = {.name = "hkf_p0_velocity",
+                               .min = 0.01f,
+                               .max = 10.0f},
+    [PARAM_HKF_P0_BIAS] = {.name = "hkf_p0_bias", .min = 0.001f, .max = 1.0f},
 };
 
 void tunable_params_init(tunable_params_t *params) {
@@ -209,6 +231,15 @@ void tunable_params_init(tunable_params_t *params) {
     params->rate_yaw_kp = HAL_RATE_YAW_PID_KP;
     params->rate_yaw_ki = HAL_RATE_YAW_PID_KI;
     params->rate_yaw_kd = HAL_RATE_YAW_PID_KD;
+
+    // Horizontal Kalman filter - from config.h
+    params->hkf_q_position = HKF_Q_POSITION;
+    params->hkf_q_velocity = HKF_Q_VELOCITY;
+    params->hkf_q_bias = HKF_Q_BIAS;
+    params->hkf_r_velocity = HKF_R_VELOCITY;
+    params->hkf_p0_position = HKF_P0_POSITION;
+    params->hkf_p0_velocity = HKF_P0_VELOCITY;
+    params->hkf_p0_bias = HKF_P0_BIAS;
 
     // Flight manager lifecycle
 #ifdef SIMULATED_TIME

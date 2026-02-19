@@ -12,6 +12,7 @@
 #include "math_utils.h"
 #include "fusion/complementary_filter.h"
 #include "fusion/altitude_kf.h"
+#include "fusion/horizontal_kf.h"
 #include "hive_runtime.h"
 #include "hive_bus.h"
 #include "hive_ipc.h"
@@ -168,16 +169,18 @@ void estimator_actor(void *args, const hive_spawn_info_t *siblings,
                                       .p0_bias = p->kf_p0_bias};
     altitude_kf_init(&alt_kf, &kf_config);
 
-    // Horizontal velocity (still using differentiation + LPF for now)
-    float prev_x = 0.0f;
-    float prev_y = 0.0f;
-    float x_velocity = 0.0f;
-    float y_velocity = 0.0f;
-    bool first_sample = true;
-
-    // Last known valid position (held when GPS becomes invalid)
-    float last_valid_x = 0.0f;
-    float last_valid_y = 0.0f;
+    // Horizontal Kalman filters (one per axis)
+    horizontal_kf_state_t hkf_x;
+    horizontal_kf_state_t hkf_y;
+    horizontal_kf_config_t hkf_config = {.q_position = p->hkf_q_position,
+                                         .q_velocity = p->hkf_q_velocity,
+                                         .q_bias = p->hkf_q_bias,
+                                         .r_velocity = p->hkf_r_velocity,
+                                         .p0_position = p->hkf_p0_position,
+                                         .p0_velocity = p->hkf_p0_velocity,
+                                         .p0_bias = p->hkf_p0_bias};
+    horizontal_kf_init(&hkf_x, &hkf_config);
+    horizontal_kf_init(&hkf_y, &hkf_config);
 
     // Rangefinder mode (like Bitcraze's "surfaceFollowingMode")
     // Once rangefinder gives valid reading, we stay in this mode and NEVER
@@ -232,13 +235,8 @@ void estimator_actor(void *args, const hive_spawn_info_t *siblings,
             HIVE_LOG_INFO("[EST] RESET - reinitializing filters");
             cf_init(&filter, &cf_config);
             altitude_kf_init(&alt_kf, &kf_config);
-            prev_x = 0.0f;
-            prev_y = 0.0f;
-            x_velocity = 0.0f;
-            y_velocity = 0.0f;
-            first_sample = true;
-            last_valid_x = 0.0f;
-            last_valid_y = 0.0f;
+            horizontal_kf_init(&hkf_x, &hkf_config);
+            horizontal_kf_init(&hkf_y, &hkf_config);
             // rangefinder_mode, last_valid_rangefinder_alt, and
             // last_rangefinder_time intentionally preserved across RESET
             have_altitude_measurement = false;
@@ -292,6 +290,16 @@ void estimator_actor(void *args, const hive_spawn_info_t *siblings,
         alt_kf.config.q_bias = p->kf_q_bias;
         alt_kf.config.r_altitude = p->kf_r_altitude;
 
+        // Update horizontal KF config from tunable params (live tuning)
+        hkf_x.config.q_position = p->hkf_q_position;
+        hkf_x.config.q_velocity = p->hkf_q_velocity;
+        hkf_x.config.q_bias = p->hkf_q_bias;
+        hkf_x.config.r_velocity = p->hkf_r_velocity;
+        hkf_y.config.q_position = p->hkf_q_position;
+        hkf_y.config.q_velocity = p->hkf_q_velocity;
+        hkf_y.config.q_bias = p->hkf_q_bias;
+        hkf_y.config.r_velocity = p->hkf_r_velocity;
+
         // Run complementary filter for attitude estimation
         cf_update(&filter, &sensors, dt);
 
@@ -308,32 +316,20 @@ void estimator_actor(void *args, const hive_spawn_info_t *siblings,
         // -----------------------------------------------------------------
         float measured_altitude = 0.0f;
 
-        // Log GPS state transitions (TRACE level - toggles at 40Hz normally
-        // because VL53L1x only provides data at 40Hz vs 250Hz control loop)
+        // Log GPS state transitions
         if (sensors.gps_valid != prev_gps_valid) {
             if (sensors.gps_valid) {
                 HIVE_LOG_TRACE("[EST] GPS valid: pos=(%.2f, %.2f, %.2f)",
                                sensors.gps_x, sensors.gps_y, sensors.gps_z);
             } else {
-                HIVE_LOG_TRACE("[EST] GPS lost - holding position (%.2f, %.2f)",
-                               last_valid_x, last_valid_y);
+                HIVE_LOG_TRACE("[EST] GPS lost");
             }
             prev_gps_valid = sensors.gps_valid;
         }
 
+        // Altitude measurement from rangefinder (via gps_z)
         if (sensors.gps_valid) {
-            est.x = sensors.gps_x;
-            est.y = sensors.gps_y;
             measured_altitude = sensors.gps_z;
-            // Update last known valid position
-            last_valid_x = est.x;
-            last_valid_y = est.y;
-        } else {
-            // Hold last known position when GPS becomes invalid
-            // (e.g., flow deck out of range). This prevents position
-            // controller from generating aggressive corrections.
-            est.x = last_valid_x;
-            est.y = last_valid_y;
         }
 
         // Altitude source: Rangefinder only (like Bitcraze's "surfaceFollowingMode")
@@ -369,25 +365,43 @@ void estimator_actor(void *args, const hive_spawn_info_t *siblings,
         // Before first rangefinder reading, Kalman filter coasts at 0.
 
         // -----------------------------------------------------------------
-        // Altitude and vertical velocity estimation (Kalman filter)
+        // World-frame acceleration (full rotation including yaw)
         // -----------------------------------------------------------------
-        // Compute vertical acceleration in world frame
-        // Body frame accel_z points down when level, world frame z points up
-        // Need to rotate body accel to world frame and extract vertical component
+        // Body-to-world rotation matrix R = Rz(yaw) * Ry(pitch) * Rx(roll)
+        // Used for both vertical (altitude KF) and horizontal (XY KF) axes.
         float cos_roll = cosf(est.roll);
         float sin_roll = sinf(est.roll);
         float cos_pitch = cosf(est.pitch);
         float sin_pitch = sinf(est.pitch);
+        float cos_yaw = cosf(est.yaw);
+        float sin_yaw = sinf(est.yaw);
 
-        // Simplified rotation: vertical component of body-frame accel
-        // accel_world_z = -ax*sin(pitch) + ay*sin(roll)*cos(pitch) + az*cos(roll)*cos(pitch)
-        // Note: sensors.accel[2] includes gravity (~9.81 when level)
-        float accel_world_z = -sensors.accel[0] * sin_pitch +
-                              sensors.accel[1] * sin_roll * cos_pitch +
-                              sensors.accel[2] * cos_roll * cos_pitch;
+        float ax = sensors.accel[0];
+        float ay = sensors.accel[1];
+        float az = sensors.accel[2];
 
-        // Remove gravity to get true vertical acceleration
-        // When level and stationary, accel_world_z is ~9.81, so subtracting gives ~0
+        // Full rotation matrix rows for world-frame acceleration:
+        // R[0] = [cos_yaw*cos_pitch,
+        //         cos_yaw*sin_pitch*sin_roll - sin_yaw*cos_roll,
+        //         cos_yaw*sin_pitch*cos_roll + sin_yaw*sin_roll]
+        // R[1] = [sin_yaw*cos_pitch,
+        //         sin_yaw*sin_pitch*sin_roll + cos_yaw*cos_roll,
+        //         sin_yaw*sin_pitch*cos_roll - cos_yaw*sin_roll]
+        // R[2] = [-sin_pitch, cos_pitch*sin_roll, cos_pitch*cos_roll]
+        float accel_world_x =
+            ax * cos_yaw * cos_pitch +
+            ay * (cos_yaw * sin_pitch * sin_roll - sin_yaw * cos_roll) +
+            az * (cos_yaw * sin_pitch * cos_roll + sin_yaw * sin_roll);
+
+        float accel_world_y =
+            ax * sin_yaw * cos_pitch +
+            ay * (sin_yaw * sin_pitch * sin_roll + cos_yaw * cos_roll) +
+            az * (sin_yaw * sin_pitch * cos_roll - cos_yaw * sin_roll);
+
+        float accel_world_z = -ax * sin_pitch + ay * cos_pitch * sin_roll +
+                              az * cos_pitch * cos_roll;
+
+        // Remove gravity to get true acceleration
         float accel_z = accel_world_z - GRAVITY;
 
         // Run Kalman filter
@@ -426,41 +440,50 @@ void estimator_actor(void *args, const hive_spawn_info_t *siblings,
                               NULL);
 
         // -----------------------------------------------------------------
-        // Horizontal velocity
+        // Horizontal position and velocity (Kalman filter)
         // -----------------------------------------------------------------
         // Log velocity source transitions
         if (sensors.velocity_valid != prev_velocity_valid) {
             if (sensors.velocity_valid) {
                 HIVE_LOG_TRACE("[EST] Velocity source: optical flow");
             } else {
-                HIVE_LOG_TRACE(
-                    "[EST] Velocity source: differentiation (flow lost)");
+                HIVE_LOG_TRACE("[EST] Velocity lost - KF coasting on accel");
             }
             prev_velocity_valid = sensors.velocity_valid;
         }
 
-        if (sensors.velocity_valid) {
-            // Use direct velocity from HAL (e.g., optical flow)
-            // This is higher quality than differentiated position
-            x_velocity = sensors.velocity_x;
-            y_velocity = sensors.velocity_y;
-            first_sample = false;
-        } else if (first_sample) {
-            // No velocity yet, initialize to zero
-            x_velocity = 0.0f;
-            y_velocity = 0.0f;
-            first_sample = false;
-        } else if (dt > 0.0f) {
-            // Fallback: differentiate position + LPF
-            float raw_vx = (est.x - prev_x) / dt;
-            float raw_vy = (est.y - prev_y) / dt;
-            x_velocity = LPF(x_velocity, raw_vx, p->hvel_filter_alpha);
-            y_velocity = LPF(y_velocity, raw_vy, p->hvel_filter_alpha);
+        // Initialize horizontal KFs on first valid velocity
+        if (!hkf_x.initialized && sensors.velocity_valid) {
+            horizontal_kf_reset(&hkf_x);
+            horizontal_kf_reset(&hkf_y);
         }
-        prev_x = est.x;
-        prev_y = est.y;
-        est.x_velocity = x_velocity;
-        est.y_velocity = y_velocity;
+
+        // Predict every cycle using world-frame horizontal acceleration
+        horizontal_kf_predict(&hkf_x, accel_world_x, dt);
+        horizontal_kf_predict(&hkf_y, accel_world_y, dt);
+
+        // Correct when optical flow velocity is available
+        if (sensors.velocity_valid) {
+            // Innovation gating: reject outlier flow readings
+            float innov_x = sensors.velocity_x - hkf_x.velocity;
+            float innov_y = sensors.velocity_y - hkf_y.velocity;
+            if (fabsf(innov_x) <= HKF_MAX_INNOVATION) {
+                horizontal_kf_correct(&hkf_x, sensors.velocity_x);
+            } else {
+                HIVE_LOG_WARN("[EST] Flow X outlier: meas=%.3f pred=%.3f",
+                              sensors.velocity_x, hkf_x.velocity);
+            }
+            if (fabsf(innov_y) <= HKF_MAX_INNOVATION) {
+                horizontal_kf_correct(&hkf_y, sensors.velocity_y);
+            } else {
+                HIVE_LOG_WARN("[EST] Flow Y outlier: meas=%.3f pred=%.3f",
+                              sensors.velocity_y, hkf_y.velocity);
+            }
+        }
+
+        // Get filtered state from horizontal KFs
+        horizontal_kf_get_state(&hkf_x, &est.x, &est.x_velocity, NULL);
+        horizontal_kf_get_state(&hkf_y, &est.y, &est.y_velocity, NULL);
 
         status = hive_bus_publish(state->state_bus, &est, sizeof(est));
         if (HIVE_FAILED(status)) {

@@ -14,23 +14,9 @@ Goals, design decisions, and architecture overview for the pilot autopilot.
 
 ## Status
 
-**Implemented**
-- Altitude-hold hover with attitude stabilization
-- Horizontal position hold (simulated GPS in Webots; optical flow on Crazyflie)
-- Heading hold (yaw control with angle wrap-around)
-- Waypoint navigation (square demo route with altitude and heading changes)
-- Step 1: Motor actor (safety, watchdog)
-- Step 2: Separate altitude actor (altitude/rate split)
-- Step 3: Sensor actor (hardware abstraction)
-- Step 4: Attitude actor (attitude angle control)
-- Step 5: Estimator actor (sensor fusion, vertical velocity)
-- Step 6: Position actor (horizontal position hold + heading hold)
-- Step 7: Waypoint actor (waypoint navigation)
-- Step 8: Flight manager actor (startup coordination, safety cutoff)
-- Step 9: Comms actor (radio telemetry, Crazyflie only)
-- Step 10: Logger actor (hive log sync, CSV telemetry)
-- Step 11: Battery actor (voltage monitoring, debounced emergency landing)
-- Mixer moved to HAL (platform-specific, X-configuration)
+12-13 actors implemented (see [Actor Counts](README.md#actor-counts)):
+cascaded PID control, sensor fusion (3 filters), waypoint navigation,
+supervised restart, radio telemetry, battery monitoring, CSV logging.
 
 ## Goals
 
@@ -61,28 +47,13 @@ Traditional RTOS designs use tasks with shared memory and locks. Actors use mess
 
 ### Why buses instead of IPC?
 
-- **Buses** provide latest-value semantics - subscribers get current state, not history
-- **IPC notify** queues every message - slow consumers would process stale data
-- For control loops, you always want the *latest* sensor reading, not a backlog
+Buses provide latest-value semantics - subscribers get current state, not
+history. IPC notify queues every message, so slow consumers would process
+stale data. For control loops, you always want the *latest* sensor reading.
 
-> **Bus semantics** - All buses use `max_entries=1` (latest-value only). Subscriptions do not receive retained values; subscribers only observe publishes that occur after subscription.
-
-### Why max_entries=1?
-
-All buses use `max_entries=1` (single entry, latest value only):
-
-```c
-#define HAL_BUS_CONFIG { \
-    .max_subscribers = 6, \
-    .max_entries = 1, \      // Latest value only
-    .max_entry_size = 128 \
-}
-```
-
-- Control loops need current state, not history
-- If a subscriber is slow, it should skip stale data, not queue it
-- Larger buffers would cause processing of outdated sensor readings
-- This matches how real flight controllers handle sensor data
+All buses use `max_entries=1, max_subscribers=8, max_entry_size=128`
+(see `HAL_BUS_CONFIG` in `config.h`). Subscriptions do not receive retained
+values; subscribers only see publishes that occur after subscription.
 
 ### Startup Ordering and Supervision
 
@@ -128,21 +99,10 @@ When ONE_FOR_ALL triggers, all actors restart from scratch:
 This is correct behavior for a flight controller - inconsistent state is more dangerous than
 a brief control gap during restart.
 
-**Comms actor isolation**
-The comms actor uses TEMPORARY restart type:
-- Does NOT trigger ONE_FOR_ALL restart of flight-critical actors if it crashes
-- Simply stops sending telemetry (acceptable for non-critical actor)
-- Flight continues normally without comms
-
-This isolation prevents a telemetry bug from crashing the entire flight.
-
-**Battery actor isolation**
-Same as comms - TEMPORARY restart, LOW priority. If battery actor crashes,
-flight continues without voltage monitoring. This is acceptable because the
-battery actor is an advisory safety layer, not part of the control loop.
-
-**Logger isolation**
-Same as comms - TEMPORARY restart, outside the critical path.
+**Non-critical actor isolation** - Comms, battery, and logger use TEMPORARY
+restart at LOW priority. If any crashes, flight continues without it. A
+telemetry or logging bug cannot trigger ONE_FOR_ALL restart of the control
+pipeline.
 
 ### Pipeline Model
 
@@ -166,77 +126,20 @@ same instant.
 
 ### Error Handling Pattern
 
-> **Actor return semantics (Erlang)** - In Hive, returning from an actor entry function is normal termination (`HIVE_EXIT_REASON_NORMAL`). To signal failure, actors must explicitly call `hive_exit(HIVE_EXIT_REASON_CRASH)`.
+No `assert()` - it kills the process and the supervisor cannot recover.
+Instead, actors use `HIVE_FAILED()` checks with two patterns:
 
-Actors use explicit error checking instead of `assert()`. This enables the supervisor
-to detect and recover from failed actors.
+| Path | Action | Example |
+|------|--------|---------|
+| Init / blocking calls | Log ERROR, `hive_exit(CRASH)` | Bus subscribe, timer_recv, hive_select |
+| Non-blocking calls | Log WARN, continue | Bus publish, IPC notify |
 
-**Cold path (initialization)** - Log error and call `hive_exit(HIVE_EXIT_REASON_CRASH)`.
-The supervisor sees this as a CRASH and can attempt restart per the restart strategy.
-
-```c
-// Estimator subscribes to sensor bus (consumer role)
-if (HIVE_FAILED(hive_bus_subscribe(state->sensor_bus))) {
-    HIVE_LOG_ERROR("[ESTIMATOR] bus subscribe failed");
-    hive_exit(HIVE_EXIT_REASON_CRASH);
-}
-```
-
-**Hot path - blocking calls** (`hive_select`, `hive_bus_read` with timeout, `hive_timer_recv`):
-Log error and call `hive_exit(HIVE_EXIT_REASON_CRASH)`. These failures indicate a fundamental runtime problem that the
-actor cannot recover from.
-
-```c
-// Sensor waits for periodic timer (producer role)
-status = hive_timer_recv(timer, &msg, -1);
-if (HIVE_FAILED(status)) {
-    HIVE_LOG_ERROR("[SENSOR] timer_recv failed: %s", HIVE_ERR_STR(status));
-    hive_exit(HIVE_EXIT_REASON_CRASH);
-}
-```
-
-**Hot path - non-blocking calls** (`hive_bus_publish`, `hive_ipc_notify`, `hive_timer_after`):
-Log warning and continue. The actor keeps running and processes the next iteration.
-
-```c
-// Sensor publishes to sensor bus (producer role)
-if (HIVE_FAILED(hive_bus_publish(state->sensor_bus, &sensors, sizeof(sensors)))) {
-    HIVE_LOG_WARN("[SENSOR] bus publish failed");
-}
-```
-
-**Why no `assert()`**
-- `assert()` terminates the entire process - supervisor cannot recover
-- On STM32, `assert()` behavior is platform-dependent (hang, reset, undefined)
-- Log + `hive_exit(CRASH)` gives consistent behavior across platforms
-- Supervisor sees CRASH and applies restart strategy (ONE_FOR_ALL in pilot)
-
-**Exception** - `_Static_assert` is used for compile-time checks (e.g., packet sizes
-in comms_actor.c) since these fail at build time, not runtime.
-
-**Logging configuration (Crazyflie)**
-
-The Crazyflie build uses `HIVE_LOG_LEVEL=INFO`:
-
-| Level | Status | Rationale |
-|-------|--------|-----------|
-| TRACE, DEBUG | Compiled out | Verbose, development only |
-| INFO | Captured to flash | Important events (waypoint reached, flight started) |
-| WARN, ERROR | Captured to flash | Problems that need attention |
-
-Logs are written to flash and downloaded over radio after flight. This provides a
-complete flight record for debugging without the overhead of TRACE/DEBUG messages.
+The supervisor sees CRASH exits and applies ONE_FOR_ALL restart.
 
 ## Architecture Overview
 
-12-13 actors depending on platform (see [Actor Counts](README.md#actor-counts)): flight-critical workers connected via buses, supervisor, flight manager, battery monitor, logger, and optional comms actor:
-
-**Supervision** - All actors are supervised with ONE_FOR_ALL strategy. Flight-critical
-actors use PERMANENT restart (crash triggers restart of all). Battery, comms, and
-logger use TEMPORARY restart (crash/exit doesn't trigger restarts).
-
-**Sibling Info** - Workers use `hive_find_sibling()` to look up sibling actor IDs
-for IPC communication. The supervisor passes sibling info at spawn time.
+12-13 actors depending on platform (see [Actor Counts](README.md#actor-counts)).
+See [Supervision Semantics](#supervision-semantics) above for restart strategy.
 
 ```mermaid
 graph TB

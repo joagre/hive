@@ -75,8 +75,25 @@
 #define ALT_KF_P0_VELOCITY 1.0f // Initial velocity uncertainty (m^2/s^2)
 #define ALT_KF_P0_BIAS 0.1f     // Initial bias uncertainty (m^2/s^4)
 
-// Low-pass filter coefficient for horizontal velocity
-// Higher alpha needed with noisy optical flow/GPS position data
+// Horizontal Kalman filter parameters
+// Same 3-state model as altitude KF but measures velocity (H=[0,1,0])
+// Process noise (Q matrix diagonal)
+#define HKF_Q_POSITION 0.0001f // Position process noise (m^2)
+#define HKF_Q_VELOCITY 1.0f    // Velocity process noise (m^2/s^2)
+#define HKF_Q_BIAS 0.0001f     // Accel bias random walk (m^2/s^4)
+
+// Measurement noise (R) - optical flow velocity noise
+#define HKF_R_VELOCITY 0.01f // Flow velocity noise (m/s)^2
+
+// Initial uncertainty (P0 diagonal)
+#define HKF_P0_POSITION 1.0f // Initial position uncertainty (m^2)
+#define HKF_P0_VELOCITY 1.0f // Initial velocity uncertainty (m^2/s^2)
+#define HKF_P0_BIAS 0.1f     // Initial bias uncertainty (m^2/s^4)
+
+// Innovation gate for horizontal KF velocity correction
+#define HKF_MAX_INNOVATION 1.0f // m/s - reject outlier flow readings
+
+// Low-pass filter coefficient for horizontal velocity (legacy fallback)
 #define HVEL_FILTER_ALPHA 0.95f
 
 // ----------------------------------------------------------------------------

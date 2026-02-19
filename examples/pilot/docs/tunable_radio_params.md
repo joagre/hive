@@ -40,182 +40,15 @@ uses different tuning due to different dynamics:
 | `rate_kp` | 0.020 | 0.028 |
 | `rate_ki` | 0.001 | 0.002 |
 | `rate_kd` | 0.0015 | 0.003 |
+| `alt_ki` | 0.005 | 0.03 |
+| `vvel_damping` | 0.55 | 0.15 |
 | `pos_kd` | 0.10 | 0.06 |
 | `max_tilt` | 0.25 | 0.20 |
-| `vvel_damping` | 0.25 | 0.35 |
 
-### Header File Structure
+### Header File
 
-```c
-// tunable_params.h
-
-#include <stdbool.h>
-#include <stdint.h>
-
-// Parameter IDs - explicit enum for type safety
-typedef enum {
-    // Rate PID (0-6)
-    PARAM_RATE_KP = 0,
-    PARAM_RATE_KI = 1,
-    PARAM_RATE_KD = 2,
-    PARAM_RATE_IMAX = 3,
-    PARAM_RATE_OMAX_ROLL = 4,
-    PARAM_RATE_OMAX_PITCH = 5,
-    PARAM_RATE_OMAX_YAW = 6,
-
-    // Attitude PID (7-11)
-    PARAM_ATT_KP = 7,
-    PARAM_ATT_KI = 8,
-    PARAM_ATT_KD = 9,
-    PARAM_ATT_IMAX = 10,
-    PARAM_ATT_OMAX = 11,
-
-    // Altitude PID (12-17)
-    PARAM_ALT_KP = 12,
-    PARAM_ALT_KI = 13,
-    PARAM_ALT_KD = 14,
-    PARAM_ALT_IMAX = 15,
-    PARAM_ALT_OMAX = 16,
-    PARAM_VVEL_DAMPING = 17,
-
-    // Emergency limits (18-19)
-    PARAM_EMERGENCY_TILT_LIMIT = 18,
-    PARAM_EMERGENCY_ALT_MAX = 19,
-
-    // Landing (20-21)
-    PARAM_LANDING_DESCENT_RATE = 20,
-    PARAM_LANDING_VELOCITY_GAIN = 21,
-
-    // Position control (22-24)
-    PARAM_POS_KP = 22,
-    PARAM_POS_KD = 23,
-    PARAM_MAX_TILT_ANGLE = 24,
-
-    // Complementary filter (25-29)
-    PARAM_CF_ALPHA = 25,
-    PARAM_CF_MAG_ALPHA = 26,
-    PARAM_CF_USE_MAG = 27,
-    PARAM_CF_ACCEL_THRESH_LO = 28,
-    PARAM_CF_ACCEL_THRESH_HI = 29,
-
-    // Waypoint navigation (30-34)
-    PARAM_WP_TOLERANCE_XY = 30,
-    PARAM_WP_TOLERANCE_Z = 31,
-    PARAM_WP_TOLERANCE_YAW = 32,
-    PARAM_WP_TOLERANCE_VEL = 33,
-    PARAM_WP_HOVER_TIME_S = 34,
-
-    // Altitude Kalman filter (35-41)
-    PARAM_KF_Q_ALTITUDE = 35,
-    PARAM_KF_Q_VELOCITY = 36,
-    PARAM_KF_Q_BIAS = 37,
-    PARAM_KF_R_ALTITUDE = 38,
-    PARAM_KF_P0_ALTITUDE = 39,
-    PARAM_KF_P0_VELOCITY = 40,
-    PARAM_KF_P0_BIAS = 41,
-
-    // Horizontal velocity filter (42)
-    PARAM_HVEL_FILTER_ALPHA = 42,
-
-    // Flight manager lifecycle (43-44)
-    PARAM_ARMED_COUNTDOWN_S = 43,
-    PARAM_AUTO_GO_DELAY_S = 44,
-
-    // Yaw rate PID - separate from roll/pitch (45-47)
-    PARAM_RATE_YAW_KP = 45,
-    PARAM_RATE_YAW_KI = 46,
-    PARAM_RATE_YAW_KD = 47,
-} tunable_param_id_t;
-
-#define TUNABLE_PARAM_COUNT 48
-
-// Shared tunable parameters - all floats for simplicity
-typedef struct {
-    // Rate PID (same Kp/Ki/Kd for all axes, per-axis output limits)
-    float rate_kp;            // Proportional gain
-    float rate_ki;
-    float rate_kd;
-    float rate_imax;
-    float rate_omax_roll;
-    float rate_omax_pitch;
-    float rate_omax_yaw;
-
-    // Attitude PID (7-11)
-    float att_kp;
-    float att_ki;
-    float att_kd;
-    float att_imax;
-    float att_omax;
-
-    // Altitude PID (12-17)
-    float alt_kp;
-    float alt_ki;
-    float alt_kd;
-    float alt_imax;
-    float alt_omax;
-    float vvel_damping;
-
-    // Emergency limits (18-19)
-    float emergency_tilt_limit;
-    float emergency_alt_max;
-
-    // Landing (20-21)
-    float landing_descent_rate;
-    float landing_velocity_gain;
-
-    // Position control (22-24)
-    float pos_kp;
-    float pos_kd;
-    float max_tilt_angle;
-
-    // Complementary filter (25-29)
-    float cf_alpha;
-    float cf_mag_alpha;
-    float cf_use_mag;         // 0.0 = false, 1.0 = true
-    float cf_accel_thresh_lo;
-    float cf_accel_thresh_hi;
-
-    // Waypoint navigation (30-34)
-    float wp_tolerance_xy;
-    float wp_tolerance_z;
-    float wp_tolerance_yaw;
-    float wp_tolerance_vel;
-    float wp_hover_time_s;
-
-    // Altitude Kalman filter (35-41)
-    float kf_q_altitude;
-    float kf_q_velocity;
-    float kf_q_bias;
-    float kf_r_altitude;
-    float kf_p0_altitude;
-    float kf_p0_velocity;
-    float kf_p0_bias;
-
-    // Horizontal velocity filter (42)
-    float hvel_filter_alpha;
-
-    // Flight manager lifecycle (43-44)
-    float armed_countdown_s;
-    float auto_go_delay_s;
-
-    // Yaw rate PID (45-47)
-    float rate_yaw_kp;
-    float rate_yaw_ki;
-    float rate_yaw_kd;
-} tunable_params_t;
-
-// Initialize with defaults from hal_config.h
-void tunable_params_init(tunable_params_t *params);
-
-// Set parameter by ID (returns HIVE_OK on success, HIVE_ERR_INVALID if invalid)
-hive_status_t tunable_params_set(tunable_params_t *params, tunable_param_id_t id, float value);
-
-// Get parameter by ID (returns 0.0f if invalid ID)
-float tunable_params_get(const tunable_params_t *params, tunable_param_id_t id);
-
-// Get parameter name string for debugging
-const char *tunable_params_name(tunable_param_id_t id);
-```
+See `include/tunable_params.h` for the full enum, struct, and API.
+55 parameters (`TUNABLE_PARAM_COUNT`), all stored as `float`.
 
 ### Usage in pilot.c
 
@@ -298,11 +131,11 @@ aerodynamic restoring force, needs higher P and much higher I).
 | Parameter | Description | Default |
 |-----------|-------------|---------|
 | `alt_kp` | Proportional gain | 0.12 |
-| `alt_ki` | Integral gain | 0.01 |
+| `alt_ki` | Integral gain | 0.005 |
 | `alt_kd` | Derivative gain | 0.0 |
 | `alt_imax` | Integral windup limit | 0.2 |
 | `alt_omax` | Output limit | 0.15 |
-| `vvel_damping` | Vertical velocity damping | 0.25 |
+| `vvel_damping` | Vertical velocity damping | 0.55 |
 
 ### Position PD (controls XY - requires Flow deck)
 | Parameter | Description | Default |
@@ -332,6 +165,14 @@ aerodynamic restoring force, needs higher P and much higher I).
 | `kf_q_velocity` | Process noise - velocity (m^2/s^2) | 1.0 |
 | `kf_q_bias` | Process noise - accel bias | 0.0001 |
 | `kf_r_altitude` | Measurement noise (m^2) | 0.001 |
+
+#### Horizontal Kalman Filter
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `hkf_q_position` | Process noise - position (m^2) | 0.0001 |
+| `hkf_q_velocity` | Process noise - velocity (m^2/s^2) | 1.0 |
+| `hkf_q_bias` | Process noise - accel bias | 0.0001 |
+| `hkf_r_velocity` | Measurement noise - flow velocity | 0.01 |
 
 #### Velocity Filters
 | Parameter | Description | Default |
@@ -473,19 +314,5 @@ values and reflash. No runtime persistence needed.
 
 ## Implementation Status
 
-All core functionality is implemented:
-
-- [x] Create `tunable_params.h` with struct and enum
-- [x] Create `tunable_params.c` with init/set/get functions
-- [x] Update `pilot.c` to allocate and pass params pointer
-- [x] Update actors to read from shared params (not hal_config.h constants)
-- [x] Add `CMD_SET_PARAM` / `CMD_GET_PARAM` / `CMD_LIST_PARAMS` handling to `comms_actor.c`
-- [x] Update `ground_station.py` with set/get/list commands
-- [x] Add validation ranges per parameter
-- [ ] Test with live tuning on hardware
-
-**Implementation notes:**
-- Typedef is `tunable_param_id_t` (not `param_id_t`)
-- `tunable_params_set()` returns `hive_status_t` (not `bool`)
-- 48 parameter slots: all used (0-47)
-- Kalman filter Q/R and velocity filter alpha are now runtime-tunable
+Fully implemented and tested on hardware (tuning sessions 3-10).
+55 parameters, all runtime-tunable via radio.

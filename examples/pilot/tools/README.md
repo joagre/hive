@@ -28,6 +28,62 @@ cmake -DCMAKE_INSTALL_PREFIX=../install ..
 make && make install
 ```
 
+## Simulation
+
+### run_webots_sim.sh
+
+Run a Webots simulation end-to-end: build, launch in fast/headless mode, wait for the flight to complete, then print the hive runtime log and flight analysis.
+
+```bash
+# Full 3D waypoint flight (default)
+tools/run_webots_sim.sh
+
+# Quick 6s hover test
+tools/run_webots_sim.sh --profile FIRST_TEST
+
+# Clean sensors (no noise), show timeline
+tools/run_webots_sim.sh --noise 0 --timeline
+
+# Skip rebuild (reuse last binary)
+tools/run_webots_sim.sh --no-build
+
+# All options
+tools/run_webots_sim.sh --profile FULL_3D --noise 3 --motor-lag 20 --timeline
+```
+
+**Options:**
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--profile` | `FULL_3D` | Flight profile: `FIRST_TEST`, `ALTITUDE`, `FULL_3D`, `GROUND_TEST` |
+| `--noise` | `3` | Sensor noise level (0=clean, 3=realistic, 5=heavy) |
+| `--motor-lag` | `20` | Motor time constant in ms (0=instant) |
+| `--world` | `hover_test.wbt` | World file in `worlds/` |
+| `--no-build` | - | Skip the build step |
+| `--timeline` | - | Show flight timeline in analysis output |
+| `--keep` | - | Keep Webots running after flight completes |
+| `--make-args` | - | Extra arguments passed to `make` |
+
+**Output** - The script prints three sections:
+1. Webots console output (controller stdout/stderr)
+2. The hive runtime log (`/var/tmp/hive.log`) - actor lifecycle events, waypoints, errors
+3. Flight analysis from `flight_summary.py` on `/tmp/tlog.csv`
+
+The simulation runs in ~5s wall-clock for a 75s flight (fast mode with no rendering).
+
+### flight_summary.py
+
+Quick per-flight analysis with optional timeline. Used by `run_webots_sim.sh`
+for automated post-flight reporting.
+
+```bash
+# Basic flight summary
+python3 flight_summary.py /tmp/tlog.csv
+
+# With timeline (shows waypoint transitions)
+python3 flight_summary.py /tmp/tlog.csv --timeline
+```
+
 ## Telemetry Tools
 
 Python scripts for analyzing flight telemetry, tuning PID controllers, and communicating with Crazyflie hardware.
@@ -228,27 +284,23 @@ The two packet types alternate at ~50 Hz each. Ground station merges them into o
 
 ### Webots Simulation
 
-1. Run a flight test in Webots (telemetry logged to `/tmp/tlog.csv`)
-
-2. Analyze current performance:
+1. Run a flight test (builds, launches Webots in fast mode, analyzes results):
    ```bash
-   python3 tools/analyze_pid.py /tmp/tlog.csv
+   tools/run_webots_sim.sh --timeline
    ```
 
-3. Visualize the response:
+2. For deeper analysis, use the CSV at `/tmp/tlog.csv`:
    ```bash
+   python3 tools/analyze_pid.py /tmp/tlog.csv
    python3 tools/plot_telemetry.py /tmp/tlog.csv --xlim 0 15
    ```
 
-4. Adjust gains in `hal/*/hal_config.h` (altitude) or `config.h` (position)
+3. Adjust gains in `hal/*/hal_config.h` (altitude) or `config.h` (position)
 
-5. Rebuild and test:
+4. Re-run and compare:
    ```bash
-   make && make install
-   # Reset Webots simulation
+   tools/run_webots_sim.sh --timeline
    ```
-
-6. Repeat until satisfied with response characteristics
 
 ### Crazyflie Hardware
 

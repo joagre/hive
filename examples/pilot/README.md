@@ -1,6 +1,6 @@
 # Pilot Example
 
-A complete quadcopter autopilot. Not a toy demo, but a flight controller targeting real hardware. Demonstrates Hive in a safety-critical embedded context with 12 actors, cascaded PID control, sensor fusion, battery monitoring, pub-sub data flow, and fail-safe supervision.
+A complete quadcopter autopilot. Not a toy demo, but a flight controller targeting real hardware. Demonstrates Hive in a safety-critical embedded context with 12-13 actors, cascaded PID control, sensor fusion, battery monitoring, pub-sub data flow, and fail-safe supervision.
 
 ## Table of Contents
 
@@ -45,7 +45,7 @@ A complete quadcopter autopilot. Not a toy demo, but a flight controller targeti
 Demonstrates waypoint navigation with a quadcopter using 12-13 actors (8 flight-critical workers + flight manager + battery monitor + logger + supervisor + optional comms actor):
 
 1. **Sensor actor** reads raw sensors via HAL, publishes to sensor bus
-2. **Estimator actor** runs altitude Kalman filter + attitude complementary filter, publishes to state bus
+2. **Estimator actor** runs complementary filter (attitude) + altitude KF + horizontal KF, publishes to state bus
 3. **Altitude actor** reads target altitude from position target bus, runs altitude PID, handles landing
 4. **Waypoint actor** waits for START signal, manages waypoint list, publishes to position target bus
 5. **Position actor** reads target XY/yaw from position target bus, runs position PD
@@ -238,8 +238,8 @@ cascade is: altitude -> position -> attitude -> rate -> motors.
 
 - **Altitude** - PI with velocity damping (tracks target altitude)
 - **Position** - PD with velocity damping (tracks target XY, max tilt limited)
-- **Attitude** - P controller for roll/pitch/yaw angles
-- **Rate** - PD controller for angular rates
+- **Attitude** - PD controller for roll/pitch/yaw angles
+- **Rate** - PID controller for angular rates
 
 ### Waypoint Navigation
 
@@ -343,30 +343,7 @@ Logs downloadable over radio after flight (see Log Download section).
 
 ### Configuration Hierarchy
 
-The pilot uses a layered configuration system where later levels override earlier ones:
-
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│  Level 1: Library Defaults                                         │
-│  ../../include/hive_static_config.h                                │
-│  Default: HIVE_MAX_ACTORS=64, HIVE_STACK_ARENA_SIZE=1MB, etc.      │
-├─────────────────────────────────────────────────────────────────────┤
-│  Level 2: Pilot Application Config                                 │
-│  hive_config.mk                                                    │
-│  Pilot needs: HIVE_MAX_ACTORS=16, smaller pools, 4KB stacks        │
-├─────────────────────────────────────────────────────────────────────┤
-│  Level 3: Board Config                                             │
-│  hal/crazyflie-2.1plus/hive_board_config.mk                           │
-│  Flash addresses: VFILE_LOG_BASE, VFILE_LOG_SIZE, VFILE_LOG_SECTOR │
-│  SD card: ENABLE_SD, HIVE_ENABLE_SD, HIVE_MAX_SD_FILES             │
-├─────────────────────────────────────────────────────────────────────┤
-│  Level 4: Command Line                                             │
-│  make -f Makefile.crazyflie-2.1plus ENABLE_SD=1                       │
-│  Highest priority - for testing and one-off builds                 │
-└─────────────────────────────────────────────────────────────────────┘
-```
-
-**What each level controls:**
+Later levels override earlier ones:
 
 | Level | File | Controls |
 |-------|------|----------|
@@ -375,41 +352,8 @@ The pilot uses a layered configuration system where later levels override earlie
 | 3 | `hive_board_config.mk` | Flash layout, SD card pins, peripheral addresses |
 | 4 | Command line | Override anything (`ENABLE_SD=1`, `FLIGHT_PROFILE=2`) |
 
-**Example: Adding SD card logging**
-```bash
-# hive_board_config.mk has: ENABLE_SD ?= 0 (default off)
-# Override from command line:
-make -f Makefile.crazyflie-2.1plus ENABLE_SD=1
-```
-
-**Example: hive_config.mk contents**
-```makefile
-# Pilot requires fewer resources than library defaults
-HIVE_CFLAGS += -DHIVE_MAX_ACTORS=14
-HIVE_CFLAGS += -DHIVE_MAX_BUSES=8
-HIVE_CFLAGS += -DHIVE_MAILBOX_ENTRY_POOL_SIZE=32
-HIVE_CFLAGS += -DHIVE_DEFAULT_STACK_SIZE=4096
-HIVE_CFLAGS += '-DHIVE_STACK_ARENA_SIZE=(60*1024)'
-```
-
-**Example: hive_board_config.mk contents**
-```makefile
-# STM32F405 flash sector 8 for /log virtual file
-HIVE_CFLAGS += -DHIVE_VFILE_LOG_BASE=0x08080000
-HIVE_CFLAGS += -DHIVE_VFILE_LOG_SIZE=131072
-HIVE_CFLAGS += -DHIVE_VFILE_LOG_SECTOR=8
-
-# SD card support (off by default, enable with ENABLE_SD=1)
-ENABLE_SD ?= 0
-ifeq ($(ENABLE_SD),1)
-  HIVE_CFLAGS += -DHIVE_ENABLE_SD=1
-endif
-```
-
-This separation ensures:
-- **hive_config.mk** is portable across boards (same actor count everywhere)
-- **hive_board_config.mk** captures hardware specifics (different flash layouts per MCU)
-- **Command line** enables quick experiments without editing files
+`hive_config.mk` is portable across boards (same actor count everywhere).
+`hive_board_config.mk` captures hardware specifics (different flash layouts per MCU).
 
 ## Radio Telemetry (Crazyflie 2.1+ only)
 
@@ -475,17 +419,20 @@ python3 tools/ground_station.py --set-param att_kp 2.0
 python3 tools/ground_station.py --set-param vvel_damping 0.50
 ```
 
-**Tunable parameters (45 parameters in 8 categories):**
+**Tunable parameters (55 total):**
 
 | Category | Parameters |
 |----------|------------|
-| Rate PID | `rate_kp`, `rate_ki`, `rate_kd`, `rate_imax`, `rate_omax_roll`, `rate_omax_pitch`, `rate_omax_yaw` |
+| Rate PID | `rate_kp`, `rate_ki`, `rate_kd`, `rate_imax`, `rate_omax_roll`, `rate_omax_pitch`, `rate_omax_yaw`, `rate_yaw_kp`, `rate_yaw_ki`, `rate_yaw_kd` |
 | Attitude PID | `att_kp`, `att_ki`, `att_kd`, `att_imax`, `att_omax` |
 | Altitude PID | `alt_kp`, `alt_ki`, `alt_kd`, `alt_imax`, `alt_omax`, `vvel_damping` |
 | Emergency | `emergency_tilt_limit`, `emergency_alt_max` |
 | Landing | `landing_descent_rate`, `landing_velocity_gain` |
 | Position | `pos_kp`, `pos_kd`, `max_tilt_angle` |
-| Estimator | `cf_alpha`, `cf_mag_alpha`, `cf_use_mag`, `cf_accel_thresh_lo`, `cf_accel_thresh_hi` |
+| Complementary Filter | `cf_alpha`, `cf_mag_alpha`, `cf_use_mag`, `cf_accel_thresh_lo`, `cf_accel_thresh_hi` |
+| Altitude Kalman Filter | `kf_q_altitude`, `kf_q_velocity`, `kf_q_bias`, `kf_r_altitude`, `kf_p0_altitude`, `kf_p0_velocity`, `kf_p0_bias` |
+| Horizontal Kalman Filter | `hkf_q_position`, `hkf_q_velocity`, `hkf_q_bias`, `hkf_r_velocity`, `hkf_p0_position`, `hkf_p0_velocity`, `hkf_p0_bias` |
+| Horizontal Velocity | `hvel_filter_alpha` |
 | Waypoints | `wp_tolerance_xy`, `wp_tolerance_z`, `wp_tolerance_yaw`, `wp_tolerance_vel`, `wp_hover_time_s` |
 
 **Safety:** All values are validated before application. Invalid values (out of range) are rejected.
@@ -565,6 +512,8 @@ doesn't affect flight-critical control loops and won't trigger restarts if it fa
 | `tunable_params.c` | Runtime parameter tuning |
 | `stack_profile.c` | Stack usage profiling |
 | `fusion/complementary_filter.c` | Portable attitude estimation (accel+gyro fusion) |
+| `fusion/altitude_kf.c` | Altitude Kalman filter (3-state: position, velocity, bias) |
+| `fusion/horizontal_kf.c` | Horizontal Kalman filter (same model, velocity measurement) |
 
 ### Headers (in `include/`)
 
@@ -580,16 +529,19 @@ doesn't affect flight-critical control loops and won't trigger restarts if it fa
 | `include/notifications.h` | IPC notification tags (NOTIFY_FLIGHT_START, etc.) |
 | `include/flight_profiles.h` | Waypoint definitions per flight profile |
 
-### Analysis Tools
+### Tools
 
 | File | Description |
 |------|-------------|
+| `tools/ground_station.py` | Radio telemetry, parameter tuning, log download (Crazyflie) |
+| `tools/flight_summary.py` | Per-flight analysis with timeline |
+| `tools/run_webots_sim.sh` | Automated Webots simulation (build, run, analyze) |
 | `tools/analyze_pid.py` | PID metrics analysis (overshoot, rise time, settling time) |
 | `tools/analyze_hover.py` | Hover stability analysis (altitude std dev, drift) |
 | `tools/flight_debug.py` | Flight debugging (timeline, crash detection) |
 | `tools/plot_telemetry.py` | 6-panel telemetry visualization |
 | `tools/plot_flight.py` | Full flight summary with 3D trajectory |
-| `tools/ground_station.py` | Radio telemetry receiver (Crazyflie only) |
+| `tools/repair_sd_deck_ow.py` | SD card deck one-wire EEPROM repair |
 | `tools/st-trace.sh` | SWO trace viewer for debug output |
 | `tools/README.md` | Tools documentation and PID tuning workflow |
 
@@ -598,8 +550,7 @@ doesn't affect flight-critical control loops and won't trigger restarts if it fa
 | File | Description |
 |------|-------------|
 | `README.md` | This file |
-| `docs/spec/` | Detailed design specification (design, implementation, evolution) |
-| `docs/first_flight_checklist.md` | Hardware bring-up and first flight guide |
+| `docs/spec/` | Detailed design specification (design, implementation, future) |
 | `docs/tunable_radio_params.md` | Runtime parameter tuning specification |
 
 ### Directories
@@ -607,8 +558,8 @@ doesn't affect flight-critical control loops and won't trigger restarts if it fa
 | Directory | Description |
 |-----------|-------------|
 | `include/` | Header files (types, config, actor interfaces) |
-| `docs/spec/` | Design specification (design, implementation, evolution) |
-| `docs/` | Documentation (first flight checklist) |
+| `docs/spec/` | Design specification (design, implementation, future) |
+| `docs/` | Documentation (tunable params spec, flight reports) |
 | `hal/` | Hardware abstraction layer (see `hal/<platform>/README.md`) |
 | `tools/` | PID tuning and telemetry analysis tools |
 | `controllers/pilot/` | Webots controller (installed by `make`) |

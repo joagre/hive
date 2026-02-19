@@ -112,7 +112,7 @@ PILOT_SRCS := pilot.c pid.c stack_profile.c tunable_params.c \
 	$(HAL_DIR)/hal_time.c \
 	$(HAL_DIR)/hal_led.c \
 	$(HAL_DIR)/hal_debug.c \
-	fusion/complementary_filter.c fusion/altitude_kf.c
+	fusion/complementary_filter.c fusion/altitude_kf.c fusion/horizontal_kf.c
 
 PILOT_OBJS := $(PILOT_SRCS:.c=.o)
 PILOT_DEPS := $(PILOT_SRCS:.c=.d)

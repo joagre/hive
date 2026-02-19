@@ -17,24 +17,8 @@ Implementation details, control algorithms, portability, and reference informati
 
 ### PID Controller
 
-Standard discrete PID with anti-windup:
-
-```c
-float pid_update(pid_state_t *pid, float setpoint, float measurement, float dt) {
-    float error = setpoint - measurement;
-
-    float p = pid->kp * error;
-
-    pid->integral += error * dt;
-    pid->integral = clamp(pid->integral, -integral_max, integral_max);
-    float i = pid->ki * pid->integral;
-
-    float d = pid->kd * (error - pid->prev_error) / dt;
-    pid->prev_error = error;
-
-    return clamp(p + i + d, -output_max, output_max);
-}
-```
+Standard discrete PID with anti-windup and derivative-on-measurement
+(avoids setpoint kick). See `pid.c` for implementation.
 
 ### Tuned PID Gains
 
@@ -78,41 +62,8 @@ sensor -> estimator -> altitude/waypoint/position -> attitude -> rate -> motor.
 ### Hardware Abstraction Layer (HAL)
 
 All hardware access goes through `hal/hal.h`. Each platform provides its own
-implementation of this interface:
-
-```c
-// Platform lifecycle
-int hal_init(void);        // Initialize hardware
-void hal_cleanup(void);    // Release resources
-bool hal_self_test(void);  // Verify sensors respond (returns true if OK)
-void hal_calibrate(void);  // Calibrate sensors
-void hal_arm(void);        // Enable motor output
-void hal_disarm(void);     // Disable motor output
-
-// Sensor interface (called by sensor_actor)
-void hal_read_sensors(sensor_data_t *sensors);
-
-// Motor interface (called by motor_actor)
-void hal_write_torque(const torque_cmd_t *cmd);
-
-// ESB radio interface (called by comms_actor, HAL_HAS_RADIO only)
-int hal_esb_init(void);
-int hal_esb_send(const void *data, size_t len);
-bool hal_esb_tx_ready(void);
-bool hal_esb_recv(void *buf, size_t max_len, size_t *out_len);
-hive_hal_event_id_t hal_esb_get_rx_event(void);  // For event-driven RX
-
-// Power interface
-float hal_power_get_battery(void);
-
-// Simulation time (only for SIMULATED_TIME builds)
-bool hal_step(void);  // Advance simulation, returns false when done
-```
-
-Actors use the HAL directly - no function pointers needed:
-- `sensor_actor.c` calls `hal_read_sensors()`
-- `motor_actor.c` calls `hal_write_torque()`
-- `comms_actor.c` calls `hal_esb_*()` (Crazyflie only)
+implementation. See `hal/hal.h` for the full API (lifecycle, sensors, motors,
+radio, power, debug, LED, simulation time).
 
 ### Startup Sequence
 
@@ -155,29 +106,6 @@ All hardware differences are encapsulated in the HAL. Actor code is identical
 across platforms. The only compile-time difference is `SIMULATED_TIME` which
 controls the main loop (simulation vs real-time).
 
-### Portable Code
-
-All actor code is platform-independent. Actors use:
-- Bus API for inter-actor communication
-- HAL API for hardware access (abstracted)
-
-| File | Dependencies |
-|------|--------------|
-| `sensor_actor.c/h` | HAL (hal_read_sensors) + bus API |
-| `estimator_actor.c/h` | Bus API only |
-| `altitude_actor.c/h` | Bus API only |
-| `waypoint_actor.c/h` | IPC + bus API |
-| `position_actor.c/h` | Bus API only |
-| `attitude_actor.c/h` | Bus API only |
-| `rate_actor.c/h` | Bus API only |
-| `motor_actor.c/h` | HAL (hal_write_torque) + IPC + bus API |
-| `flight_manager_actor.c/h` | IPC only (no bus) |
-| `battery_actor.c/h` | HAL (hal_power_get_battery) + IPC |
-| `comms_actor.c/h` | HAL (hal_esb_*, hal_power_*) + bus API (Crazyflie only) |
-| `pid.c/h` | Pure C, no runtime deps |
-| `types.h` | Data structures |
-| `config.h` | Tuning parameters |
-
 ---
 
 ## File Structure
@@ -196,7 +124,7 @@ examples/pilot/
     flight_manager_actor.c # Startup delay, flight window cutoff
     battery_actor.c      # Battery voltage monitoring
     comms_actor.c        # Radio telemetry (Crazyflie only)
-    logger_actor.c           # Hive log sync + CSV telemetry
+    logger_actor.c       # Hive log sync + CSV telemetry
     pid.c                # Reusable PID controller
     tunable_params.c     # Runtime-tunable parameters
     stack_profile.c      # Stack usage profiling
@@ -216,12 +144,15 @@ examples/pilot/
         altitude_kf.c/h           # Altitude Kalman filter (3-state)
         horizontal_kf.c/h         # Horizontal Kalman filter (3-state x2)
     tools/
+        ground_station.py    # Radio telemetry receiver (Crazyflie)
+        flight_summary.py    # Per-flight analysis with timeline
+        run_webots_sim.sh    # Automated Webots simulation (build, run, analyze)
         analyze_pid.py       # PID metrics analysis (overshoot, settling time)
         analyze_hover.py     # Hover stability analysis
         flight_debug.py      # Flight debugging utilities
         plot_telemetry.py    # 6-panel telemetry visualization
         plot_flight.py       # Full flight summary with 3D trajectory
-        ground_station.py    # Radio telemetry receiver (Crazyflie)
+        repair_sd_deck_ow.py # SD card deck one-wire repair
         README.md            # Tools documentation
     Makefile                 # Webots simulation build
     Makefile.crazyflie-2.1plus  # Crazyflie 2.1+ build
@@ -233,7 +164,6 @@ examples/pilot/
             design.md        # Design decisions
             implementation.md # This file
             future.md        # Production gaps, deferred features, estimator roadmap
-        first_flight_checklist.md  # Hardware bring-up and flight checklist
         tunable_radio_params.md    # Runtime parameter tuning specification
     worlds/
         hover_test.wbt   # Webots world file

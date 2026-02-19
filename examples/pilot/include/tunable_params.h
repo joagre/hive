@@ -13,7 +13,7 @@
 #include "hive_runtime.h"
 
 // Parameter count (must match enum)
-#define TUNABLE_PARAM_COUNT 48
+#define TUNABLE_PARAM_COUNT 55
 
 // Parameter identifiers
 // Grouped by subsystem for easier navigation
@@ -78,7 +78,7 @@ typedef enum {
     PARAM_KF_P0_VELOCITY = 40,
     PARAM_KF_P0_BIAS = 41,
 
-    // Horizontal velocity filter (42)
+    // Horizontal velocity filter (42) - kept for backwards compat
     PARAM_HVEL_FILTER_ALPHA = 42,
 
     // Flight manager lifecycle (43-44)
@@ -91,6 +91,15 @@ typedef enum {
     PARAM_RATE_YAW_KP = 45,
     PARAM_RATE_YAW_KI = 46,
     PARAM_RATE_YAW_KD = 47,
+
+    // Horizontal Kalman filter (48-54)
+    PARAM_HKF_Q_POSITION = 48,
+    PARAM_HKF_Q_VELOCITY = 49,
+    PARAM_HKF_Q_BIAS = 50,
+    PARAM_HKF_R_VELOCITY = 51,
+    PARAM_HKF_P0_POSITION = 52,
+    PARAM_HKF_P0_VELOCITY = 53,
+    PARAM_HKF_P0_BIAS = 54,
 } tunable_param_id_t;
 
 // All tunable parameters in a single struct
@@ -167,6 +176,15 @@ typedef struct {
     float rate_yaw_kp;
     float rate_yaw_ki;
     float rate_yaw_kd;
+
+    // Horizontal Kalman filter
+    float hkf_q_position;
+    float hkf_q_velocity;
+    float hkf_q_bias;
+    float hkf_r_velocity;
+    float hkf_p0_position;
+    float hkf_p0_velocity;
+    float hkf_p0_bias;
 } tunable_params_t;
 
 // Initialize parameters with platform defaults from HAL_* defines

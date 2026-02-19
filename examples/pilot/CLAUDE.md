@@ -350,7 +350,6 @@ Paths are relative to repo root (`/home/jocke/projects/hive`):
 - `README.md` - Usage instructions
 - `docs/spec/` - Design specification (design.md, implementation.md, future.md)
 - `docs/tunable_radio_params.md` - Runtime parameter tuning specification
-- `docs/first_flight_checklist.md` - Hardware bring-up guide
 - `hal/*/README.md` - Platform-specific details
 - `tools/README.md` - Analysis tools documentation
 - `tests/README.md` - Test documentation
