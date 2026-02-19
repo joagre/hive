@@ -28,14 +28,14 @@ no oscillation), and stable attitude. In that priority order.
 | `alt_kp` | 0.12 | Needs work (43-56% overshoot) |
 | `alt_ki` | 0.005 | Needs work |
 | `vvel_damping` | 0.55 | Needs work |
-| `pos_kp` | **0.0** | **Disabled** - root cause of XY drift |
+| `pos_kp` | **0.0** | **Disabled** - re-enable with HKF (phase 2) |
 | `pos_kd` | 0.20 | Tuned session 8, damping-only |
 | `max_tilt_angle` | 0.25 (14 deg) | OK |
 
-### Architectural analysis - why we drift
+### Architectural analysis - why we drifted
 
-The fundamental problem is not PID gains. It is the asymmetry between
-vertical and horizontal state estimation.
+The fundamental problem was the asymmetry between vertical and horizontal
+state estimation. Session 9 closed this gap with a horizontal KF.
 
 **Altitude** has a proper 3-state Kalman filter:
 - States: [altitude, velocity, accel_bias]
@@ -43,66 +43,28 @@ vertical and horizontal state estimation.
 - Correct: rangefinder (40 Hz)
 - Result: smooth velocity, bias-compensated, handles sensor dropouts
 
-**Horizontal** has nothing:
-- Position: raw dead-reckoned flow integration (drifts unboundedly)
-- Velocity: raw optical flow passed straight through (no filtering)
-- No accelerometer fusion, no bias estimation, no dropout handling
+**Horizontal** now has a 3-state Kalman filter (session 9):
+- States: [position, velocity, accel_bias] (same as altitude KF)
+- Predict: world-frame accelerometer (250 Hz)
+- Correct: optical flow velocity (100 Hz)
+- Result: smooth velocity, bias-compensated, handles flow dropouts
+- Sim-validated in Webots (session 9), awaiting hardware testing
 
-At 0.5m hover, a single PMW3901 pixel delta = 0.25 m/s. That noise
-goes directly into the pos_kd damping term, producing 2.9 deg tilt
-jitter per pixel. The position estimate drifts because it is just
-accumulated noisy velocity with no correction source.
+Before session 9, horizontal had raw flow only (no filtering, no bias
+estimation). At 0.5m hover, a single PMW3901 pixel delta = 0.25 m/s
+went directly into the pos_kd damping term, producing 2.9 deg tilt
+jitter per pixel. The horizontal KF eliminates this noise path.
 
-Additionally, the flow deck rotates body-frame velocity to world-frame
-using gyro-integrated yaw (platform.c:1372). Yaw drifts ~5 deg/s, so
-after 6 seconds the world-frame X axis is rotated 30 degrees. Position
-corrections via pos_kp would push in the wrong direction.
+### Phase 1 - Horizontal Kalman filter - DONE (session 9)
 
-### Phase 1 - Horizontal Kalman filter (code change, then tune)
+Implemented `fusion/horizontal_kf.c` / `.h` mirroring `altitude_kf.c`.
+Two independent 1D filters (X and Y), each with states [position,
+velocity, accel_bias]. Velocity measurement from optical flow. Innovation
+gating at 1.0 m/s rejects flow outliers. Full rotation matrix in
+estimator_actor.c provides world-frame acceleration for all three axes.
 
-**Goal** - Give horizontal the same quality estimation as altitude.
-
-Create `horizontal_kf.c` mirroring `altitude_kf.c`. Two independent
-1D filters (X and Y), each with states [position, velocity, accel_bias].
-
-```
-Predict (every cycle, 250 Hz):
-  pos += vel * dt + 0.5 * (accel_world - bias) * dt^2
-  vel += (accel_world - bias) * dt
-  bias += 0  (random walk)
-
-Correct (when flow valid, ~100 Hz):
-  Velocity measurement: z = flow_velocity
-  Innovation: y = z - predicted_velocity
-  Standard KF update on velocity row
-```
-
-**Key difference from altitude KF** - The measurement is velocity (from
-optical flow), not position. There is no absolute position sensor indoors.
-The KF still estimates position by integrating bias-corrected velocity,
-which drifts slower than raw flow integration.
-
-**What this gives us:**
-1. Smooth, filtered velocity for pos_kd (removes pixel-level noise)
-2. Accelerometer bias estimation (reduces systematic drift)
-3. Accelerometer-based prediction during flow dropouts (coasting)
-4. Better position estimate (bias-corrected integration drifts slower)
-
-**Implementation** - New files:
-- `fusion/horizontal_kf.h` - Same API pattern as altitude_kf.h
-- `fusion/horizontal_kf.c` - Same math as altitude_kf.c, velocity measurement
-- Changes to `estimator_actor.c` - Replace raw flow pass-through with KF
-
-The horizontal accel input requires rotating body-frame accelerometer to
-world-frame XY. The estimator already computes accel_world_z for the
-altitude KF; extend to compute accel_world_x and accel_world_y using
-the same attitude rotation matrix.
-
-**Tuning parameters** (initial values, tune via radio):
-- `hkf_q_position` = 0.001 - Trust model for position
-- `hkf_q_velocity` = 1.0 - Allow velocity to change fast
-- `hkf_q_bias` = 0.0001 - Slow accel bias drift
-- `hkf_r_velocity` = 0.1 - Flow deck velocity noise (~0.3 m/s std)
+Sim-validated in Webots: 7-8 cm hover RMS, velocity jitter 0.005 m/s.
+See session 9 for full results and default parameters.
 
 ### Phase 2 - Enable position hold and tune
 
@@ -195,16 +157,16 @@ With stable hover in all axes, push toward perfection:
 | Component | Hive pilot | Bitcraze firmware |
 |-----------|-----------|-------------------|
 | Attitude | Complementary filter | Extended Kalman Filter |
-| Altitude | 3-state KF (good) | Part of full EKF |
-| Horizontal velocity | Raw flow (bad) | EKF-fused with accel |
-| Horizontal position | Dead reckoning (bad) | EKF-fused |
+| Altitude | 3-state KF | Part of full EKF |
+| Horizontal velocity | 3-state KF (session 9) | EKF-fused with accel |
+| Horizontal position | KF-integrated (session 9) | EKF-fused |
 | Position control | PD (no integral) | PID with feedforward |
 
-The horizontal KF (phase 1) closes the biggest gap. Adding an integral
-to position control (phase 4) closes the next. A full EKF fusing all
-sensors would be ideal but is a much larger project.
+The horizontal KF (phase 1, done) closed the biggest gap. Adding an
+integral to position control (phase 4) closes the next. A full EKF
+fusing all sensors would be ideal but is a much larger project.
 
-**Estimation data flow after phase 1:**
+**Current estimation data flow:**
 
 ```
                      Accelerometer (250 Hz)
