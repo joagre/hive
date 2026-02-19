@@ -10,7 +10,6 @@ controllers/pilot/pilot
 # Flight data (CSVs, logs, SD dumps)
 *.csv
 *.log
-sd_log.txt
 
 # Editor backups
 *~
