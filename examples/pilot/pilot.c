@@ -325,7 +325,6 @@ int main(void) {
 
     // Cleanup
     // Note: hal_disarm() now handled by motor_actor via DISARM request
-    hive_log_file_sync();
     hive_log_file_close();
     hive_cleanup();
     hal_cleanup();
