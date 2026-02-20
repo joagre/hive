@@ -71,20 +71,11 @@ int main(void) {
         return 1;
     }
 
-    // Grace period - 15 seconds to step back and place drone
-    hal_printf(
-        "[PILOT] 15 second grace period - place drone on level surface\n");
-    for (int i = 15; i > 0; i--) {
-        hal_printf("[PILOT] %2d seconds...\n", i);
-        hal_led_on();
-        hal_delay_ms(500);
-        hal_led_off();
-        hal_delay_ms(500);
-    }
-    hal_printf("[PILOT] Grace period complete\n");
+    hal_printf("[PILOT] Self-test passed - waiting for GO command\n");
 
-    // Note: Calibration and arming now handled by flight_manager via actors
-    // (sensor_actor calls hal_calibrate() on RESET, motor_actor calls hal_arm())
+    // Note: Calibration runs at GO time in flight_manager (PREFLIGHT state),
+    // not at boot. This ensures baro reference pressure is measured on the
+    // flight surface, not on the flashing table.
 
     // Initialize actor runtime
     if (HIVE_FAILED(hive_init())) {

@@ -46,7 +46,7 @@ The following safety features are STM32-only (disabled in Webots):
 
 | Feature       | Location               | Behavior                                                              |
 |---------------|------------------------|-----------------------------------------------------------------------|
-| Startup delay | flight_manager_actor.c | Flight blocked by 15s grace period + 10s armed countdown (motors OFF) |
+| Startup delay | flight_manager_actor.c | Flight blocked by ~3s calibration + 10s armed countdown (motors OFF) |
 
 ### Future Safety Features
 

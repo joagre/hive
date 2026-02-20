@@ -724,8 +724,10 @@ class TelemetryReceiver:
         params = {}
         received_ids = set()
 
-        # Receive param list packets (may come in multiple batches)
-        for _ in range(50):  # Enough polls to get all params
+        # Receive param list packets (may come in multiple batches).
+        # 55 params / 5 per chunk = 11 chunks, but chunks alternate with
+        # telemetry packets so we need more polls than chunks.
+        for _ in range(200):
             data = self.poll()
             if not data or len(data) < 7:
                 continue

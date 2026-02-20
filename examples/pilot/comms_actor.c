@@ -89,8 +89,9 @@
 
 // Operating modes
 typedef enum {
-    COMMS_MODE_FLIGHT,      // Normal telemetry transmission
-    COMMS_MODE_LOG_DOWNLOAD // Sending log file to ground station
+    COMMS_MODE_FLIGHT,       // Normal telemetry transmission
+    COMMS_MODE_LOG_DOWNLOAD, // Sending log file to ground station
+    COMMS_MODE_PARAM_LIST    // Sending parameter list to ground station
 } comms_mode_t;
 
 // Scale factors for int16 encoding
@@ -366,23 +367,10 @@ static void handle_rx_command(comms_state_t *state, const uint8_t *data,
     }
 
     if (cmd == CMD_LIST_PARAMS) {
-        // Start param list transmission from offset 0
+        // Enter param list mode - sends one chunk per main loop iteration
         state->param_list_offset = 0;
-        state->mode =
-            COMMS_MODE_FLIGHT; // Stay in flight mode, list is one-shot
-        // Send first batch immediately
-        param_list_packet_t pkt = {
-            .type = RESP_PARAM_LIST,
-            .offset = 0,
-        };
-        for (int i = 0;
-             i < PARAM_LIST_MAX_PER_PACKET && i < TUNABLE_PARAM_COUNT; i++) {
-            pkt.params[i].id = (uint8_t)i;
-            pkt.params[i].value =
-                tunable_params_get(state->params, (tunable_param_id_t)i);
-        }
-        hal_esb_send(&pkt, sizeof(pkt));
-        HIVE_LOG_INFO("[COMMS] Sent param list offset=%u", pkt.offset);
+        state->mode = COMMS_MODE_PARAM_LIST;
+        HIVE_LOG_INFO("[COMMS] Starting param list");
         return;
     }
 }
@@ -578,6 +566,29 @@ void comms_actor(void *args, const hive_spawn_info_t *siblings,
                 hal_esb_send(&chunk, sizeof(chunk));
                 state->log_offset += file_bytes_read;
                 state->log_sequence++;
+            }
+        } else if (state->mode == COMMS_MODE_PARAM_LIST) {
+            // Param list mode: send one chunk per iteration
+            uint8_t offset = state->param_list_offset;
+            if (offset >= TUNABLE_PARAM_COUNT) {
+                // All params sent, return to flight mode
+                state->mode = COMMS_MODE_FLIGHT;
+                HIVE_LOG_INFO("[COMMS] Param list complete");
+            } else {
+                param_list_packet_t pkt = {
+                    .type = RESP_PARAM_LIST,
+                    .offset = offset,
+                };
+                int count = 0;
+                for (int i = offset; i < TUNABLE_PARAM_COUNT &&
+                                     count < PARAM_LIST_MAX_PER_PACKET;
+                     i++, count++) {
+                    pkt.params[count].id = (uint8_t)i;
+                    pkt.params[count].value = tunable_params_get(
+                        state->params, (tunable_param_id_t)i);
+                }
+                hal_esb_send(&pkt, sizeof(pkt));
+                state->param_list_offset += count;
             }
         } else {
             // Flight telemetry mode: alternate tlog_state / tlog_sensors

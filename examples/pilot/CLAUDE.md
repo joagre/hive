@@ -126,19 +126,23 @@ local/stlink/build/bin/st-flash --connect-under-reset write \
 ```bash
 ./tools/st-trace.sh -t 20
 ```
-Wait for `Self-test PASSED` and grace period countdown to finish (15 seconds).
+Wait for `Self-test PASSED`. The drone is immediately ready for GO after
+self-test completes (no grace period).
 
-**Step 4 - Wait for grace period**
+**Step 4 - Place drone and tune parameters**
 
-Wait at least 20 seconds after boot before sending GO. The drone has a
-15-second grace period for sensor calibration. Sending GO during the grace
-period is silently ignored.
+Place drone on level flight surface. Optionally tune parameters via radio
+before flight. Parameters can be set while the drone is in IDLE - they
+persist until power cycle.
 
 **Step 5 - Send GO and record**
 
 **NEVER send GO without asking the user first.** The user must confirm the
 drone is in a safe position and the area is clear before GO is sent. Always
 ask and wait for explicit approval.
+
+When GO is received, the drone calibrates sensors (~3s on the flight surface),
+then runs a 10s armed countdown before takeoff.
 
 Single command: sends GO, records telemetry, auto-stops on landing.
 ```bash
@@ -154,9 +158,11 @@ python3 tools/flight_summary.py flight_testNN.csv --timeline
 
 **For subsequent flights (no reflash)** - The drone returns to IDLE after
 landing. Just repeat from step 5. No power cycle or reflash needed.
+Calibration runs fresh on each GO, so no power cycle needed when moving
+the drone to a different surface.
 
-**If power cycling (no reflash needed)** - Skip steps 2-3, wait 20 seconds
-after power-on for grace period, then continue from step 5.
+**If power cycling (no reflash needed)** - Skip steps 2-3, wait for
+self-test to complete, then continue from step 4.
 
 **If the listener fails with "Resource busy"** - Go back to step 1.
 

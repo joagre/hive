@@ -64,7 +64,7 @@ by the supervisor at spawn time.
 **Webots** - Flies a square pattern with altitude changes at each waypoint (full 3D navigation with GPS).
 
 **Crazyflie 2.1+** - With Flow deck v2, uses optical flow for XY positioning and ToF for altitude.
-Without Flow deck, hovers and changes altitude only. 15s grace period + 10s armed countdown before flight.
+Without Flow deck, hovers and changes altitude only. Calibrates on GO (~3s) + 10s armed countdown before flight.
 Radio telemetry enabled via Crazyradio 2.0 for real-time ground station logging.
 Optional SD card logging with Micro SD Card Deck (build with `ENABLE_SD=1`).
 
