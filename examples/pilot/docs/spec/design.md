@@ -246,7 +246,7 @@ This table documents the scheduling design for audit and latency analysis.
 | **Attitude** | Attitude Setpoint + State | Rate Setpoint Bus | CRITICAL | PERMANENT | Attitude PIDs |
 | **Rate** | State + Thrust + Rate SP | Torque Bus | CRITICAL | PERMANENT | Rate PIDs |
 | **Motor** | Torque Bus + STOP notification | Hardware | CRITICAL | PERMANENT | Output to hardware via HAL |
-| **Flight Manager** | LANDED + LOW_BATTERY notifications | START/LANDING/STOP/RESET notifications | CRITICAL | TRANSIENT | Startup delay, landing coordination (normal exit = mission complete) |
+| **Flight Manager** | LANDED + LIFTOFF + LOW_BATTERY notifications | START/LANDING/STOP notifications, RESET request/reply | CRITICAL | PERMANENT | Flight state machine, loops for multiple flights |
 | **Battery** | Timer (2 Hz) + RESET notification | LOW_BATTERY notification | LOW | TEMPORARY | Voltage monitoring, debounced emergency landing (not flight-critical) |
 | **Comms** | Sensor + State + Thrust Bus + HAL event | Radio (HAL) | LOW | TEMPORARY | Radio telemetry (Crazyflie only, event-driven RX, not flight-critical) |
 | **Logger** | Sensor + State + Thrust + Position Target Bus | CSV file | LOW | TEMPORARY | Hive log sync + CSV telemetry (to /sd or /tmp, not flight-critical) |

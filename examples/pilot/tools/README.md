@@ -84,6 +84,20 @@ python3 flight_summary.py /tmp/tlog.csv
 python3 flight_summary.py /tmp/tlog.csv --timeline
 ```
 
+## Hardware Utilities
+
+### repair_sd_deck_ow.py
+
+Repair corrupted 1-wire EEPROM on Crazyflie Micro SD Card Deck. Writes the
+correct board name (`bcUSD`) and revision so the firmware can detect the deck.
+
+Requires Bitcraze firmware running on the Crazyflie (not the Hive firmware).
+
+```bash
+python3 repair_sd_deck_ow.py
+python3 repair_sd_deck_ow.py --uri radio://0/80/2M
+```
+
 ## Telemetry Tools
 
 Python scripts for analyzing flight telemetry, tuning PID controllers, and communicating with Crazyflie hardware.
@@ -93,7 +107,7 @@ Python scripts for analyzing flight telemetry, tuning PID controllers, and commu
 - Python 3
 - numpy
 - matplotlib
-- cflib (for ground_station.py only - `pip install cflib`)
+- cflib (for ground_station.py and repair_sd_deck_ow.py - `pip install cflib`)
 
 ## Tools
 

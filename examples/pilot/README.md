@@ -42,7 +42,7 @@ A complete quadcopter autopilot. Not a toy demo, but a flight controller targeti
 
 ## What it does
 
-Demonstrates waypoint navigation with a quadcopter using 12-13 actors (8 flight-critical workers + flight manager + battery monitor + logger + supervisor + optional comms actor):
+Demonstrates waypoint navigation with a quadcopter using 12-13 actors (9 flight-critical workers + battery monitor + logger + supervisor + optional comms actor):
 
 1. **Sensor actor** reads raw sensors via HAL, publishes to sensor bus
 2. **Estimator actor** runs complementary filter (attitude) + altitude KF + horizontal KF, publishes to state bus
@@ -142,8 +142,7 @@ graph TB
     Logger -.-> CSV[(CSV)]
 ```
 
-IPC messages coordinate flight state transitions. Solid arrows are
-fire-and-forget notifications, dashed arrows are request/reply:
+IPC messages coordinate flight state transitions (all fire-and-forget notifications):
 
 ```mermaid
 graph LR
@@ -158,14 +157,8 @@ graph LR
     end
 
     subgraph Control Pipeline
-        Sensor[Sensor]
-        Estimator[Estimator]
         Waypoint[Waypoint]
-        Position[Position]
-        Attitude[Attitude]
-        Rate[Rate]
         Motor[Motor]
-        Logger[Logger]
     end
 
     Comms -->|GO| FlightMgr
@@ -174,21 +167,14 @@ graph LR
     Altitude -->|LIFTOFF| FlightMgr
     Altitude -->|FLIGHT_LANDED| FlightMgr
 
-    FlightMgr -.->|RESET| Sensor
-    FlightMgr -.->|RESET| Estimator
-    FlightMgr -.->|RESET| Waypoint
-    FlightMgr -.->|RESET| Position
-    FlightMgr -.->|RESET| Attitude
-    FlightMgr -.->|RESET| Rate
-    FlightMgr -.->|RESET| Motor
-    FlightMgr -.->|RESET| Logger
-    FlightMgr -.->|RESET| Battery
-
     FlightMgr -->|FLIGHT_START| Motor
     FlightMgr -->|FLIGHT_START| Waypoint
     FlightMgr -->|LANDING| Altitude
     FlightMgr -->|FLIGHT_STOP| Motor
 ```
+
+Before each flight, Flight Manager sends RESET (request/reply) to all actors
+sequentially, waiting for each to acknowledge before proceeding.
 
 Hardware Abstraction Layer (HAL) provides platform independence:
 - `hal_init()`, `hal_cleanup()` - platform lifecycle
@@ -224,7 +210,7 @@ Spawn order determines execution order (round-robin within priority level):
 | 6     | attitude  | CRITICAL | PERMANENT | Needs attitude setpoints, produces rate setpoints |
 | 7     | rate      | CRITICAL | PERMANENT | Needs state + thrust + rate setpoints |
 | 8     | motor     | CRITICAL | PERMANENT | Needs torque + STOP signal, writes hardware last |
-| 9     | flight_mgr| CRITICAL | TRANSIENT | Normal exit = mission complete |
+| 9     | flight_mgr| CRITICAL | PERMANENT | Flight state machine, loops for multiple flights |
 | 10    | battery   | LOW      | TEMPORARY | Voltage monitoring, emergency landing on critical low |
 | 11    | comms     | LOW      | TEMPORARY | Crazyflie only, not flight-critical |
 | 12    | logger    | LOW      | TEMPORARY | Hive log sync + CSV telemetry (to /sd or /tmp) |

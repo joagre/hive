@@ -165,6 +165,9 @@ aerodynamic restoring force, needs higher P and much higher I).
 | `kf_q_velocity` | Process noise - velocity (m^2/s^2) | 1.0 |
 | `kf_q_bias` | Process noise - accel bias | 0.0001 |
 | `kf_r_altitude` | Measurement noise (m^2) | 0.001 |
+| `kf_p0_altitude` | Initial covariance - position (m^2) | 1.0 |
+| `kf_p0_velocity` | Initial covariance - velocity (m^2/s^2) | 1.0 |
+| `kf_p0_bias` | Initial covariance - accel bias (m^2/s^4) | 0.1 |
 
 #### Horizontal Kalman Filter
 | Parameter | Description | Default |
@@ -173,6 +176,9 @@ aerodynamic restoring force, needs higher P and much higher I).
 | `hkf_q_velocity` | Process noise - velocity (m^2/s^2) | 1.0 |
 | `hkf_q_bias` | Process noise - accel bias | 0.0001 |
 | `hkf_r_velocity` | Measurement noise - flow velocity | 0.01 |
+| `hkf_p0_position` | Initial covariance - position (m^2) | 1.0 |
+| `hkf_p0_velocity` | Initial covariance - velocity (m^2/s^2) | 1.0 |
+| `hkf_p0_bias` | Initial covariance - accel bias (m^2/s^4) | 0.1 |
 
 #### Velocity Filters
 | Parameter | Description | Default |
@@ -187,6 +193,12 @@ aerodynamic restoring force, needs higher P and much higher I).
 | `cf_use_mag` | Enable magnetometer for yaw (0=off, 1=on) | 1.0 |
 | `cf_accel_thresh_lo` | Reject accel below this (g) | 0.8 |
 | `cf_accel_thresh_hi` | Reject accel above this (g) | 1.2 |
+
+### Flight Manager Lifecycle
+| Parameter | Description | Default (HW) | Default (Sim) |
+|-----------|-------------|--------------|---------------|
+| `armed_countdown_s` | Countdown before flight authorization (s) | 10.0 | 5.0 |
+| `auto_go_delay_s` | Auto-GO delay after boot (s, 0=manual) | 0.0 | 2.0 |
 
 ### Mission / Waypoint
 | Parameter | Description | Default |
@@ -230,6 +242,12 @@ Parameters must be validated before applying. Reject values outside these ranges
 | `landing_velocity_gain` | 0.0 | 2.0 | |
 | `kf_q_*` | 1e-6 | 10.0 | |
 | `kf_r_altitude` | 1e-6 | 1.0 | |
+| `kf_p0_altitude` | 0.01 | 10.0 | |
+| `kf_p0_velocity` | 0.01 | 10.0 | |
+| `kf_p0_bias` | 0.001 | 1.0 | |
+| `hkf_p0_position` | 0.01 | 10.0 | |
+| `hkf_p0_velocity` | 0.01 | 10.0 | |
+| `hkf_p0_bias` | 0.001 | 1.0 | |
 | `hvel_filter_alpha` | 0.0 | 1.0 | 0=no filter, 1=no update |
 | `cf_alpha` | 0.9 | 0.999 | |
 | `cf_mag_alpha` | 0.0 | 1.0 | |
@@ -241,6 +259,8 @@ Parameters must be validated before applying. Reject values outside these ranges
 | `wp_tolerance_yaw` | 0.01 | 0.5 | radians |
 | `wp_tolerance_vel` | 0.01 | 0.5 | m/s |
 | `wp_hover_time_s` | 0.0 | 60.0 | seconds |
+| `armed_countdown_s` | 5.0 | 300.0 | seconds |
+| `auto_go_delay_s` | 0.0 | 60.0 | seconds (0=manual) |
 
 ---
 
@@ -257,7 +277,7 @@ Parameters must be validated before applying. Reject values outside these ranges
 | `RESP_PARAM_VALUE` | 0x34 | Drone -> Ground | Response with parameter value |
 | `RESP_PARAM_LIST` | 0x35 | Drone -> Ground | Response with parameter list chunk |
 
-**Note:** Values 0x10-0x12 are reserved for log download commands, 0x20 for GO command.
+**Note:** Values 0x10-0x12 are reserved for log download, 0x20-0x23 for flight commands (GO, ABORT, STATUS).
 
 ### Packet Format
 

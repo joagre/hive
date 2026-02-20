@@ -11,8 +11,7 @@ Quadcopter autopilot using the Hive actor runtime. 12-13 actors in a supervised 
 - Webots simulation
 
 **Actor count:** 12-13 (11-12 children + 1 supervisor)
-- 8 flight-critical workers: sensor, estimator, waypoint, altitude, position, attitude, rate, motor
-- 1 flight manager (TRANSIENT - normal exit = mission complete)
+- 9 flight-critical workers (PERMANENT): sensor, estimator, waypoint, altitude, position, attitude, rate, motor, flight manager
 - 1 battery monitor (TEMPORARY - 2 Hz voltage sampling, emergency landing)
 - 1 logger (hive log sync + CSV telemetry to /sd or /tmp)
 - 1 supervisor
@@ -328,6 +327,9 @@ The nRF51 is PRX (receiver), Crazyradio is PTX (transmitter):
 - `0x03-0x04` - Telemetry packets (tlog_state, tlog_sensors)
 - `0x10-0x12` - Log download commands
 - `0x20` - GO command (start flight)
+- `0x21` - ABORT command (abort countdown/flight)
+- `0x22` - STATUS request (query flight manager state)
+- `0x23` - STATUS response (state + countdown)
 - `0x30-0x32` - Parameter tuning (set, get, list)
 - `0x33-0x35` - Parameter responses (ack, value, list chunk)
 
