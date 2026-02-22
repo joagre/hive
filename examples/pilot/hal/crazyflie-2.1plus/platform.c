@@ -1335,8 +1335,14 @@ void platform_read_sensors(sensor_data_t *sensors) {
     }
 
     // Read optical flow (PMW3901) and integrate to position
-    int16_t delta_x = 0, delta_y = 0;
-    bool flow_ok = platform_read_flow(&delta_x, &delta_y);
+    int16_t raw_dx = 0, raw_dy = 0;
+    bool flow_ok = platform_read_flow(&raw_dx, &raw_dy);
+
+    // Flip axes to match sensor mounting on Crazyflie flow deck.
+    // PMW3901 is rotated 90 deg: body X = -sensor Y, body Y = -sensor X.
+    // From Bitcraze flowdeck_v1v2.c lines 92-95.
+    int16_t delta_x = -raw_dy;
+    int16_t delta_y = -raw_dx;
 
     // Initialize velocity as invalid
     sensors->velocity_x = 0.0f;
@@ -1354,9 +1360,10 @@ void platform_read_sensors(sensor_data_t *sensors) {
 
         if (dt > 0.0f && dt < 0.1f) { // Sanity check: dt between 0 and 100ms
             // Convert pixel deltas to velocity (m/s, body frame)
-            // Formula: velocity = pixel_delta * SCALE * height
-            float vx_body = delta_x * HAL_FLOW_SCALE * height_m;
-            float vy_body = delta_y * HAL_FLOW_SCALE * height_m;
+            // Formula: velocity = pixel_delta * SCALE * height / dt
+            // PMW3901 outputs displacement per sample, divide by dt for m/s
+            float vx_body = delta_x * HAL_FLOW_SCALE * height_m / dt;
+            float vy_body = delta_y * HAL_FLOW_SCALE * height_m / dt;
 
             // Compensate for body rotation (pre-flight finding #3).
             // The PMW3901 sees rotational flow when the drone pitches/rolls.

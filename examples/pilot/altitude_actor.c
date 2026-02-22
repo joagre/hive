@@ -194,11 +194,16 @@ void altitude_actor(void *args, const hive_spawn_info_t *siblings,
         // altitude Kalman filter may drift because the rangefinder can't
         // measure below ~40mm (drone sits at ~20-30mm on surface).
         // False crash detection on a grounded drone blocks the next flight.
+        // Check BOTH positive (>2m) and negative (<-0.5m) altitude bounds.
+        // Negative altitude is physically impossible - it means the KF has
+        // diverged post-crash. Without this check, the PID commands max
+        // thrust trying to "climb" from e.g. -26m (flight test 47 bug).
         if (target_altitude > 0.0f) {
             bool attitude_emergency =
                 (fabsf(est.roll) > p->emergency_tilt_limit) ||
                 (fabsf(est.pitch) > p->emergency_tilt_limit);
-            bool altitude_emergency = (est.altitude > p->emergency_alt_max);
+            bool altitude_emergency = (est.altitude > p->emergency_alt_max) ||
+                                      (est.altitude < EMERGENCY_ALTITUDE_MIN);
 
             // Latch crash condition - once triggered, motors stay off
             if (attitude_emergency || altitude_emergency) {

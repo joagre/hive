@@ -28,9 +28,10 @@ no oscillation), and stable attitude. In that priority order.
 | `alt_kp` | 0.12 | Needs work (43-56% overshoot) |
 | `alt_ki` | 0.005 | Needs work |
 | `vvel_damping` | 0.55 | Needs work |
-| `pos_kp` | **0.0** | **Disabled** - re-enable with HKF (phase 2) |
+| `pos_kp` | **0.0** | Re-enabling (session 11 fixed flow bugs) |
 | `pos_kd` | 0.20 | Tuned session 8, damping-only |
 | `max_tilt_angle` | 0.25 (14 deg) | OK |
+| `HAL_FLOW_SCALE` | 0.0005 | May need 4x increase (see session 11) |
 
 ### Architectural analysis
 
@@ -156,6 +157,123 @@ With stable hover in all axes, push toward perfection:
 
 5. **Full 3D waypoints** - FULL_3D profile with XY waypoints.
    Requires position control to be solid before attempting.
+
+---
+
+## Session 11 - 2026-02-22 - Flow sensor bugs and safety fix (tests 44-49)
+
+Discovered two critical flow sensor bugs that made position control blind
+for all 49 flights, plus a post-crash safety bug. Three code fixes, no
+tuning changes.
+
+### Bug 1 - Missing /dt in flow velocity conversion (CRITICAL)
+
+**File**: `hal/crazyflie-2.1plus/platform.c:1358`
+
+The PMW3901 pixel-to-velocity conversion was:
+```c
+float vx_body = delta_x * HAL_FLOW_SCALE * height_m;       // WRONG
+```
+Should be:
+```c
+float vx_body = delta_x * HAL_FLOW_SCALE * height_m / dt;  // FIXED
+```
+
+The PMW3901 outputs pixel displacement per sample. Without dividing by dt
+(~0.004s at 250Hz), velocities were **250x too small**. The HKF reported
+0.017 m/s while the real drift was 0.25 m/s. Position control was
+essentially running blind on accelerometer integration for all 49 tests.
+
+This explains why increasing pos_kp from 0 to 0.10 across tests 44-48
+barely helped - the corrections were based on nearly-zero position errors.
+
+### Bug 2 - PMW3901 axis mapping missing (CRITICAL)
+
+**File**: `hal/crazyflie-2.1plus/platform.c:1338`
+
+Raw PMW3901 delta_x/delta_y were passed straight through to body-frame
+velocity. But the sensor is mounted 90 deg rotated on the flow deck.
+Bitcraze's `flowdeck_v1v2.c:94-95` applies:
+```c
+body_x = -sensor.deltaY;
+body_y = -sensor.deltaX;
+```
+
+Our code had no axis mapping. This was invisible while bug 1 existed
+because flow velocities were negligible. After fixing /dt, test 49
+(pos_kp=0.03) showed 40.8 deg tilt and 2m drift into a wall in 3.9s -
+the position controller was correcting in the wrong direction.
+
+Fixed by adding Bitcraze's swap-and-negate before velocity computation.
+
+### Bug 3 - No negative altitude emergency cutoff (SAFETY)
+
+**File**: `altitude_actor.c:201`, `config.h:137`
+
+The altitude emergency check only triggered at `> 2.0m` (positive).
+After a crash, the KF altitude diverged to -26m (post-landing drift
+from accelerometer bias with no rangefinder correction). The PID
+commanded 99.2% thrust for 30+ seconds trying to "climb" from -26m.
+
+The 10-second landing timeout never fired because the flight manager
+never entered LANDING state (crash happened during FLYING).
+
+Fixed by adding `EMERGENCY_ALTITUDE_MIN = -0.5f`. Negative altitude
+is physically impossible - any reading below -0.5m triggers the crash
+latch and zeros motors immediately.
+
+Verified in test 48: post-landing KF drift was caught within 3 seconds
+(vs 30+ seconds in test 47).
+
+### Flight test results
+
+| Test | pos_kp | Duration | Max tilt | XY drift (real) | XY (HKF) | Notes |
+|------|--------|----------|----------|-----------------|----------|-------|
+| 44 | 0.00 | ~6s | - | 2m (shelf crash) | - | Baseline, no position hold |
+| 45 | 0.03 | 11.7s | 32 deg | 1.5m (shelf) | 0.20m | Slow backward drift |
+| 46 | 0.05 | 7.6s | - | 1.5m (shelf) | 0.05m | HKF divergence clear |
+| 47 | 0.08 | 8.1s | 25 deg | 1.0m (shelf) | 0.07m | **Safety bug found** - 99% thrust 30s on ground |
+| 48 | 0.10 | 8.1s | 23 deg | 1.0m (wall) | 0.10m | Safety fix confirmed working |
+| 49 | 0.03 | 3.9s | 41 deg | 2m (wall) | 0.18m | /dt fix but wrong axes - violent |
+
+Tests 44-48 had the /dt bug (flow 250x too small). Test 49 had /dt
+fixed but axes wrong. Test 50 (pending - battery charging) will be
+the first flight with all three fixes.
+
+### Key insight - why drift was invisible for 49 tests
+
+All previous position control problems (session 3 "flow drift", session 5
+"XY drift ~1m", session 7 "aggressive tilts", session 8 "drift getting
+worse") trace back to the same root cause: the flow sensor data was 250x
+too small to be useful. The HKF, position PD controller, and velocity
+damping were all processing nearly-zero flow data. Every pos_kp tuning
+attempt was futile - there was no real position information to correct from.
+
+### Updated tuning plan
+
+With correct flow data (both scale and axes), the tuning plan changes:
+
+- **Phase 2b restarts from scratch** - pos_kp=0.03 with working flow is a
+  completely different starting point. The stop condition (drift < 0.10m)
+  is now actually achievable.
+- **Phase 3 may improve too** - some altitude oscillation was likely caused
+  by the position controller fighting phantom drift. With real position
+  feedback, the system should be calmer overall.
+- **HAL_FLOW_SCALE (0.0005)** may need calibration. Derived from Bitcraze's
+  Npix=35, thetapix=0.717, FLOW_RESOLUTION=0.1 gives ~0.00205. Current
+  value is 4x smaller. Not critical yet but may need adjustment if
+  velocity magnitude is wrong after axis fix.
+
+### Compile-time changes (all in hal/crazyflie-2.1plus/)
+
+| File | Change |
+|------|--------|
+| `platform.c:1337-1343` | Added Bitcraze axis mapping (swap + negate) |
+| `platform.c:1358-1359` | Added `/dt` to flow velocity conversion |
+| `altitude_actor.c:201` | Added `est.altitude < EMERGENCY_ALTITUDE_MIN` |
+| `config.h:137` | Added `EMERGENCY_ALTITUDE_MIN -0.5f` |
+
+No tuning parameter changes. All gains at session 8 compiled defaults.
 
 ---
 

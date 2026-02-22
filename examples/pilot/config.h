@@ -135,6 +135,8 @@
 
 #define EMERGENCY_TILT_LIMIT 0.78f  // ~45 degrees in radians
 #define EMERGENCY_ALTITUDE_MAX 2.0f // meters - cut motors if exceeded
+#define EMERGENCY_ALTITUDE_MIN \
+    -0.5f // meters - KF divergence floor (impossible)
 
 // Minimum thrust when airborne. Keeps enough base thrust for the mixer
 // to produce some attitude corrections. Without this, the altitude PID

@@ -145,6 +145,8 @@ When GO is received, the drone calibrates sensors (~3s on the flight surface),
 then runs a 10s armed countdown before takeoff.
 
 Single command: sends GO, records telemetry, auto-stops on landing.
+FIRST_TEST flights are 45 seconds maximum (6s flight + calibration +
+countdown + landing). Do not record telemetry for longer than that.
 ```bash
 source tests/.venv/bin/activate
 python3 tools/ground_station.py --go -o flight_testNN.csv
@@ -157,9 +159,11 @@ python3 tools/flight_summary.py flight_testNN.csv --timeline
 ```
 
 **For subsequent flights (no reflash)** - The drone returns to IDLE after
-landing. Just repeat from step 5. No power cycle or reflash needed.
-Calibration runs fresh on each GO, so no power cycle needed when moving
-the drone to a different surface.
+landing, even after crashes into furniture. Just repeat from step 5.
+No power cycle needed. Radio stays responsive after crashes. Calibration
+runs fresh on each GO, so no power cycle needed when moving the drone
+to a different surface. Only power cycle if nRF51 radio becomes
+completely unresponsive (rare).
 
 **If power cycling (no reflash needed)** - Skip steps 2-3, wait for
 self-test to complete, then continue from step 4.
