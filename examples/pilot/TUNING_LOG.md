@@ -160,6 +160,93 @@ With stable hover in all axes, push toward perfection:
 
 ---
 
+## Session 12 - 2026-02-23 - Unify pitch sign convention across HALs
+
+Unified the pitch axis convention between Webots and Crazyflie HALs.
+Both platforms now present identical sensor conventions to the shared
+control code. No tuning parameter changes.
+
+### Problem
+
+The position_actor was changed to negate both roll and pitch when
+publishing attitude setpoints (`.pitch = -pitch_cmd`), matching
+Bitcraze controller_pid.c lines 251-252 (aerospace convention:
+positive pitch = nose-UP). This broke the Webots sim because the
+motor HAL had a compensating pitch negation (`float pitch = -cmd->pitch`)
+that created a double-negation.
+
+The root cause: the original Webots sensor HAL produced **positive
+est.pitch = nose-DOWN** while the Crazyflie sensor HAL produced
+**positive est.pitch = nose-UP**. The shared code worked by accident
+because the position_actor's missing pitch negation and the motor
+HAL's pitch negation cancelled each other out.
+
+### Fix - sensor-side corrections
+
+Moved all sensor polarity corrections to the sensor HAL, where they
+belong. Each HAL now presents the same convention to shared code:
+
+**Webots sensor HAL (`hal_sensors.c`)**:
+- `accel[0] = +g*sin(pitch)` (sign-flipped from naive `-g*sin(pitch)`)
+- `gyro[1] = -(float)gyro[1]` (pitch rate negated)
+- `gyro[2]` unchanged (yaw is an actuator issue, see below)
+
+This mirrors what the Crazyflie HAL already does for the BMI088:
+- `accel[0] = -(accel_data.x * scale)` (X-axis negated, BMI088 points AFT)
+- `gyro[1] = -(gyro_data.y * scale - bias)` (pitch rate negated to match)
+
+**Webots motor HAL (`hal_motors.c`)**:
+- Pitch negation removed (sensor-side makes it unnecessary)
+- Yaw negation kept (`float yaw = -cmd->yaw`) - this compensates for
+  the PROTO's opposite propeller spin directions, an actuator difference
+  that cannot be sensor-corrected
+
+**Position actor (`position_actor.c`)**:
+- `.pitch = -pitch_cmd` (was `pitch_cmd`, now matches Bitcraze convention)
+- `.roll = -roll_cmd` (unchanged, was already correct)
+
+**Flow gyro compensation (`platform.c`)**:
+- Changed from `+=` to `-=` for both axes, matching Bitcraze mm_flow.c
+  velocity model. The session 3 sign flip (subtract -> add) was wrong
+  given the gyro Y negation at line 1307.
+
+### Design principle
+
+- **Sensor HAL** corrects measurement polarity (pitch axis for both platforms)
+- **Motor HAL** corrects actuator differences (yaw for Webots propeller spin)
+- **Shared actors** use a single convention (aerospace: positive pitch = nose-UP)
+
+### Verification (Webots sim)
+
+| Profile | Noise | Max tilt | XY error | Verdict |
+|---------|-------|----------|----------|---------|
+| FIRST_TEST | 0 | 0.0 deg | 0.000m | OK |
+| FIRST_TEST | 3 | 1.9 deg | 0.000m | OK |
+| FULL_3D | 0 | 4.6 deg | 0.348m | OK |
+| FULL_3D | 3 | ~4.7 deg | ~0.5m | OK (stochastic) |
+
+Performance matches the original code (before the position_actor change).
+FULL_3D navigates all 5 waypoints and lands cleanly at all noise levels.
+
+### Code changes
+
+| File | Change |
+|------|--------|
+| `hal/webots-crazyflie/hal_sensors.c` | Negate gyro[1], flip accel[0] sign |
+| `hal/webots-crazyflie/hal_motors.c` | Remove pitch negation, keep yaw negation |
+| `hal/webots-crazyflie/README.md` | Updated sign convention docs |
+| `position_actor.c` | `.pitch = -pitch_cmd` (aerospace convention) |
+| `hal/crazyflie-2.1plus/platform.c` | Fix flow gyro compensation signs |
+
+### Impact on hardware tuning
+
+No tuning parameter changes. The position_actor pitch negation and
+flow gyro compensation fix affect Crazyflie hardware behavior. Next
+hardware flight (test 50) will validate. If position control direction
+is wrong, the flow compensation sign change is the likely cause.
+
+---
+
 ## Session 11 - 2026-02-22 - Flow sensor bugs and safety fix (tests 44-49)
 
 Discovered two critical flow sensor bugs that made position control blind
