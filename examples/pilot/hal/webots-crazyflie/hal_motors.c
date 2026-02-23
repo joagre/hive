@@ -21,28 +21,28 @@
 //         Rear
 //
 // Motor rotation: M1(CCW), M2(CW), M3(CCW), M4(CW)
+//
+// Sensor-side corrections (in hal_sensors.c) handle pitch axis polarity.
+// The yaw negation below handles an actuator difference: the PROTO
+// propellers spin opposite from real hardware, inverting yaw torque.
+// This cannot be sensor-corrected because it's a physical torque
+// reversal, not a measurement polarity issue.
 
 void hal_write_torque(const torque_cmd_t *cmd) {
-    // Platform-specific sign corrections for Webots coordinate frame.
-    //
-    // Pitch: Webots front/rear motor mapping is transposed relative to the
-    // Crazyflie, requiring pitch negation for correct nose-up/down response.
-    //
-    // Yaw: The Webots gyro Z axis has opposite polarity from the Bitcraze
-    // BMI088. The rate_actor already negates yaw for Bitcraze hardware,
-    // so we negate again here to undo that and match the Webots convention.
-    //
-    // Roll: No negation needed - the Webots gyro X polarity difference
-    // cancels the motor position transposition.
-    float pitch = -cmd->pitch;
+    // Yaw negation: PROTO propellers spin opposite from hardware,
+    // reversing the reactive yaw torque for the same motor speeds.
     float yaw = -cmd->yaw;
 
     // Apply mixer (same equation template as Crazyflie HAL)
     float motors[NUM_MOTORS];
-    motors[0] = cmd->thrust - cmd->roll + pitch + yaw; // M1 (rear-left, CCW)
-    motors[1] = cmd->thrust - cmd->roll - pitch - yaw; // M2 (front-left, CW)
-    motors[2] = cmd->thrust + cmd->roll - pitch + yaw; // M3 (front-right, CCW)
-    motors[3] = cmd->thrust + cmd->roll + pitch - yaw; // M4 (rear-right, CW)
+    motors[0] =
+        cmd->thrust - cmd->roll + cmd->pitch + yaw; // M1 (rear-left, CCW)
+    motors[1] =
+        cmd->thrust - cmd->roll - cmd->pitch - yaw; // M2 (front-left, CW)
+    motors[2] =
+        cmd->thrust + cmd->roll - cmd->pitch + yaw; // M3 (front-right, CCW)
+    motors[3] =
+        cmd->thrust + cmd->roll + cmd->pitch - yaw; // M4 (rear-right, CW)
 
     // Attitude-priority mixing: if any motor exceeds 1.0, reduce base
     // thrust for all motors equally so attitude differentials (roll, pitch,

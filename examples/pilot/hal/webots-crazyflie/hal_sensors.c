@@ -19,9 +19,16 @@ void hal_read_sensors(sensor_data_t *sensors) {
 
     // Synthesize accelerometer from gravity + known attitude
     // (Webots Crazyflie PROTO has no accelerometer device)
+    //
+    // Pitch axis (accel[0]) sign convention:
+    // The Crazyflie HAL negates the BMI088 X-axis accel so the complementary
+    // filter produces positive pitch = nose-UP (aerospace convention).
+    // The Webots PROTO pitch axis has opposite polarity, so we use
+    // +g*sin(pitch) here (vs -g*sin(pitch) in the naive projection)
+    // to match the Crazyflie convention.
     float roll = (float)rpy[0];
     float pitch = (float)rpy[1];
-    sensors->accel[0] = -GRAVITY * sinf(pitch);
+    sensors->accel[0] = GRAVITY * sinf(pitch);
     sensors->accel[1] = GRAVITY * sinf(roll) * cosf(pitch);
     sensors->accel[2] = GRAVITY * cosf(roll) * cosf(pitch);
     sensors->accel_valid = true;
@@ -32,8 +39,15 @@ void hal_read_sensors(sensor_data_t *sensors) {
     sensors->accel[2] += ACCEL_NOISE_STDDEV * randf_gaussian();
 
     // Gyroscope (body frame, rad/s)
+    //
+    // gyro[1] negated: Webots PROTO pitch axis has opposite polarity from
+    // the Crazyflie BMI088. Matches the Crazyflie HAL's gyro Y negation.
+    //
+    // gyro[2] NOT negated: the yaw axis difference is an actuator issue
+    // (PROTO propellers spin opposite from hardware), not a sensor issue.
+    // Compensated in hal_motors.c by negating cmd->yaw in the mixer.
     sensors->gyro[0] = (float)gyro[0];
-    sensors->gyro[1] = (float)gyro[1];
+    sensors->gyro[1] = -(float)gyro[1];
     sensors->gyro[2] = (float)gyro[2];
     sensors->gyro_valid = true;
 

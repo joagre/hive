@@ -7,7 +7,8 @@
 //   Internal: Positive error -> positive command -> accelerate toward target
 //   Aerospace: Positive pitch (nose up) -> -X accel, positive roll -> -Y accel
 //
-// Roll is negated when publishing to convert from internal to aerospace.
+// Both roll and pitch are negated when publishing to convert from internal
+// to aerospace convention.
 
 #include "position_actor.h"
 #include "pilot_buses.h"
@@ -160,14 +161,16 @@ void position_actor(void *args, const hive_spawn_info_t *siblings,
         roll_cmd = CLAMPF(roll_cmd, -p->max_tilt_angle, p->max_tilt_angle);
 
         // Sign conversion to aerospace convention:
+        // - Pitch negated: positive body X error -> negative pitch (nose down) -> +X accel
         // - Roll negated: positive body Y error -> negative roll -> +Y accel
+        // Matches Bitcraze controller_pid.c lines 251-252 which negate both.
         float target_yaw = target.yaw;
         if (!isfinite(target_yaw)) {
             HIVE_LOG_ERROR("[POS] NaN target yaw - waypoint corrupted!");
             target_yaw = est.yaw;
         }
         attitude_setpoint_t setpoint = {
-            .roll = -roll_cmd, .pitch = pitch_cmd, .yaw = target_yaw};
+            .roll = -roll_cmd, .pitch = -pitch_cmd, .yaw = target_yaw};
 
         status = hive_bus_publish(state->attitude_setpoint_bus, &setpoint,
                                   sizeof(setpoint));

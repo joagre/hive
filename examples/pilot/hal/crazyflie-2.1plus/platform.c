@@ -1365,14 +1365,17 @@ void platform_read_sensors(sensor_data_t *sensors) {
             float vx_body = delta_x * HAL_FLOW_SCALE * height_m / dt;
             float vy_body = delta_y * HAL_FLOW_SCALE * height_m / dt;
 
-            // Compensate for body rotation (pre-flight finding #3).
+            // Compensate for body rotation.
             // The PMW3901 sees rotational flow when the drone pitches/rolls.
-            // Subtract the gyro-induced component to isolate translational
-            // velocity. Based on Bitcraze mm_flow.c:79 and :92.
-            // Note: gyro[1] is negated (pitch axis fix), so += here gives
-            // the original subtraction of raw pitch rate.
-            vx_body += sensors->gyro[1] * height_m; // pitch rate (negated)
-            vy_body += sensors->gyro[0] * height_m; // roll rate (unchanged)
+            // From Bitcraze mm_flow.c:79 predicted_x ~ (vx/z - pitch_rate),
+            // solving for vx: vx = flow_vel + pitch_rate * z.
+            // From mm_flow.c:92 predicted_y ~ (vy/z + roll_rate),
+            // solving for vy: vy = flow_vel - roll_rate * z.
+            // gyro[1] = -raw_pitch_rate (negated at line 1307), so
+            // -= gives +raw_pitch_rate*h. gyro[0] = raw_roll_rate, so
+            // -= gives -raw_roll_rate*h. Both match Bitcraze's model.
+            vx_body -= sensors->gyro[1] * height_m;
+            vy_body -= sensors->gyro[0] * height_m;
 
             // Integrate yaw from gyro (simple dead-reckoning)
             // Note: This drifts over time, but flow-based position drifts anyway

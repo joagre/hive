@@ -47,13 +47,14 @@ command.
 
 **Motor mixing (in hal_motors.c)**
 
-Pitch is negated before mixing to match Crazyflie coordinate frame.
-After this adjustment, the effective mixing is:
+Sensor-side corrections handle pitch (gyro[1], accel[0] in hal_sensors.c).
+Yaw is negated in the mixer because the PROTO propellers spin opposite
+from hardware - an actuator difference, not a sensor one:
 ```
-M1 = thrust - roll - pitch + yaw  (rear-left, CCW)
-M2 = thrust - roll + pitch - yaw  (front-left, CW)
-M3 = thrust + roll + pitch + yaw  (front-right, CCW)
-M4 = thrust + roll - pitch - yaw  (rear-right, CW)
+M1 = thrust - roll + pitch + yaw  (rear-left, CCW)
+M2 = thrust - roll - pitch - yaw  (front-left, CW)
+M3 = thrust + roll - pitch + yaw  (front-right, CCW)
+M4 = thrust + roll + pitch - yaw  (rear-right, CW)
 ```
 
 **Motor velocity signs** - M1,M3 use negative velocity; M2,M4 use positive.
@@ -62,8 +63,8 @@ M4 = thrust + roll - pitch - yaw  (rear-right, CW)
 
 | Sensor | Source | Notes |
 |--------|--------|-------|
-| Accelerometer | Synthesized from gravity + inertial_unit | No accelerometer device in PROTO |
-| Gyroscope | `gyro` device | Body-frame angular rates |
+| Accelerometer | Synthesized from gravity + inertial_unit | accel[0] sign-flipped for pitch convention |
+| Gyroscope | `gyro` device | gyro[1] negated for pitch convention |
 | Position | `gps` device | Perfect XYZ position |
 | Attitude | `inertial_unit` device | Used internally for accel synthesis |
 
