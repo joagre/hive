@@ -155,6 +155,8 @@ void estimator_actor(void *args, const hive_spawn_info_t *siblings,
         .use_mag = (p->cf_use_mag > 0.5f),
         .accel_threshold_lo = p->cf_accel_thresh_lo,
         .accel_threshold_hi = p->cf_accel_thresh_hi,
+        .accel_bias_ki = p->cf_accel_bias_ki,
+        .accel_bias_max = p->cf_accel_bias_max,
     };
     cf_init(&filter, &cf_config);
 
@@ -233,7 +235,7 @@ void estimator_actor(void *args, const hive_spawn_info_t *siblings,
             // Without this, the KF drifts negative for ~5s after RESET
             // (no rangefinder corrections) causing blind max-thrust flight.
             HIVE_LOG_INFO("[EST] RESET - reinitializing filters");
-            cf_init(&filter, &cf_config);
+            cf_reset(&filter);
             altitude_kf_init(&alt_kf, &kf_config);
             horizontal_kf_init(&hkf_x, &hkf_config);
             horizontal_kf_init(&hkf_y, &hkf_config);
@@ -282,6 +284,8 @@ void estimator_actor(void *args, const hive_spawn_info_t *siblings,
         filter.config.use_mag = (p->cf_use_mag > 0.5f);
         filter.config.accel_threshold_lo = p->cf_accel_thresh_lo;
         filter.config.accel_threshold_hi = p->cf_accel_thresh_hi;
+        filter.config.accel_bias_ki = p->cf_accel_bias_ki;
+        filter.config.accel_bias_max = p->cf_accel_bias_max;
 
         // Update altitude Kalman filter config from tunable params (live tuning)
         // Note: P0 changes only affect future resets, Q/R affect every cycle
@@ -376,9 +380,13 @@ void estimator_actor(void *args, const hive_spawn_info_t *siblings,
         float cos_yaw = cosf(est.yaw);
         float sin_yaw = sinf(est.yaw);
 
-        float ax = sensors.accel[0];
-        float ay = sensors.accel[1];
-        float az = sensors.accel[2];
+        // Subtract estimated accel bias before body-to-world rotation.
+        // Removes vibration-induced phantom horizontal acceleration.
+        float bias[3];
+        cf_get_accel_bias(&filter, bias);
+        float ax = sensors.accel[0] - bias[0];
+        float ay = sensors.accel[1] - bias[1];
+        float az = sensors.accel[2] - bias[2];
 
         // Full rotation matrix rows for world-frame acceleration:
         // R[0] = [cos_yaw*cos_pitch,

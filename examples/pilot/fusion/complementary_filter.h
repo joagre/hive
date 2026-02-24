@@ -28,26 +28,30 @@ typedef struct {
     bool use_mag;             // Enable magnetometer fusion for yaw
     float accel_threshold_lo; // Reject accel if magnitude below this (g)
     float accel_threshold_hi; // Reject accel if magnitude above this (g)
+    float accel_bias_ki;      // Integral gain for accel bias estimation (0=off)
+    float accel_bias_max;     // Maximum bias magnitude per axis (m/s^2)
 } cf_config_t;
 
 // Default configuration
 // alpha = 0.995: High gyro trust, slow accel correction (reduces noise
 // sensitivity) Accel thresholds: Only trust accelerometer near 1g (not during
 // maneuvers)
-#define CF_CONFIG_DEFAULT                                      \
-    {                                                          \
-        .alpha = 0.995f, .mag_alpha = 0.95f, .use_mag = false, \
-        .accel_threshold_lo = 0.8f, .accel_threshold_hi = 1.2f \
+#define CF_CONFIG_DEFAULT                                       \
+    {                                                           \
+        .alpha = 0.995f, .mag_alpha = 0.95f, .use_mag = false,  \
+        .accel_threshold_lo = 0.8f, .accel_threshold_hi = 1.2f, \
+        .accel_bias_ki = 0.5f, .accel_bias_max = 1.0f           \
     }
 
 // Filter state
 typedef struct {
-    float roll;         // Current roll estimate (radians)
-    float pitch;        // Current pitch estimate (radians)
-    float yaw;          // Current yaw estimate (radians)
-    float gyro_bias[3]; // Optional gyro bias (subtracted from readings)
-    cf_config_t config; // Filter configuration
-    bool initialized;   // True after first update
+    float roll;          // Current roll estimate (radians)
+    float pitch;         // Current pitch estimate (radians)
+    float yaw;           // Current yaw estimate (radians)
+    float gyro_bias[3];  // Optional gyro bias (subtracted from readings)
+    float accel_bias[3]; // Estimated accelerometer bias (m/s^2, body frame)
+    cf_config_t config;  // Filter configuration
+    bool initialized;    // True after first update
 } cf_state_t;
 
 // ----------------------------------------------------------------------------
@@ -73,6 +77,9 @@ void cf_get_attitude(const cf_state_t *state, float *roll, float *pitch,
 // Set gyro bias (subtracted from gyro readings before integration).
 // bias: [x, y, z] bias in rad/s
 void cf_set_gyro_bias(cf_state_t *state, const float bias[3]);
+
+// Get estimated accelerometer bias (body frame, m/s^2).
+void cf_get_accel_bias(const cf_state_t *state, float bias[3]);
 
 // Utility: Calculate roll from accelerometer (radians).
 // Only valid when stationary or in steady flight.

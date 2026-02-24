@@ -57,6 +57,11 @@ void cf_init(cf_state_t *state, const cf_config_t *config) {
     state->gyro_bias[1] = 0.0f;
     state->gyro_bias[2] = 0.0f;
 
+    // Initialize accel bias to zero
+    state->accel_bias[0] = 0.0f;
+    state->accel_bias[1] = 0.0f;
+    state->accel_bias[2] = 0.0f;
+
     state->initialized = false;
 }
 
@@ -74,6 +79,12 @@ void cf_update(cf_state_t *state, const sensor_data_t *sensors, float dt) {
     gyro[1] = sensors->gyro[1] - state->gyro_bias[1];
     gyro[2] = sensors->gyro[2] - state->gyro_bias[2];
 
+    // Subtract estimated accel bias (online vibration bias correction)
+    float accel_corrected[3];
+    accel_corrected[0] = sensors->accel[0] - state->accel_bias[0];
+    accel_corrected[1] = sensors->accel[1] - state->accel_bias[1];
+    accel_corrected[2] = sensors->accel[2] - state->accel_bias[2];
+
     // -------------------------------------------------------------------------
     // Step 1: Integrate gyroscope for angle prediction
     // -------------------------------------------------------------------------
@@ -89,15 +100,15 @@ void cf_update(cf_state_t *state, const sensor_data_t *sensors, float dt) {
     // Only valid when acceleration ~= gravity (not during aggressive maneuvers)
 
     bool accel_valid =
-        cf_accel_valid(sensors->accel, state->config.accel_threshold_lo,
+        cf_accel_valid(accel_corrected, state->config.accel_threshold_lo,
                        state->config.accel_threshold_hi);
 
     float accel_roll = 0.0f;
     float accel_pitch = 0.0f;
 
     if (accel_valid) {
-        accel_roll = cf_accel_roll(sensors->accel);
-        accel_pitch = cf_accel_pitch(sensors->accel);
+        accel_roll = cf_accel_roll(accel_corrected);
+        accel_pitch = cf_accel_pitch(accel_corrected);
     }
 
     // -------------------------------------------------------------------------
@@ -122,6 +133,36 @@ void cf_update(cf_state_t *state, const sensor_data_t *sensors, float dt) {
 
     // Yaw: gyro integration by default
     state->yaw = gyro_yaw;
+
+    // -------------------------------------------------------------------------
+    // Step 3b: Online accelerometer bias estimation (Mahony-style integral)
+    // -------------------------------------------------------------------------
+    // When accel is valid (near 1g), the residual between measured and expected
+    // gravity reveals vibration-induced bias. Integrating with slow Ki gives
+    // the bias estimate. Only update when accel_valid to prevent maneuver
+    // centripetal acceleration from corrupting the estimate.
+    if (accel_valid && state->config.accel_bias_ki > 0.0f) {
+        float cos_r = cosf(state->roll);
+        float sin_r = sinf(state->roll);
+        float cos_p = cosf(state->pitch);
+        float sin_p = sinf(state->pitch);
+
+        // Expected gravity in body frame from current attitude
+        float expected[3];
+        expected[0] = -GRAVITY * sin_p;
+        expected[1] = GRAVITY * sin_r * cos_p;
+        expected[2] = GRAVITY * cos_r * cos_p;
+
+        for (int i = 0; i < 3; i++) {
+            float residual = accel_corrected[i] - expected[i];
+            state->accel_bias[i] += state->config.accel_bias_ki * residual * dt;
+            // Clamp to maximum
+            if (state->accel_bias[i] > state->config.accel_bias_max)
+                state->accel_bias[i] = state->config.accel_bias_max;
+            if (state->accel_bias[i] < -state->config.accel_bias_max)
+                state->accel_bias[i] = -state->config.accel_bias_max;
+        }
+    }
 
     // -------------------------------------------------------------------------
     // Step 4: Magnetometer fusion for yaw (if available and enabled)
@@ -173,6 +214,12 @@ void cf_set_gyro_bias(cf_state_t *state, const float bias[3]) {
     state->gyro_bias[0] = bias[0];
     state->gyro_bias[1] = bias[1];
     state->gyro_bias[2] = bias[2];
+}
+
+void cf_get_accel_bias(const cf_state_t *state, float bias[3]) {
+    bias[0] = state->accel_bias[0];
+    bias[1] = state->accel_bias[1];
+    bias[2] = state->accel_bias[2];
 }
 
 float cf_accel_roll(const float accel[3]) {

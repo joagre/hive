@@ -179,6 +179,14 @@ static const param_meta_t param_meta[TUNABLE_PARAM_COUNT] = {
     [PARAM_HKF_MAX_INNOVATION] = {.name = "hkf_max_innov",
                                   .min = 0.1f,
                                   .max = 5.0f},
+
+    // Accel bias estimation (60-61)
+    [PARAM_CF_ACCEL_BIAS_KI] = {.name = "cf_accel_bias_ki",
+                                .min = 0.0f,
+                                .max = 5.0f},
+    [PARAM_CF_ACCEL_BIAS_MAX] = {.name = "cf_accel_bias_max",
+                                 .min = 0.1f,
+                                 .max = 5.0f},
 };
 
 void tunable_params_init(tunable_params_t *params) {
@@ -268,6 +276,10 @@ void tunable_params_init(tunable_params_t *params) {
     // Innovation gating - from config.h
     params->kf_max_innovation = KF_MAX_INNOVATION;
     params->hkf_max_innovation = HKF_MAX_INNOVATION;
+
+    // Accel bias estimation - from CF_CONFIG_DEFAULT
+    params->cf_accel_bias_ki = 0.5f;
+    params->cf_accel_bias_max = 1.0f;
 
     // Flight manager lifecycle
 #ifdef SIMULATED_TIME

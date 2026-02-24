@@ -13,7 +13,7 @@
 #include "hive_runtime.h"
 
 // Parameter count (must match enum)
-#define TUNABLE_PARAM_COUNT 60
+#define TUNABLE_PARAM_COUNT 62
 
 // Parameter identifiers
 // Grouped by subsystem for easier navigation
@@ -109,6 +109,10 @@ typedef enum {
     // Innovation gating (58-59)
     PARAM_KF_MAX_INNOVATION = 58,
     PARAM_HKF_MAX_INNOVATION = 59,
+
+    // Accel bias estimation (60-61)
+    PARAM_CF_ACCEL_BIAS_KI = 60,
+    PARAM_CF_ACCEL_BIAS_MAX = 61,
 } tunable_param_id_t;
 
 // All tunable parameters in a single struct
@@ -203,6 +207,10 @@ typedef struct {
     // Innovation gating
     float kf_max_innovation;
     float hkf_max_innovation;
+
+    // Accel bias estimation
+    float cf_accel_bias_ki;
+    float cf_accel_bias_max;
 } tunable_params_t;
 
 // Initialize parameters with platform defaults from HAL_* defines
