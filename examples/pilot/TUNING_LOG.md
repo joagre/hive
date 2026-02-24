@@ -32,7 +32,7 @@ no oscillation), and stable attitude. In that priority order.
 | `pos_kd` | 0.05 | Reduced from 0.20 (session 13, real flow was too strong) |
 | `max_tilt_angle` | 0.25 (14 deg) | OK |
 | `liftoff_climb_rate` | 0.15 | Reduced from 0.2 (session 14) |
-| `HAL_FLOW_SCALE` | 0.0005 | May need 4x increase (see session 11) |
+| `FLOW_SCALE` | 0.0005 | Moved from HAL to config.h (session 15). May need 4x increase (see session 11) |
 
 ### Architectural analysis
 
@@ -162,6 +162,88 @@ With stable hover in all axes, push toward perfection:
 
 5. **Full 3D waypoints** - FULL_3D profile with XY waypoints.
    Requires position control to be solid before attempting.
+
+---
+
+## Session 15 - 2026-02-24 - HAL separation of concerns (architecture)
+
+Moved all signal processing from platform-specific HAL code to
+platform-independent sensor_actor.c. No tuning parameter changes, no
+behavioral change on hardware. Architecture-only refactor.
+
+### Motivation
+
+The HAL should do ONLY: raw hardware access, scaling to physical units,
+axis alignment/negation, and bias subtraction. Both HALs contained
+signal processing that violated this:
+
+- **Crazyflie HAL** (platform.c): pixel-to-velocity conversion,
+  rotational flow compensation, yaw dead-reckoning, body-to-world
+  rotation, position integration
+- **Webots HAL** (hal_sensors.c): velocity differentiation from GPS,
+  height range validation
+
+### Changes
+
+Added raw HAL fields to `sensor_data_t` (types.h):
+- `range_height`, `range_valid` - raw rangefinder (VL53L1x or GPS Z)
+- `flow_dpixel_x/y`, `flow_valid` - raw optical flow pixel deltas
+- `raw_gps_x/y/z`, `raw_gps_valid` - raw GPS position (Webots only)
+
+Existing `gps_x/y/z` and `velocity_x/y` fields now populated by
+sensor_actor instead of HAL.
+
+Added `flow_process()` to sensor_actor.c with three paths:
+1. **Optical flow (Crazyflie)** - pixel-to-velocity, rotation
+   compensation, yaw dead-reckoning, body-to-world, integration
+2. **GPS (Webots)** - pass through position, differentiate for velocity
+3. **Range only (fallback)** - altitude from range, hold last position
+
+Moved flow constants to config.h: `FLOW_SCALE` (was `HAL_FLOW_SCALE`),
+`FLOW_MIN_HEIGHT`, `FLOW_MAX_HEIGHT`.
+
+### Noise model fix
+
+Initial implementation put XY noise on `raw_gps_x/y` in the Webots HAL.
+This broke velocity differentiation - noise amplifies through the
+derivative: sigma_v = sigma_pos * sqrt(2) / dt = 0.002 * 1.414 / 0.004
+= 0.707 m/s (vs HKF expected 0.1 m/s). Also caused false liftoff
+detection when altitude noise pushed ground-level readings above the
+0.02m threshold.
+
+Fixed by providing clean GPS in `raw_gps_x/y/z` (for differentiation)
+and noisy altitude only in `range_height` (simulating VL53L1x noise).
+This matches the old code's behavior exactly.
+
+### Code changes
+
+| File | Change |
+|------|--------|
+| `include/types.h` | Added raw range/flow/GPS fields to sensor_data_t |
+| `config.h` | Added FLOW_SCALE, FLOW_MIN_HEIGHT, FLOW_MAX_HEIGHT |
+| `sensor_actor.c` | Added flow_process() with 3 paths, reset on RESET |
+| `hal/crazyflie-2.1plus/platform.c` | Stripped flow integration, output raw fields |
+| `hal/crazyflie-2.1plus/hal_config.h` | Removed HAL_FLOW_SCALE |
+| `hal/webots-crazyflie/hal_sensors.c` | Stripped velocity diff, output clean raw GPS |
+| `hal/webots-crazyflie/hal_internal.h` | Removed prev_gps state, FLOW height defines |
+| `hal/webots-crazyflie/hal_init.c` | Removed g_prev_gps definitions |
+
+### Verification (Webots sim)
+
+| Profile | Noise | Waypoints | Verdict |
+|---------|-------|-----------|---------|
+| FIRST_TEST | 0 | 1/1 | OK |
+| FULL_3D | 3 | 5/5 | OK |
+
+Crazyflie builds clean (FIRST_TEST and FULL_3D profiles). Hardware
+flight test pending.
+
+### Impact on tuning
+
+None. Same numerical processing, just moved to a different file. All
+existing tuning parameters and compiled defaults unchanged. The
+estimator reads the same `gps_z`, `velocity_x/y` fields regardless
+of who populated them.
 
 ---
 
