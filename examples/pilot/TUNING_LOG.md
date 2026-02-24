@@ -238,12 +238,79 @@ This matches the old code's behavior exactly.
 Crazyflie builds clean (FIRST_TEST and FULL_3D profiles). Hardware
 flight test pending.
 
+### Hardware flight tests (tests 63-64)
+
+| Test | Accel bias cal | Overshoot | SS error | XY (HKF) | XY (real) | Max tilt | Notes |
+|------|---------------|-----------|----------|----------|-----------|----------|-------|
+| 63 | No | +66% | -48.9% | 0.034m | ~2m back+left | 43.5 deg | Shelf crash |
+| 64 | Yes (per-axis) | +35% | -4.2% | 0.044m | ~3m backward | 42.9 deg | Chair crash |
+
+Test 63 confirmed the HAL separation didn't break anything - XY hold
+quality (0.034m HKF) matches session 13-14. The 2m real-world drift is
+the same accelerometer bias problem from session 14.
+
+Test 64 added per-axis accel bias calibration (200 samples at startup,
+subtract deviation from expected [0, 0, +g]). Altitude improved
+dramatically (SS error -49% -> -4%). But XY drift was unchanged.
+
+### Key finding - static accel bias calibration is useless for XY
+
+| Axis | Test 63 (no cal) | Test 64 (with cal) |
+|------|-----------------|-------------------|
+| accel_x | -0.198 m/s^2 | -0.093 m/s^2 |
+| accel_y | -0.245 m/s^2 | -0.242 m/s^2 |
+| accel_z | 9.829 m/s^2 | 9.799 m/s^2 |
+
+X-axis bias was halved by calibration. Y-axis (the drift axis) barely
+changed. The Y bias is **vibration-induced** - it shifts when motors
+spin. Calibrating on the ground with props off measures a different
+bias than what exists in flight. This is the MEMS rectification error:
+high-frequency vibration causes systematic offset in MEMS accelerometers.
+
+The 30 Hz accel LPF removes vibration from the signal but not the DC
+offset it creates. Static calibration cannot fix a dynamic bias.
+Bitcraze doesn't do per-axis accel bias calibration either - they
+handle it with online estimation in their EKF.
+
+Per-axis calibration code was reverted (not committed). The existing
+scale-only calibration is sufficient.
+
+### Drift physics
+
+The 0.24 m/s^2 Y-axis bias tilts the complementary filter's "level"
+by 1.4 degrees. Over 5 seconds: `0.5 * 0.24 * 5^2 = 3.0m` - matches
+observed drift exactly. The HKF doesn't detect it because flow velocity
+is near zero (the drone accelerates slowly, flow noise dominates).
+
+### Options for fixing XY drift
+
+Three approaches to investigate, in order of increasing complexity:
+
+1. **Stronger accel LPF** - Lower the 30 Hz cutoff to reduce
+   vibration-induced bias. Trade-off: adds phase lag to attitude
+   estimation, which degrades rate PID response. Could try 20 Hz
+   or 15 Hz via radio (make LPF cutoff a tunable param). Quick test.
+
+2. **Online accel bias estimation in the complementary filter** -
+   Add a slow integrator that estimates per-axis accel bias from the
+   discrepancy between expected gravity and measured gravity over time.
+   Similar to how the gyro bias is handled. Medium complexity.
+
+3. **Trust flow more in the HKF** - Increase `hkf_q_bias` so the
+   HKF's accel bias state converges faster from flow velocity
+   measurements. Currently 0.0001 (very slow). If flow is reliable
+   (it is - 0.06m XY error in session 13), the HKF should trust it
+   more and correct the accel-induced drift. Could try 0.001 or 0.01
+   via radio. Quick test but only fixes position, not attitude.
+
+Option 3 is the fastest to test (radio tunable) and addresses the
+real problem: the HKF has the information (flow says no motion, accel
+says motion) but converges too slowly to correct it.
+
 ### Impact on tuning
 
-None. Same numerical processing, just moved to a different file. All
-existing tuning parameters and compiled defaults unchanged. The
-estimator reads the same `gps_z`, `velocity_x/y` fields regardless
-of who populated them.
+No compiled default changes. HAL separation verified on hardware -
+same flight characteristics as sessions 13-14.
 
 ---
 
