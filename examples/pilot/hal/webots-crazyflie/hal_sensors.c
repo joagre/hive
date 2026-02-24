@@ -72,47 +72,32 @@ void hal_read_sensors(sensor_data_t *sensors) {
     sensors->baro_temp_c = 0.0f;
     sensors->baro_valid = false;
 
-    // GPS position with noise (simulates integrated flow deck)
-    float current_gps[3] = {(float)gps[0], (float)gps[1], (float)gps[2]};
-    float current_height = current_gps[2];
+    // Raw GPS position (clean) - sensor_actor differentiates for velocity.
+    // Noise-free so differentiation doesn't amplify noise
+    // (sigma_v = sigma_pos * sqrt(2) / dt would be ~0.7 m/s at 250 Hz).
+    sensors->raw_gps_x = (float)gps[0];
+    sensors->raw_gps_y = (float)gps[1];
+    sensors->raw_gps_z = (float)gps[2];
+    sensors->raw_gps_valid = true;
 
-    // Check if height is within flow deck operational range
-    bool height_valid = (current_height >= FLOW_MIN_HEIGHT) &&
-                        (current_height <= FLOW_MAX_HEIGHT);
+    // Noisy rangefinder (simulates VL53L1x measurement noise).
+    // Altitude noise applied here, not in raw_gps_z, so velocity
+    // differentiation stays clean while altitude KF sees realistic noise.
+    sensors->range_height =
+        (float)gps[2] + ALTITUDE_NOISE_STDDEV * randf_gaussian();
+    sensors->range_valid = true;
 
-    if (height_valid) {
-        sensors->gps_x =
-            current_gps[0] + GPS_XY_NOISE_STDDEV * randf_gaussian();
-        sensors->gps_y =
-            current_gps[1] + GPS_XY_NOISE_STDDEV * randf_gaussian();
-        sensors->gps_z =
-            current_height + ALTITUDE_NOISE_STDDEV * randf_gaussian();
-        sensors->gps_valid = true;
+    // No optical flow sensor in Webots
+    sensors->flow_dpixel_x = 0;
+    sensors->flow_dpixel_y = 0;
+    sensors->flow_valid = false;
 
-        // Compute velocity from GPS
-        float dt = TIME_STEP_MS / 1000.0f;
-        if (g_prev_gps_valid && dt > 0.0f) {
-            sensors->velocity_x = (current_gps[0] - g_prev_gps[0]) / dt;
-            sensors->velocity_y = (current_gps[1] - g_prev_gps[1]) / dt;
-            sensors->velocity_valid = true;
-        } else {
-            sensors->velocity_x = 0.0f;
-            sensors->velocity_y = 0.0f;
-            sensors->velocity_valid = false;
-        }
-    } else {
-        sensors->gps_x = 0.0f;
-        sensors->gps_y = 0.0f;
-        sensors->gps_z = current_height;
-        sensors->gps_valid = false;
-        sensors->velocity_x = 0.0f;
-        sensors->velocity_y = 0.0f;
-        sensors->velocity_valid = false;
-    }
-
-    // Store for next iteration
-    g_prev_gps[0] = current_gps[0];
-    g_prev_gps[1] = current_gps[1];
-    g_prev_gps[2] = current_gps[2];
-    g_prev_gps_valid = height_valid;
+    // Processed fields - sensor_actor fills these from raw data above
+    sensors->gps_x = 0.0f;
+    sensors->gps_y = 0.0f;
+    sensors->gps_z = 0.0f;
+    sensors->gps_valid = false;
+    sensors->velocity_x = 0.0f;
+    sensors->velocity_y = 0.0f;
+    sensors->velocity_valid = false;
 }

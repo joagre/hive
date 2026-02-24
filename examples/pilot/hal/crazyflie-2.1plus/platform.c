@@ -104,12 +104,6 @@ static bool s_i2c1_initialized = false;
 static pmw3901_dev_t s_pmw3901_dev;
 static vl53l1x_dev_t s_vl53l1x_dev;
 
-// Flow deck integration state (provides pseudo-GPS position)
-static float s_integrated_x = 0.0f; // Integrated X position (m, world frame)
-static float s_integrated_y = 0.0f; // Integrated Y position (m, world frame)
-static float s_prev_yaw = 0.0f;     // Previous yaw for body-to-world rotation
-static uint32_t s_prev_flow_time_us = 0;
-
 // ----------------------------------------------------------------------------
 // SysTick Handler
 // ----------------------------------------------------------------------------
@@ -1291,8 +1285,8 @@ void platform_read_sensors(sensor_data_t *sensors) {
     sensors->accel_valid = false;
     if (bmi088_get_accel_data(&accel_data, &s_bmi088_dev) == BMI088_OK) {
         sensors->accel[0] = -(accel_data.x * accel_scale);
-        sensors->accel[1] = accel_data.y * accel_scale;
-        sensors->accel[2] = accel_data.z * accel_scale;
+        sensors->accel[1] = (accel_data.y * accel_scale);
+        sensors->accel[2] = (accel_data.z * accel_scale);
         sensors->accel_valid = true;
     }
 
@@ -1322,93 +1316,47 @@ void platform_read_sensors(sensor_data_t *sensors) {
     sensors->mag[2] = 0.0f;
     sensors->mag_valid = false;
 
-    // Flow deck integration - provides pseudo-GPS position
-    // The flow deck (PMW3901 + VL53L1x) is integrated here in the HAL to
-    // provide a generic position interface matching the Webots GPS.
-
-    // Read rangefinder height (VL53L1x)
+    // Raw rangefinder (VL53L1x) - HAL outputs meters, sensor_actor processes
     uint16_t height_mm = 0;
     bool range_ok = platform_read_height(&height_mm);
-    float height_m = 0.0f;
     if (range_ok && height_mm > 0 && height_mm < HAL_TOF_MAX_RANGE_MM) {
-        height_m = height_mm / 1000.0f;
+        sensors->range_height = height_mm / 1000.0f;
+        sensors->range_valid = true;
+    } else {
+        sensors->range_height = 0.0f;
+        sensors->range_valid = false;
     }
 
-    // Read optical flow (PMW3901) and integrate to position
+    // Raw optical flow (PMW3901) - HAL outputs axis-aligned pixel deltas
     int16_t raw_dx = 0, raw_dy = 0;
     bool flow_ok = platform_read_flow(&raw_dx, &raw_dy);
+    if (flow_ok) {
+        // Flip axes to match sensor mounting on Crazyflie flow deck.
+        // PMW3901 is rotated 90 deg: body X = -sensor Y, body Y = -sensor X.
+        // From Bitcraze flowdeck_v1v2.c lines 92-95.
+        sensors->flow_dpixel_x = -raw_dy;
+        sensors->flow_dpixel_y = -raw_dx;
+        sensors->flow_valid = true;
+    } else {
+        sensors->flow_dpixel_x = 0;
+        sensors->flow_dpixel_y = 0;
+        sensors->flow_valid = false;
+    }
 
-    // Flip axes to match sensor mounting on Crazyflie flow deck.
-    // PMW3901 is rotated 90 deg: body X = -sensor Y, body Y = -sensor X.
-    // From Bitcraze flowdeck_v1v2.c lines 92-95.
-    int16_t delta_x = -raw_dy;
-    int16_t delta_y = -raw_dx;
+    // No GPS on Crazyflie
+    sensors->raw_gps_x = 0.0f;
+    sensors->raw_gps_y = 0.0f;
+    sensors->raw_gps_z = 0.0f;
+    sensors->raw_gps_valid = false;
 
-    // Initialize velocity as invalid
+    // Processed fields - sensor_actor fills these from raw data above
+    sensors->gps_x = 0.0f;
+    sensors->gps_y = 0.0f;
+    sensors->gps_z = 0.0f;
+    sensors->gps_valid = false;
     sensors->velocity_x = 0.0f;
     sensors->velocity_y = 0.0f;
     sensors->velocity_valid = false;
-
-    if (flow_ok && height_m > 0.05f) {
-        // Compute dt from previous flow read
-        uint32_t now_us = platform_get_time_us();
-        float dt = 0.0f;
-        if (s_prev_flow_time_us > 0) {
-            dt = (now_us - s_prev_flow_time_us) / 1000000.0f;
-        }
-        s_prev_flow_time_us = now_us;
-
-        if (dt > 0.0f && dt < 0.1f) { // Sanity check: dt between 0 and 100ms
-            // Convert pixel deltas to velocity (m/s, body frame)
-            // Formula: velocity = pixel_delta * SCALE * height / dt
-            // PMW3901 outputs displacement per sample, divide by dt for m/s
-            float vx_body = delta_x * HAL_FLOW_SCALE * height_m / dt;
-            float vy_body = delta_y * HAL_FLOW_SCALE * height_m / dt;
-
-            // Compensate for body rotation.
-            // The PMW3901 sees rotational flow when the drone pitches/rolls.
-            // From Bitcraze mm_flow.c:79 predicted_x ~ (vx/z - pitch_rate),
-            // solving for vx: vx = flow_vel + pitch_rate * z.
-            // From mm_flow.c:92 predicted_y ~ (vy/z + roll_rate),
-            // solving for vy: vy = flow_vel - roll_rate * z.
-            // gyro[1] = -raw_pitch_rate (negated at line 1307), so
-            // -= gives +raw_pitch_rate*h. gyro[0] = raw_roll_rate, so
-            // -= gives -raw_roll_rate*h. Both match Bitcraze's model.
-            vx_body -= sensors->gyro[1] * height_m;
-            vy_body -= sensors->gyro[0] * height_m;
-
-            // Integrate yaw from gyro (simple dead-reckoning)
-            // Note: This drifts over time, but flow-based position drifts anyway
-            s_prev_yaw += sensors->gyro[2] * dt;
-
-            // Rotate body velocity to world frame
-            float cos_yaw = cosf(s_prev_yaw);
-            float sin_yaw = sinf(s_prev_yaw);
-            float vx_world = vx_body * cos_yaw - vy_body * sin_yaw;
-            float vy_world = vx_body * sin_yaw + vy_body * cos_yaw;
-
-            // Provide direct velocity (higher quality than differentiated position)
-            sensors->velocity_x = vx_world;
-            sensors->velocity_y = vy_world;
-            sensors->velocity_valid = true;
-
-            // Integrate velocity to position
-            s_integrated_x += vx_world * dt;
-            s_integrated_y += vy_world * dt;
-        }
-
-        // Provide integrated position as pseudo-GPS
-        sensors->gps_x = s_integrated_x;
-        sensors->gps_y = s_integrated_y;
-        sensors->gps_z = height_m;
-        sensors->gps_valid = true;
-    } else {
-        // No valid flow/range - provide last known position with range altitude
-        sensors->gps_x = s_integrated_x;
-        sensors->gps_y = s_integrated_y;
-        sensors->gps_z = height_m;
-        sensors->gps_valid = (height_m > 0.0f);
-    }
 }
 
 void platform_write_motors(const motor_cmd_t *cmd) {

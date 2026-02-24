@@ -27,8 +27,6 @@ extern WbDeviceTag g_gps;
 
 extern uint32_t g_rng_state;
 extern float g_gyro_bias[3];
-extern float g_prev_gps[3];
-extern bool g_prev_gps_valid;
 extern float g_motor_state[NUM_MOTORS];
 
 // ----------------------------------------------------------------------------
@@ -75,18 +73,6 @@ extern float g_motor_state[NUM_MOTORS];
 
 // Motor direction signs
 static const float MOTOR_SIGNS[NUM_MOTORS] = {-1.0f, 1.0f, -1.0f, 1.0f};
-
-// ----------------------------------------------------------------------------
-// Flow Deck Height Limits
-// ----------------------------------------------------------------------------
-
-#ifndef FLOW_MIN_HEIGHT
-#define FLOW_MIN_HEIGHT 0.05f
-#endif
-
-#ifndef FLOW_MAX_HEIGHT
-#define FLOW_MAX_HEIGHT 1.3f
-#endif
 
 // ----------------------------------------------------------------------------
 // PRNG Utilities

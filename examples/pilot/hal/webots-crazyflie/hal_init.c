@@ -23,8 +23,6 @@ uint32_t g_rng_state = 1;
 
 // Sensor simulation state
 float g_gyro_bias[3] = {0.0f, 0.0f, 0.0f};
-float g_prev_gps[3] = {0.0f, 0.0f, 0.0f};
-bool g_prev_gps_valid = false;
 float g_motor_state[NUM_MOTORS] = {0.0f, 0.0f, 0.0f, 0.0f};
 
 int hal_init(void) {

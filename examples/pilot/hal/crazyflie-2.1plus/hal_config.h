@@ -30,7 +30,7 @@
 // ----------------------------------------------------------------------------
 
 // Altitude PID gains (position error -> thrust correction)
-#define HAL_ALT_PID_KP 0.12f   // Reduced overshoot (was 0.18, overshot 100%)
+#define HAL_ALT_PID_KP 0.08f   // Reduced overshoot (was 0.12, session 13)
 #define HAL_ALT_PID_KI 0.005f  // Halved to reduce windup overshoot (was 0.01)
 #define HAL_ALT_PID_KD 0.0f    // Using velocity feedback instead
 #define HAL_ALT_PID_IMAX 0.2f  // Integral limit
@@ -78,10 +78,6 @@
 // Flow Deck Configuration
 // ----------------------------------------------------------------------------
 
-// Flow sensor scaling - converts raw flow to m/s at 1m height
-// PMW3901 outputs pixel deltas; this converts to velocity
-#define HAL_FLOW_SCALE 0.0005f
-
 // ToF sensor max range (mm) - readings above this are considered invalid
 // VL53L1x in short distance mode is reliable up to ~1.3m
 #define HAL_TOF_MAX_RANGE_MM 1300
@@ -95,7 +91,7 @@
 // aggressive tilts into walls during early flight tests (34-36).
 #define HAL_POS_KP 0.0f
 #define HAL_POS_KD \
-    0.20f // Velocity damping to resist drift (tuned flight 40-41)
+    0.05f // Reduced - strong damping caused oscillation with real flow (session 13)
 #define HAL_MAX_TILT_ANGLE 0.25f // ~14 degrees
 
 #endif // HAL_CONFIG_H

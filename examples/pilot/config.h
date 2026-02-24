@@ -121,7 +121,7 @@
 // After liftoff, the altitude target ramps from current altitude toward the
 // waypoint target at this rate. Prevents step-change overshoot by giving
 // the PID a smooth reference to track at full authority.
-#define LIFTOFF_CLIMB_RATE 0.3f // m/s - climb rate after liftoff detection
+#define LIFTOFF_CLIMB_RATE 0.2f // m/s - climb rate after liftoff detection
 
 // Position control authority scales linearly from 0 to 1 between the
 // liftoff threshold and this height above it. Below threshold: no tilt.
@@ -276,6 +276,30 @@
 // Comms actor trace logging interval. Produces ~1 log line per second
 // at the typical ~500Hz ESB poll rate.
 #define COMMS_TRACE_INTERVAL 500
+
+// ----------------------------------------------------------------------------
+// Flow processing (sensor_actor converts raw HAL data to position/velocity)
+// ----------------------------------------------------------------------------
+
+// Pixel-to-velocity scale factor for PMW3901 optical flow sensor.
+// Converts raw pixel deltas to m/s at 1m height.
+#ifndef FLOW_SCALE
+#define FLOW_SCALE 0.0005f
+#endif
+
+// Minimum height for valid flow/range measurements (meters).
+// Below this the rangefinder returns noise (VL53L1x minimum range ~40mm,
+// drone chassis sits ~20-30mm above ground).
+#ifndef FLOW_MIN_HEIGHT
+#define FLOW_MIN_HEIGHT 0.05f
+#endif
+
+// Maximum height for valid flow/range measurements (meters).
+// Beyond this optical flow and rangefinder become unreliable.
+// VL53L1x short mode: 1.3m. Webots overrides to 4.0m (no physical limit).
+#ifndef FLOW_MAX_HEIGHT
+#define FLOW_MAX_HEIGHT 1.3f
+#endif
 
 // ----------------------------------------------------------------------------
 // Position control (gains in hal/*/hal_config.h)

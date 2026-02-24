@@ -6,6 +6,7 @@
 #define PILOT_TYPES_H
 
 #include <stdbool.h>
+#include <stdint.h>
 
 // ----------------------------------------------------------------------------
 // Raw Sensor Data (from HAL to sensor actor)
@@ -34,16 +35,33 @@ typedef struct sensor_data {
     float baro_temp_c;   // temperature in Celsius
     bool baro_valid;     // false if not available
 
-    // Position (meters, world frame) - from GPS or integrated optical flow
-    // On Crazyflie: HAL integrates flow deck internally to provide position
-    // On Webots: direct GPS position from simulation
+    // Raw rangefinder (HAL populates)
+    // On Crazyflie: VL53L1x ToF sensor (meters, axis-aligned by HAL)
+    // On Webots: GPS Z with noise
+    float range_height; // meters above ground
+    bool range_valid;
+
+    // Raw optical flow pixel deltas (HAL populates, body frame)
+    // On Crazyflie: PMW3901 pixel deltas with mounting axis flip
+    // On Webots: not available (no optical flow sensor)
+    int16_t flow_dpixel_x, flow_dpixel_y;
+    bool flow_valid;
+
+    // Raw GPS position (HAL populates, simulation only)
+    // On Webots: direct GPS position with noise
+    // On Crazyflie: not available (no GPS)
+    float raw_gps_x, raw_gps_y, raw_gps_z;
+    bool raw_gps_valid;
+
+    // Position (meters, world frame) - sensor_actor populates from raw fields
+    // On Crazyflie: integrated from optical flow + rangefinder
+    // On Webots: passed through from raw GPS
     float gps_x, gps_y, gps_z;
     bool gps_valid; // false if position not available
 
-    // Velocity (m/s, world frame) - optional, for direct velocity sensors
-    // When valid, estimator can use this directly instead of differentiating position.
-    // On Crazyflie: direct from optical flow (higher quality than differentiated position)
-    // On Webots: computed from GPS
+    // Velocity (m/s, world frame) - sensor_actor populates from raw fields
+    // On Crazyflie: computed from optical flow
+    // On Webots: differentiated from GPS
     float velocity_x, velocity_y;
     bool velocity_valid; // false if direct velocity not available
 } sensor_data_t;
@@ -54,6 +72,9 @@ typedef struct sensor_data {
         .gyro = {0.0f, 0.0f, 0.0f}, .gyro_valid = false,                     \
         .mag = {0.0f, 0.0f, 0.0f}, .mag_valid = false, .pressure_hpa = 0.0f, \
         .baro_altitude = 0.0f, .baro_temp_c = 0.0f, .baro_valid = false,     \
+        .range_height = 0.0f, .range_valid = false, .flow_dpixel_x = 0,      \
+        .flow_dpixel_y = 0, .flow_valid = false, .raw_gps_x = 0.0f,          \
+        .raw_gps_y = 0.0f, .raw_gps_z = 0.0f, .raw_gps_valid = false,        \
         .gps_x = 0.0f, .gps_y = 0.0f, .gps_z = 0.0f, .gps_valid = false,     \
         .velocity_x = 0.0f, .velocity_y = 0.0f, .velocity_valid = false      \
     }
