@@ -25,12 +25,13 @@ no oscillation), and stable attitude. In that priority order.
 | `rate_kd` | 0.0015 | Stable (session 2) |
 | `rate_yaw_kp` | 0.12 | Stable (session 7) |
 | `rate_yaw_ki` | 0.05 | Stable (session 7) |
-| `alt_kp` | 0.12 | Needs work (43-56% overshoot) |
-| `alt_ki` | 0.005 | Needs work |
-| `vvel_damping` | 0.55 | Needs work |
-| `pos_kp` | **0.0** | Re-enabling (session 11 fixed flow bugs) |
-| `pos_kd` | 0.20 | Tuned session 8, damping-only |
+| `alt_kp` | 0.06 | Reduced (session 14), overshoot +25% at this value |
+| `alt_ki` | 0.005 | Needs work (weak integral, slow steady-state) |
+| `vvel_damping` | 0.55 | Keep (0.75 worsened overshoot, see session 13) |
+| `pos_kp` | 0.02 | Gentle position hold (session 14) |
+| `pos_kd` | 0.05 | Reduced from 0.20 (session 13, real flow was too strong) |
 | `max_tilt_angle` | 0.25 (14 deg) | OK |
+| `liftoff_climb_rate` | 0.15 | Reduced from 0.2 (session 14) |
 | `HAL_FLOW_SCALE` | 0.0005 | May need 4x increase (see session 11) |
 
 ### Architectural analysis
@@ -58,65 +59,69 @@ See session 9 for full results and default parameters.
 
 **Goal** - XY drift < 0.10m during 6s FIRST_TEST flight.
 
-Two sub-phases: first validate the horizontal KF produces clean velocity
-on real hardware, then re-enable pos_kp.
+**Phase 2a - HKF validation (pos_kp=0, damping only) - DONE (session 13)**
 
-**Phase 2a - HKF validation (pos_kp=0, damping only)**
+Validated in tests 50-52. The HKF produces clean velocity on real
+hardware with default parameters (hkf_r_velocity=0.01). No tuning
+needed. Key results from test 52:
+- XY error 0.061m (target was <0.10m) - BEST EVER
+- Attitude 1-4 deg during hover (vs 25-51 deg in session 8)
+- Successful landing
 
-Fly with pos_kp=0 (current default) and observe HKF velocity quality.
-The key parameter is `hkf_r_velocity` - measurement noise variance for
-optical flow. Webots default is 0.01 but real PMW3901 noise differs.
+Discovery: pos_kd=0.20 caused growing oscillations with real flow data
+(test 50, max tilt 44 deg). With 250x-corrected flow (session 11),
+the damping response is much stronger. Reduced pos_kd to 0.05.
 
-| Symptom | Diagnosis | Fix |
-|---------|-----------|-----|
-| Jerky velocity, tilt jitter | R too low (trusts noisy flow) | Increase `hkf_r_velocity` |
-| Sluggish response, slow to stop | R too high (ignores flow) | Decrease `hkf_r_velocity` |
-| Steady drift in one direction | Bias not converging | Increase `hkf_q_bias` |
+**Phase 2b - Position hold (re-enable pos_kp) - IN PROGRESS (session 14)**
 
-Start with compiled defaults. Fly 1-2 FIRST_TEST flights with pos_kp=0
-and check telemetry for velocity smoothness. Compare tilt jitter against
-session 8 (pre-HKF) flights. If velocity looks clean, proceed to 2b.
-If not, tune `hkf_r_velocity` via radio (try 0.05, 0.1, 0.5).
-
-**Phase 2b - Position hold (re-enable pos_kp)**
+Test 60 enabled pos_kp=0.02 via radio. Cannot evaluate position hold
+until accelerometer bias calibration is validated - the uncorrected
+Y-axis bias (0.134 m/s^2) causes 3m drift that overwhelms pos_kp.
 
 With validated HKF velocity, re-enable pos_kp. Tune via radio.
 The control law is: `accel = pos_kp * error - pos_kd * velocity`.
 
+**Important** - pos_kd must stay at 0.05 (not 0.20). The old value
+was tuned when flow was 250x too small. With real flow, 0.20 causes
+a feedback loop between altitude oscillation and attitude.
+
 | Step | pos_kp | pos_kd | Rationale |
 |------|--------|--------|-----------|
-| 1 | 0.03 | 0.20 | Very gentle. At 0.3m drift: 0.5 deg tilt |
-| 2 | 0.05 | 0.20 | If step 1 shows drift reduction |
-| 3 | 0.08 | 0.20 | Moderate hold. At 0.3m drift: 1.4 deg tilt |
-| 4 | 0.10 | 0.15 | Stronger hold if step 3 is good |
+| 1 | 0.02 | 0.05 | Very gentle start with new damping value |
+| 2 | 0.04 | 0.05 | If step 1 shows drift reduction |
+| 3 | 0.06 | 0.05 | Moderate hold |
+| 4 | 0.08 | 0.05 | Stronger hold if step 3 is good |
 
-**Stop condition** - If max tilt exceeds 35 deg, back off pos_kp.
-If drift < 0.10m, lock in the value and move to phase 3.
+**Stop condition** - If max tilt exceeds 25 deg, back off pos_kp.
+If drift < 0.10m, lock in the value and move to phase 4.
 
-**Why position control failed before (tests 34-36)** - Two compounding
-problems: altitude was wildly overshooting (up to 263%) creating large
-attitude disturbances, AND the velocity fed into pos_kd was unfiltered
-pixel noise. The horizontal KF fixes the second problem. The altitude
-work in phase 3 addresses the first.
-
-### Phase 3 - Tame altitude overshoot
+### Phase 3 - Tame altitude overshoot - IN PROGRESS (session 14)
 
 **Goal** - Altitude overshoot < 10%, thrust oscillation < 1/s.
 
-Current: alt_kp=0.12, alt_ki=0.005, vvel_damping=0.55, alt_omax=0.20.
-Overshoot of 43-56% suggests the system cannot brake fast enough.
+Current: alt_kp=0.06, alt_ki=0.005, vvel_damping=0.55, alt_omax=0.20,
+liftoff_climb_rate=0.15.
 
-**Tuning steps** (via radio):
+Session 14 progress:
+- **alt_kp 0.08 -> 0.06** (radio): overshoot +57% -> +25% improvement
+- **liftoff_climb_rate 0.2 -> 0.15** (radio): overshoot +59% -> +45%
+- **Combined (test 60)**: +25% overshoot, -1.2% steady-state error
+- Still above 10% target. Next steps: increase alt_ki or reduce
+  liftoff_thrust_corr.
+
+Session 13 findings:
+- **Increasing vvel_damping made overshoot WORSE** (test 53: +156%).
+  Root cause: feedforward = climb_rate * vvel_damping. Higher damping
+  increases feedforward, launching the drone faster and building more
+  momentum. The damping and feedforward are coupled through the same
+  parameter.
+
+**Remaining tuning steps** (via radio):
 
 | Step | Parameter | Value | Rationale |
 |------|-----------|-------|-----------|
-| 1 | `vvel_damping` | 0.70 | Stronger altitude braking |
-| 2 | `alt_omax` | 0.25 | Allow PID to brake harder (was clamped) |
-| 3 | `alt_kp` | 0.08 | Softer correction if oscillation persists |
-
-**Code change to consider** - Reduce LIFTOFF_CLIMB_RATE from 0.3 to
-0.2 m/s. Slower climb ramp means less momentum to brake at target.
-Requires reflash. Try tuning-only first.
+| 1 | `alt_ki` | 0.01 | Increase integral to close steady-state gap |
+| 2 | `liftoff_thrust_corr` | 0.88 | More aggressive thrust reduction at liftoff |
 
 ### Phase 4 - Position integral for steady-state hold
 
@@ -157,6 +162,201 @@ With stable hover in all axes, push toward perfection:
 
 5. **Full 3D waypoints** - FULL_3D profile with XY waypoints.
    Requires position control to be solid before attempting.
+
+---
+
+## Session 14 - 2026-02-24 - Altitude progress, accel bias, GO drain (tests 56-62)
+
+Continued from session 13. Three major outcomes: altitude overshoot
+reduced from +63% to +25%, discovered accelerometer bias as root cause
+of 3m XY drift, and fixed a safety bug where stale GO messages caused
+auto-restarts.
+
+### Key discovery - accelerometer Y-axis bias causes all XY drift
+
+Analysis of test 60 hover data revealed:
+- Mean accel_y = +0.134 m/s^2 during "level" hover
+- Mean flow VY = -0.008 m/s (near zero - no real motion detected by flow)
+- HKF position stayed near (0,0) while drone drifted 3m right
+- Physics: 0.5 * 0.134 * 7^2 = 3.3m - matches observed drift exactly
+
+The complementary filter sees the biased accelerometer and computes a
+"level" attitude that is actually tilted 0.78 degrees. This produces
+constant lateral acceleration. The HKF cannot detect or correct this
+because the flow sensor confirms near-zero velocity (the drone IS moving
+at constant acceleration, but slowly enough that flow noise dominates).
+
+Root cause: BMI088 accelerometer has per-axis offset that was never
+calibrated. The existing calibration only computed a scale factor (gravity
+magnitude), not per-axis bias.
+
+### Key fix - per-axis accelerometer bias calibration
+
+Added to `platform_calibrate()` in platform.c:
+1. Sample 200 accelerometer readings over 1 second on a level surface
+2. Apply existing scale factor for correct units
+3. Compute bias as deviation from expected values: X=0, Y=0, Z=+9.81
+4. Subtract bias from every subsequent sensor reading
+
+Initial implementation had a Z-axis sign error (tests 61-62 failed -
+Z-up convention means accel_z = +9.81 at rest, not -9.81). Fixed to
+`bias_z = mean_z - GRAVITY`.
+
+Awaiting flight verification with corrected code (flashed, self-test OK).
+
+### Key fix - stale GO messages causing auto-restarts (safety bug)
+
+The drone auto-started flights twice without GO being sent, including
+once under a sofa. Root cause: ESB auto-retransmit causes duplicate
+NOTIFY_GO messages in flight_manager's mailbox. After landing, stale
+GO messages were immediately consumed when returning to IDLE, triggering
+an immediate re-flight.
+
+Fixed by draining stale GO messages in FM_STATE_LANDED before
+transitioning to IDLE.
+
+### Compiled default changes
+
+| Parameter | Old | New | Reasoning |
+|-----------|-----|-----|-----------|
+| `alt_kp` | 0.08 | 0.06 | Radio-tuned: overshoot +57% at 0.08, +25% at 0.06 |
+| `pos_kp` | 0.0 | 0.02 | Gentle position hold enabled (session 14) |
+| `LIFTOFF_CLIMB_RATE` | 0.2 | 0.15 | Slower ramp: overshoot +59% at 0.2, +45% at 0.15 |
+
+### Code changes
+
+| File | Change |
+|------|--------|
+| `hal/crazyflie-2.1plus/platform.c` | Per-axis accel bias calibration (200 samples at startup) |
+| `hal/crazyflie-2.1plus/platform.c` | Bias subtraction in sensor reading |
+| `flight_manager_actor.c` | Drain stale GO messages in FM_STATE_LANDED |
+| `tools/ground_station.py` | Added param IDs 55-59 to PARAM_NAMES dict |
+| `hal/crazyflie-2.1plus/hal_config.h` | alt_kp 0.08 -> 0.06, pos_kp 0.0 -> 0.02 |
+| `config.h` | LIFTOFF_CLIMB_RATE 0.2 -> 0.15 |
+
+### Flight test results
+
+| Test | alt_kp | climb_rate | pos_kp | Overshoot | Max tilt | XY drift | Notes |
+|------|--------|------------|--------|-----------|----------|----------|-------|
+| 56 | 0.08 | 0.2 | 0.0 | +57% | 11.2 deg | 2m | KF diverged post-landing |
+| 57 | 0.06 | 0.2 | 0.0 | +59% | 8.9 deg | 2m | Clean landing |
+| 58 | 0.06 | 0.15 | 0.0 | +45% | 15.6 deg | 2m | Climb rate helped |
+| 59 | 0.06 | 0.15 | 0.02 | +48% | low | 2m | Stale KF packet confused summary |
+| 60 | 0.06 | 0.15 | 0.02 | +25% | 30.5 deg | 3m | Best altitude! Accel bias found |
+| 61 | 0.06 | 0.15 | 0.02 | N/A | - | - | Z bias bug, 0.3s flight |
+| 62 | 0.06 | 0.15 | 0.02 | N/A | - | - | Z bias bug, 0.6s flight |
+
+All params set via radio except test 56 (compiled defaults from session 13).
+
+### Analysis
+
+**Test 56** - Baseline with session 13 defaults. Overshoot +57%. The KF
+diverged to -2.3m post-landing (accel bias drift with no rangefinder
+correction). 2m XY drift to the right.
+
+**Test 57** - alt_kp reduced to 0.06 via radio. Overshoot still +59%
+(climb rate dominates the initial overshoot, not kp). Clean landing.
+Same 2m drift pattern.
+
+**Test 58** - liftoff_climb_rate reduced to 0.15. Overshoot dropped to
++45% - first clear improvement. Slower climb = less momentum at target.
+Max tilt 15.6 deg during hover.
+
+**Test 60** - Best flight of the session. +25% overshoot with -1.2%
+steady-state error (integral is working). pos_kp=0.02 active but
+overwhelmed by accel bias drift. Max roll 30.5 deg (single excursion).
+Drone drifted 3m right into a sofa, steady hover throughout.
+
+**Tests 61-62** - Accel bias calibration active but Z-axis sign was
+wrong. Computed bias_z = +19.62 (should have been ~0). This flipped
+gravity's sign in the KF, causing immediate altitude divergence to
+negative values. Drone props started briefly then stopped (NO LIFTOFF).
+Fixed Z formula and reflashed.
+
+### Phase status
+
+- **Phase 2b**: In progress. pos_kp=0.02 active but blocked on accel bias validation.
+- **Phase 3**: Progress. Overshoot 63% -> 25%. Next: alt_ki increase.
+
+---
+
+## Session 13 - 2026-02-24 - First flights with corrected flow (tests 50-53)
+
+First hardware flights since session 11's flow sensor fixes and session
+12's sign convention unification. Phase 2a validated, altitude overshoot
+is now the blocking problem.
+
+### Key discovery - flow fixes work
+
+For the first time in 52 tests, the drone holds XY position. The flow
+sensor bug fixes (session 11: /dt + axis mapping) and sign convention
+fix (session 12: flow gyro compensation) produce clean HKF velocity on
+real hardware. No HKF parameter tuning needed.
+
+### Key discovery - feedforward/damping coupling
+
+Increasing vvel_damping from 0.55 to 0.75 (test 53) made overshoot
+WORSE (+156% vs +63%). Root cause: the altitude controller's feedforward
+term is `feedforward = liftoff_climb_rate * vvel_damping`. Higher damping
+increases feedforward during the climb ramp, launching the drone faster
+and building more momentum at target. This coupling was not obvious from
+the code and invalidates the phase 3 tuning plan's step 1.
+
+### Compiled default changes
+
+| Parameter | Old | New | Reasoning |
+|-----------|-----|-----|-----------|
+| `alt_kp` | 0.12 | 0.08 | 0.12 overshot 103% (test 50), 0.08 overshot 63% (test 52) |
+| `pos_kd` | 0.20 | 0.05 | 0.20 caused growing oscillation with real flow data (test 50) |
+| `LIFTOFF_CLIMB_RATE` | 0.3 | 0.2 | Slower climb = less momentum at target |
+
+### Code changes
+
+| File | Change |
+|------|--------|
+| `config.h` | LIFTOFF_CLIMB_RATE 0.3 -> 0.2 |
+| `hal/crazyflie-2.1plus/hal_config.h` | alt_kp 0.12 -> 0.08, pos_kd 0.20 -> 0.05 |
+| `tunable_params.h` | 5 new params (55-59): liftoff_climb_rate, liftoff_ramp_rate, liftoff_thrust_corr, kf_max_innov, hkf_max_innov |
+| `tunable_params.c` | Metadata and init for new params |
+| `altitude_actor.c` | Use tunable params for climb rate, ramp rate, thrust correction |
+| `estimator_actor.c` | Use tunable params for KF/HKF innovation gating |
+
+### Flight test results
+
+| Test | alt_kp | pos_kd | vvel_damp | Duration | Overshoot | Max tilt | XY error | Notes |
+|------|--------|--------|-----------|----------|-----------|----------|----------|-------|
+| 50 | 0.12 | 0.20 | 0.55 | 8.2s | +103% | 44 deg | 0.41m | Growing oscillation, crash |
+| 51 | 0.08 | 0.05 | 0.55 | 9.6s | +67% | 38 deg | 0.06m | Stable hover! End crash = sofa edge |
+| 52 | 0.08 | 0.05 | 0.55 | 16.5s | +63% | 14 deg | 0.06m | **Best flight.** Landed successfully |
+| 53 | 0.08 | 0.05 | 0.75 | 17.6s | +156% | 24 deg | 0.07m | vvel_damping experiment, much worse |
+
+### Analysis
+
+**Test 50** - pos_kd=0.20 with real flow (250x stronger than before).
+Velocity damping produced large tilt commands. These tilts stole vertical
+thrust, altitude dropped, PID overcorrected, more tilt. Growing
+oscillation until crash latch at 44 deg.
+
+**Test 51** - pos_kd reduced to 0.05. Stable hover for 9.6s, attitude
+1-4 deg during hover. XY error 0.061m. Crash at end was a sudden
+40 deg pitch excursion during landing - likely sofa edge confusing
+the VL53L1x rangefinder.
+
+**Test 52** - Same params as 51. Full flight including successful landing.
+16.5s total. Best flight ever. XY error 0.061m. Altitude settled at
+~0.74m (overshoot +63%), thrust hunting at 9.9/s. Y-axis drift of
+0.25m without position correction (pos_kp=0).
+
+**Test 53** - vvel_damping increased to 0.75. Overshoot jumped to +156%
+(1.28m peak). The feedforward coupling made the climb ramp push harder.
+Attitude stayed calm (max 24 deg) but drone traveled ~1m sideways.
+Reverted to 0.55.
+
+### Phase status
+
+- **Phase 2a**: DONE. HKF validated on hardware. XY error 0.061m.
+- **Phase 2b**: Pending. Needs altitude fix first.
+- **Phase 3**: In progress. alt_kp=0.08 + climb_rate=0.2 not yet tested.
 
 ---
 

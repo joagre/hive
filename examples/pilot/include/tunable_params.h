@@ -13,7 +13,7 @@
 #include "hive_runtime.h"
 
 // Parameter count (must match enum)
-#define TUNABLE_PARAM_COUNT 55
+#define TUNABLE_PARAM_COUNT 60
 
 // Parameter identifiers
 // Grouped by subsystem for easier navigation
@@ -100,6 +100,15 @@ typedef enum {
     PARAM_HKF_P0_POSITION = 52,
     PARAM_HKF_P0_VELOCITY = 53,
     PARAM_HKF_P0_BIAS = 54,
+
+    // Liftoff and climb (55-57)
+    PARAM_LIFTOFF_CLIMB_RATE = 55,
+    PARAM_LIFTOFF_RAMP_RATE = 56,
+    PARAM_LIFTOFF_THRUST_CORRECTION = 57,
+
+    // Innovation gating (58-59)
+    PARAM_KF_MAX_INNOVATION = 58,
+    PARAM_HKF_MAX_INNOVATION = 59,
 } tunable_param_id_t;
 
 // All tunable parameters in a single struct
@@ -185,6 +194,15 @@ typedef struct {
     float hkf_p0_position;
     float hkf_p0_velocity;
     float hkf_p0_bias;
+
+    // Liftoff and climb
+    float liftoff_climb_rate;
+    float liftoff_ramp_rate;
+    float liftoff_thrust_correction;
+
+    // Innovation gating
+    float kf_max_innovation;
+    float hkf_max_innovation;
 } tunable_params_t;
 
 // Initialize parameters with platform defaults from HAL_* defines

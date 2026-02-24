@@ -426,7 +426,7 @@ void estimator_actor(void *args, const hive_spawn_info_t *siblings,
             // The VL53L1x can give spurious readings from multipath or
             // SNR issues at longer ranges.
             float innovation = measured_altitude - alt_kf.altitude;
-            if (fabsf(innovation) > KF_MAX_INNOVATION) {
+            if (fabsf(innovation) > p->kf_max_innovation) {
                 HIVE_LOG_WARN("[EST] Rangefinder outlier: meas=%.3f pred=%.3f "
                               "innov=%.3f",
                               measured_altitude, alt_kf.altitude, innovation);
@@ -467,13 +467,13 @@ void estimator_actor(void *args, const hive_spawn_info_t *siblings,
             // Innovation gating: reject outlier flow readings
             float innov_x = sensors.velocity_x - hkf_x.velocity;
             float innov_y = sensors.velocity_y - hkf_y.velocity;
-            if (fabsf(innov_x) <= HKF_MAX_INNOVATION) {
+            if (fabsf(innov_x) <= p->hkf_max_innovation) {
                 horizontal_kf_correct(&hkf_x, sensors.velocity_x);
             } else {
                 HIVE_LOG_WARN("[EST] Flow X outlier: meas=%.3f pred=%.3f",
                               sensors.velocity_x, hkf_x.velocity);
             }
-            if (fabsf(innov_y) <= HKF_MAX_INNOVATION) {
+            if (fabsf(innov_y) <= p->hkf_max_innovation) {
                 horizontal_kf_correct(&hkf_y, sensors.velocity_y);
             } else {
                 HIVE_LOG_WARN("[EST] Flow Y outlier: meas=%.3f pred=%.3f",

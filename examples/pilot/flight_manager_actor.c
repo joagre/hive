@@ -580,6 +580,23 @@ void flight_manager_actor(void *args, const hive_spawn_info_t *siblings,
             stack_profile_capture("flight_mgr");
             stack_profile_request();
 
+            // Drain any stale GO messages from mailbox before
+            // returning to IDLE. ESB auto-retransmit can cause
+            // duplicate GO notifications from comms_actor. Without
+            // draining, a stale GO triggers an immediate re-flight.
+            {
+                hive_message_t stale;
+                int drained = 0;
+                while (HIVE_SUCCEEDED(hive_ipc_recv_match(
+                    ids.comms, HIVE_MSG_NOTIFY, NOTIFY_GO, &stale, 0))) {
+                    drained++;
+                }
+                if (drained > 0) {
+                    HIVE_LOG_WARN("[FLM] Drained %d stale GO message(s)",
+                                  drained);
+                }
+            }
+
             // Return to IDLE - reset timers for next flight
             HIVE_LOG_INFO("[FLM] Flight complete - returning to IDLE");
             countdown_s = 0;

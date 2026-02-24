@@ -166,6 +166,13 @@ PARAM_NAMES = {
     52: "hkf_p0_position",
     53: "hkf_p0_velocity",
     54: "hkf_p0_bias",
+    # Liftoff and climb (55-57)
+    55: "liftoff_climb_rate",
+    56: "liftoff_ramp_rate",
+    57: "liftoff_thrust_corr",
+    # Innovation gating (58-59)
+    58: "kf_max_innov",
+    59: "hkf_max_innov",
 }
 
 # Reverse lookup: name to ID

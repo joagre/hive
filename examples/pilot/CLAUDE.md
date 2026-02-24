@@ -69,16 +69,16 @@ make -f Makefile.crazyflie-2.1plus clean
 
 **CRITICAL:** st-flash leaves CPU halted. You MUST run st-trace.sh after every flash.
 
-**ST-Link tools location:** `local/stlink/build/bin/` (st-flash, st-trace, st-info)
+**ST-Link tools location:** `/home/jocke/projects/hive/local/stlink/build/bin/` (st-flash, st-trace, st-info)
 
 ```bash
-# Flash firmware (use full path - st-flash is not in PATH)
-local/stlink/build/bin/st-flash --connect-under-reset write \
-  examples/pilot/build_crazyflie-2.1plus/pilot_crazyflie-2.1plus.bin 0x8000000
+# Flash firmware
+/home/jocke/projects/hive/local/stlink/build/bin/st-flash --connect-under-reset write \
+  build_crazyflie-2.1plus/pilot_crazyflie-2.1plus.bin 0x8000000
 
 # MANDATORY: Reset CPU and view debug output
-./tools/st-trace.sh -t 30    # 30s timeout
-./tools/st-trace.sh -t 0     # No timeout (Ctrl-C to stop)
+tools/st-trace.sh -t 30    # 30s timeout
+tools/st-trace.sh -t 0     # No timeout (Ctrl-C to stop)
 ```
 
 Without running st-trace.sh after flashing, the drone appears dead (no LEDs, no response).
@@ -118,8 +118,8 @@ pkill -f ground_station.py; sleep 1
 
 **Step 2 - Flash (only if firmware changed)**
 ```bash
-local/stlink/build/bin/st-flash --connect-under-reset write \
-  examples/pilot/build_crazyflie-2.1plus/pilot_crazyflie-2.1plus.bin 0x8000000
+/home/jocke/projects/hive/local/stlink/build/bin/st-flash --connect-under-reset write \
+  build_crazyflie-2.1plus/pilot_crazyflie-2.1plus.bin 0x8000000
 ```
 
 **Step 3 - Reset CPU (mandatory after flash)**
@@ -187,7 +187,7 @@ python3 tools/ground_station.py --set-param att_kp 2.0
 python3 tools/ground_station.py --set-param vvel_damping 0.50
 ```
 
-**Tunable Parameters (55 total):**
+**Tunable Parameters (60 total):**
 
 | Category | Parameters |
 |----------|------------|
@@ -202,6 +202,8 @@ python3 tools/ground_station.py --set-param vvel_damping 0.50
 | Horizontal Kalman Filter | `hkf_q_position`, `hkf_q_velocity`, `hkf_q_bias`, `hkf_r_velocity`, `hkf_p0_position`, `hkf_p0_velocity`, `hkf_p0_bias` |
 | Horizontal Velocity | `hvel_filter_alpha` |
 | Waypoints | `wp_tolerance_xy`, `wp_tolerance_z`, `wp_tolerance_yaw`, `wp_tolerance_vel`, `wp_hover_time_s` |
+| Liftoff/Climb | `liftoff_climb_rate`, `liftoff_ramp_rate`, `liftoff_thrust_corr` |
+| Innovation Gating | `kf_max_innov`, `hkf_max_innov` |
 
 **Safety:** All values are validated before application. Invalid values (out of range) are rejected.
 
@@ -345,10 +347,10 @@ The nRF51 is PRX (receiver), Crazyradio is PTX (transmitter):
 
 ## Local Dependencies
 
-Paths are relative to repo root (`/home/jocke/projects/hive`):
+Absolute paths:
 
-- `local/stlink/build/bin/` - ST-Link tools (st-flash, st-trace, st-info)
-- `local/crazyflie-firmware/` - Bitcraze firmware source (reference for deck drivers, SPI config)
+- `/home/jocke/projects/hive/local/stlink/build/bin/` - ST-Link tools (st-flash, st-trace, st-info)
+- `/home/jocke/projects/hive/local/crazyflie-firmware/` - Bitcraze firmware source (reference for deck drivers, SPI config)
 
 ## Documentation
 

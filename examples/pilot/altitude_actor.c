@@ -281,7 +281,7 @@ void altitude_actor(void *args, const hive_spawn_info_t *siblings,
             }
         } else if (!liftoff_detected) {
             // Liftoff detection: ramp thrust until rangefinder sees altitude
-            ramp_thrust += LIFTOFF_RAMP_RATE * dt;
+            ramp_thrust += p->liftoff_ramp_rate * dt;
 
             if (ramp_thrust > LIFTOFF_MAX_THRUST) {
                 // Failed to lift off at max thrust - something is wrong
@@ -296,7 +296,7 @@ void altitude_actor(void *args, const hive_spawn_info_t *siblings,
                 // The ramp continues past actual hover because detection
                 // has physical lag (drone must rise LIFTOFF_ALT_THRESHOLD).
                 discovered_hover_thrust =
-                    ramp_thrust * LIFTOFF_THRUST_CORRECTION;
+                    ramp_thrust * p->liftoff_thrust_correction;
                 liftoff_detected = true;
                 climb_target = est.altitude;
                 HIVE_LOG_INFO("[ALT] Liftoff at thrust=%.3f corrected=%.3f "
@@ -321,15 +321,15 @@ void altitude_actor(void *args, const hive_spawn_info_t *siblings,
             // Normal altitude hold using discovered hover thrust.
             // Instead of tracking target_altitude directly (step change
             // causes overshoot), ramp a smooth reference trajectory from
-            // liftoff altitude toward the target at LIFTOFF_CLIMB_RATE.
+            // liftoff altitude toward the target at liftoff_climb_rate.
             // PID runs at full authority tracking the moving reference.
             if (climb_target < target_altitude) {
-                climb_target += LIFTOFF_CLIMB_RATE * dt;
+                climb_target += p->liftoff_climb_rate * dt;
                 if (climb_target > target_altitude) {
                     climb_target = target_altitude;
                 }
             } else if (climb_target > target_altitude) {
-                climb_target -= LIFTOFF_CLIMB_RATE * dt;
+                climb_target -= p->liftoff_climb_rate * dt;
                 if (climb_target < target_altitude) {
                     climb_target = target_altitude;
                 }
@@ -350,9 +350,9 @@ void altitude_actor(void *args, const hive_spawn_info_t *siblings,
             // to wind up to compensate, then overshoot when the ramp stops.
             float feedforward = 0.0f;
             if (climb_target < target_altitude) {
-                feedforward = LIFTOFF_CLIMB_RATE * p->vvel_damping;
+                feedforward = p->liftoff_climb_rate * p->vvel_damping;
             } else if (climb_target > target_altitude) {
-                feedforward = -LIFTOFF_CLIMB_RATE * p->vvel_damping;
+                feedforward = -p->liftoff_climb_rate * p->vvel_damping;
             }
 
             float correction = pos_correction + vel_damping + feedforward;

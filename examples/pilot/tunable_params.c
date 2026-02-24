@@ -160,6 +160,25 @@ static const param_meta_t param_meta[TUNABLE_PARAM_COUNT] = {
                                .min = 0.01f,
                                .max = 10.0f},
     [PARAM_HKF_P0_BIAS] = {.name = "hkf_p0_bias", .min = 0.001f, .max = 1.0f},
+
+    // Liftoff and climb (55-57)
+    [PARAM_LIFTOFF_CLIMB_RATE] = {.name = "liftoff_climb_rate",
+                                  .min = 0.05f,
+                                  .max = 1.0f},
+    [PARAM_LIFTOFF_RAMP_RATE] = {.name = "liftoff_ramp_rate",
+                                 .min = 0.1f,
+                                 .max = 1.0f},
+    [PARAM_LIFTOFF_THRUST_CORRECTION] = {.name = "liftoff_thrust_corr",
+                                         .min = 0.7f,
+                                         .max = 1.0f},
+
+    // Innovation gating (58-59)
+    [PARAM_KF_MAX_INNOVATION] = {.name = "kf_max_innov",
+                                 .min = 0.05f,
+                                 .max = 2.0f},
+    [PARAM_HKF_MAX_INNOVATION] = {.name = "hkf_max_innov",
+                                  .min = 0.1f,
+                                  .max = 5.0f},
 };
 
 void tunable_params_init(tunable_params_t *params) {
@@ -240,6 +259,15 @@ void tunable_params_init(tunable_params_t *params) {
     params->hkf_p0_position = HKF_P0_POSITION;
     params->hkf_p0_velocity = HKF_P0_VELOCITY;
     params->hkf_p0_bias = HKF_P0_BIAS;
+
+    // Liftoff and climb - from config.h
+    params->liftoff_climb_rate = LIFTOFF_CLIMB_RATE;
+    params->liftoff_ramp_rate = LIFTOFF_RAMP_RATE;
+    params->liftoff_thrust_correction = LIFTOFF_THRUST_CORRECTION;
+
+    // Innovation gating - from config.h
+    params->kf_max_innovation = KF_MAX_INNOVATION;
+    params->hkf_max_innovation = HKF_MAX_INNOVATION;
 
     // Flight manager lifecycle
 #ifdef SIMULATED_TIME
