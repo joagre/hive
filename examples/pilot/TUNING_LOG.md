@@ -33,6 +33,8 @@ no oscillation), and stable attitude. In that priority order.
 | `max_tilt_angle` | 0.25 (14 deg) | OK |
 | `liftoff_climb_rate` | 0.15 | Reduced from 0.2 (session 14) |
 | `FLOW_SCALE` | 0.0005 | Moved from HAL to config.h (session 15). May need 4x increase (see session 11) |
+| `cf_accel_bias_ki` | 0.5 (default) | **Too aggressive on hardware** (session 16). Set to 0 via radio. Needs tuning. |
+| `cf_accel_bias_max` | 1.0 | OK (clamping limit) |
 
 ### Architectural analysis
 
@@ -162,6 +164,147 @@ With stable hover in all axes, push toward perfection:
 
 5. **Full 3D waypoints** - FULL_3D profile with XY waypoints.
    Requires position control to be solid before attempting.
+
+---
+
+## Session 16 - 2026-02-25 - Online accel bias estimation (tests 65-66)
+
+Implemented Mahony-style integral feedback in the complementary filter
+to estimate vibration-induced accelerometer bias online during flight.
+This is option 2 from session 15's "Options for fixing XY drift".
+
+### Implementation
+
+Added to the complementary filter (`fusion/complementary_filter.c`):
+
+1. Subtract estimated `accel_bias[3]` from raw accel before validity
+   check and attitude angle computation
+2. After CF fusion (when accel valid), compute expected gravity from
+   fused attitude, integrate residual with Ki, clamp to max
+3. Corrected accel also used in estimator_actor.c body-to-world
+   rotation (removes phantom horizontal acceleration)
+
+Expected gravity in body frame:
+```
+expected[0] = -g * sin(pitch)
+expected[1] =  g * sin(roll) * cos(pitch)
+expected[2] =  g * cos(roll) * cos(pitch)
+bias += Ki * (accel_corrected - expected) * dt
+```
+
+Bias preserved across `cf_reset()` (between flights) but zeroed on
+`cf_init()` (fresh power-on). Two new radio-tunable parameters:
+`cf_accel_bias_ki` (0-5, default 0.5) and `cf_accel_bias_max` (0.1-5,
+default 1.0).
+
+### Flight test 65 - Ki=0.5 (CRASH)
+
+**Result: violent pitch oscillations, 3m backward into bookshelf, lost a prop.**
+
+| Metric | Value |
+|--------|-------|
+| Duration | 6.8s |
+| Max tilt | 28.6 deg |
+| Thrust saturation | 8% at 100% |
+| Oscillations | 5.5/s |
+| XY end pos | (-0.08, 0.10)m |
+| Overshoot | +26% |
+
+The pitch swung +/-20 deg during hover. Ki=0.5 is far too aggressive -
+creates a positive feedback loop: wrong bias shifts accel, shifts
+attitude estimate, shifts expected gravity, shifts residual. The bias
+estimator fights the attitude controller.
+
+Timeline shows the instability:
+```
+t=3.08s  pitch=-14.4 deg
+t=4.10s  pitch=+13.3 deg
+t=5.13s  pitch=-20.7 deg
+t=6.14s  pitch=+16.7 deg
+```
+
+### Bug found - stale bias survives Ki=0
+
+After test 65, set Ki=0 via radio to disable estimation. But
+`cf_reset()` preserves `accel_bias` (by design, for between-flight
+convergence). The corrupt bias from test 65's unstable oscillations
+persisted. Test 66 with Ki=0 immediately flipped onto its back because
+the stale bias was still being subtracted from accel readings.
+
+### Flight test 66 - Ki=0 with stale bias (CRASH)
+
+**Result: immediate flip onto back. No liftoff.**
+
+| Metric | Value |
+|--------|-------|
+| Duration | 2.3s |
+| Max tilt | 9.0 deg (pre-flip) |
+| Y drift | 0.74m in 2s |
+
+### Bug fix - Ki=0 actively zeros bias
+
+Changed `cf_update()` so that when `accel_bias_ki <= 0`, the bias is
+actively zeroed every cycle (not just frozen). This ensures disabling
+the feature via radio immediately clears any stale estimate.
+
+```c
+if (state->config.accel_bias_ki <= 0.0f) {
+    // Feature disabled - clear any stale bias
+    state->accel_bias[i] = 0.0f;
+} else if (accel_valid) {
+    // Estimate bias...
+}
+```
+
+### Ground station fix
+
+The ground_station.py `PARAM_NAMES` dict was missing IDs 60-61. Added
+`cf_accel_bias_ki` and `cf_accel_bias_max` entries. Without this, the
+new parameters couldn't be set via radio (the drone had them, but the
+ground station didn't know the names).
+
+### Code changes
+
+| File | Change |
+|------|--------|
+| `fusion/complementary_filter.h` | Added accel_bias_ki/max to config, accel_bias[3] to state, cf_get_accel_bias() |
+| `fusion/complementary_filter.c` | Bias estimation in cf_update(), Ki=0 zeros bias, cf_get_accel_bias() |
+| `estimator_actor.c` | Subtract bias before world-frame transform, cf_reset() on RESET, live tuning |
+| `include/tunable_params.h` | IDs 60-61, count 60 -> 62, struct fields |
+| `tunable_params.c` | Validation ranges, init values |
+| `tools/ground_station.py` | Added param IDs 60-61 to PARAM_NAMES |
+
+### Verification (Webots sim)
+
+| Profile | Noise | Verdict | Notes |
+|---------|-------|---------|-------|
+| FIRST_TEST | 0 | OK | Zero bias learned (no vibration in sim) |
+| FULL_3D | 3 | OK | Worst WP XY error 0.126m, max tilt 1.4 deg |
+
+### Next steps
+
+Ki=0.5 is too aggressive. Need much slower convergence to avoid
+feedback instability. Plan:
+
+1. Baseline flight with Ki=0 to confirm drone is stable (pending prop)
+2. Try Ki=0.05 (10x slower, ~20s convergence for 0.24 m/s^2 bias)
+3. If stable, increase toward Ki=0.1 (10s convergence)
+4. If 0.05 is unstable, try Ki=0.02 (50s convergence)
+
+The convergence time for a 0.24 m/s^2 bias at Ki=K is approximately
+`bias / (Ki * bias) = 1/Ki` seconds. So Ki=0.05 takes ~20s, Ki=0.1
+takes ~10s. For a 6s flight, Ki=0.1 would converge halfway.
+
+Alternative: option 3 from session 15 (increase hkf_q_bias) is still
+worth testing as a complementary approach. It only fixes position (not
+attitude tilt) but is safer since it doesn't modify the attitude loop.
+
+### Impact on tuning
+
+No compiled default changes to PID gains. Default Ki=0.5 in firmware
+is too aggressive for hardware - must be set to 0 via radio until a
+safe value is validated. Consider changing compiled default to Ki=0
+until a working value is found.
 
 ---
 
@@ -295,6 +438,7 @@ Three approaches to investigate, in order of increasing complexity:
    Add a slow integrator that estimates per-axis accel bias from the
    discrepancy between expected gravity and measured gravity over time.
    Similar to how the gyro bias is handled. Medium complexity.
+   **Implemented in session 16.** Ki=0.5 too aggressive, needs tuning.
 
 3. **Trust flow more in the HKF** - Increase `hkf_q_bias` so the
    HKF's accel bias state converges faster from flow velocity

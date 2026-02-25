@@ -173,6 +173,9 @@ PARAM_NAMES = {
     # Innovation gating (58-59)
     58: "kf_max_innov",
     59: "hkf_max_innov",
+    # Accel bias estimation (60-61)
+    60: "cf_accel_bias_ki",
+    61: "cf_accel_bias_max",
 }
 
 # Reverse lookup: name to ID

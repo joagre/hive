@@ -141,7 +141,12 @@ void cf_update(cf_state_t *state, const sensor_data_t *sensors, float dt) {
     // gravity reveals vibration-induced bias. Integrating with slow Ki gives
     // the bias estimate. Only update when accel_valid to prevent maneuver
     // centripetal acceleration from corrupting the estimate.
-    if (accel_valid && state->config.accel_bias_ki > 0.0f) {
+    if (state->config.accel_bias_ki <= 0.0f) {
+        // Feature disabled - clear any stale bias
+        state->accel_bias[0] = 0.0f;
+        state->accel_bias[1] = 0.0f;
+        state->accel_bias[2] = 0.0f;
+    } else if (accel_valid) {
         float cos_r = cosf(state->roll);
         float sin_r = sinf(state->roll);
         float cos_p = cosf(state->pitch);
