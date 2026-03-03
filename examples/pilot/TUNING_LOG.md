@@ -33,7 +33,7 @@ no oscillation), and stable attitude. In that priority order.
 | `max_tilt_angle` | 0.25 (14 deg) | OK |
 | `liftoff_climb_rate` | 0.15 | Reduced from 0.2 (session 14) |
 | `FLOW_SCALE` | 0.0005 | Moved from HAL to config.h (session 15). May need 4x increase (see session 11) |
-| `cf_accel_bias_ki` | 0.5 (default) | **Too aggressive on hardware** (session 16). Set to 0 via radio. Needs tuning. |
+| `cf_accel_bias_ki` | 0.5 (compiled) | **Too aggressive** (session 16). Must set to 0 via radio. Needs tuning or compiled default change to 0. |
 | `cf_accel_bias_max` | 1.0 | OK (clamping limit) |
 
 ### Architectural analysis
@@ -74,11 +74,51 @@ Discovery: pos_kd=0.20 caused growing oscillations with real flow data
 (test 50, max tilt 44 deg). With 250x-corrected flow (session 11),
 the damping response is much stronger. Reduced pos_kd to 0.05.
 
-**Phase 2b - Position hold (re-enable pos_kp) - IN PROGRESS (session 14)**
+**Phase 2b - Resolve accel bias drift - IN PROGRESS (session 16)**
 
-Test 60 enabled pos_kp=0.02 via radio. Cannot evaluate position hold
-until accelerometer bias calibration is validated - the uncorrected
-Y-axis bias (0.134 m/s^2) causes 3m drift that overwhelms pos_kp.
+The vibration-induced accel bias (0.24 m/s^2 Y-axis) causes 3m drift
+in 6s that overwhelms position hold. Two approaches to resolve:
+
+**Approach A - Fix the accel (online bias estimation)**
+
+Implemented in session 16. Ki=0.5 was unstable (test 65 crash). The
+estimator creates a feedback loop at high Ki: wrong bias shifts accel,
+shifts attitude, shifts expected gravity, shifts residual.
+
+| Step | Ki | Expected convergence | Status |
+|------|----|---------------------|--------|
+| 1 | 0.0 | N/A (baseline) | Next test - confirm stable after bug fix |
+| 2 | 0.05 | ~20s | Pending |
+| 3 | 0.1 | ~10s | If step 2 is stable |
+| 4 | 0.02 | ~50s | Fallback if step 2 is unstable |
+
+**Approach B - Ignore the accel (gyro-only attitude)**
+
+Set `cf_alpha=1.0` via radio (pure gyro integration, no accel
+correction). The gyro is already bias-calibrated by HAL. For a 6s
+flight, gyro drift is ~3-6 degrees - the attitude PID can handle
+this. The KFs lose their accel-driven prediction step but still get
+rangefinder (40Hz) and flow (250Hz) corrections.
+
+This is a useful diagnostic: if drift disappears with alpha=1.0,
+that confirms accel bias is the sole cause. No code changes needed.
+
+**Test plan for next session:**
+
+| Flight | Config | Purpose |
+|--------|--------|---------|
+| 1 | Ki=0, alpha=0.995 | Baseline - confirm stable after bug fix |
+| 2 | Ki=0, alpha=1.0 | Diagnostic - does removing accel fix drift? |
+| 3 | Ki=0.05, alpha=0.995 | Gentle bias estimation (if flight 1 OK) |
+
+If approach A works (stable Ki found), use it - it's the proper
+long-term fix used by all major flight controllers. If not, approach B
+is a viable fallback for short flights.
+
+**Phase 2c - Position hold (re-enable pos_kp) - BLOCKED on 2b**
+
+Cannot evaluate position hold until accel bias is resolved - the
+uncorrected Y-axis bias causes 3m drift that overwhelms pos_kp.
 
 With validated HKF velocity, re-enable pos_kp. Tune via radio.
 The control law is: `accel = pos_kp * error - pos_kd * velocity`.
